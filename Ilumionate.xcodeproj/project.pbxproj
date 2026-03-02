@@ -6,6 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		7988F3942F4FB6E700E1DC5E /* Playlist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3932F4FB6E700E1DC5E /* Playlist.swift */; };
+		7988F3962F4FB70800E1DC5E /* PlaylistEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */; };
+		7988F3982F4FB79400E1DC5E /* PlaylistLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */; };
+		7988F39A2F4FB7F500E1DC5E /* PlaylistPlayerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3992F4FB7F500E1DC5E /* PlaylistPlayerController.swift */; };
+		7988F39C2F4FB82700E1DC5E /* PlaylistPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F39B2F4FB82700E1DC5E /* PlaylistPlayerView.swift */; };
+		79D548392F4F723B00B3B07F /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 79D548382F4F723B00B3B07F /* WhisperKit */; };
+		79D5483B2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */; };
+		79D5483D2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */; };
+		79D5483F2F4F7B9800B3B07F /* AudioLightPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483E2F4F7B9800B3B07F /* AudioLightPlayerView.swift */; };
+		79D548412F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		795944112F38010B00907305 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +40,15 @@
 		795944032F38010900907305 /* Ilumionate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ilumionate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		795944102F38010B00907305 /* IlumionateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IlumionateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7959441A2F38010B00907305 /* IlumionateUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IlumionateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7988F3932F4FB6E700E1DC5E /* Playlist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Playlist.swift; sourceTree = "<group>"; };
+		7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistEditorView.swift; sourceTree = "<group>"; };
+		7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistLibraryView.swift; sourceTree = "<group>"; };
+		7988F3992F4FB7F500E1DC5E /* PlaylistPlayerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistPlayerController.swift; sourceTree = "<group>"; };
+		7988F39B2F4FB82700E1DC5E /* PlaylistPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistPlayerView.swift; sourceTree = "<group>"; };
+		79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightScoreGenerator.swift; sourceTree = "<group>"; };
+		79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightSyncPlayer.swift; sourceTree = "<group>"; };
+		79D5483E2F4F7B9800B3B07F /* AudioLightPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightPlayerView.swift; sourceTree = "<group>"; };
+		79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ENHANCED_LIGHT_SCORE_GUIDE.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +74,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				79D548392F4F723B00B3B07F /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,7 +101,17 @@
 				795944052F38010900907305 /* Ilumionate */,
 				795944132F38010B00907305 /* IlumionateTests */,
 				7959441D2F38010B00907305 /* IlumionateUITests */,
+				79D548372F4F723B00B3B07F /* Frameworks */,
 				795944042F38010900907305 /* Products */,
+				79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */,
+				79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */,
+				79D5483E2F4F7B9800B3B07F /* AudioLightPlayerView.swift */,
+				79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */,
+				7988F3932F4FB6E700E1DC5E /* Playlist.swift */,
+				7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */,
+				7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */,
+				7988F3992F4FB7F500E1DC5E /* PlaylistPlayerController.swift */,
+				7988F39B2F4FB82700E1DC5E /* PlaylistPlayerView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -90,6 +123,13 @@
 				7959441A2F38010B00907305 /* IlumionateUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		79D548372F4F723B00B3B07F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -112,6 +152,7 @@
 			);
 			name = Ilumionate;
 			packageProductDependencies = (
+				79D548382F4F723B00B3B07F /* WhisperKit */,
 			);
 			productName = Ilumionate;
 			productReference = 795944032F38010900907305 /* Ilumionate.app */;
@@ -195,6 +236,9 @@
 			);
 			mainGroup = 795943FA2F38010900907305;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				79D548362F4F6FF400B3B07F /* XCRemoteSwiftPackageReference "WhisperKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 795944042F38010900907305 /* Products */;
 			projectDirPath = "";
@@ -212,6 +256,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				79D548412F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -236,6 +281,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				79D5483D2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift in Sources */,
+				79D5483F2F4F7B9800B3B07F /* AudioLightPlayerView.swift in Sources */,
+				79D5483B2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift in Sources */,
+				7988F3982F4FB79400E1DC5E /* PlaylistLibraryView.swift in Sources */,
+				7988F3962F4FB70800E1DC5E /* PlaylistEditorView.swift in Sources */,
+				7988F39C2F4FB82700E1DC5E /* PlaylistPlayerView.swift in Sources */,
+				7988F3942F4FB6E700E1DC5E /* Playlist.swift in Sources */,
+				7988F39A2F4FB7F500E1DC5E /* PlaylistPlayerController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -400,11 +453,13 @@
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Ilumionate uses speech recognition to transcribe your audio files and generate personalized light therapy sessions based on the content.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -413,6 +468,9 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.Ilumionate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -432,11 +490,13 @@
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Ilumionate uses speech recognition to transcribe your audio files and generate personalized light therapy sessions based on the content.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -445,6 +505,9 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.Ilumionate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -578,6 +641,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		79D548362F4F6FF400B3B07F /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		79D548382F4F723B00B3B07F /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 79D548362F4F6FF400B3B07F /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 795943FB2F38010900907305 /* Project object */;
 }

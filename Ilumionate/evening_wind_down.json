@@ -1,0 +1,72 @@
+{
+  "session_name": "Evening Wind Down",
+  "duration_sec": 600,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 10.0,
+      "intensity": 0.4,
+      "waveform": "sine",
+      "bilateral": false,
+      "color_temperature": 4500
+    },
+    {
+      "time": 60,
+      "frequency": 9.0,
+      "intensity": 0.45,
+      "waveform": "sine",
+      "bilateral": false,
+      "color_temperature": 3800
+    },
+    {
+      "time": 120,
+      "frequency": 8.0,
+      "intensity": 0.5,
+      "waveform": "sine",
+      "bilateral": true,
+      "bilateral_transition_duration": 8.0,
+      "color_temperature": 3200
+    },
+    {
+      "time": 240,
+      "frequency": 7.0,
+      "intensity": 0.6,
+      "waveform": "triangle",
+      "bilateral": true,
+      "color_temperature": 2800
+    },
+    {
+      "time": 360,
+      "frequency": 6.0,
+      "intensity": 0.65,
+      "waveform": "sine",
+      "bilateral": true,
+      "color_temperature": 2400
+    },
+    {
+      "time": 480,
+      "frequency": 5.0,
+      "intensity": 0.7,
+      "waveform": "sine",
+      "bilateral": true,
+      "color_temperature": 2000
+    },
+    {
+      "time": 540,
+      "frequency": 6.0,
+      "intensity": 0.5,
+      "waveform": "sine",
+      "bilateral": false,
+      "bilateral_transition_duration": 10.0,
+      "color_temperature": 2200
+    },
+    {
+      "time": 600,
+      "frequency": 8.0,
+      "intensity": 0.3,
+      "waveform": "sine",
+      "bilateral": false,
+      "color_temperature": 2500
+    }
+  ]
+}

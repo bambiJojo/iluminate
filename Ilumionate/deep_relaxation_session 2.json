@@ -1,0 +1,870 @@
+{
+  "session_name": "Deep Relaxation",
+  "duration_sec": 720,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 10.0,
+      "intensity": 0.2,
+      "waveform": "sine"
+    },
+    {
+      "time": 5,
+      "frequency": 9.979,
+      "intensity": 0.208,
+      "waveform": "sine"
+    },
+    {
+      "time": 10,
+      "frequency": 9.958,
+      "intensity": 0.217,
+      "waveform": "sine"
+    },
+    {
+      "time": 15,
+      "frequency": 9.938,
+      "intensity": 0.225,
+      "waveform": "sine"
+    },
+    {
+      "time": 20,
+      "frequency": 9.917,
+      "intensity": 0.233,
+      "waveform": "sine"
+    },
+    {
+      "time": 25,
+      "frequency": 9.896,
+      "intensity": 0.242,
+      "waveform": "sine"
+    },
+    {
+      "time": 30,
+      "frequency": 9.875,
+      "intensity": 0.25,
+      "waveform": "sine"
+    },
+    {
+      "time": 35,
+      "frequency": 9.854,
+      "intensity": 0.258,
+      "waveform": "sine"
+    },
+    {
+      "time": 40,
+      "frequency": 9.833,
+      "intensity": 0.267,
+      "waveform": "sine"
+    },
+    {
+      "time": 45,
+      "frequency": 9.812,
+      "intensity": 0.275,
+      "waveform": "sine"
+    },
+    {
+      "time": 50,
+      "frequency": 9.792,
+      "intensity": 0.283,
+      "waveform": "sine"
+    },
+    {
+      "time": 55,
+      "frequency": 9.771,
+      "intensity": 0.292,
+      "waveform": "sine"
+    },
+    {
+      "time": 60,
+      "frequency": 9.75,
+      "intensity": 0.3,
+      "waveform": "sine"
+    },
+    {
+      "time": 65,
+      "frequency": 9.729,
+      "intensity": 0.308,
+      "waveform": "sine"
+    },
+    {
+      "time": 70,
+      "frequency": 9.708,
+      "intensity": 0.317,
+      "waveform": "sine"
+    },
+    {
+      "time": 75,
+      "frequency": 9.688,
+      "intensity": 0.325,
+      "waveform": "sine"
+    },
+    {
+      "time": 80,
+      "frequency": 9.667,
+      "intensity": 0.333,
+      "waveform": "sine"
+    },
+    {
+      "time": 85,
+      "frequency": 9.646,
+      "intensity": 0.342,
+      "waveform": "sine"
+    },
+    {
+      "time": 90,
+      "frequency": 9.625,
+      "intensity": 0.35,
+      "waveform": "sine"
+    },
+    {
+      "time": 95,
+      "frequency": 9.604,
+      "intensity": 0.358,
+      "waveform": "sine"
+    },
+    {
+      "time": 100,
+      "frequency": 9.583,
+      "intensity": 0.367,
+      "waveform": "sine"
+    },
+    {
+      "time": 105,
+      "frequency": 9.562,
+      "intensity": 0.375,
+      "waveform": "sine"
+    },
+    {
+      "time": 110,
+      "frequency": 9.542,
+      "intensity": 0.383,
+      "waveform": "sine"
+    },
+    {
+      "time": 115,
+      "frequency": 9.521,
+      "intensity": 0.392,
+      "waveform": "sine"
+    },
+    {
+      "time": 120,
+      "frequency": 9.5,
+      "intensity": 0.4,
+      "waveform": "sine"
+    },
+    {
+      "time": 125,
+      "frequency": 9.472,
+      "intensity": 0.406,
+      "waveform": "sine"
+    },
+    {
+      "time": 130,
+      "frequency": 9.444,
+      "intensity": 0.411,
+      "waveform": "sine"
+    },
+    {
+      "time": 135,
+      "frequency": 9.417,
+      "intensity": 0.417,
+      "waveform": "sine"
+    },
+    {
+      "time": 140,
+      "frequency": 9.389,
+      "intensity": 0.422,
+      "waveform": "sine"
+    },
+    {
+      "time": 145,
+      "frequency": 9.361,
+      "intensity": 0.428,
+      "waveform": "sine"
+    },
+    {
+      "time": 150,
+      "frequency": 9.333,
+      "intensity": 0.433,
+      "waveform": "sine"
+    },
+    {
+      "time": 155,
+      "frequency": 9.306,
+      "intensity": 0.439,
+      "waveform": "sine"
+    },
+    {
+      "time": 160,
+      "frequency": 9.278,
+      "intensity": 0.444,
+      "waveform": "sine"
+    },
+    {
+      "time": 165,
+      "frequency": 9.25,
+      "intensity": 0.45,
+      "waveform": "sine"
+    },
+    {
+      "time": 170,
+      "frequency": 9.222,
+      "intensity": 0.456,
+      "waveform": "sine"
+    },
+    {
+      "time": 175,
+      "frequency": 9.194,
+      "intensity": 0.461,
+      "waveform": "sine"
+    },
+    {
+      "time": 180,
+      "frequency": 9.167,
+      "intensity": 0.467,
+      "waveform": "sine"
+    },
+    {
+      "time": 185,
+      "frequency": 9.139,
+      "intensity": 0.472,
+      "waveform": "sine"
+    },
+    {
+      "time": 190,
+      "frequency": 9.111,
+      "intensity": 0.478,
+      "waveform": "sine"
+    },
+    {
+      "time": 195,
+      "frequency": 9.083,
+      "intensity": 0.483,
+      "waveform": "sine"
+    },
+    {
+      "time": 200,
+      "frequency": 9.056,
+      "intensity": 0.489,
+      "waveform": "sine"
+    },
+    {
+      "time": 205,
+      "frequency": 9.028,
+      "intensity": 0.494,
+      "waveform": "sine"
+    },
+    {
+      "time": 210,
+      "frequency": 9.0,
+      "intensity": 0.5,
+      "waveform": "sine"
+    },
+    {
+      "time": 215,
+      "frequency": 8.972,
+      "intensity": 0.506,
+      "waveform": "sine"
+    },
+    {
+      "time": 220,
+      "frequency": 8.944,
+      "intensity": 0.511,
+      "waveform": "sine"
+    },
+    {
+      "time": 225,
+      "frequency": 8.917,
+      "intensity": 0.517,
+      "waveform": "sine"
+    },
+    {
+      "time": 230,
+      "frequency": 8.889,
+      "intensity": 0.522,
+      "waveform": "sine"
+    },
+    {
+      "time": 235,
+      "frequency": 8.861,
+      "intensity": 0.528,
+      "waveform": "sine"
+    },
+    {
+      "time": 240,
+      "frequency": 8.833,
+      "intensity": 0.533,
+      "waveform": "sine"
+    },
+    {
+      "time": 245,
+      "frequency": 8.806,
+      "intensity": 0.539,
+      "waveform": "sine"
+    },
+    {
+      "time": 250,
+      "frequency": 8.778,
+      "intensity": 0.544,
+      "waveform": "sine"
+    },
+    {
+      "time": 255,
+      "frequency": 8.75,
+      "intensity": 0.55,
+      "waveform": "sine"
+    },
+    {
+      "time": 260,
+      "frequency": 8.722,
+      "intensity": 0.556,
+      "waveform": "sine"
+    },
+    {
+      "time": 265,
+      "frequency": 8.694,
+      "intensity": 0.561,
+      "waveform": "sine"
+    },
+    {
+      "time": 270,
+      "frequency": 8.667,
+      "intensity": 0.567,
+      "waveform": "sine"
+    },
+    {
+      "time": 275,
+      "frequency": 8.639,
+      "intensity": 0.572,
+      "waveform": "sine"
+    },
+    {
+      "time": 280,
+      "frequency": 8.611,
+      "intensity": 0.578,
+      "waveform": "sine"
+    },
+    {
+      "time": 285,
+      "frequency": 8.583,
+      "intensity": 0.583,
+      "waveform": "sine"
+    },
+    {
+      "time": 290,
+      "frequency": 8.556,
+      "intensity": 0.589,
+      "waveform": "sine"
+    },
+    {
+      "time": 295,
+      "frequency": 8.528,
+      "intensity": 0.594,
+      "waveform": "sine"
+    },
+    {
+      "time": 300,
+      "frequency": 8.5,
+      "intensity": 0.6,
+      "waveform": "triangle"
+    },
+    {
+      "time": 305,
+      "frequency": 8.475,
+      "intensity": 0.602,
+      "waveform": "triangle"
+    },
+    {
+      "time": 310,
+      "frequency": 8.45,
+      "intensity": 0.605,
+      "waveform": "triangle"
+    },
+    {
+      "time": 315,
+      "frequency": 8.425,
+      "intensity": 0.607,
+      "waveform": "triangle"
+    },
+    {
+      "time": 320,
+      "frequency": 8.4,
+      "intensity": 0.61,
+      "waveform": "triangle"
+    },
+    {
+      "time": 325,
+      "frequency": 8.375,
+      "intensity": 0.612,
+      "waveform": "triangle"
+    },
+    {
+      "time": 330,
+      "frequency": 8.35,
+      "intensity": 0.615,
+      "waveform": "triangle"
+    },
+    {
+      "time": 335,
+      "frequency": 8.325,
+      "intensity": 0.617,
+      "waveform": "triangle"
+    },
+    {
+      "time": 340,
+      "frequency": 8.3,
+      "intensity": 0.62,
+      "waveform": "triangle"
+    },
+    {
+      "time": 345,
+      "frequency": 8.275,
+      "intensity": 0.622,
+      "waveform": "triangle"
+    },
+    {
+      "time": 350,
+      "frequency": 8.25,
+      "intensity": 0.625,
+      "waveform": "triangle"
+    },
+    {
+      "time": 355,
+      "frequency": 8.225,
+      "intensity": 0.627,
+      "waveform": "triangle"
+    },
+    {
+      "time": 360,
+      "frequency": 8.2,
+      "intensity": 0.63,
+      "waveform": "triangle"
+    },
+    {
+      "time": 365,
+      "frequency": 8.175,
+      "intensity": 0.632,
+      "waveform": "triangle"
+    },
+    {
+      "time": 370,
+      "frequency": 8.15,
+      "intensity": 0.635,
+      "waveform": "triangle"
+    },
+    {
+      "time": 375,
+      "frequency": 8.125,
+      "intensity": 0.637,
+      "waveform": "triangle"
+    },
+    {
+      "time": 380,
+      "frequency": 8.1,
+      "intensity": 0.64,
+      "waveform": "triangle"
+    },
+    {
+      "time": 385,
+      "frequency": 8.075,
+      "intensity": 0.642,
+      "waveform": "triangle"
+    },
+    {
+      "time": 390,
+      "frequency": 8.05,
+      "intensity": 0.645,
+      "waveform": "triangle"
+    },
+    {
+      "time": 395,
+      "frequency": 8.025,
+      "intensity": 0.647,
+      "waveform": "triangle"
+    },
+    {
+      "time": 400,
+      "frequency": 8.0,
+      "intensity": 0.65,
+      "waveform": "triangle"
+    },
+    {
+      "time": 405,
+      "frequency": 7.975,
+      "intensity": 0.652,
+      "waveform": "triangle"
+    },
+    {
+      "time": 410,
+      "frequency": 7.95,
+      "intensity": 0.655,
+      "waveform": "triangle"
+    },
+    {
+      "time": 415,
+      "frequency": 7.925,
+      "intensity": 0.657,
+      "waveform": "triangle"
+    },
+    {
+      "time": 420,
+      "frequency": 7.9,
+      "intensity": 0.66,
+      "waveform": "triangle"
+    },
+    {
+      "time": 425,
+      "frequency": 7.875,
+      "intensity": 0.662,
+      "waveform": "triangle"
+    },
+    {
+      "time": 430,
+      "frequency": 7.85,
+      "intensity": 0.665,
+      "waveform": "triangle"
+    },
+    {
+      "time": 435,
+      "frequency": 7.825,
+      "intensity": 0.667,
+      "waveform": "triangle"
+    },
+    {
+      "time": 440,
+      "frequency": 7.8,
+      "intensity": 0.67,
+      "waveform": "triangle"
+    },
+    {
+      "time": 445,
+      "frequency": 7.775,
+      "intensity": 0.672,
+      "waveform": "triangle"
+    },
+    {
+      "time": 450,
+      "frequency": 7.75,
+      "intensity": 0.675,
+      "waveform": "triangle"
+    },
+    {
+      "time": 455,
+      "frequency": 7.725,
+      "intensity": 0.677,
+      "waveform": "triangle"
+    },
+    {
+      "time": 460,
+      "frequency": 7.7,
+      "intensity": 0.68,
+      "waveform": "triangle"
+    },
+    {
+      "time": 465,
+      "frequency": 7.675,
+      "intensity": 0.682,
+      "waveform": "triangle"
+    },
+    {
+      "time": 470,
+      "frequency": 7.65,
+      "intensity": 0.685,
+      "waveform": "triangle"
+    },
+    {
+      "time": 475,
+      "frequency": 7.625,
+      "intensity": 0.688,
+      "waveform": "triangle"
+    },
+    {
+      "time": 480,
+      "frequency": 7.6,
+      "intensity": 0.69,
+      "waveform": "triangle"
+    },
+    {
+      "time": 485,
+      "frequency": 7.575,
+      "intensity": 0.693,
+      "waveform": "triangle"
+    },
+    {
+      "time": 490,
+      "frequency": 7.55,
+      "intensity": 0.695,
+      "waveform": "triangle"
+    },
+    {
+      "time": 495,
+      "frequency": 7.525,
+      "intensity": 0.698,
+      "waveform": "triangle"
+    },
+    {
+      "time": 500,
+      "frequency": 7.5,
+      "intensity": 0.7,
+      "waveform": "triangle"
+    },
+    {
+      "time": 505,
+      "frequency": 7.475,
+      "intensity": 0.703,
+      "waveform": "triangle"
+    },
+    {
+      "time": 510,
+      "frequency": 7.45,
+      "intensity": 0.705,
+      "waveform": "triangle"
+    },
+    {
+      "time": 515,
+      "frequency": 7.425,
+      "intensity": 0.708,
+      "waveform": "triangle"
+    },
+    {
+      "time": 520,
+      "frequency": 7.4,
+      "intensity": 0.71,
+      "waveform": "triangle"
+    },
+    {
+      "time": 525,
+      "frequency": 7.375,
+      "intensity": 0.713,
+      "waveform": "triangle"
+    },
+    {
+      "time": 530,
+      "frequency": 7.35,
+      "intensity": 0.715,
+      "waveform": "triangle"
+    },
+    {
+      "time": 535,
+      "frequency": 7.325,
+      "intensity": 0.718,
+      "waveform": "triangle"
+    },
+    {
+      "time": 540,
+      "frequency": 7.3,
+      "intensity": 0.72,
+      "waveform": "triangle"
+    },
+    {
+      "time": 545,
+      "frequency": 7.275,
+      "intensity": 0.723,
+      "waveform": "triangle"
+    },
+    {
+      "time": 550,
+      "frequency": 7.25,
+      "intensity": 0.725,
+      "waveform": "triangle"
+    },
+    {
+      "time": 555,
+      "frequency": 7.225,
+      "intensity": 0.728,
+      "waveform": "triangle"
+    },
+    {
+      "time": 560,
+      "frequency": 7.2,
+      "intensity": 0.73,
+      "waveform": "triangle"
+    },
+    {
+      "time": 565,
+      "frequency": 7.175,
+      "intensity": 0.732,
+      "waveform": "triangle"
+    },
+    {
+      "time": 570,
+      "frequency": 7.15,
+      "intensity": 0.735,
+      "waveform": "triangle"
+    },
+    {
+      "time": 575,
+      "frequency": 7.125,
+      "intensity": 0.738,
+      "waveform": "triangle"
+    },
+    {
+      "time": 580,
+      "frequency": 7.1,
+      "intensity": 0.74,
+      "waveform": "triangle"
+    },
+    {
+      "time": 585,
+      "frequency": 7.075,
+      "intensity": 0.742,
+      "waveform": "triangle"
+    },
+    {
+      "time": 590,
+      "frequency": 7.05,
+      "intensity": 0.745,
+      "waveform": "triangle"
+    },
+    {
+      "time": 595,
+      "frequency": 7.025,
+      "intensity": 0.748,
+      "waveform": "triangle"
+    },
+    {
+      "time": 600,
+      "frequency": 7.0,
+      "intensity": 0.75,
+      "waveform": "sine"
+    },
+    {
+      "time": 605,
+      "frequency": 6.889,
+      "intensity": 0.736,
+      "waveform": "sine"
+    },
+    {
+      "time": 610,
+      "frequency": 6.778,
+      "intensity": 0.722,
+      "waveform": "sine"
+    },
+    {
+      "time": 615,
+      "frequency": 6.667,
+      "intensity": 0.708,
+      "waveform": "sine"
+    },
+    {
+      "time": 620,
+      "frequency": 6.556,
+      "intensity": 0.694,
+      "waveform": "sine"
+    },
+    {
+      "time": 625,
+      "frequency": 6.444,
+      "intensity": 0.681,
+      "waveform": "sine"
+    },
+    {
+      "time": 630,
+      "frequency": 6.333,
+      "intensity": 0.667,
+      "waveform": "sine"
+    },
+    {
+      "time": 635,
+      "frequency": 6.222,
+      "intensity": 0.653,
+      "waveform": "sine"
+    },
+    {
+      "time": 640,
+      "frequency": 6.111,
+      "intensity": 0.639,
+      "waveform": "sine"
+    },
+    {
+      "time": 645,
+      "frequency": 6.0,
+      "intensity": 0.625,
+      "waveform": "sine"
+    },
+    {
+      "time": 650,
+      "frequency": 6.111,
+      "intensity": 0.611,
+      "waveform": "sine"
+    },
+    {
+      "time": 655,
+      "frequency": 6.222,
+      "intensity": 0.597,
+      "waveform": "sine"
+    },
+    {
+      "time": 660,
+      "frequency": 6.333,
+      "intensity": 0.583,
+      "waveform": "sine"
+    },
+    {
+      "time": 665,
+      "frequency": 6.444,
+      "intensity": 0.569,
+      "waveform": "sine"
+    },
+    {
+      "time": 670,
+      "frequency": 6.556,
+      "intensity": 0.556,
+      "waveform": "sine"
+    },
+    {
+      "time": 675,
+      "frequency": 6.667,
+      "intensity": 0.542,
+      "waveform": "sine"
+    },
+    {
+      "time": 680,
+      "frequency": 6.778,
+      "intensity": 0.528,
+      "waveform": "sine"
+    },
+    {
+      "time": 685,
+      "frequency": 6.889,
+      "intensity": 0.514,
+      "waveform": "sine"
+    },
+    {
+      "time": 690,
+      "frequency": 7.0,
+      "intensity": 0.5,
+      "waveform": "sine"
+    },
+    {
+      "time": 695,
+      "frequency": 7.111,
+      "intensity": 0.486,
+      "waveform": "sine"
+    },
+    {
+      "time": 700,
+      "frequency": 7.222,
+      "intensity": 0.472,
+      "waveform": "sine"
+    },
+    {
+      "time": 705,
+      "frequency": 7.333,
+      "intensity": 0.458,
+      "waveform": "sine"
+    },
+    {
+      "time": 710,
+      "frequency": 7.444,
+      "intensity": 0.444,
+      "waveform": "sine"
+    },
+    {
+      "time": 715,
+      "frequency": 7.556,
+      "intensity": 0.431,
+      "waveform": "sine"
+    }
+  ]
+}

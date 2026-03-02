@@ -1,0 +1,99 @@
+{
+  "session_name": "Deep Relaxation with Bilateral",
+  "duration_sec": 720,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 10.0,
+      "intensity": 0.2,
+      "waveform": "sine",
+      "bilateral": false
+    },
+    {
+      "time": 60,
+      "frequency": 9.5,
+      "intensity": 0.3,
+      "waveform": "sine",
+      "bilateral": false
+    },
+    {
+      "time": 120,
+      "frequency": 9.0,
+      "intensity": 0.4,
+      "waveform": "sine",
+      "bilateral": false
+    },
+    {
+      "time": 180,
+      "frequency": 8.5,
+      "intensity": 0.5,
+      "waveform": "sine",
+      "bilateral": true,
+      "bilateral_transition_duration": 8.0
+    },
+    {
+      "time": 240,
+      "frequency": 8.0,
+      "intensity": 0.6,
+      "waveform": "triangle",
+      "bilateral": true
+    },
+    {
+      "time": 300,
+      "frequency": 7.5,
+      "intensity": 0.65,
+      "waveform": "triangle",
+      "bilateral": true
+    },
+    {
+      "time": 360,
+      "frequency": 7.0,
+      "intensity": 0.7,
+      "waveform": "triangle",
+      "bilateral": true
+    },
+    {
+      "time": 420,
+      "frequency": 6.5,
+      "intensity": 0.75,
+      "waveform": "sine",
+      "bilateral": true
+    },
+    {
+      "time": 480,
+      "frequency": 6.0,
+      "intensity": 0.8,
+      "waveform": "sine",
+      "bilateral": true
+    },
+    {
+      "time": 540,
+      "frequency": 6.5,
+      "intensity": 0.7,
+      "waveform": "sine",
+      "bilateral": true
+    },
+    {
+      "time": 600,
+      "frequency": 7.0,
+      "intensity": 0.6,
+      "waveform": "sine",
+      "bilateral": false,
+      "bilateral_transition_duration": 10.0
+    },
+    {
+      "time": 660,
+      "frequency": 8.0,
+      "intensity": 0.5,
+      "waveform": "sine",
+      "bilateral": false
+    },
+    {
+      "time": 720,
+      "frequency": 10.0,
+      "intensity": 0.3,
+      "waveform": "sine",
+      "bilateral": false
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "session_name": "Bilateral Wave Pattern",
+  "duration_sec": 600,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 10.0,
+      "intensity": 0.3,
+      "waveform": "sine",
+      "bilateral": false
+    },
+    {
+      "time": 60,
+      "frequency": 9.0,
+      "intensity": 0.4,
+      "waveform": "sine",
+      "bilateral": true,
+      "bilateral_transition_duration": 5.0
+    },
+    {
+      "time": 120,
+      "frequency": 8.5,
+      "intensity": 0.5,
+      "waveform": "sine",
+      "bilateral": false,
+      "bilateral_transition_duration": 4.0
+    },
+    {
+      "time": 180,
+      "frequency": 8.0,
+      "intensity": 0.55,
+      "waveform": "triangle",
+      "bilateral": true,
+      "bilateral_transition_duration": 6.0
+    },
+    {
+      "time": 240,
+      "frequency": 7.5,
+      "intensity": 0.6,
+      "waveform": "triangle",
+      "bilateral": false,
+      "bilateral_transition_duration": 5.0
+    },
+    {
+      "time": 300,
+      "frequency": 7.0,
+      "intensity": 0.65,
+      "waveform": "triangle",
+      "bilateral": true,
+      "bilateral_transition_duration": 7.0
+    },
+    {
+      "time": 360,
+      "frequency": 6.5,
+      "intensity": 0.7,
+      "waveform": "sine",
+      "bilateral": true
+    },
+    {
+      "time": 420,
+      "frequency": 7.0,
+      "intensity": 0.65,
+      "waveform": "sine",
+      "bilateral": false,
+      "bilateral_transition_duration": 8.0
+    },
+    {
+      "time": 480,
+      "frequency": 8.0,
+      "intensity": 0.55,
+      "waveform": "sine",
+      "bilateral": false
+    },
+    {
+      "time": 540,
+      "frequency": 9.0,
+      "intensity": 0.45,
+      "waveform": "sine",
+      "bilateral": false
+    },
+    {
+      "time": 600,
+      "frequency": 10.0,
+      "intensity": 0.3,
+      "waveform": "sine",
+      "bilateral": false
+    }
+  ]
+}

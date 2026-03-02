@@ -1,0 +1,369 @@
+//
+//  AnalysisProgressView.swift
+//  Ilumionate
+//
+//  Created by Byron Quine on 2/10/26.
+//
+
+import SwiftUI
+
+/// Shows the progress of audio analysis and displays results
+struct AnalysisProgressView: View {
+
+    let audioFile: AudioFile
+    @State private var audioAnalyzer = AudioAnalyzer()
+    @State private var aiAnalyzer = AIContentAnalyzer()
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var currentStage: AnalysisStage = .starting
+    @State private var transcriptionResult: AudioTranscriptionResult?
+    @State private var analysisResult: AnalysisResult?
+    @State private var errorMessage: String?
+
+    var onAnalysisComplete: (AudioFile, AnalysisResult) -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 30) {
+
+                Spacer()
+
+                // Progress visualization
+                progressSection
+
+                // Stage indicator
+                stageIndicator
+
+                Spacer()
+
+                // Results or error
+                if let result = analysisResult {
+                    resultsPreview(result)
+                } else if let error = errorMessage {
+                    errorView(error)
+                }
+
+                Spacer()
+
+                // Action button
+                actionButton
+
+            }
+            .padding()
+            .navigationTitle("Analyzing Audio")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        cancelAnalysis()
+                        dismiss()
+                    }
+                    .disabled(currentStage == .complete)
+                }
+            }
+            .task {
+                await startAnalysis()
+            }
+        }
+    }
+
+    // MARK: - Progress Section
+
+    private var progressSection: some View {
+        VStack(spacing: 20) {
+            // Animated progress circle
+            ZStack {
+                Circle()
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 8)
+                    .frame(width: 150, height: 150)
+
+                Circle()
+                    .trim(from: 0, to: overallProgress)
+                    .stroke(
+                        currentStage == .complete ? Color.green : Color.blue,
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    )
+                    .frame(width: 150, height: 150)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.3), value: overallProgress)
+
+                // Icon or percentage
+                if currentStage == .complete {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 50, weight: .bold))
+                        .foregroundStyle(.green)
+                } else if currentStage == .failed {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 50, weight: .bold))
+                        .foregroundStyle(.red)
+                } else {
+                    VStack(spacing: 4) {
+                        Text("\(Int(overallProgress * 100))%")
+                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .foregroundStyle(.primary)
+
+                        // Show spinner to indicate activity
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .tint(.blue)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Stage Indicator
+
+    private var stageIndicator: some View {
+        VStack(spacing: 12) {
+            // Current stage title
+            Text(currentStage.title)
+                .font(.title3.bold())
+
+            // Stage description
+            Text(currentStage.description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            // Progress bar for current stage
+            if currentStage != .complete && currentStage != .failed {
+                ProgressView(value: currentStageProgress)
+                    .tint(currentStage.color)
+                    .frame(width: 200)
+            }
+        }
+        .padding()
+    }
+
+    // MARK: - Results Preview
+
+    private func resultsPreview(_ result: AnalysisResult) -> some View {
+        VStack(spacing: 16) {
+            Text("Analysis Complete!")
+                .font(.title2.bold())
+                .foregroundStyle(.green)
+
+            // Quick summary
+            VStack(alignment: .leading, spacing: 8) {
+                resultRow(icon: "brain.head.profile", label: "Mood", value: result.mood.rawValue.capitalized)
+                resultRow(icon: "bolt.fill", label: "Energy", value: "\(Int(result.energyLevel * 100))%")
+                resultRow(icon: "waveform", label: "Frequency",
+                         value: "\(Int(result.suggestedFrequencyRange.lowerBound))-\(Int(result.suggestedFrequencyRange.upperBound)) Hz")
+                resultRow(icon: "light.max", label: "Intensity", value: "\(Int(result.suggestedIntensity * 100))%")
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(12)
+        }
+    }
+
+    private func resultRow(icon: String, label: String, value: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text(value)
+                .font(.subheadline.bold())
+        }
+    }
+
+    // MARK: - Error View
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 50))
+                .foregroundStyle(.red)
+
+            Text("Analysis Failed")
+                .font(.title3.bold())
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+
+    // MARK: - Action Button
+
+    private var actionButton: some View {
+        Group {
+            if currentStage == .complete, let result = analysisResult {
+                Button {
+                    var updatedFile = audioFile
+                    updatedFile.analysisResult = result
+                    if let transcription = transcriptionResult {
+                        updatedFile.transcription = transcription.fullText
+                    }
+                    onAnalysisComplete(updatedFile, result)
+                    dismiss()
+                } label: {
+                    Label("Continue to Session Generation", systemImage: "arrow.right.circle.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundStyle(.white)
+                        .cornerRadius(12)
+                }
+            } else if currentStage == .failed {
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Close")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray)
+                        .foregroundStyle(.white)
+                        .cornerRadius(12)
+                }
+            }
+        }
+    }
+
+    // MARK: - Analysis Logic
+
+    private func startAnalysis() async {
+        do {
+            // Stage 1: Transcription
+            currentStage = .transcribing
+            transcriptionResult = try await audioAnalyzer.transcribe(audioFile: audioFile)
+
+            // Stage 2: AI Analysis
+            currentStage = .analyzing
+            guard let transcription = transcriptionResult else {
+                throw AnalyzerError.noAudioData
+            }
+
+            analysisResult = try await aiAnalyzer.analyzeContent(
+                transcription: transcription,
+                audioFile: audioFile
+            )
+
+            // Complete
+            currentStage = .complete
+
+        } catch {
+            currentStage = .failed
+            errorMessage = error.localizedDescription
+            print("❌ Analysis failed: \(error)")
+        }
+    }
+
+    private func cancelAnalysis() {
+        audioAnalyzer.cancelTranscription()
+    }
+
+    // MARK: - Progress Calculation
+
+    private var overallProgress: Double {
+        switch currentStage {
+        case .starting:
+            return 0.0
+        case .transcribing:
+            return 0.0 + (audioAnalyzer.progress * 0.4)
+        case .analyzing:
+            return 0.4 + (aiAnalyzer.progress * 0.4)
+        case .generatingSession:
+            return 0.8
+        case .complete:
+            return 1.0
+        case .failed:
+            return 0.0
+        }
+    }
+
+    private var currentStageProgress: Double {
+        switch currentStage {
+        case .transcribing:
+            return audioAnalyzer.progress
+        case .analyzing:
+            return aiAnalyzer.progress
+        case .generatingSession:
+            return 1.0
+        default:
+            return 0.0
+        }
+    }
+}
+
+// MARK: - Analysis Stage
+
+enum AnalysisStage {
+    case starting
+    case transcribing
+    case analyzing
+    case generatingSession
+    case complete
+    case failed
+
+    var title: String {
+        switch self {
+        case .starting:
+            return "Starting..."
+        case .transcribing:
+            return "Transcribing Audio"
+        case .analyzing:
+            return "AI Analysis"
+        case .generatingSession:
+            return "Generating Light Session"
+        case .complete:
+            return "Complete"
+        case .failed:
+            return "Failed"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .starting:
+            return "Preparing audio analysis"
+        case .transcribing:
+            return "Converting speech to text"
+        case .analyzing:
+            return "Generating therapy recommendations"
+        case .generatingSession:
+            return "Creating synchronized light session"
+        case .complete:
+            return "Session ready to use"
+        case .failed:
+            return "Something went wrong"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .starting, .transcribing, .analyzing, .generatingSession:
+            return .blue
+        case .complete:
+            return .green
+        case .failed:
+            return .red
+        }
+    }
+}
+
+#Preview {
+    AnalysisProgressView(
+        audioFile: AudioFile(
+            filename: "test.m4a",
+            url: URL(fileURLWithPath: "/tmp/test.m4a"),
+            duration: 300,
+            fileSize: 1024000
+        )
+    ) { file, _ in
+        print("Analysis complete for: \(file.filename)")
+    }
+}

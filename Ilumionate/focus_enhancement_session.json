@@ -1,0 +1,54 @@
+{
+  "session_name": "Focus Enhancement",
+  "duration_sec": 300,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 8.0,
+      "intensity": 0.4,
+      "waveform": "sine",
+      "ramp_duration": 3.0,
+      "bilateral": false
+    },
+    {
+      "time": 30,
+      "frequency": 12.0,
+      "intensity": 0.6,
+      "waveform": "sine",
+      "ramp_duration": 5.0,
+      "bilateral": true
+    },
+    {
+      "time": 90,
+      "frequency": 15.0,
+      "intensity": 0.7,
+      "waveform": "soft_pulse",
+      "ramp_duration": 8.0,
+      "bilateral": true
+    },
+    {
+      "time": 180,
+      "frequency": 18.0,
+      "intensity": 0.8,
+      "waveform": "triangle",
+      "ramp_duration": 10.0,
+      "bilateral": true
+    },
+    {
+      "time": 240,
+      "frequency": 14.0,
+      "intensity": 0.6,
+      "waveform": "sine",
+      "ramp_duration": 8.0,
+      "bilateral": true
+    },
+    {
+      "time": 300,
+      "frequency": 10.0,
+      "intensity": 0.3,
+      "waveform": "sine",
+      "ramp_duration": 5.0,
+      "bilateral": false
+    }
+  ]
+}
