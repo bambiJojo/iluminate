@@ -219,7 +219,7 @@ final class OrbCrashLogger {
     private func startCrashDetection() {
         // Monitor for UI hangs that might indicate a crash
         crashDetectionTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 self.checkForSuspiciousActivity()
             }

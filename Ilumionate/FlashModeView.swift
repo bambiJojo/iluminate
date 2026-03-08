@@ -36,6 +36,12 @@ final class FlashController {
     private var sessionStartTime: Date?
     private var originalBrightness: CGFloat = 0.5
     
+    private var currentScreen: UIScreen? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.screen
+    }
+    
     init(frequency: Double, intensity: Double, pattern: MindMachineModel.LightPattern) {
         self.frequency = frequency
         self.intensity = intensity
@@ -54,8 +60,10 @@ final class FlashController {
         TranceHaptics.shared.heavy()
         
         // Maximize brightness
-        originalBrightness = UIScreen.main.brightness
-        UIScreen.main.brightness = 1.0
+        if let screen = currentScreen {
+            originalBrightness = screen.brightness
+            screen.brightness = 1.0
+        }
         
         sessionStartTime = Date()
         
@@ -76,7 +84,7 @@ final class FlashController {
         displayLink = nil
         
         // Restore brightness
-        UIScreen.main.brightness = originalBrightness
+        currentScreen?.brightness = originalBrightness
         
         // Reset output
         leftOpacity = 0.0

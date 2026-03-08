@@ -30,6 +30,12 @@ struct AudioLibraryView: View {
     @State private var showingRenameAlert = false
     @State private var newFilename = ""
     @State private var fileToRename: AudioFile?
+    @State private var showingURLDownloader = false
+    @State private var audioURLInput = ""
+    @State private var isDownloadingURL = false
+    @State private var downloadError: String?
+    @State private var showingBrowser = false
+    @State private var showingAddSheet = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -126,7 +132,7 @@ struct AudioLibraryView: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: TranceSpacing.small) {
-                        // Queue management button
+                        // Queue badge
                         if analysisManager.currentAnalysis != nil || !analysisManager.analysisQueue.isEmpty {
                             Button {
                                 showingQueueManagement = true
@@ -147,14 +153,13 @@ struct AudioLibraryView: View {
                             }
                         }
 
-                        // Import button with Trance styling
+                        // Add button — triggers action sheet
                         Button {
                             TranceHaptics.shared.light()
-                            showingImporter = true
+                            showingAddSheet = true
                         } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .symbolRenderingMode(.hierarchical)
-                                .font(.title2)
+                            Image(systemName: "plus")
+                                .font(.title3.weight(.semibold))
                                 .foregroundColor(.roseGold)
                         }
                     }
@@ -193,8 +198,56 @@ struct AudioLibraryView: View {
             } message: {
                 Text("Enter a new name for this audio file.")
             }
+            .alert("Download Audio URL", isPresented: $showingURLDownloader) {
+                TextField("https://...", text: $audioURLInput)
+                Button("Cancel", role: .cancel) {
+                    audioURLInput = ""
+                    isDownloadingURL = false
+                }
+                Button("Download") {
+                    handleURLDownload()
+                }
+                .disabled(audioURLInput.isEmpty || isDownloadingURL)
+            } message: {
+                if isDownloadingURL {
+                    Text("Downloading... Please wait.")
+                } else {
+                    Text("Enter a stable URL pointing directly to an MP3, M4A, or WAV file.")
+                }
+            }
+            .alert("Download Failed", isPresented: Binding(
+                get: { downloadError != nil },
+                set: { if !$0 { downloadError = nil } }
+            )) {
+                Button("OK", role: .cancel) { downloadError = nil }
+            } message: {
+                if let err = downloadError { Text(err) }
+            }
             .onAppear {
                 loadAudioFiles()
+            }
+            .confirmationDialog("Add to Library", isPresented: $showingAddSheet, titleVisibility: .visible) {
+                Button("Import from Files") {
+                    TranceHaptics.shared.light()
+                    showingImporter = true
+                }
+                Button("Import from URL") {
+                    TranceHaptics.shared.light()
+                    showingURLDownloader = true
+                }
+                Button("Browse the Web") {
+                    TranceHaptics.shared.light()
+                    showingBrowser = true
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .sheet(isPresented: $showingBrowser) {
+                InAppBrowserView { file in
+                    addAudioFile(file)
+                    Task {
+                        await analysisManager.queueForAnalysis([file])
+                    }
+                }
             }
             .onChange(of: isSelectionMode) { _, newValue in
                 if !newValue {
@@ -204,112 +257,56 @@ struct AudioLibraryView: View {
         }
     }
 
-    // MARK: - Empty State with Trance Design
+    // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: TranceSpacing.statusBar) {
+        VStack(spacing: TranceSpacing.content) {
             Spacer()
 
-            // Elegant centered icon
             VStack(spacing: TranceSpacing.card) {
-                // Simple icon with rose gold styling
-                Image(systemName: "waveform.circle.fill")
-                    .font(.system(size: 80, weight: .light))
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 64, weight: .ultraLight))
                     .foregroundStyle(
                         LinearGradient(
                             colors: [.roseGold, .roseDeep],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
                     )
-                    .shadow(
-                        color: Color.roseGold.opacity(0.3),
-                        radius: 20,
-                        x: 0,
-                        y: 10
-                    )
+                    .shadow(color: Color.roseGold.opacity(0.25), radius: 16, x: 0, y: 8)
 
                 VStack(spacing: TranceSpacing.inner) {
-                    Text("Your Audio Library")
+                    Text("No Audio Yet")
                         .font(TranceTypography.greeting)
                         .foregroundColor(.textPrimary)
-                        .multilineTextAlignment(.center)
 
-                    Text("Transform your audio into personalized\nlight therapy experiences")
+                    Text("Tap  +  in the top right to add\naudio files to your library")
                         .font(TranceTypography.body)
                         .foregroundColor(.textSecondary)
                         .multilineTextAlignment(.center)
-                        .lineSpacing(2)
+                        .lineSpacing(3)
                 }
             }
 
             Spacer()
 
-            // Import button with Trance styling
-            VStack(spacing: TranceSpacing.card) {
-                Button {
-                    TranceHaptics.shared.medium()
-                    showingImporter = true
-                } label: {
-                    HStack(spacing: TranceSpacing.list) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Import Audio Files")
-                                .font(TranceTypography.body)
-                                .fontWeight(.semibold)
-
-                            Text("MP3, M4A & more formats")
-                                .font(TranceTypography.caption)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "arrow.right")
-                            .font(.caption)
-                            .opacity(0.7)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, TranceSpacing.content)
-                    .padding(.vertical, TranceSpacing.card)
-                }
-                .background(
-                    LinearGradient(
-                        colors: [.roseGold, .roseDeep],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
-                .shadow(
-                    color: TranceShadow.button.color,
-                    radius: TranceShadow.button.radius,
-                    x: TranceShadow.button.x,
-                    y: TranceShadow.button.y
-                )
-                .padding(.horizontal, TranceSpacing.screen)
-
-                // Helpful tip
-                HStack(spacing: TranceSpacing.icon) {
-                    Image(systemName: "sparkles")
-                        .font(TranceTypography.caption)
-                        .foregroundColor(.roseGold)
-
-                    Text("AI will analyze your audio to create custom light sessions")
-                        .font(TranceTypography.caption)
-                        .foregroundColor(.textLight)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, TranceSpacing.screen)
+            // Subtle AI hint at the bottom
+            HStack(spacing: TranceSpacing.icon) {
+                Image(systemName: "sparkles")
+                    .font(.caption)
+                    .foregroundColor(.roseGold)
+                Text("AI will analyze your audio to create custom light sessions")
+                    .font(TranceTypography.caption)
+                    .foregroundColor(.textLight)
+                    .multilineTextAlignment(.center)
             }
-
-            Spacer()
+            .padding(.horizontal, TranceSpacing.screen)
+            .padding(.bottom, TranceSpacing.statusBar)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Audio Library Content with Trance Design
+    // MARK: - Audio Library Content
 
     private var audioLibraryContent: some View {
         ScrollView {
@@ -317,10 +314,7 @@ struct AudioLibraryView: View {
                 // Search bar
                 searchSection
 
-                // Import options section
-                importOptionsSection
-
-                // Audio files grid
+                // Audio files list
                 audioFilesGrid
 
                 // Bottom spacing for selection toolbar
@@ -374,8 +368,8 @@ struct AudioLibraryView: View {
 
     private var importOptionsSection: some View {
         GlassCard(label: "Add Audio") {
-            VStack(spacing: TranceSpacing.card) {
-                // Import from Files
+            VStack(spacing: TranceSpacing.inner) {
+                // --- Import from File (Primary) ---
                 Button {
                     TranceHaptics.shared.light()
                     showingImporter = true
@@ -383,66 +377,126 @@ struct AudioLibraryView: View {
                     HStack(spacing: TranceSpacing.list) {
                         Image(systemName: "folder.fill")
                             .font(.title2)
-                            .foregroundColor(.roseGold)
+                            .frame(width: 28)
+                            .foregroundColor(.white)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Import from Files")
+                            Text("Import from File")
                                 .font(TranceTypography.body)
-                                .fontWeight(.medium)
-                                .foregroundColor(.textPrimary)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
 
                             Text("Choose MP3, M4A, or WAV files")
                                 .font(TranceTypography.caption)
-                                .foregroundColor(.textSecondary)
+                                .foregroundColor(.white.opacity(0.8))
                         }
 
                         Spacer()
 
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.textLight)
+                        Image(systemName: "arrow.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.white.opacity(0.8))
                     }
-                    .padding(.vertical, TranceSpacing.inner)
+                    .padding(.horizontal, TranceSpacing.card)
+                    .padding(.vertical, TranceSpacing.card)
+                    .background(
+                        LinearGradient(
+                            colors: [.roseGold, .roseDeep],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
+                    .shadow(color: Color.roseGold.opacity(0.30), radius: 8, x: 0, y: 4)
                 }
 
-                Rectangle()
-                    .fill(Color.glassBorder.opacity(0.3))
-                    .frame(height: 1)
-
-                // Record Audio (placeholder for now)
+                // --- Import from Web (Secondary) ---
                 Button {
                     TranceHaptics.shared.light()
-                    // TODO: Implement audio recording
+                    showingURLDownloader = true
                 } label: {
                     HStack(spacing: TranceSpacing.list) {
-                        Image(systemName: "mic.fill")
-                            .font(.title2)
-                            .foregroundColor(.warmAccent)
+                        Group {
+                            if isDownloadingURL {
+                                ProgressView()
+                                    .tint(.roseGold)
+                            } else {
+                                Image(systemName: "link.icloud.fill")
+                                    .font(.title2)
+                            }
+                        }
+                        .frame(width: 28)
+                        .foregroundColor(.roseGold)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Record Audio")
+                            Text(isDownloadingURL ? "Downloading..." : "Import from Web")
                                 .font(TranceTypography.body)
-                                .fontWeight(.medium)
+                                .fontWeight(.semibold)
                                 .foregroundColor(.textPrimary)
 
-                            Text("Record directly in the app")
+                            Text(isDownloadingURL ? "Saving to your library..." : "Paste a link to an audio file")
                                 .font(TranceTypography.caption)
                                 .foregroundColor(.textSecondary)
                         }
 
                         Spacer()
 
-                        Text("Coming Soon")
-                            .font(TranceTypography.caption)
+                        Image(systemName: "arrow.right")
+                            .font(.caption.weight(.semibold))
                             .foregroundColor(.textLight)
-                            .padding(.horizontal, TranceSpacing.inner)
-                            .padding(.vertical, TranceSpacing.micro)
-                            .background(Color.glassBorder.opacity(0.2))
-                            .clipShape(RoundedRectangle(cornerRadius: TranceRadius.pill))
                     }
-                    .padding(.vertical, TranceSpacing.inner)
+                    .padding(.horizontal, TranceSpacing.card)
+                    .padding(.vertical, TranceSpacing.card)
+                    .background(
+                        RoundedRectangle(cornerRadius: TranceRadius.button)
+                            .fill(Color.roseGold.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: TranceRadius.button)
+                                    .strokeBorder(Color.roseGold.opacity(0.35), lineWidth: 1)
+                            )
+                    )
                 }
-                .disabled(true)
+                .disabled(isDownloadingURL)
+
+                // --- Browse the Web (Tertiary) ---
+                Button {
+                    TranceHaptics.shared.light()
+                    showingBrowser = true
+                } label: {
+                    HStack(spacing: TranceSpacing.list) {
+                        Image(systemName: "safari.fill")
+                            .font(.title2)
+                            .frame(width: 28)
+                            .foregroundColor(.textSecondary)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Browse the Web")
+                                .font(TranceTypography.body)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.textPrimary)
+
+                            Text("Find & download audio in-app")
+                                .font(TranceTypography.caption)
+                                .foregroundColor(.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "arrow.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.textLight)
+                    }
+                    .padding(.horizontal, TranceSpacing.card)
+                    .padding(.vertical, TranceSpacing.card)
+                    .background(
+                        RoundedRectangle(cornerRadius: TranceRadius.button)
+                            .fill(Color.glassBorder.opacity(0.12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: TranceRadius.button)
+                                    .strokeBorder(Color.glassBorder.opacity(0.35), lineWidth: 1)
+                            )
+                    )
+                }
             }
         }
         .padding(.horizontal, TranceSpacing.screen)
@@ -716,6 +770,48 @@ struct AudioLibraryView: View {
 
         case .failure(let error):
             print("❌ Import failed: \(error)")
+        }
+    }
+
+    private func handleURLDownload() {
+        guard let url = URL(string: audioURLInput.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme == "http" || url.scheme == "https" else {
+            downloadError = "Please enter a valid http:// or https:// URL."
+            return
+        }
+
+        isDownloadingURL = true
+
+        Task {
+            do {
+                if let file = try await audioManager.downloadAudio(from: url) {
+                    await MainActor.run {
+                        addAudioFile(file)
+                        showingURLDownloader = false
+                        audioURLInput = ""
+                        isDownloadingURL = false
+                    }
+
+                    // Auto queue for analysis
+                    print("🔬 Auto-queuing downloaded file for analysis...")
+                    await analysisManager.queueForAnalysis([file])
+                } else {
+                    await MainActor.run {
+                        isDownloadingURL = false
+                        downloadError = "Download completed but the file could not be saved. Please try again."
+                    }
+                }
+            } catch let urlError as URLError where urlError.code == .badServerResponse {
+                await MainActor.run {
+                    isDownloadingURL = false
+                    downloadError = "The server returned an error. Please check the URL and try again."
+                }
+            } catch {
+                await MainActor.run {
+                    isDownloadingURL = false
+                    downloadError = "Download failed: \(error.localizedDescription)"
+                }
+            }
         }
     }
 }

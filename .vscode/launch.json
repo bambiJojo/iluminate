@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Ilumionate}",
+            "name": "Debug Ilumionate",
+            "program": "${workspaceFolder:Ilumionate}/.build/debug/Ilumionate",
+            "preLaunchTask": "swift: Build Debug Ilumionate"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Ilumionate}",
+            "name": "Release Ilumionate",
+            "program": "${workspaceFolder:Ilumionate}/.build/release/Ilumionate",
+            "preLaunchTask": "swift: Build Release Ilumionate"
+        }
+    ]
+}

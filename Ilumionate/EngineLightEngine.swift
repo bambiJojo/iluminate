@@ -349,6 +349,18 @@ final class LightEngine {
         let dt = link.timestamp - lastTimestamp
         lastTimestamp = link.timestamp
 
+        // Early return when paused — freeze brightness and don't advance phase or session time.
+        // We still update lastTimestamp each tick so that on resume, dt is just one normal
+        // frame interval (~8ms) rather than the entire pause duration (which would cause a
+        // massive phase jump and broken oscillator output — the first-launch bug).
+        if isPaused {
+            brightness = 0.0
+            brightnessLeft = 0.0
+            brightnessRight = 0.0
+            lastTimestamp = link.timestamp   // ← keep timestamp fresh while paused
+            return
+        }
+
         // Performance monitoring
         frameCounter += 1
         cumulativeFramesRendered += 1

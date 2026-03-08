@@ -198,6 +198,109 @@ class AudioManager: NSObject {
         }
     }
 
+    /// Downloads an audio file from a remote URL, saves it locally, and returns an AudioFile object
+    func downloadAudio(from sourceURL: URL) async throws -> AudioFile? {
+        // Download the file to a temporary location
+        let (tempURL, response) = try await URLSession.shared.download(from: sourceURL)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            // Clean up temp file
+            try? FileManager.default.removeItem(at: tempURL)
+            throw URLError(.badServerResponse)
+        }
+        
+        // Extract original filename or create a fallback using Content-Type hint
+        let originalName = sourceURL.lastPathComponent.components(separatedBy: "?").first ?? ""
+        let targetName: String
+        let originalExt = URL(fileURLWithPath: originalName).pathExtension.lowercased()
+        if !originalName.isEmpty, originalName != "/",
+           ["mp3", "m4a", "wav", "aac", "flac"].contains(originalExt) {
+            // URL has a recognizable audio extension – use it directly
+            targetName = originalName
+        } else {
+            // Sniff Content-Type header to pick the right extension
+            let contentType = httpResponse.allHeaderFields["Content-Type"] as? String ?? ""
+            let ext: String
+            if contentType.contains("mpeg") || contentType.contains("mp3") {
+                ext = "mp3"
+            } else if contentType.contains("m4a") || contentType.contains("mp4") {
+                ext = "m4a"
+            } else if contentType.contains("wav") {
+                ext = "wav"
+            } else if contentType.contains("aac") {
+                ext = "aac"
+            } else if contentType.contains("flac") {
+                ext = "flac"
+            } else {
+                ext = "mp3" // safe fallback
+            }
+            let baseName = originalName.isEmpty || originalName == "/" ? "DownloadedAudio" : (originalName as NSString).deletingPathExtension
+            targetName = "\(baseName).\(ext)"
+        }
+        
+        // Generate final destination path
+        let destinationURL = URL.documentsDirectory.appending(path: targetName)
+        let finalDestinationURL = makeUniqueFileURL(destinationURL)
+        let finalFilename = finalDestinationURL.lastPathComponent
+        
+        do {
+            // Move downloaded temp file to documents directory
+            try FileManager.default.moveItem(at: tempURL, to: finalDestinationURL)
+            print("📁 File downloaded and saved to: \(finalDestinationURL.path)")
+            
+            // Get file size
+            let resources = try finalDestinationURL.resourceValues(forKeys: [.fileSizeKey])
+            let fileSize = Int64(resources.fileSize ?? 0)
+            
+            // Get audio duration with timeout
+            let durationSeconds = await withTaskGroup(of: Double?.self) { group in
+                group.addTask {
+                    do {
+                        let asset = AVURLAsset(url: finalDestinationURL)
+                        print("🔍 Loading audio properties for downloaded file: \(finalFilename)")
+                        let duration = try await asset.load(.duration)
+                        let seconds = duration.seconds
+                        print("⏱️ Duration loaded: \(seconds) seconds")
+                        return seconds.isFinite ? seconds : 0
+                    } catch {
+                        print("❌ Failed to load duration: \(error)")
+                        return 0
+                    }
+                }
+                
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    print("⚠️ Audio loading timeout reached for downloaded file: \(finalFilename)")
+                    return 0
+                }
+                
+                if let result = await group.next() {
+                    group.cancelAll()
+                    return result ?? 0
+                }
+                return 0
+            }
+            
+            let audioFile = AudioFile(
+                filename: finalFilename,
+                url: finalDestinationURL,
+                duration: durationSeconds,
+                fileSize: fileSize
+            )
+            
+            print("✅ Successfully downloaded audio: \(finalFilename) (Duration: \(durationSeconds)s)")
+            return audioFile
+            
+        } catch {
+            print("❌ Failed to move downloaded file to Library: \(error)")
+            // Clean up files on error
+            try? FileManager.default.removeItem(at: tempURL)
+            try? FileManager.default.removeItem(at: finalDestinationURL)
+            throw error
+        }
+    }
+
     // MARK: - Cleanup
 
     /// Cleanup audio resources - call this explicitly when done with AudioManager
