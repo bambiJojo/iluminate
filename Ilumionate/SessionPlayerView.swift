@@ -26,6 +26,10 @@ struct SessionPlayerView: View {
     @State private var isSyncEnabled = true
     @State private var currentPhase = "Induction Phase"
 
+    // Persist last-played position for HomeView "Continue Session" card
+    @AppStorage("lastSessionId") private var lastSessionId = ""
+    @AppStorage("lastSessionProgress") private var lastSessionProgress: Double = 0.0
+
     init(session: LightSession, audioFile: AudioFile? = nil, engine: LightEngine) {
         self.session = session
         self.audioFile = audioFile
@@ -202,6 +206,7 @@ struct SessionPlayerView: View {
                         player.pause()
                         engine.pause()
                         audioSync?.pause()
+                        saveProgress()
                     } else {
                         player.play()
                         engine.resume()
@@ -353,10 +358,26 @@ struct SessionPlayerView: View {
     }
 
     private func stopSession() {
+        saveProgress()
         player.stop()
         engine.detachSession()
         engine.stop()
         audioSync?.stop()
+    }
+
+    private func saveProgress() {
+        // Only save if session is not complete and has real progress
+        guard session.duration_sec > 0 else { return }
+        let progress = player.currentTime / session.duration_sec
+        // Don't overwrite with 0 or 1 (completed)
+        if progress > 0.01 && progress < 0.99 {
+            lastSessionId = session.id.uuidString
+            lastSessionProgress = progress
+        } else if progress >= 0.99 {
+            // Session finished — clear the card
+            lastSessionId = ""
+            lastSessionProgress = 0.0
+        }
     }
 
     // MARK: - Audio Sync

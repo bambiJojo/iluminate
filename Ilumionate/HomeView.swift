@@ -56,12 +56,12 @@ struct HomeView: View {
     @Binding var selectedSession: LightSession?
 
     let sessions: [LightSession]
+    let audioFiles: [AudioFile]
     let onRefresh: (() -> Void)?
 
     @State private var animateCards = false
     @State private var isRefreshing = false
-    @State private var showingCategorySheet = false
-    @State private var activeCategoryFilter: BrainwaveCategory?
+    @State private var showingProfile = false
 
     // Persist user name and last session progress
     @AppStorage("userName") private var userName = ""
@@ -72,11 +72,13 @@ struct HomeView: View {
          showingSessionPlayer: Binding<Bool>,
          selectedSession: Binding<LightSession?>,
          sessions: [LightSession],
+         audioFiles: [AudioFile] = [],
          onRefresh: (() -> Void)? = nil) {
         self._showingAudioLibrary = showingAudioLibrary
         self._showingSessionPlayer = showingSessionPlayer
         self._selectedSession = selectedSession
         self.sessions = sessions
+        self.audioFiles = audioFiles
         self.onRefresh = onRefresh
     }
 
@@ -84,16 +86,15 @@ struct HomeView: View {
         ScrollView {
             VStack(spacing: TranceSpacing.content) {
                 greetingSection
-                categoryIconsSection
 
-                // Only show Continue Session card when we have real progress
                 if lastSessionProgress > 0,
                    let lastSession = sessions.first(where: { $0.id.uuidString == lastSessionId }) ?? sessions.first {
                     continueSessionCard(session: lastSession)
                 }
 
                 quickStartSection
-                yourLibrarySection
+                recentAudioSection
+                mindMachineSection
             }
             .padding(.horizontal, TranceSpacing.screen)
             .padding(.bottom, 100)
@@ -107,20 +108,11 @@ struct HomeView: View {
                 animateCards = true
             }
         }
-        // Category filter sheet
-        .sheet(isPresented: $showingCategorySheet) {
-            if let category = activeCategoryFilter {
-                CategorySessionSheet(
-                    category: category,
-                    sessions: sessions,
-                    onSelect: { session in
-                        showingCategorySheet = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            selectedSession = session
-                            showingSessionPlayer = true
-                        }
-                    }
-                )
+        .sheet(isPresented: $showingProfile) {
+            NavigationStack {
+                SettingsView()
+                    .navigationTitle("Profile & Settings")
+                    .navigationBarTitleDisplayMode(.large)
             }
         }
     }
@@ -141,47 +133,53 @@ struct HomeView: View {
 
             Spacer()
 
-            // Profile circle — shows first initial
-            Circle()
-                .fill(
-                    LinearGradient(colors: [.roseGold, .blush],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-                )
-                .frame(width: 52, height: 52)
-                .overlay(
-                    Text(profileInitial)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.white)
-                )
-                .shadow(
-                    color: TranceShadow.elevated.color,
-                    radius: TranceShadow.elevated.radius,
-                    x: TranceShadow.elevated.x,
-                    y: TranceShadow.elevated.y
-                )
+            // Profile circle — taps to open settings
+            Button {
+                TranceHaptics.shared.light()
+                showingProfile = true
+            } label: {
+                Circle()
+                    .fill(
+                        LinearGradient(colors: [.roseGold, .blush],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .frame(width: 52, height: 52)
+                    .overlay(
+                        Text(profileInitial)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.white)
+                    )
+                    .shadow(
+                        color: TranceShadow.elevated.color,
+                        radius: TranceShadow.elevated.radius,
+                        x: TranceShadow.elevated.x,
+                        y: TranceShadow.elevated.y
+                    )
+            }
+            .buttonStyle(PlainButtonStyle())
         }
         .padding(.top, TranceSpacing.statusBar)
     }
 
     // MARK: - Category Icons Section
 
-    private var categoryIconsSection: some View {
-        HStack(spacing: TranceSpacing.content) {
-            ForEach(BrainwaveCategory.allCases, id: \.rawValue) { category in
-                Button {
-                    TranceHaptics.shared.light()
-                    activeCategoryFilter = category
-                    showingCategorySheet = true
-                } label: {
-                    CategoryIcon(emoji: category.emoji, label: category.rawValue, haloColor: category.haloColor)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
-        .opacity(animateCards ? 1 : 0)
-        .offset(y: animateCards ? 0 : 20)
-        .animation(.easeOut(duration: 0.6).delay(0.1), value: animateCards)
-    }
+//    private var categoryIconsSection: some View {
+//        HStack(spacing: TranceSpacing.content) {
+//            ForEach(BrainwaveCategory.allCases, id: \.rawValue) { category in
+//                Button {
+//                    TranceHaptics.shared.light()
+//                    activeCategoryFilter = category
+//                    showingCategorySheet = true
+//                } label: {
+//                    CategoryIcon(emoji: category.emoji, label: category.rawValue, haloColor: category.haloColor)
+//                }
+//                .buttonStyle(PlainButtonStyle())
+//            }
+//        }
+//        .opacity(animateCards ? 1 : 0)
+//        .offset(y: animateCards ? 0 : 20)
+//        .animation(.easeOut(duration: 0.6).delay(0.1), value: animateCards)
+//    }
 
     // MARK: - Continue Session Card
 
@@ -272,45 +270,69 @@ struct HomeView: View {
         .buttonStyle(PlainButtonStyle())
     }
 
-    // MARK: - Your Library Section
+    // MARK: - Recent Audio Section
 
-    private var yourLibrarySection: some View {
-        GlassCard(label: "Your Library") {
+    private var recentAudioSection: some View {
+        GlassCard(label: "Recent Audio") {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                Button {
-                    showingAudioLibrary = true
-                } label: {
-                    HStack(spacing: TranceSpacing.list) {
-                        Circle()
-                            .fill(Color.phaseInduction)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: "plus")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(.white)
-                            )
+                if recentAudioFiles.isEmpty {
+                    // Empty state row
+                    Button {
+                        showingAudioLibrary = true
+                    } label: {
+                        HStack(spacing: TranceSpacing.list) {
+                            Circle()
+                                .fill(Color.phaseInduction)
+                                .frame(width: 44, height: 44)
+                                .overlay(
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.white)
+                                )
 
-                        VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                            Text("Import Audio")
-                                .font(TranceTypography.body)
-                                .foregroundColor(.textPrimary)
+                            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                                Text("Import Audio")
+                                    .font(TranceTypography.body)
+                                    .foregroundColor(.textPrimary)
+                                Text("Add your own hypnosis files")
+                                    .font(TranceTypography.caption)
+                                    .foregroundColor(.textSecondary)
+                            }
 
-                            Text("Create custom sessions")
-                                .font(TranceTypography.caption)
-                                .foregroundColor(.textSecondary)
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.textLight)
                         }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.textLight)
                     }
-                }
-                .buttonStyle(PlainButtonStyle())
+                    .buttonStyle(PlainButtonStyle())
+                } else {
+                    ForEach(Array(recentAudioFiles.enumerated()), id: \.element.id) { index, file in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(Color.glassBorder.opacity(0.3))
+                                .frame(height: 1)
+                        }
+                        audioFileRow(file: file, index: index)
+                    }
 
-                if !sessions.isEmpty {
-                    libraryThumbnailsRow
+                    // "See all" link
+                    Button {
+                        showingAudioLibrary = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Text("See all \(audioFiles.count) files")
+                                .font(TranceTypography.caption)
+                                .foregroundColor(.roseGold)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(.roseGold)
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .opacity(audioFiles.count > 3 ? 1 : 0)
                 }
             }
         }
@@ -319,49 +341,160 @@ struct HomeView: View {
         .animation(.easeOut(duration: 0.6).delay(0.4), value: animateCards)
     }
 
-    private var libraryThumbnailsRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: TranceSpacing.small) {
-                ForEach(Array(sessions.prefix(6).enumerated()), id: \.element.id) { index, session in
-                    libraryThumbnail(session: session, color: sessionColors[index % sessionColors.count])
+    private func audioFileRow(file: AudioFile, index: Int) -> some View {
+        HStack(spacing: TranceSpacing.list) {
+            // Track number / icon
+            ZStack {
+                RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
+                    .fill(sessionColors[index % sessionColors.count].opacity(0.15))
+                    .frame(width: 44, height: 44)
+                Image(systemName: file.isAnalyzed ? "waveform.circle.fill" : "waveform.circle")
+                    .font(.system(size: 20))
+                    .foregroundColor(sessionColors[index % sessionColors.count])
+            }
+
+            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                Text(file.displayName)
+                    .font(TranceTypography.body)
+                    .foregroundColor(.textPrimary)
+                    .lineLimit(1)
+
+                HStack(spacing: TranceSpacing.small) {
+                    Text(file.durationFormatted)
+                        .font(TranceTypography.caption)
+                        .foregroundColor(.textSecondary)
+
+                    if file.isAnalyzed {
+                        Text("· Analyzed")
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.roseGold)
+                    }
                 }
             }
-            .padding(.horizontal, 2)
+
+            Spacer()
+
+            Image(systemName: "play.circle")
+                .font(.system(size: 22))
+                .foregroundColor(.textLight)
         }
     }
 
-    private func libraryThumbnail(session: LightSession, color: Color) -> some View {
-        Button {
-            TranceHaptics.shared.light()
-            selectedSession = session
-            showingSessionPlayer = true
-        } label: {
-            VStack(spacing: TranceSpacing.micro) {
-                RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                    .fill(
-                        LinearGradient(colors: [color, color.opacity(0.7)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .frame(width: 72, height: 72)
-                    .overlay(
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.9))
-                    )
-                    .overlay(alignment: .topTrailing) {
-                        Text(String(session.displayName.prefix(1)))
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.white.opacity(0.7))
-                            .padding(4)
+    private var recentAudioFiles: [AudioFile] {
+        Array(audioFiles.sorted { $0.createdDate > $1.createdDate }.prefix(3))
+    }
+
+    // MARK: - Mind Machine Section
+
+    private var mindMachineSection: some View {
+        GlassCard(label: "Mind Machine") {
+            VStack(spacing: TranceSpacing.list) {
+                Text("Brainwave Presets")
+                    .font(TranceTypography.caption)
+                    .foregroundColor(.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: TranceSpacing.list) {
+                    mindMachinePresetCard(
+                        emoji: "🧘",
+                        title: "Theta",
+                        subtitle: "6 Hz · Deep Relax",
+                        color: .bwTheta
+                    ) {
+                        launchQuickSession(name: "Theta Relax", frequency: 6.0, durationMinutes: 15, color: .bwTheta)
                     }
 
-                Text(session.displayName)
+                    mindMachinePresetCard(
+                        emoji: "🎯",
+                        title: "Alpha",
+                        subtitle: "10 Hz · Focus",
+                        color: .bwAlpha
+                    ) {
+                        launchQuickSession(name: "Alpha Focus", frequency: 10.0, durationMinutes: 10, color: .bwAlpha)
+                    }
+
+                    mindMachinePresetCard(
+                        emoji: "🌙",
+                        title: "Delta",
+                        subtitle: "2 Hz · Sleep",
+                        color: .bwDelta
+                    ) {
+                        launchQuickSession(name: "Delta Sleep", frequency: 2.0, durationMinutes: 20, color: .bwDelta)
+                    }
+                }
+
+                // Built-in sessions row (up to 3)
+                if !sessions.isEmpty {
+                    Rectangle()
+                        .fill(Color.glassBorder.opacity(0.3))
+                        .frame(height: 1)
+
+                    ForEach(Array(sessions.prefix(3).enumerated()), id: \.element.id) { index, session in
+                        Button {
+                            TranceHaptics.shared.light()
+                            selectedSession = session
+                            showingSessionPlayer = true
+                        } label: {
+                            HStack(spacing: TranceSpacing.list) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
+                                        .fill(sessionColors[index % sessionColors.count].opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(sessionColors[index % sessionColors.count])
+                                }
+
+                                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                                    Text(session.displayName)
+                                        .font(TranceTypography.body)
+                                        .foregroundColor(.textPrimary)
+                                        .lineLimit(1)
+                                    Text(session.durationFormatted)
+                                        .font(TranceTypography.caption)
+                                        .foregroundColor(.textSecondary)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "play.circle")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.textLight)
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+            }
+        }
+        .opacity(animateCards ? 1 : 0)
+        .offset(y: animateCards ? 0 : 20)
+        .animation(.easeOut(duration: 0.6).delay(0.5), value: animateCards)
+    }
+
+    private func mindMachinePresetCard(emoji: String, title: String, subtitle: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: TranceSpacing.micro) {
+                Text(emoji)
+                    .font(.system(size: 24))
+
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+
+                Text(subtitle)
                     .font(.system(size: 10))
                     .foregroundColor(.textSecondary)
-                    .lineLimit(2)
                     .multilineTextAlignment(.center)
-                    .frame(width: 72)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, TranceSpacing.inner)
+            .background(color.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: TranceRadius.thumbnail))
+            .overlay(
+                RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
+                    .stroke(color.opacity(0.3), lineWidth: 1)
+            )
         }
         .buttonStyle(PlainButtonStyle())
     }

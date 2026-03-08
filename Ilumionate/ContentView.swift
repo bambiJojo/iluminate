@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var selectedTab: TranceTab = .home
     @State private var engine = LightEngine()
     @State private var sessions: [LightSession] = []
+    @State private var audioFiles: [AudioFile] = []
     @State private var selectedSession: LightSession?
     @State private var showingAudioLibrary = false
     @State private var showingSessionPlayer = false
@@ -20,8 +21,8 @@ struct ContentView: View {
     @State private var isLoading = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Main content area
+        ZStack(alignment: .bottom) {
+            // Main content area — fills full screen; bottom padding reserves space for floating bar
             Group {
                 switch selectedTab {
                 case .home:
@@ -31,6 +32,7 @@ struct ContentView: View {
                             showingSessionPlayer: $showingSessionPlayer,
                             selectedSession: $selectedSession,
                             sessions: sessions,
+                            audioFiles: audioFiles,
                             onRefresh: loadSessions
                         )
                         .navigationTitle("Home")
@@ -55,7 +57,6 @@ struct ContentView: View {
 
                 case .store:
                     NavigationStack {
-                        // Store view (placeholder for now)
                         VStack {
                             Text("Store")
                                 .font(TranceTypography.screenTitle)
@@ -69,13 +70,6 @@ struct ContentView: View {
                         .navigationTitle("Store")
                         .navigationBarTitleDisplayMode(.large)
                     }
-
-                case .profile:
-                    NavigationStack {
-                        SettingsView()
-                            .navigationTitle("Profile")
-                            .navigationBarTitleDisplayMode(.large)
-                    }
                 }
             }
 
@@ -84,6 +78,7 @@ struct ContentView: View {
         }
         .onAppear {
             loadSessions()
+            loadAudioFiles()
             checkForFirstLaunch()
         }
         .fullScreenCover(isPresented: $showingSessionPlayer) {
@@ -108,7 +103,6 @@ struct ContentView: View {
         isLoading = true
         sessions = []
 
-        // Simulate loading delay for smoother UX
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             let sessionNames = LightScoreReader.discoverBundledSessions()
 
@@ -122,6 +116,14 @@ struct ContentView: View {
             }
 
             isLoading = false
+        }
+    }
+
+    private func loadAudioFiles() {
+        // Read audio files from the same UserDefaults key AudioLibraryView uses
+        if let data = UserDefaults.standard.data(forKey: "audioFiles"),
+           let files = try? JSONDecoder().decode([AudioFile].self, from: data) {
+            audioFiles = files
         }
     }
 

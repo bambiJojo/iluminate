@@ -2,100 +2,134 @@
 //  TranceTabBar.swift
 //  Ilumionate
 //
-//  Five-tab navigation with glass morphism styling
+//  Floating capsule tab bar with matchedGeometryEffect sliding indicator
+//  and SF Symbol bounce animations — inspired by Kavsoft.
 //
 
 import SwiftUI
 
+// MARK: - Tab Enum
+
 enum TranceTab: String, CaseIterable {
-    case home      = "🏠"
-    case library   = "📚"
-    case machine   = "💡"
-    case playlists = "🎵"
-    case store     = "🛒"
-    case profile   = "👤"
+    case home      = "home"
+    case library   = "library"
+    case machine   = "machine"
+    case playlists = "playlists"
+    case store     = "store"
 
     var title: String {
         switch self {
-        case .home:    "Home"
-        case .library: "Library"
+        case .home:      "Home"
+        case .library:   "Library"
         case .machine:   "Machine"
         case .playlists: "Playlists"
         case .store:     "Store"
-        case .profile:   "Profile"
         }
     }
 
     var sfSymbol: String {
         switch self {
-        case .home:    "house.fill"
-        case .library: "books.vertical.fill"
+        case .home:      "house.fill"
+        case .library:   "books.vertical.fill"
         case .machine:   "lightbulb.fill"
         case .playlists: "music.note.list"
         case .store:     "bag.fill"
-        case .profile:   "person.fill"
         }
     }
 }
 
+// MARK: - Tab Bar View
+
 struct TranceTabBar: View {
     @Binding var selected: TranceTab
+    @Namespace private var tabAnimation
 
     var body: some View {
-        HStack {
+        HStack(spacing: 0) {
             ForEach(TranceTab.allCases, id: \.self) { tab in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selected = tab
-                        TranceHaptics.shared.light()
-                    }
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: tab.sfSymbol)
-                            .font(.system(size: 20))
-                        Text(tab.title)
-                            .font(TranceTypography.tabLabel)
-                    }
-                    .foregroundColor(selected == tab ? .roseGold : .textLight)
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, TranceSpacing.small)
+                tabItem(tab)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 10)
+        .background {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 8)
+        }
+        .overlay {
+            Capsule()
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
+    }
+
+    // MARK: - Single Tab Item
+
+    @ViewBuilder
+    private func tabItem(_ tab: TranceTab) -> some View {
+        let isSelected = selected == tab
+
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                selected = tab
+            }
+            TranceHaptics.shared.light()
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: tab.sfSymbol)
+                    .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
+                    .symbolEffect(.bounce, value: selected)
+                    .foregroundStyle(isSelected ? tabAccentColor : .white.opacity(0.45))
+                    .scaleEffect(isSelected ? 1.1 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.65), value: selected)
+
+                Text(tab.title)
+                    .font(.system(size: 9, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? tabAccentColor : .white.opacity(0.45))
+                    .animation(.easeInOut(duration: 0.2), value: selected)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background {
+                if isSelected {
+                    Capsule()
+                        .fill(tabAccentColor.opacity(0.18))
+                        .matchedGeometryEffect(id: "TAB_INDICATOR", in: tabAnimation)
                 }
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, TranceSpacing.small)
-        .padding(.bottom, TranceSpacing.statusBar) // safe area
-        .background(.ultraThinMaterial)
-        .background(Color.bgPrimary.opacity(0.9))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.glassBorder)
-                .frame(height: 1)
-        }
+        .buttonStyle(PlainButtonStyle())
     }
+
+    // The tint for the active tab — uses the design system's rose-gold
+    private var tabAccentColor: Color { .roseGold }
 }
 
 // MARK: - Preview
 
 #Preview {
-    struct TranceTabBarPreview: View {
+    struct Preview: View {
         @State private var selectedTab: TranceTab = .home
 
         var body: some View {
-            VStack {
-                Spacer()
+            ZStack(alignment: .bottom) {
+                Color.bgPrimary
+                    .ignoresSafeArea()
 
-                Text("Selected: \(selectedTab.title)")
-                    .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
-
-                Spacer()
+                VStack {
+                    Spacer()
+                    Text("Tab: \(selectedTab.title)")
+                        .font(TranceTypography.body)
+                        .foregroundColor(.textPrimary)
+                    Spacer()
+                }
 
                 TranceTabBar(selected: $selectedTab)
             }
-            .background(Color.bgPrimary)
         }
     }
 
-    return TranceTabBarPreview()
+    return Preview()
 }
