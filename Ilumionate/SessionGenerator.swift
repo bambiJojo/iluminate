@@ -21,7 +21,7 @@ class SessionGenerator {
         var colorTemperatureOverride: Double? // Optional override
         var bilateralMode: Bool = false // Enable bilateral stimulation
 
-        static let `default` = GenerationConfig()
+        nonisolated static let `default` = GenerationConfig()
     }
 
     // MARK: - Generation

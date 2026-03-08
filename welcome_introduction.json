@@ -1,0 +1,138 @@
+{
+  "displayName": "Welcome Introduction",
+  "duration": 180.0,
+  "description": "A gentle 3-minute introduction to light therapy with breathing guidance and progressive relaxation",
+  "category": "introduction",
+  "difficulty": "beginner",
+  "tags": ["introduction", "breathing", "relaxation", "beginner"],
+  "moments": [
+    {
+      "time": 0.0,
+      "frequency": 10.0,
+      "intensity": 0.2,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Gentle welcome - soft breathing rhythm"
+    },
+    {
+      "time": 5.0,
+      "frequency": 10.0,
+      "intensity": 0.3,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Settling in"
+    },
+    {
+      "time": 15.0,
+      "frequency": 8.0,
+      "intensity": 0.4,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Deep breath in"
+    },
+    {
+      "time": 20.0,
+      "frequency": 6.0,
+      "intensity": 0.3,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Slow breath out"
+    },
+    {
+      "time": 30.0,
+      "frequency": 10.0,
+      "intensity": 0.5,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Finding your rhythm"
+    },
+    {
+      "time": 45.0,
+      "frequency": 12.0,
+      "intensity": 0.6,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Light focus enhancement"
+    },
+    {
+      "time": 60.0,
+      "frequency": 10.0,
+      "intensity": 0.7,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Optimal entrainment"
+    },
+    {
+      "time": 75.0,
+      "frequency": 8.0,
+      "intensity": 0.6,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Deeper relaxation"
+    },
+    {
+      "time": 90.0,
+      "frequency": 6.0,
+      "intensity": 0.5,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Peaceful state"
+    },
+    {
+      "time": 105.0,
+      "frequency": 8.0,
+      "intensity": 0.6,
+      "waveform": "sine",
+      "bilateral": true,
+      "description": "Introduction to bilateral mode"
+    },
+    {
+      "time": 120.0,
+      "frequency": 10.0,
+      "intensity": 0.7,
+      "waveform": "sine",
+      "bilateral": true,
+      "description": "Bilateral harmony"
+    },
+    {
+      "time": 135.0,
+      "frequency": 12.0,
+      "intensity": 0.6,
+      "waveform": "triangle",
+      "bilateral": false,
+      "description": "Gentle waveform variation"
+    },
+    {
+      "time": 150.0,
+      "frequency": 10.0,
+      "intensity": 0.5,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Returning to center"
+    },
+    {
+      "time": 165.0,
+      "frequency": 8.0,
+      "intensity": 0.4,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Gentle completion"
+    },
+    {
+      "time": 175.0,
+      "frequency": 6.0,
+      "intensity": 0.2,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Final breath"
+    },
+    {
+      "time": 180.0,
+      "frequency": 4.0,
+      "intensity": 0.1,
+      "waveform": "sine",
+      "bilateral": false,
+      "description": "Complete"
+    }
+  ]
+}

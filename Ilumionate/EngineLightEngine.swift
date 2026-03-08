@@ -50,6 +50,9 @@ final class LightEngine {
     /// Whether the engine is currently running.
     private(set) var isRunning: Bool = false
 
+    /// Whether the engine is paused (running but not updating brightness)
+    private(set) var isPaused: Bool = false
+
     /// The instantaneous frequency being output (may differ from targetFrequency
     /// during a ramp).
     private(set) var currentFrequency: Double = 10.0
@@ -206,9 +209,7 @@ final class LightEngine {
     /// User-controlled brightness multiplier in [0.1, 1.0].
     /// This is preserved during session playback and multiplies with session intensity.
     /// Use this for the brightness slider in the UI.
-    var userBrightnessMultiplier: Double = 1.0 {
-        didSet { userBrightnessMultiplier = max(0.1, min(userBrightnessMultiplier, 1.0)) }
-    }
+    var userBrightnessMultiplier: Double = 1.0
 
     // MARK: - Private State
 
@@ -267,6 +268,7 @@ final class LightEngine {
         currentFrequency = targetFrequency
         activeRamp = nil
         isRunning = true
+        isPaused = false
 
         // Use a proxy to avoid retaining self in the display link target.
         // Clear any existing proxy first to prevent memory leaks
@@ -303,6 +305,7 @@ final class LightEngine {
         displayLink = nil
         proxy = nil
         isRunning = false
+        isPaused = false
         brightness = 0.0
         brightnessLeft = 0.0
         brightnessRight = 0.0
@@ -312,10 +315,32 @@ final class LightEngine {
         currentFrequency = targetFrequency
     }
 
+    /// Pause the engine (keep running but freeze brightness at 0)
+    func pause() {
+        guard isRunning else { return }
+        isPaused = true
+        brightness = 0.0
+        brightnessLeft = 0.0
+        brightnessRight = 0.0
+        print("⏸️ Light engine paused")
+    }
+
+    /// Resume the engine from pause state
+    func resume() {
+        guard isRunning else { return }
+        isPaused = false
+        print("▶️ Light engine resumed")
+    }
+
     // MARK: - Display Tick
 
     fileprivate func tick(_ link: CADisplayLink) {
+        // CRASH DEBUG: Monitor CADisplayLink for issues
+        let tickStart = CFAbsoluteTimeGetCurrent()
+
         guard lastTimestamp > 0 else {
+            print("🔴 CRASH DEBUG: CADisplayLink first tick - timestamp: \(link.timestamp)")
+            OrbCrashLogger.shared.logEngineOperation("FirstTick", details: "CADisplayLink first callback")
             lastTimestamp = link.timestamp
             lastFPSCheck = link.timestamp
             return
@@ -404,7 +429,9 @@ final class LightEngine {
 
             // Update intensity range based on session intensity
             // Session intensity is multiplied by user brightness multiplier
-            maximumBrightness = state.intensity * userBrightnessMultiplier
+            // Clamp to [0.0, 1.0] to prevent invalid UIColor values
+            let clampedMultiplier = max(0.1, min(userBrightnessMultiplier, 1.0))
+            maximumBrightness = max(0.0, min(1.0, state.intensity * clampedMultiplier))
 
             // Ramp to the target frequency with optional custom ramp duration
             if abs(state.frequency - currentFrequency) > 0.01 {
@@ -472,8 +499,34 @@ final class LightEngine {
         let correctedLeft = applyGammaCorrection(rawLeft)
         let correctedRight = applyGammaCorrection(rawRight)
 
-        brightness = minimumBrightness + correctedLeft * (maximumBrightness - minimumBrightness)
-        brightnessLeft = brightness
-        brightnessRight = minimumBrightness + correctedRight * (maximumBrightness - minimumBrightness)
+        // Apply pause state - keep brightness at 0 when paused
+        if isPaused {
+            brightness = 0.0
+            brightnessLeft = 0.0
+            brightnessRight = 0.0
+        } else {
+            brightness = max(0.0, min(1.0, minimumBrightness + correctedLeft * (maximumBrightness - minimumBrightness)))
+            brightnessLeft = brightness
+            brightnessRight = max(0.0, min(1.0, minimumBrightness + correctedRight * (maximumBrightness - minimumBrightness)))
+        }
+
+        // CRASH DEBUG: Monitor tick completion and performance
+        let tickEnd = CFAbsoluteTimeGetCurrent()
+        let tickDuration = tickEnd - tickStart
+
+        // Warn if tick takes too long (potential main thread blocking)
+        if tickDuration > 0.016 { // 16ms = 60fps frame time
+            let warning = "Slow tick: \(String(format: "%.3f", tickDuration * 1000))ms"
+            print("⚠️ CRASH DEBUG: \(warning)")
+            OrbCrashLogger.shared.logPotentialCrash("Slow CADisplayLink tick", context: warning)
+        }
+
+        // Periodic health check every 60 ticks (~1 second)
+        frameCounter += 1
+        if frameCounter % 60 == 0 {
+            let engineState = "brightness: \(String(format: "%.3f", brightness)), freq: \(String(format: "%.1f", currentFrequency))Hz"
+            print("🔄 CRASH DEBUG: Engine health check - \(engineState)")
+            OrbCrashLogger.shared.logEngineOperation("HealthCheck", details: engineState)
+        }
     }
 }

@@ -45,6 +45,8 @@ struct AudioEnergyAnalyzer: Sendable {
         var binauralRMSThreshold: Float = 0.05
         /// Variance threshold — very low variance means a steady-state signal
         var binauralVarianceThreshold: Float = 0.0001
+
+        nonisolated init() {}
     }
 
     /// Analyze the audio file at `url` and return a dead-time profile.

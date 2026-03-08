@@ -85,6 +85,44 @@ class AudioSyncController {
         }
     }
 
+    /// Asynchronous audio loading to prevent UI blocking
+    func loadAudioAsync(from url: URL) async throws {
+        print("🎵 Loading audio asynchronously from: \(url.lastPathComponent)")
+
+        // Stop any existing playback on main actor
+        await MainActor.run {
+            stop()
+        }
+
+        // Load audio on background queue
+        try await withCheckedThrowingContinuation { continuation in
+            Task.detached {
+                do {
+                    // Create audio player on background thread
+                    let player = try AVAudioPlayer(contentsOf: url)
+
+                    // Switch back to main actor for property updates
+                    await MainActor.run {
+                        self.audioPlayer = player
+                        self.audioPlayer?.prepareToPlay()
+                        self.audioPlayer?.volume = self.audioVolume
+
+                        self.audioFileURL = url
+                        self.duration = self.audioPlayer?.duration ?? 0.0
+                        self.currentTime = 0.0
+
+                        print("✅ Audio loaded asynchronously, duration: \(self.duration)s")
+                    }
+
+                    continuation.resume()
+                } catch {
+                    print("❌ Failed to load audio asynchronously: \(error)")
+                    continuation.resume(throwing: AudioSyncError.failedToLoadAudio(error))
+                }
+            }
+        }
+    }
+
     // MARK: - Playback Control
 
     func play() {

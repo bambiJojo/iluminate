@@ -24,39 +24,46 @@ struct AnalysisProgressView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 30) {
+            ZStack {
+                Color.bgPrimary.ignoresSafeArea()
+                VStack(spacing: 30) {
 
-                Spacer()
+                    Spacer()
 
-                // Progress visualization
-                progressSection
+                    // Progress visualization
+                    progressSection
 
-                // Stage indicator
-                stageIndicator
+                    // Stage indicator
+                    stageIndicator
 
-                Spacer()
+                    Spacer()
 
-                // Results or error
-                if let result = analysisResult {
-                    resultsPreview(result)
-                } else if let error = errorMessage {
-                    errorView(error)
+                    // Results or error
+                    if let result = analysisResult {
+                        resultsPreview(result)
+                    } else if let error = errorMessage {
+                        errorView(error)
+                    }
+
+                    Spacer()
+
+                    // Action button
+                    actionButton
+
                 }
-
-                Spacer()
-
-                // Action button
-                actionButton
-
+                .padding()
             }
-            .padding()
             .navigationTitle("Analyzing Audio")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button {
                         cancelAnalysis()
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.title3)
+                            .foregroundStyle(.primary)
                     }
                     .disabled(currentStage == .complete)
                 }
@@ -71,41 +78,46 @@ struct AnalysisProgressView: View {
 
     private var progressSection: some View {
         VStack(spacing: 20) {
-            // Animated progress circle
+            // Animated progress circle with hypnotic effects
             ZStack {
                 Circle()
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 8)
+                    .stroke(Color.lavender.opacity(0.3), lineWidth: 8)
                     .frame(width: 150, height: 150)
 
                 Circle()
                     .trim(from: 0, to: overallProgress)
                     .stroke(
-                        currentStage == .complete ? Color.green : Color.blue,
+                        currentStage == .complete ? Color.green : Color.bwGamma,
                         style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
                     .frame(width: 150, height: 150)
                     .rotationEffect(.degrees(-90))
                     .animation(.easeInOut(duration: 0.3), value: overallProgress)
 
+                // Rotating background spiral
+                Circle()
+                    .stroke(Color.roseDeep.opacity(0.2), lineWidth: 2)
+                    .frame(width: 180, height: 180)
+
                 // Icon or percentage
                 if currentStage == .complete {
-                    Image(systemName: "checkmark")
+                    Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 50, weight: .bold))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.green)
                 } else if currentStage == .failed {
-                    Image(systemName: "xmark")
+                    Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 50, weight: .bold))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.red)
                 } else {
                     VStack(spacing: 4) {
                         Text("\(Int(overallProgress * 100))%")
-                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .font(TranceTypography.greetingAccent)
                             .foregroundStyle(.primary)
 
                         // Show spinner to indicate activity
                         ProgressView()
                             .scaleEffect(0.8)
-                            .tint(.blue)
+                            .tint(Color.bwGamma)
                     }
                 }
             }
@@ -118,22 +130,25 @@ struct AnalysisProgressView: View {
         VStack(spacing: 12) {
             // Current stage title
             Text(currentStage.title)
-                .font(.title3.bold())
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(.primary)
 
             // Stage description
             Text(currentStage.description)
-                .font(.subheadline)
+                .font(TranceTypography.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             // Progress bar for current stage
             if currentStage != .complete && currentStage != .failed {
                 ProgressView(value: currentStageProgress)
-                    .tint(currentStage.color)
+                    .tint(Color.bwGamma)
                     .frame(width: 200)
             }
         }
         .padding()
+        .background(Color.white.opacity(0.8))
+        .cornerRadius(TranceRadius.thumbnail)
     }
 
     // MARK: - Results Preview
@@ -141,8 +156,8 @@ struct AnalysisProgressView: View {
     private func resultsPreview(_ result: AnalysisResult) -> some View {
         VStack(spacing: 16) {
             Text("Analysis Complete!")
-                .font(.title2.bold())
-                .foregroundStyle(.green)
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(Color.green)
 
             // Quick summary
             VStack(alignment: .leading, spacing: 8) {
@@ -153,26 +168,27 @@ struct AnalysisProgressView: View {
                 resultRow(icon: "light.max", label: "Intensity", value: "\(Int(result.suggestedIntensity * 100))%")
             }
             .padding()
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .background(Color.roseDeep.opacity(0.4))
+            .cornerRadius(TranceRadius.thumbnail)
         }
     }
 
     private func resultRow(icon: String, label: String, value: String) -> some View {
         HStack {
             Image(systemName: icon)
-                .font(.caption)
+                .font(TranceTypography.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
 
             Text(label)
-                .font(.subheadline)
+                .font(TranceTypography.body)
                 .foregroundStyle(.secondary)
 
             Spacer()
 
             Text(value)
-                .font(.subheadline.bold())
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(.primary)
         }
     }
 
@@ -182,17 +198,20 @@ struct AnalysisProgressView: View {
         VStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 50))
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.red)
 
             Text("Analysis Failed")
-                .font(.title3.bold())
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(Color.red)
 
             Text(message)
-                .font(.subheadline)
+                .font(TranceTypography.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .padding()
+        .background(Color.white.opacity(0.8))
+        .cornerRadius(TranceRadius.thumbnail)
     }
 
     // MARK: - Action Button
@@ -210,25 +229,21 @@ struct AnalysisProgressView: View {
                     dismiss()
                 } label: {
                     Label("Continue to Session Generation", systemImage: "arrow.right.circle.fill")
-                        .font(.headline)
+                        .font(TranceTypography.sectionTitle)
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
                 }
+                .buttonStyle(GlassButtonStyle())
+                .padding(.horizontal)
             } else if currentStage == .failed {
                 Button {
                     dismiss()
                 } label: {
                     Text("Close")
-                        .font(.headline)
+                        .font(TranceTypography.sectionTitle)
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.gray)
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
                 }
+                .buttonStyle(GlassButtonStyle())
+                .padding(.horizontal)
             }
         }
     }
@@ -263,7 +278,9 @@ struct AnalysisProgressView: View {
     }
 
     private func cancelAnalysis() {
-        audioAnalyzer.cancelTranscription()
+        Task {
+            await audioAnalyzer.cancelTranscription()
+        }
     }
 
     // MARK: - Progress Calculation
@@ -301,14 +318,7 @@ struct AnalysisProgressView: View {
 
 // MARK: - Analysis Stage
 
-enum AnalysisStage {
-    case starting
-    case transcribing
-    case analyzing
-    case generatingSession
-    case complete
-    case failed
-
+extension AnalysisStage {
     var title: String {
         switch self {
         case .starting:

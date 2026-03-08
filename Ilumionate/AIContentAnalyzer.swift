@@ -9,38 +9,35 @@ import Foundation
 import FoundationModels
 import Combine
 
-/// Uses Apple's on-device AI to analyze audio content and generate recommendations
-@MainActor
-class AIContentAnalyzer: ObservableObject {
+/// Uses Apple's on-device AI to analyze audio content with modern Swift concurrency
+@MainActor @Observable
+class AIContentAnalyzer: Sendable {
 
     // MARK: - Published State
 
-    @Published var isAnalyzing = false
-    @Published var progress: Double = 0.0
-    @Published var statusMessage: String = ""
-    @Published var modelAvailability: SystemLanguageModel.Availability = .unavailable(.modelNotReady)
+    var isAnalyzing = false
+    var progress: Double = 0.0
+    var statusMessage: String = ""
+    var modelAvailability: SystemLanguageModel.Availability = .unavailable(.modelNotReady)
 
-    // MARK: - Private State
+    // MARK: - Actor-Isolated Components
 
-    private let model = SystemLanguageModel.default
-    private var session: LanguageModelSession?
+    private let aiManager = AIAnalysisManager()
+    private var currentTask: Task<AnalysisResult, Error>?
 
     // MARK: - Initialization
 
     init() {
-        checkModelAvailability()
+        Task {
+            modelAvailability = await aiManager.checkModelAvailability()
+        }
     }
 
     // MARK: - Model Availability
 
     func checkModelAvailability() {
-        modelAvailability = model.availability
-
-        switch modelAvailability {
-        case .available:
-            print("✅ Foundation Models available")
-        case .unavailable(let reason):
-            print("❌ Foundation Models unavailable: \(reason)")
+        Task {
+            modelAvailability = await aiManager.checkModelAvailability()
         }
     }
 
@@ -53,196 +50,231 @@ class AIContentAnalyzer: ObservableObject {
 
     // MARK: - Content Analysis
 
-    /// Analyze transcribed audio content to generate therapy recommendations
+    /// Analyze transcribed audio content using modern async/await patterns
     func analyzeContent(transcription: AudioTranscriptionResult, audioFile: AudioFile) async throws -> AnalysisResult {
         guard isModelAvailable else {
             throw AIAnalyzerError.modelUnavailable
         }
 
-        // Update UI state on main thread
-        await MainActor.run {
-            isAnalyzing = true
-            progress = 0.0
-            statusMessage = "Analyzing content with AI..."
+        // Cancel any existing analysis
+        currentTask?.cancel()
+
+        isAnalyzing = true
+        progress = 0.0
+        statusMessage = "Analyzing content with AI..."
+
+        // Create cancellable task
+        currentTask = Task {
+            defer {
+                Task { @MainActor in
+                    self.isAnalyzing = false
+                    self.statusMessage = "Analysis complete"
+                }
+            }
+
+            let progressHandler: @Sendable (AIAnalysisManager.ProgressInfo) async -> Void = { info in
+                await MainActor.run {
+                    self.progress = info.progress
+                    self.statusMessage = info.message
+                }
+            }
+
+            return try await aiManager.analyzeContent(
+                transcription: transcription,
+                audioFile: audioFile,
+                onProgress: progressHandler
+            )
         }
 
-        defer {
-            Task { @MainActor in
-                isAnalyzing = false
-            }
-        }
-
-        // Perform analysis on background thread for better performance
-        return try await withCheckedThrowingContinuation { continuation in
-            Task.detached { [weak self] in
-                await self?.performBackgroundAnalysis(
-                    transcription: transcription,
-                    audioFile: audioFile,
-                    continuation: continuation
-                )
-            }
-        }
+        return try await currentTask!.value
     }
 
-    /// Performs the actual analysis on a background queue
-    private func performBackgroundAnalysis(
-        transcription: AudioTranscriptionResult,
-        audioFile: AudioFile,
-        continuation: CheckedContinuation<AnalysisResult, Error>
-    ) async {
-
-        do {
-            // Create analysis session with instructions
-            let instructions = """
-            You are an expert in light therapy, neuroscience, and brainwave entrainment.
-            Your role is to analyze audio content (meditation, music, spoken word) and recommend
-            optimal light therapy parameters that complement and enhance the audio experience.
-
-            Consider:
-            - The overall mood and emotional tone
-            - Energy level (calming vs. energizing)
-            - Pacing and rhythm
-            - Key transitions or climactic moments
-            - The intended purpose (relaxation, focus, sleep, energy)
-
-            Provide specific, actionable recommendations for:
-            - Light frequency ranges (in Hz) based on brainwave states
-            - Intensity levels (0.0 to 1.0)
-            - Color temperature in Kelvin (2000K warm to 6500K cool)
-            - Key moments where parameters should change
-
-            Be concise and focus on what will create the best synergistic effect.
-            """
-
-            session = LanguageModelSession(instructions: instructions)
-
-            await MainActor.run {
-                progress = 0.2
-            }
-
-            // Build the analysis prompt efficiently
-            let prompt = buildAnalysisPrompt(transcription: transcription, duration: audioFile.duration)
-
-            await MainActor.run {
-                progress = 0.4
-                statusMessage = "Generating AI recommendations..."
-            }
-
-            // Request structured analysis
-            let response = try await session!.respond(
-                to: prompt,
-                generating: AIAnalysisResponse.self
-            )
-
-            await MainActor.run {
-                progress = 0.8
-                statusMessage = "Processing recommendations..."
-            }
-
-            // Convert AI response to AnalysisResult
-            let result = convertToAnalysisResult(
-                aiResponse: response.content,
-                duration: audioFile.duration
-            )
-
-            await MainActor.run {
-                progress = 1.0
-                statusMessage = "Analysis complete"
-            }
-
-            print("✅ AI Analysis completed")
-            print("📊 Mood: \(result.mood.rawValue), Energy: \(result.energyLevel)")
-            print("💡 Frequency range: \(result.suggestedFrequencyRange)")
-            print("🎯 Key moments: \(result.keyMoments.count)")
-
-            continuation.resume(returning: result)
-
-        } catch {
-            await MainActor.run {
-                statusMessage = "Analysis failed"
-            }
-            print("❌ AI Analysis error: \(error)")
-            continuation.resume(throwing: AIAnalyzerError.analysisFailed(error))
-        }
-    }
-
-    /// Analyze audio without transcription (for music or instrumental content)
+    /// Analyze audio without transcription using modern patterns
     func analyzeWithoutTranscription(audioFile: AudioFile, audioFeatures: AudioFeatures) async throws -> AnalysisResult {
         guard isModelAvailable else {
             throw AIAnalyzerError.modelUnavailable
         }
 
+        currentTask?.cancel()
+
         isAnalyzing = true
         progress = 0.0
         statusMessage = "Analyzing audio characteristics..."
 
-        defer {
-            isAnalyzing = false
+        currentTask = Task {
+            defer {
+                Task { @MainActor in
+                    self.isAnalyzing = false
+                    self.statusMessage = "Analysis complete"
+                }
+            }
+
+            let progressHandler: @Sendable (AIAnalysisManager.ProgressInfo) async -> Void = { info in
+                await MainActor.run {
+                    self.progress = info.progress
+                    self.statusMessage = info.message
+                }
+            }
+
+            return try await aiManager.analyzeWithoutTranscription(
+                audioFile: audioFile,
+                audioFeatures: audioFeatures,
+                onProgress: progressHandler
+            )
         }
 
-        do {
-            let instructions = """
-            You are an expert in audio analysis and light therapy for music and instrumental audio.
-            Based on audio characteristics, recommend light therapy parameters.
-            """
+        return try await currentTask!.value
+    }
 
-            session = LanguageModelSession(instructions: instructions)
+}
 
-            let prompt = """
-            Analyze this audio file and recommend light therapy parameters:
+// MARK: - AI Analysis Manager Actor
 
-            Audio Characteristics:
-            - Duration: \(formatDuration(audioFile.duration))
-            - Average Tempo: \(audioFeatures.averageTempo) BPM
-            - Average Energy: \(String(format: "%.1f%%", audioFeatures.averageEnergy * 100))
-            - Dynamic Range: \(audioFeatures.dynamicRange)
+/// Actor-isolated AI analysis manager for thread-safe operations
+actor AIAnalysisManager {
 
-            Provide recommendations for:
-            1. Overall mood classification
-            2. Suggested light frequency range (Hz)
-            3. Intensity level (0.0-1.0)
-            4. Color temperature preference
-            5. How parameters should evolve over time
-            """
+    // MARK: - State
 
-            progress = 0.5
+    private let model = SystemLanguageModel.default
+    private var session: LanguageModelSession?
+    private var currentTask: Task<LanguageModelSession.Response<AIAnalysisResponse>, Error>?
 
-            let response = try await session!.respond(
-                to: prompt,
-                generating: AIAnalysisResponse.self
-            )
+    // MARK: - Progress Info
 
-            progress = 0.9
+    struct ProgressInfo: Sendable {
+        let progress: Double
+        let message: String
+    }
 
-            let result = convertToAnalysisResult(
-                aiResponse: response.content,
-                duration: audioFile.duration
-            )
+    // MARK: - Model Availability
 
-            progress = 1.0
-            statusMessage = "Analysis complete"
-
-            return result
-
-        } catch {
-            statusMessage = "Analysis failed"
-            print("❌ AI Analysis error: \(error)")
-            throw AIAnalyzerError.analysisFailed(error)
+    func checkModelAvailability() async -> SystemLanguageModel.Availability {
+        let availability = model.availability
+        switch availability {
+        case .available:
+            print("✅ Foundation Models available")
+        case .unavailable(let reason):
+            print("❌ Foundation Models unavailable: \(reason)")
         }
+        return availability
+    }
+
+    // MARK: - Analysis Methods
+
+    func analyzeContent(
+        transcription: AudioTranscriptionResult,
+        audioFile: AudioFile,
+        onProgress: @Sendable @escaping (ProgressInfo) async -> Void
+    ) async throws -> AnalysisResult {
+        await onProgress(ProgressInfo(progress: 0.1, message: "Setting up AI session..."))
+
+        // Create analysis session
+        let instructions = """
+        You are an expert in light therapy, neuroscience, and brainwave entrainment.
+        Your role is to analyze audio content (meditation, music, spoken word) and recommend
+        optimal light therapy parameters that complement and enhance the audio experience.
+
+        Consider:
+        - The overall mood and emotional tone
+        - Energy level (calming vs. energizing)
+        - Pacing and rhythm
+        - Key transitions or climactic moments
+        - The intended purpose (relaxation, focus, sleep, energy)
+
+        Provide specific, actionable recommendations for:
+        - Light frequency ranges (in Hz) based on brainwave states
+        - Intensity levels (0.0 to 1.0)
+        - Color temperature in Kelvin (2000K warm to 6500K cool)
+        - Key moments where parameters should change
+
+        Be concise and focus on what will create the best synergistic effect.
+        """
+
+        session = LanguageModelSession(instructions: instructions)
+
+        await onProgress(ProgressInfo(progress: 0.3, message: "Building analysis prompt..."))
+
+        // Build analysis prompt
+        let prompt = buildAnalysisPrompt(transcription: transcription, duration: audioFile.duration)
+
+        await onProgress(ProgressInfo(progress: 0.5, message: "Generating AI recommendations..."))
+
+        // Create analysis task
+        currentTask = Task {
+            return try await session!.respond(to: prompt, generating: AIAnalysisResponse.self)
+        }
+
+        let response = try await currentTask!.value
+        currentTask = nil
+
+        await onProgress(ProgressInfo(progress: 0.9, message: "Processing recommendations..."))
+
+        let result = convertToAnalysisResult(aiResponse: response.content, duration: audioFile.duration)
+
+        print("✅ AI Analysis completed")
+        print("📊 Mood: \(result.mood.rawValue), Energy: \(result.energyLevel)")
+        print("💡 Frequency range: \(result.suggestedFrequencyRange)")
+        print("🎯 Key moments: \(result.keyMoments.count)")
+
+        return result
+    }
+
+    func analyzeWithoutTranscription(
+        audioFile: AudioFile,
+        audioFeatures: AudioFeatures,
+        onProgress: @Sendable @escaping (ProgressInfo) async -> Void
+    ) async throws -> AnalysisResult {
+        await onProgress(ProgressInfo(progress: 0.1, message: "Setting up audio analysis..."))
+
+        let instructions = """
+        You are an expert in audio analysis and light therapy for music and instrumental audio.
+        Based on audio characteristics, recommend light therapy parameters.
+        """
+
+        session = LanguageModelSession(instructions: instructions)
+
+        let prompt = """
+        Analyze this audio file and recommend light therapy parameters:
+
+        Audio Characteristics:
+        - Duration: \(formatDuration(audioFile.duration))
+        - Average Tempo: \(audioFeatures.averageTempo) BPM
+        - Average Energy: \(String(format: "%.1f%%", audioFeatures.averageEnergy * 100))
+        - Dynamic Range: \(audioFeatures.dynamicRange)
+
+        Provide recommendations for:
+        1. Overall mood classification
+        2. Suggested light frequency range (Hz)
+        3. Intensity level (0.0-1.0)
+        4. Color temperature preference
+        5. How parameters should evolve over time
+        """
+
+        await onProgress(ProgressInfo(progress: 0.5, message: "Analyzing audio features..."))
+
+        currentTask = Task {
+            return try await session!.respond(to: prompt, generating: AIAnalysisResponse.self)
+        }
+
+        let response = try await currentTask!.value
+        currentTask = nil
+
+        let result = convertToAnalysisResult(aiResponse: response.content, duration: audioFile.duration)
+        return result
     }
 
     // MARK: - Helper Methods
 
-    /// Efficiently builds analysis prompt using StringBuilder pattern
     private func buildAnalysisPrompt(transcription: AudioTranscriptionResult, duration: TimeInterval) -> String {
-        // Pre-allocate capacity for better performance
         var prompt = ""
         prompt.reserveCapacity(1000)
 
-        let wordCount = transcription.wordCount
+        // Safe access to transcription properties
+        let wordCount = transcription.fullText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
         let textPreview = String(transcription.fullText.prefix(500))
         let durationStr = formatDuration(duration)
-        let confidenceStr = String(format: "%.1f%%", transcription.averageConfidence * 100)
+        let avgConfidence = transcription.segments.isEmpty ? 0.0 : transcription.segments.map { $0.confidence }.reduce(0, +) / Double(transcription.segments.count)
+        let confidenceStr = String(format: "%.1f%%", avgConfidence * 100)
 
         prompt += "Analyze this audio content and recommend light therapy parameters:\n\n"
         prompt += "Audio Information:\n"
@@ -265,10 +297,9 @@ class AIContentAnalyzer: ObservableObject {
     }
 
     private func convertToAnalysisResult(aiResponse: AIAnalysisResponse, duration: TimeInterval) -> AnalysisResult {
-        // Convert AI response to our AnalysisResult model
         let mood = AnalysisResult.Mood(rawValue: aiResponse.mood.lowercased()) ?? .neutral
 
-        // Parse frequency range (format: "8-12" or "8.0-12.0")
+        // Parse frequency range
         let frequencyComponents = aiResponse.frequencyRange
             .components(separatedBy: CharacterSet(charactersIn: "-–—"))
             .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
@@ -277,8 +308,7 @@ class AIContentAnalyzer: ObservableObject {
         if frequencyComponents.count == 2 {
             frequencyRange = frequencyComponents[0]...frequencyComponents[1]
         } else {
-            // Default to alpha waves if parsing fails
-            frequencyRange = 8.0...12.0
+            frequencyRange = 8.0...12.0 // Default to alpha waves
         }
 
         // Convert key moments
@@ -306,6 +336,11 @@ class AIContentAnalyzer: ObservableObject {
         let minutes = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return "\(minutes)m \(secs)s"
+    }
+
+    func cancelAnalysis() async {
+        currentTask?.cancel()
+        currentTask = nil
     }
 }
 

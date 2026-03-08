@@ -112,36 +112,88 @@ class AudioManager: NSObject {
 
     // MARK: - Import Audio
 
+    /// Create a unique file URL if the destination already exists
+    private func makeUniqueFileURL(_ url: URL) -> URL {
+        let fileManager = FileManager.default
+        var uniqueURL = url
+        var counter = 1
+
+        // Keep trying until we find a unique filename
+        while fileManager.fileExists(atPath: uniqueURL.path) {
+            let nameWithoutExtension = url.deletingPathExtension().lastPathComponent
+            let fileExtension = url.pathExtension
+            let newName = "\(nameWithoutExtension) (\(counter)).\(fileExtension)"
+            uniqueURL = url.deletingLastPathComponent().appending(path: newName)
+            counter += 1
+        }
+
+        return uniqueURL
+    }
+
     func importAudio(from url: URL) async -> AudioFile? {
-        let filename = "imported_\(Date().timeIntervalSince1970)_\(url.lastPathComponent)"
-        let destinationURL = URL.documentsDirectory.appending(path: filename)
+        let originalName = url.lastPathComponent
+        let destinationURL = URL.documentsDirectory.appending(path: originalName)
+
+        // Check if file already exists and create unique name if needed
+        let finalDestinationURL = makeUniqueFileURL(destinationURL)
+        let finalFilename = finalDestinationURL.lastPathComponent
 
         do {
             // Copy file to documents directory
-            try FileManager.default.copyItem(at: url, to: destinationURL)
+            try FileManager.default.copyItem(at: url, to: finalDestinationURL)
+            print("📁 File copied to: \(finalDestinationURL.path)")
 
-            // Get audio properties
-            let asset = AVURLAsset(url: destinationURL)
-            let duration = try await asset.load(.duration)
-            let durationSeconds = duration.seconds
-
-            // Get file size
-            let resources = try destinationURL.resourceValues(forKeys: [.fileSizeKey])
+            // Get file size first (fast operation)
+            let resources = try finalDestinationURL.resourceValues(forKeys: [.fileSizeKey])
             let fileSize = Int64(resources.fileSize ?? 0)
 
-            // Create AudioFile
+            // Get audio duration with timeout to prevent hanging
+            let durationSeconds = await withTaskGroup(of: Double?.self) { group in
+                // Add duration loading task with timeout
+                group.addTask {
+                    do {
+                        let asset = AVURLAsset(url: finalDestinationURL)
+                        print("🔍 Loading audio properties for: \(finalFilename)")
+                        let duration = try await asset.load(.duration)
+                        let seconds = duration.seconds
+                        print("⏱️ Duration loaded: \(seconds) seconds")
+                        return seconds.isFinite ? seconds : 0
+                    } catch {
+                        print("❌ Failed to load duration: \(error)")
+                        return 0
+                    }
+                }
+
+                // Add timeout task
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds timeout
+                    print("⚠️ Audio loading timeout reached for: \(finalFilename)")
+                    return 0
+                }
+
+                // Return first completed task
+                if let result = await group.next() {
+                    group.cancelAll()
+                    return result ?? 0
+                }
+                return 0
+            }
+
+            // Create AudioFile with calculated or default duration
             let audioFile = AudioFile(
-                filename: filename,
-                url: destinationURL,
+                filename: finalFilename,
+                url: finalDestinationURL,
                 duration: durationSeconds,
                 fileSize: fileSize
             )
 
-            print("✅ Imported audio: \(filename)")
+            print("✅ Imported audio: \(finalFilename) (Duration: \(durationSeconds)s)")
             return audioFile
 
         } catch {
             print("❌ Failed to import audio: \(error)")
+            // Clean up partial file if copy succeeded but metadata failed
+            try? FileManager.default.removeItem(at: finalDestinationURL)
             return nil
         }
     }

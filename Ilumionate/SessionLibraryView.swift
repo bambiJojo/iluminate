@@ -2,25 +2,26 @@
 //  SessionLibraryView.swift
 //  Ilumionate
 //
-//  Created by Byron Quine on 2/9/26.
+//  Session Library in Trance Design System
 //
 
 import SwiftUI
 
-/// Browse and select pre-programmed light sessions
 struct SessionLibraryView: View {
-
     var engine: LightEngine
     @Environment(\.dismiss) private var dismiss
 
     @State private var sessions: [LightSession] = []
     @State private var selectedSession: LightSession?
-    @State private var loadError: String?
     @State private var showingSessionPlayer = false
+    @State private var searchText = ""
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                Color.bgPrimary
+                    .ignoresSafeArea()
+
                 if sessions.isEmpty {
                     emptyView
                 } else {
@@ -31,57 +32,83 @@ struct SessionLibraryView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.textSecondary)
                     }
                 }
             }
             .onAppear {
-                loadBundledSessions()
+                loadSessions()
             }
-            .alert("Load Error", isPresented: .constant(loadError != nil)) {
-                Button("OK") {
-                    loadError = nil
-                }
-            } message: {
-                if let error = loadError {
-                    Text(error)
-                }
+            .fullScreenCover(item: $selectedSession) { session in
+                SessionPlayerView(session: session, engine: engine)
             }
-            .sheet(isPresented: $showingSessionPlayer) {
+            .fullScreenCover(isPresented: $showingSessionPlayer) {
                 if let session = selectedSession {
                     SessionPlayerView(session: session, engine: engine)
                 }
             }
+            .searchable(text: $searchText, prompt: "Search sessions...")
         }
     }
 
     // MARK: - Subviews
 
     private var emptyView: some View {
-        ContentUnavailableView(
-            "No Sessions Found",
-            systemImage: "waveform.circle",
-            description: Text("Add JSON session files to your app bundle to see them here.")
-        )
+        VStack(spacing: TranceSpacing.cardMargin) {
+            Image(systemName: "waveform.circle")
+                .font(.system(size: 64, weight: .light))
+                .foregroundColor(.lavender)
+
+            Text("No Sessions Found")
+                .font(TranceTypography.screenTitle)
+                .foregroundColor(.textPrimary)
+
+            Text("Try importing audio or using built-in sessions.")
+                .font(TranceTypography.body)
+                .foregroundColor(.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
     }
 
     private var sessionListView: some View {
-        List(sessions) { session in
-            SessionRowView(session: session)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    selectedSession = session
-                    showingSessionPlayer = true
+        ScrollView {
+            LazyVStack(spacing: TranceSpacing.cardMargin) {
+                ForEach(filteredSessions) { session in
+                    Button {
+                        selectedSession = session
+                        showingSessionPlayer = true
+                    } label: {
+                        SessionListCard(session: session)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
+            }
+            .padding(.horizontal, TranceSpacing.screen)
+            .padding(.vertical, TranceSpacing.cardMargin)
+        }
+    }
+
+    // MARK: - Computed
+
+    private var filteredSessions: [LightSession] {
+        if searchText.isEmpty {
+            return sessions
+        }
+        return sessions.filter {
+            $0.displayName.localizedCaseInsensitiveContains(searchText)
         }
     }
 
     // MARK: - Loading
 
-    private func loadBundledSessions() {
+    private func loadSessions() {
         sessions = []
-
         let sessionNames = LightScoreReader.discoverBundledSessions()
 
         for name in sessionNames {
@@ -95,86 +122,73 @@ struct SessionLibraryView: View {
     }
 }
 
-// MARK: - Session Row
+// MARK: - Components
 
-struct SessionRowView: View {
+struct SessionListCard: View {
     let session: LightSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(session.displayName)
-                .font(.headline)
+        GlassCard {
+            HStack(spacing: TranceSpacing.list) {
+                // Thumbnail
+                RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
+                    .fill(
+                        LinearGradient(
+                            colors: [sessionColor, sessionColor.opacity(0.6)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: sessionIcon)
+                            .foregroundColor(.white)
+                            .font(.system(size: 24))
+                    )
 
-            HStack {
-                Label(session.durationFormatted, systemImage: "clock")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                // Info
+                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                    Text(session.displayName)
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundColor(.textPrimary)
+                        .lineLimit(1)
 
-                Spacer()
+                    HStack(spacing: TranceSpacing.list) {
+                        Label(session.durationFormatted, systemImage: "clock")
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textSecondary)
 
-                Label("\(session.light_score.count) moments", systemImage: "waveform")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            // Mini timeline preview
-            sessionTimelinePreview
-        }
-        .padding(.vertical, 4)
-    }
-
-    private var sessionTimelinePreview: some View {
-        GeometryReader { _ in
-            Canvas { context, size in
-                let width = size.width
-                let height: CGFloat = 30
-                let duration = session.duration_sec
-
-                // Draw frequency curve
-                var path = Path()
-                for (index, moment) in session.light_score.enumerated() {
-                    let x = CGFloat(moment.time / duration) * width
-                    let normalizedFreq = (moment.frequency - 0.5) / 40.0 // 0.5-40 Hz range
-                    let y = height - (CGFloat(normalizedFreq) * height)
-
-                    if index == 0 {
-                        path.move(to: CGPoint(x: x, y: y))
-                    } else {
-                        path.addLine(to: CGPoint(x: x, y: y))
+                        Label("\(session.light_score.count) frames", systemImage: "waveform")
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textSecondary)
                     }
                 }
 
-                context.stroke(
-                    path,
-                    with: .color(.blue),
-                    lineWidth: 2
-                )
+                Spacer()
 
-                // Draw moment dots
-                for moment in session.light_score {
-                    let x = CGFloat(moment.time / duration) * width
-                    let normalizedFreq = (moment.frequency - 0.5) / 40.0
-                    let y = height - (CGFloat(normalizedFreq) * height)
-
-                    let circle = Path(ellipseIn: CGRect(
-                        x: x - 3,
-                        y: y - 3,
-                        width: 6,
-                        height: 6
-                    ))
-
-                    context.fill(circle, with: .color(.blue))
-                }
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(sessionColor)
             }
+            .padding(.vertical, TranceSpacing.inner)
         }
-        .frame(height: 30)
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(4)
     }
-}
 
-// MARK: - Preview
+    private var sessionColor: Color {
+        let name = session.displayName.lowercased()
+        if name.contains("relax") || name.contains("sleep") { return .bwDelta }
+        if name.contains("focus") { return .bwAlpha }
+        if name.contains("energy") { return .bwBeta }
+        if name.contains("trance") || name.contains("hypnosis") { return .bwTheta }
+        return .roseGold
+    }
 
-#Preview {
-    SessionLibraryView(engine: LightEngine())
+    private var sessionIcon: String {
+        let name = session.displayName.lowercased()
+        if name.contains("relax") || name.contains("sleep") { return "moon.fill" }
+        if name.contains("focus") { return "target" }
+        if name.contains("energy") { return "bolt.fill" }
+        if name.contains("trance") || name.contains("hypnosis") { return "sparkles" }
+        return "play.fill"
+    }
 }

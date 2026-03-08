@@ -8,9 +8,9 @@
 import Foundation
 
 /// Represents an audio file that can be used for session generation
-struct AudioFile: Identifiable, Codable {
+struct AudioFile: Identifiable, Codable, Sendable {
     let id: UUID
-    let filename: String
+    var filename: String
     let url: URL
     let duration: TimeInterval
     let fileSize: Int64
@@ -52,11 +52,19 @@ struct AudioFile: Identifiable, Codable {
     var hasTranscription: Bool {
         transcription != nil && !(transcription?.isEmpty ?? true)
     }
+
+    var displayName: String {
+        return filename
+            .replacingOccurrences(of: ".mp3", with: "")
+            .replacingOccurrences(of: ".m4a", with: "")
+            .replacingOccurrences(of: ".wav", with: "")
+            .replacingOccurrences(of: ".aac", with: "")
+    }
 }
 
 /// Results from AI audio analysis
-struct AnalysisResult: Codable {
-    enum Mood: String, Codable {
+struct AnalysisResult: Codable, Sendable {
+    enum Mood: String, Codable, Sendable {
         case relaxing
         case energizing
         case neutral
@@ -65,7 +73,7 @@ struct AnalysisResult: Codable {
         case melancholic
     }
 
-    enum ContentType: String, Codable {
+    enum ContentType: String, Codable, Sendable {
         case hypnosis
         case meditation
         case music
@@ -90,7 +98,7 @@ struct AnalysisResult: Codable {
     let voiceCharacteristics: VoiceCharacteristics?
     let classificationConfidence: ClassificationConfidence?
 
-    init(mood: Mood, energyLevel: Double, suggestedFrequencyRange: ClosedRange<Double>,
+    nonisolated init(mood: Mood, energyLevel: Double, suggestedFrequencyRange: ClosedRange<Double>,
          suggestedIntensity: Double, suggestedColorTemperature: Double? = nil,
          keyMoments: [KeyMoment], aiSummary: String, recommendedPreset: String,
          contentType: ContentType = .unknown,
@@ -115,13 +123,13 @@ struct AnalysisResult: Codable {
 }
 
 /// Represents a significant moment in the audio
-struct KeyMoment: Codable, Identifiable {
+struct KeyMoment: Codable, Identifiable, Sendable {
     let id: UUID
     let time: TimeInterval
     let description: String
     let suggestedAction: String // e.g., "increase intensity", "shift to warmer colors"
 
-    init(id: UUID = UUID(), time: TimeInterval, description: String, suggestedAction: String) {
+    nonisolated init(id: UUID = UUID(), time: TimeInterval, description: String, suggestedAction: String) {
         self.id = id
         self.time = time
         self.description = description
@@ -132,8 +140,8 @@ struct KeyMoment: Codable, Identifiable {
 // MARK: - Hypnosis-Specific Metadata
 
 /// Detailed hypnosis session analysis
-struct HypnosisMetadata: Codable {
-    enum Phase: String, Codable {
+struct HypnosisMetadata: Codable, Sendable {
+    enum Phase: String, Codable, Sendable {
         case preTalk = "pre_talk"
         case induction
         case deepening
@@ -157,7 +165,7 @@ struct HypnosisMetadata: Codable {
         }
     }
 
-    enum ConfidenceLevel: String, Codable {
+    enum ConfidenceLevel: String, Codable, Sendable {
         case high
         case medium
         case low
@@ -171,7 +179,7 @@ struct HypnosisMetadata: Codable {
         }
     }
 
-    enum InductionStyle: String, Codable {
+    enum InductionStyle: String, Codable, Sendable {
         case progressive
         case authoritarian
         case permissive
@@ -181,7 +189,7 @@ struct HypnosisMetadata: Codable {
         case conversational
     }
 
-    enum TranceDeph: String, Codable {
+    enum TranceDeph: String, Codable, Sendable {
         case light
         case medium
         case deep
@@ -197,7 +205,7 @@ struct HypnosisMetadata: Codable {
 }
 
 /// A phase segment within a hypnosis session
-struct PhaseSegment: Codable, Identifiable {
+struct PhaseSegment: Codable, Identifiable, Sendable {
     let id: UUID
     let phase: HypnosisMetadata.Phase
     let startTime: TimeInterval
@@ -229,8 +237,8 @@ struct PhaseSegment: Codable, Identifiable {
 }
 
 /// Linguistic markers detected in hypnotic language
-struct LinguisticMarker: Codable, Identifiable {
-    enum MarkerType: String, Codable {
+struct LinguisticMarker: Codable, Identifiable, Sendable {
+    enum MarkerType: String, Codable, Sendable {
         // Phase 0 - Pre-Talk markers
         case normalization
         case expectationSetting
@@ -296,7 +304,7 @@ struct LinguisticMarker: Codable, Identifiable {
 }
 
 /// Detected hypnotic technique with timing
-struct HypnoticTechnique: Codable, Identifiable {
+struct HypnoticTechnique: Codable, Identifiable, Sendable {
     let id: UUID
     let technique: String // e.g., "arm levitation", "eye catalepsy"
     let timestamp: TimeInterval
@@ -316,7 +324,7 @@ struct HypnoticTechnique: Codable, Identifiable {
 // MARK: - Temporal Analysis
 
 /// Analysis of how content evolves over time
-struct TemporalAnalysis: Codable {
+struct TemporalAnalysis: Codable, Sendable {
     let tranceDepthCurve: [Double] // sampled at regular intervals (0.0-1.0)
     let receptivityLevels: [Double] // suggestion receptivity at intervals
     let emotionalArc: [String] // emotional descriptors at intervals
@@ -330,7 +338,7 @@ struct TemporalAnalysis: Codable {
 // MARK: - Voice Characteristics
 
 /// Analysis of vocal delivery and prosody
-struct VoiceCharacteristics: Codable {
+struct VoiceCharacteristics: Codable, Sendable {
     let averagePace: Double? // words per minute
     let paceVariation: Double? // variance in speaking rate
     let pausePatterns: [TimeInterval] // significant pauses
@@ -341,7 +349,7 @@ struct VoiceCharacteristics: Codable {
 // MARK: - Classification Confidence
 
 /// Confidence metrics for AI classification
-struct ClassificationConfidence: Codable {
+struct ClassificationConfidence: Codable, Sendable {
     let overallConfidence: Double // 0.0-1.0
     let isDefinitelyHypnosis: Bool
     let ambiguousSegments: [TimeInterval] // timestamps needing review
@@ -349,24 +357,3 @@ struct ClassificationConfidence: Codable {
     let detectionCriteria: [String] // what led to classification
 }
 
-// MARK: - ClosedRange Codable Extension
-
-extension ClosedRange: Codable where Bound: Codable & Comparable {
-    enum CodingKeys: String, CodingKey {
-        case lowerBound
-        case upperBound
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let lower = try container.decode(Bound.self, forKey: .lowerBound)
-        let upper = try container.decode(Bound.self, forKey: .upperBound)
-        self = lower...upper
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(lowerBound, forKey: .lowerBound)
-        try container.encode(upperBound, forKey: .upperBound)
-    }
-}

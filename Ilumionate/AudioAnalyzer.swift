@@ -21,162 +21,223 @@ enum ModelState {
 
 // MARK: - Audio Analyzer
 
-/// Handles audio transcription using WhisperKit
-@Observable
-@MainActor
-class AudioAnalyzer {
+/// Handles audio transcription using WhisperKit with modern Swift concurrency
+@MainActor @Observable
+class AudioAnalyzer: Sendable {
 
-    // MARK: - State
+    // MARK: - Published State
 
     var isAnalyzing = false
     var progress: Double = 0.0
     var statusMessage: String = ""
 
-    // MARK: - Private State
+    // MARK: - Actor-Isolated Components
 
-    private var whisperKit: WhisperKit?
-    private var modelState: ModelState = .notLoaded
+    private let whisperManager = WhisperManager()
+    private var currentTask: Task<AudioTranscriptionResult, Error>?
 
     // MARK: - Initialization
 
     init() {
         // Initialize WhisperKit asynchronously
         Task {
-            await initializeWhisperKit()
-        }
-    }
-
-    // MARK: - WhisperKit Setup
-
-    private func initializeWhisperKit() async {
-        do {
-            statusMessage = "Loading Whisper model..."
-            print("🔄 Initializing WhisperKit...")
-
-            // Initialize with tiny model for fast performance
-            whisperKit = try await WhisperKit(model: "tiny")
-            modelState = .loaded
-
-            print("✅ WhisperKit initialized successfully")
-            statusMessage = "Ready"
-        } catch {
-            print("❌ Failed to initialize WhisperKit: \(error)")
-            statusMessage = "Failed to load model"
-            modelState = .failed(error)
+            await whisperManager.initialize()
+            statusMessage = await whisperManager.getStatus()
         }
     }
 
     // MARK: - Transcription
 
-    /// Transcribe an audio file to text using WhisperKit
+    /// Transcribe an audio file using modern async/await patterns
     func transcribe(audioFile: AudioFile) async throws -> AudioTranscriptionResult {
-        // Wait for WhisperKit to initialize if it's still loading
-        if whisperKit == nil {
-            statusMessage = "Loading Whisper model..."
-            print("⏳ Waiting for WhisperKit to initialize...")
+        // Cancel any existing transcription
+        currentTask?.cancel()
 
-            // Wait up to 60 seconds for initialization
-            for _ in 0..<60 {
-                if whisperKit != nil {
-                    break
+        isAnalyzing = true
+        progress = 0.0
+        statusMessage = "Loading ML Models (may download)..."
+
+        // Ensure WhisperKit is initialized before proceeding
+        await whisperManager.initialize()
+
+        statusMessage = "Preparing audio..."
+
+        // Create cancellable task
+        currentTask = Task {
+            defer {
+                Task { @MainActor in
+                    self.isAnalyzing = false
+                    self.progress = 0.0
+                    self.statusMessage = "Ready"
                 }
-                try await Task.sleep(for: .seconds(1))
             }
+
+            return try await whisperManager.transcribe(audioFile: audioFile) { @MainActor progressInfo in
+                self.progress = progressInfo.progress
+                self.statusMessage = progressInfo.message
+            }
+        }
+
+        return try await currentTask!.value
+    }
+
+    /// Cancel ongoing transcription with proper cleanup
+    func cancelTranscription() async {
+        currentTask?.cancel()
+        await whisperManager.cancelTranscription()
+
+        isAnalyzing = false
+        progress = 0.0
+        statusMessage = "Cancelled"
+        print("🛑 Transcription cancelled")
+    }
+}
+
+// MARK: - WhisperKit Manager Actor
+
+/// Actor-isolated WhisperKit manager for thread-safe operations
+actor WhisperManager {
+
+    // MARK: - State
+
+    private var whisperKit: WhisperKit?
+    private var modelState: ModelState = .notLoaded
+    private var currentTask: Task<[TranscriptionResult], Error>?
+
+    // MARK: - Progress Info
+
+    struct ProgressInfo: Sendable {
+        let progress: Double
+        let message: String
+    }
+
+    // MARK: - Initialization
+
+    func initialize() async {
+        guard whisperKit == nil else { return }
+
+        do {
+            print("🔄 Initializing WhisperKit...")
+            do {
+                // Initialize with tiny model for performance
+                whisperKit = try await WhisperKit(model: "tiny")
+            } catch {
+                print("⚠️ WhisperKit initialization failed. Attempting to clear corrupted cache...")
+                let fileManager = FileManager.default
+                let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let cacheURL = documentsURL.appendingPathComponent("huggingface/models", isDirectory: true)
+                try? fileManager.removeItem(at: cacheURL)
+                
+                print("🔄 Retrying WhisperKit initialization after cache clear...")
+                whisperKit = try await WhisperKit(model: "tiny")
+            }
+            modelState = .loaded
+            print("✅ WhisperKit initialized successfully")
+        } catch {
+            print("❌ Failed to initialize WhisperKit: \(error)")
+            modelState = .failed(error)
+        }
+    }
+
+    func getStatus() async -> String {
+        switch modelState {
+        case .notLoaded:
+            return "Model not loaded"
+        case .loading:
+            return "Loading model..."
+        case .loaded:
+            return "Ready"
+        case .failed(let error):
+            return "Failed: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Transcription
+
+    func transcribe(
+        audioFile: AudioFile,
+        onProgress: @Sendable @escaping (ProgressInfo) async -> Void
+    ) async throws -> AudioTranscriptionResult {
+        // Ensure WhisperKit is initialized before proceeding
+        if whisperKit == nil {
+            await initialize()
         }
 
         guard let whisper = whisperKit else {
             throw AnalyzerError.whisperKitNotInitialized
         }
 
-        isAnalyzing = true
-        progress = 0.0
-        statusMessage = "Preparing audio..."
+        // Get audio duration for progress calculation
+        let asset = AVURLAsset(url: audioFile.url)
+        let duration = try await asset.load(.duration)
+        let audioDuration = CMTimeGetSeconds(duration)
 
-        defer {
-            isAnalyzing = false
-        }
+        await onProgress(ProgressInfo(progress: 0.1, message: "Starting transcription..."))
 
-        do {
-            // Get audio info for logging
-            let asset = AVURLAsset(url: audioFile.url)
-            let duration = try await asset.load(.duration)
-            let audioDuration = CMTimeGetSeconds(duration)
-            let minutes = Int(audioDuration / 60)
-            print("🎵 Audio duration: \(minutes) minutes (\(Int(audioDuration)) seconds)")
-
-            statusMessage = "Transcribing with Whisper..."
-            print("🎤 Starting WhisperKit transcription...")
-            progress = 0.1
-
-            // Transcribe using WhisperKit with progress callback
-            // Use path(percentEncoded: false) to get the actual file path without URL encoding
-            let results: [TranscriptionResult] = try await whisper.transcribe(
+        // Create transcription task
+        currentTask = Task {
+            try await whisper.transcribe(
                 audioPath: audioFile.url.path(percentEncoded: false),
                 decodeOptions: DecodingOptions(verbose: true)
             ) { transcriptionProgress in
-                Task { @MainActor in
-                    // Calculate progress based on timing
-                    let progressRatio = transcriptionProgress.timings.fullPipeline / audioDuration
-                    self.progress = 0.1 + (min(progressRatio, 1.0) * 0.85)
-                    self.statusMessage = "Transcribing... \(Int(self.progress * 100))%"
+                Task {
+                    // WhisperKit processes in ~30 second windows, roughly advancing 28s at a time.
+                    let estimatedSecondsProcessed = Double(transcriptionProgress.windowId) * 28.0
+                    let progressRatio = estimatedSecondsProcessed / audioDuration
+                    let clampedRatio = min(max(progressRatio, 0.0), 1.0)
+                    let overallProgress = 0.1 + (clampedRatio * 0.85)
+                    await onProgress(ProgressInfo(
+                        progress: overallProgress,
+                        message: "Transcribing... \(Int(overallProgress * 100))%"
+                    ))
                 }
                 return nil // Continue transcription
             }
-
-            // Process WhisperKit result
-            guard let whisperResult = results.first else {
-                throw AnalyzerError.noAudioData
-            }
-
-            let transcription = whisperResult.text
-
-            // Convert WhisperKit segments to our format
-            var segments: [AudioTranscriptionSegment] = []
-            for segment in whisperResult.segments {
-                let transcriptionSegment = AudioTranscriptionSegment(
-                    text: segment.text,
-                    timestamp: TimeInterval(segment.start),
-                    duration: TimeInterval(segment.duration),
-                    confidence: Double(segment.avgLogprob) // Use log probability as confidence
-                )
-                segments.append(transcriptionSegment)
-            }
-
-            progress = 1.0
-            statusMessage = "Transcription complete"
-
-            let transcriptionResult = AudioTranscriptionResult(
-                fullText: transcription,
-                segments: segments,
-                duration: audioFile.duration,
-                locale: Locale.current
-            )
-
-            print("✅ Transcription completed: \(transcription.prefix(100))...")
-            print("📊 Segments: \(segments.count), Words: \(transcription.components(separatedBy: " ").count)")
-
-            return transcriptionResult
-
-        } catch {
-            statusMessage = "Transcription failed"
-            print("❌ Transcription error: \(error)")
-            throw AnalyzerError.transcriptionFailed(error)
         }
+
+        let results = try await currentTask!.value
+        currentTask = nil
+
+        // Process results
+        guard let whisperResult = results.first else {
+            throw AnalyzerError.noAudioData
+        }
+
+        // Convert segments
+        let segments = whisperResult.segments.map { segment in
+            AudioTranscriptionSegment(
+                text: segment.text,
+                timestamp: TimeInterval(segment.start),
+                duration: TimeInterval(segment.duration),
+                confidence: Double(segment.avgLogprob)
+            )
+        }
+
+        await onProgress(ProgressInfo(progress: 1.0, message: "Transcription complete"))
+
+        let result = AudioTranscriptionResult(
+            fullText: whisperResult.text,
+            segments: segments,
+            duration: audioFile.duration,
+            locale: Locale.current
+        )
+
+        print("✅ Transcription completed: \(result.fullText.prefix(100))...")
+        print("📊 Segments: \(segments.count), Words: \(result.wordCount)")
+
+        return result
     }
 
-    /// Cancel ongoing transcription
-    func cancelTranscription() {
-        // WhisperKit handles cancellation automatically via Task cancellation
-        isAnalyzing = false
-        statusMessage = "Cancelled"
-        print("🛑 Transcription cancelled")
+    func cancelTranscription() async {
+        currentTask?.cancel()
+        currentTask = nil
     }
 }
 
 // MARK: - Audio Transcription Result
 
 /// Result of audio transcription
-struct AudioTranscriptionResult: Codable {
+struct AudioTranscriptionResult: Codable, Sendable {
     let fullText: String
     let segments: [AudioTranscriptionSegment]
     let duration: TimeInterval
@@ -200,7 +261,7 @@ struct AudioTranscriptionResult: Codable {
 }
 
 /// A segment of transcribed text with timing information
-struct AudioTranscriptionSegment: Codable, Identifiable {
+struct AudioTranscriptionSegment: Codable, Identifiable, Sendable {
     let id: UUID
     let text: String
     let timestamp: TimeInterval

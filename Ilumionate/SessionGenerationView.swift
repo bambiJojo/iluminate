@@ -2,14 +2,12 @@
 //  SessionGenerationView.swift
 //  Ilumionate
 //
-//  Created by AI Assistant on 2/24/26.
+//  Redesigned Session Generation View for Trance UI
 //
 
 import SwiftUI
 
-/// Preview and customize AI-generated light therapy session
 struct SessionGenerationView: View {
-
     let audioFile: AudioFile
     let analysis: AnalysisResult
     @Bindable var engine: LightEngine
@@ -22,34 +20,65 @@ struct SessionGenerationView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-
-                    // Header
-                    headerSection
-
-                    // Analysis Summary
-                    analysisSummary
-
-                    // Hypnosis-specific details (if applicable)
-                    if let hypnosis = analysis.hypnosisMetadata {
-                        hypnosisDetails(hypnosis)
+            ZStack {
+                Color.bgPrimary
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: TranceSpacing.cardMargin) {
+                        heroSection
+                        analysisSummarySection
+                        
+                        if let hypnosis = analysis.hypnosisMetadata {
+                            hypnosisDetailsSection(hypnosis)
+                        }
+                        
+                        customizationSection
+                        
+                        // Play Button
+                        Button {
+                            TranceHaptics.shared.medium()
+                            showingPlayer = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "play.circle.fill")
+                                    .font(.system(size: 24))
+                                Text("Begin Therapy Session")
+                                    .font(TranceTypography.body)
+                                    .bold()
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(
+                                LinearGradient(
+                                    colors: [.roseGold, .roseDeep],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .foregroundColor(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .disabled(generatedSession == nil)
+                        .opacity(generatedSession == nil ? 0.6 : 1.0)
+                        
+                        Spacer(minLength: TranceSpacing.screen)
                     }
-
-                    // Customization controls
-                    customizationSection
-
-                    // Play button
-                    playButton
+                    .padding(.horizontal, TranceSpacing.screen)
+                    .padding(.vertical, TranceSpacing.cardMargin)
                 }
-                .padding()
             }
-            .navigationTitle("Generated Session")
+            .navigationTitle("Session Designer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.textSecondary)
                     }
                 }
             }
@@ -67,386 +96,246 @@ struct SessionGenerationView: View {
             }
         }
     }
-
-    // MARK: - Header Section
-
-    private var headerSection: some View {
-        VStack(spacing: 0) {
-            // Large icon area with gradient (like SessionCardView)
+    
+    // MARK: - Sections
+    
+    private var heroSection: some View {
+        VStack(spacing: TranceSpacing.list) {
             ZStack {
-                // Background gradient based on content type
-                contentTypeGradient
-                    .ignoresSafeArea()
-
-                // Large icon
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [contentTypeColor.opacity(0.8), contentTypeColor.opacity(0.2), .clear],
+                            center: .center,
+                            startRadius: 10,
+                            endRadius: 50
+                        )
+                    )
+                    .frame(width: 100, height: 100)
+                
                 Image(systemName: contentTypeIcon)
-                    .font(.system(size: 70))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+                    .font(.system(size: 40, weight: .light))
+                    .foregroundColor(.white)
             }
-            .frame(height: 160)
-
-            // Info area
-            VStack(spacing: 12) {
+            
+            VStack(spacing: TranceSpacing.micro) {
                 Text(audioFile.filename.replacingOccurrences(of: ".m4a", with: "").replacingOccurrences(of: ".mp3", with: ""))
-                    .font(.title2.bold())
+                    .font(TranceTypography.screenTitle)
+                    .foregroundColor(.textPrimary)
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
-
-                HStack(spacing: 16) {
+                
+                HStack(spacing: TranceSpacing.list) {
                     Label(audioFile.durationFormatted, systemImage: "clock")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    // Content type badge
-                    Text(analysis.contentType.rawValue.capitalized)
-                        .font(.caption.bold())
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(contentTypeColor.opacity(0.2))
-                        .foregroundStyle(contentTypeColor)
-                        .cornerRadius(8)
+                        .font(TranceTypography.caption)
+                        .foregroundColor(.textSecondary)
+                    
+                    PhasePill(phase: analysis.contentType.rawValue.capitalized)
                 }
             }
-            .padding()
-            .frame(maxWidth: .infinity)
-            .background(Color(.secondarySystemBackground))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .padding(.vertical, TranceSpacing.cardMargin)
     }
-
-    // MARK: - Analysis Summary
-
-    private var analysisSummary: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("AI Analysis", systemImage: "brain.head.profile")
-                .font(.headline)
-
-            VStack(spacing: 12) {
-                infoRow(icon: "brain", label: "Mood", value: analysis.mood.rawValue.capitalized)
-                infoRow(icon: "bolt.fill", label: "Energy Level", value: "\(Int(analysis.energyLevel * 100))%")
-                infoRow(icon: "waveform", label: "Frequency Range", value: "\(Int(analysis.suggestedFrequencyRange.lowerBound))-\(Int(analysis.suggestedFrequencyRange.upperBound)) Hz")
-                infoRow(icon: "light.max", label: "Intensity", value: "\(Int(analysis.suggestedIntensity * 100))%")
-
-                if let temp = analysis.suggestedColorTemperature {
-                    infoRow(icon: "thermometer.medium", label: "Color Temperature", value: "\(Int(temp))K")
+    
+    private var analysisSummarySection: some View {
+        GlassCard(label: "AI Analysis") {
+            VStack(spacing: TranceSpacing.list) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: TranceSpacing.list) {
+                    infoBox(icon: "brain", label: "Mood", value: analysis.mood.rawValue.capitalized, color: .bwTheta)
+                    infoBox(icon: "bolt.fill", label: "Energy", value: "\(Int(analysis.energyLevel * 100))%", color: .roseGold)
+                    infoBox(icon: "waveform", label: "Frequency", value: "\(Int(analysis.suggestedFrequencyRange.lowerBound))-\(Int(analysis.suggestedFrequencyRange.upperBound)) Hz", color: .bwAlpha)
+                    infoBox(icon: "light.max", label: "Intensity", value: "\(Int(analysis.suggestedIntensity * 100))%", color: .roseDeep)
+                }
+                
+                if !analysis.aiSummary.isEmpty {
+                    Divider().background(Color.glassBorder)
+                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                        Label("AI Insights", systemImage: "sparkles")
+                            .font(TranceTypography.body)
+                            .foregroundColor(.textPrimary)
+                        Text(analysis.aiSummary)
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textSecondary)
+                    }
                 }
             }
-
-            // AI Summary
-            if !analysis.aiSummary.isEmpty {
-                Divider()
-
-                Text(analysis.aiSummary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
-            }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
     }
-
-    // MARK: - Hypnosis Details
-
-    private func hypnosisDetails(_ hypnosis: HypnosisMetadata) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("Hypnosis Session Analysis", systemImage: "brain")
-                .font(.headline)
-
-            // Phases
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Detected Phases: \(hypnosis.phases.count)")
-                    .font(.subheadline.bold())
-
-                ForEach(hypnosis.phases.prefix(5)) { phase in
+    
+    private func hypnosisDetailsSection(_ hypnosis: HypnosisMetadata) -> some View {
+        GlassCard(label: "Hypnosis Details") {
+            VStack(alignment: .leading, spacing: TranceSpacing.list) {
+                Text("Detected Phases (\(hypnosis.phases.count))")
+                    .font(TranceTypography.body)
+                    .foregroundColor(.textPrimary)
+                
+                VStack(spacing: TranceSpacing.micro) {
+                    ForEach(hypnosis.phases.prefix(5)) { phase in
+                        HStack {
+                            Circle()
+                                .fill(colorForPhase(phase.phase))
+                                .frame(width: 8, height: 8)
+                            Text(phase.phase.displayName)
+                                .font(TranceTypography.caption)
+                                .foregroundColor(.textPrimary)
+                            Spacer()
+                            Text("\(formatTime(phase.startTime)) - \(formatTime(phase.endTime))")
+                                .font(TranceTypography.caption)
+                                .foregroundColor(.textSecondary)
+                        }
+                    }
+                }
+                
+                if let induction = hypnosis.inductionStyle {
                     HStack {
-                        Circle()
-                            .fill(colorForPhase(phase.phase))
-                            .frame(width: 8, height: 8)
-
-                        Text(phase.phase.displayName)
-                            .font(.caption)
-
+                        Text("Induction")
+                            .font(TranceTypography.body)
+                            .foregroundColor(.textPrimary)
                         Spacer()
-
-                        Text("\(formatTime(phase.startTime)) - \(formatTime(phase.endTime))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        PhasePill(phase: induction.rawValue.capitalized)
                     }
                 }
-            }
-
-            // Induction style & trance depth
-            if let inductionStyle = hypnosis.inductionStyle {
-                infoRow(icon: "arrow.down.circle", label: "Induction", value: inductionStyle.rawValue.capitalized)
-            }
-
-            infoRow(icon: "gauge.high", label: "Trance Depth", value: hypnosis.estimatedTranceDeph.rawValue.capitalized)
-
-            // Techniques
-            if !hypnosis.detectedTechniques.isEmpty {
-                Text("Techniques: \(hypnosis.detectedTechniques.count) detected")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                
+                HStack {
+                    Text("Depth")
+                        .font(TranceTypography.body)
+                        .foregroundColor(.textPrimary)
+                    Spacer()
+                    PhasePill(phase: hypnosis.estimatedTranceDeph.rawValue.capitalized)
+                }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
     }
-
-    // MARK: - Customization Section
-
+    
     private var customizationSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("Customization", systemImage: "slider.horizontal.3")
-                .font(.headline)
-
-            // Intensity multiplier
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Overall Intensity")
-                        .font(.subheadline)
-                    Spacer()
-                    Text("\(Int(config.intensityMultiplier * 100))%")
-                        .font(.subheadline.bold())
+        GlassCard(label: "Session Customization") {
+            VStack(spacing: TranceSpacing.list) {
+                // Intensity
+                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                    HStack {
+                        Text("Overall Intensity")
+                            .font(TranceTypography.body)
+                            .foregroundColor(.textPrimary)
+                        Spacer()
+                        Text("\(Int(config.intensityMultiplier * 100))%")
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textSecondary)
+                    }
+                    Slider(value: $config.intensityMultiplier, in: 0.5...1.5)
+                        .tint(.roseGold)
+                        .onChange(of: config.intensityMultiplier) { _, _ in
+                            regenerateSession()
+                        }
                 }
-
-                Slider(value: $config.intensityMultiplier, in: 0.5...1.5)
-                    .onChange(of: config.intensityMultiplier) { _, _ in
+                
+                // Transition Smoothness
+                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                    HStack {
+                        Text("Transition Smoothness")
+                            .font(TranceTypography.body)
+                            .foregroundColor(.textPrimary)
+                        Spacer()
+                        Text(smoothnessLabel)
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textSecondary)
+                    }
+                    Slider(value: $config.transitionSmoothness, in: 0.0...1.0)
+                        .tint(.bwTheta)
+                        .onChange(of: config.transitionSmoothness) { _, _ in
+                            regenerateSession()
+                        }
+                }
+                
+                // Bilateral Mode
+                Toggle("Bilateral Stimulation", isOn: $config.bilateralMode)
+                    .font(TranceTypography.body)
+                    .foregroundColor(.textPrimary)
+                    .tint(.roseDeep)
+                    .onChange(of: config.bilateralMode) { _, _ in
                         regenerateSession()
                     }
             }
-
-            // Transition smoothness
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Transition Smoothness")
-                        .font(.subheadline)
-                    Spacer()
-                    Text(smoothnessLabel)
-                        .font(.subheadline.bold())
-                }
-
-                Slider(value: $config.transitionSmoothness, in: 0.0...1.0)
-                    .onChange(of: config.transitionSmoothness) { _, _ in
-                        regenerateSession()
-                    }
-            }
-
-            // Bilateral mode toggle
-            Toggle(isOn: $config.bilateralMode) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Bilateral Mode")
-                        .font(.subheadline)
-                    Text("Alternating left/right stimulation")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .onChange(of: config.bilateralMode) { _, _ in
-                regenerateSession()
-            }
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
-    }
-
-    // MARK: - Play Button
-
-    private var playButton: some View {
-        Button {
-            showingPlayer = true
-        } label: {
-            Label("Play Session with Audio", systemImage: "play.circle.fill")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.blue)
-                .foregroundStyle(.white)
-                .cornerRadius(12)
-        }
-        .disabled(generatedSession == nil)
-    }
-
-    // MARK: - Helper Views
-
-    private func infoRow(icon: String, label: String, value: String) -> some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Text(value)
-                .font(.subheadline.bold())
         }
     }
-
+    
     // MARK: - Logic
-
+    
     private func generateSession() {
-        print("🎨 Generating session...")
         generatedSession = generator.generateSession(
             from: audioFile,
             analysis: analysis,
             config: config
         )
-        print("✅ Session generated with \(generatedSession?.light_score.count ?? 0) moments")
     }
-
+    
     private func regenerateSession() {
+        TranceHaptics.shared.selection()
         generateSession()
     }
-
+    
     // MARK: - Helpers
+    
+    private func infoBox(icon: String, label: String, value: String, color: Color) -> some View {
+        VStack(spacing: TranceSpacing.micro) {
+            Image(systemName: icon)
+                .foregroundColor(color)
+            Text(label)
+                .font(TranceTypography.caption)
+                .foregroundColor(.textSecondary)
+            Text(value)
+                .font(TranceTypography.body)
+                .foregroundColor(.textPrimary)
+                .bold()
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, TranceSpacing.inner)
+        .background(color.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.thumbnail))
+    }
+    
+    private var smoothnessLabel: String {
+        if config.transitionSmoothness < 0.3 { return "Sharp" }
+        if config.transitionSmoothness < 0.7 { return "Moderate" }
+        return "Smooth"
+    }
 
     private var contentTypeIcon: String {
         switch analysis.contentType {
-        case .hypnosis:
-            return "brain"
-        case .meditation:
-            return "figure.mind.and.body"
-        case .music:
-            return "music.note"
-        case .guidedImagery:
-            return "eye"
-        case .affirmations:
-            return "quote.bubble"
-        case .unknown:
-            return "waveform"
+        case .hypnosis: return "brain"
+        case .meditation: return "figure.mind.and.body"
+        case .music: return "music.note"
+        case .guidedImagery: return "eye"
+        case .affirmations: return "quote.bubble"
+        case .unknown: return "waveform"
         }
     }
 
     private var contentTypeColor: Color {
         switch analysis.contentType {
-        case .hypnosis:
-            return .purple
-        case .meditation:
-            return .blue
-        case .music:
-            return .pink
-        case .guidedImagery:
-            return .green
-        case .affirmations:
-            return .orange
-        case .unknown:
-            return .gray
+        case .hypnosis: return .bwTheta
+        case .meditation: return .bwAlpha
+        case .music: return .roseGold
+        case .guidedImagery: return .roseDeep
+        case .affirmations: return .bwBeta
+        case .unknown: return .textSecondary
         }
     }
-
-    private var contentTypeGradient: LinearGradient {
-        switch analysis.contentType {
-        case .hypnosis:
-            // Deep purple and indigo for hypnosis
-            return LinearGradient(
-                colors: [Color(red: 0.4, green: 0.2, blue: 0.6), Color(red: 0.3, green: 0.1, blue: 0.5)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .meditation:
-            // Calming blues for meditation
-            return LinearGradient(
-                colors: [Color(red: 0.2, green: 0.4, blue: 0.7), Color(red: 0.1, green: 0.3, blue: 0.6)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .music:
-            // Vibrant pink/magenta for music
-            return LinearGradient(
-                colors: [Color(red: 0.8, green: 0.2, blue: 0.6), Color(red: 0.6, green: 0.1, blue: 0.5)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .guidedImagery:
-            // Fresh greens for guided imagery
-            return LinearGradient(
-                colors: [Color(red: 0.2, green: 0.6, blue: 0.4), Color(red: 0.1, green: 0.5, blue: 0.3)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .affirmations:
-            // Warm orange for affirmations
-            return LinearGradient(
-                colors: [Color(red: 0.9, green: 0.5, blue: 0.2), Color(red: 0.8, green: 0.4, blue: 0.1)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .unknown:
-            // Neutral grays for unknown
-            return LinearGradient(
-                colors: [Color(red: 0.4, green: 0.4, blue: 0.4), Color(red: 0.3, green: 0.3, blue: 0.3)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-    }
-
+    
     private func colorForPhase(_ phase: HypnosisMetadata.Phase) -> Color {
         switch phase {
-        case .preTalk:
-            return .gray
-        case .induction:
-            return .blue
-        case .deepening:
-            return .purple
-        case .therapy, .suggestions:
-            return .green
-        case .conditioning:
-            return .orange
-        case .emergence:
-            return .yellow
-        case .transitional:
-            return .teal
+        case .preTalk: return .textSecondary
+        case .induction: return .bwAlpha
+        case .deepening: return .bwTheta
+        case .therapy, .suggestions: return .roseGold
+        case .conditioning: return .roseDeep
+        case .emergence: return .bwBeta
+        case .transitional: return .textLight
         }
     }
-
+    
     private func formatTime(_ seconds: TimeInterval) -> String {
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", mins, secs)
     }
-
-    private var smoothnessLabel: String {
-        if config.transitionSmoothness < 0.3 {
-            return "Sharp"
-        } else if config.transitionSmoothness < 0.7 {
-            return "Moderate"
-        } else {
-            return "Smooth"
-        }
-    }
-}
-
-#Preview {
-    SessionGenerationView(
-        audioFile: AudioFile(
-            filename: "Deep Trance.m4a",
-            url: URL(fileURLWithPath: "/tmp/test.m4a"),
-            duration: 1200,
-            fileSize: 5000000
-        ),
-        analysis: AnalysisResult(
-            mood: .meditative,
-            energyLevel: 0.3,
-            suggestedFrequencyRange: 4.0...8.0,
-            suggestedIntensity: 0.6,
-            suggestedColorTemperature: 2500,
-            keyMoments: [],
-            aiSummary: "This is a progressive relaxation induction leading into deep therapeutic work.",
-            recommendedPreset: "Deep Hypnosis",
-            contentType: .hypnosis
-        ),
-        engine: LightEngine()
-    )
 }

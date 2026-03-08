@@ -8,7 +8,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Displays and manages the user's audio file library
+/// Displays and manages the user's audio file library with Trance design
 struct AudioLibraryView: View {
 
     @Bindable var engine: LightEngine
@@ -18,47 +18,71 @@ struct AudioLibraryView: View {
     @State private var selectedFiles = Set<AudioFile.ID>()
     @State private var showingAnalysis = false
     @State private var audioManager = AudioManager()
-    @State private var analysisManager = AnalysisStateManager()
+    private var analysisManager: AnalysisStateManager {
+        AnalysisStateManager.shared
+    }
     @State private var showingExpandedProgress = false
     @State private var showingSyncPlayer = false
     @State private var selectedLightSession: LightSession?
     @State private var isSelectionMode = false
+    @State private var showingQueueManagement = false
+    @State private var searchText = ""
+    @State private var showingRenameAlert = false
+    @State private var newFilename = ""
+    @State private var fileToRename: AudioFile?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottom) {
-                // Main content
-                Group {
+            ZStack {
+                // Trance background
+                Color.bgPrimary.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // Main content
                     if audioFiles.isEmpty {
                         emptyState
                     } else {
-                        audioList
+                        audioLibraryContent
                     }
-                }
 
-                // Selection toolbar
-                if isSelectionMode && !selectedFiles.isEmpty {
-                    VStack(spacing: 0) {
-                        Divider()
-                        HStack {
-                            Text("\(selectedFiles.count) selected")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                    // Selection toolbar with Trance design
+                    if isSelectionMode && !selectedFiles.isEmpty {
+                        VStack(spacing: 0) {
+                            Rectangle()
+                                .fill(Color.glassBorder.opacity(0.3))
+                                .frame(height: 1)
 
-                            Spacer()
+                            HStack(spacing: TranceSpacing.card) {
+                                Text("\(selectedFiles.count) selected")
+                                    .font(TranceTypography.caption)
+                                    .foregroundColor(.textSecondary)
 
-                            Button("Analyze All") {
-                                analyzeSelectedFiles()
+                                Spacer()
+
+                                Button("Analyze All") {
+                                    TranceHaptics.shared.medium()
+                                    analyzeSelectedFiles()
+                                }
+                                .padding(.horizontal, TranceSpacing.card)
+                                .padding(.vertical, TranceSpacing.inner)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.roseGold, .roseDeep],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .foregroundColor(.white)
+                                .font(TranceTypography.body)
+                                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
+                                .disabled(selectedFiles.isEmpty)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(selectedFiles.isEmpty)
+                            .padding(TranceSpacing.content)
+                            .background(.ultraThinMaterial)
                         }
-                        .padding(.horizontal)
-                        .padding(.vertical, 12)
-                        .background(.regularMaterial)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 // Status bar overlay
@@ -84,24 +108,55 @@ struct AudioLibraryView: View {
                 }
             }
             .navigationTitle("Audio Library")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     if !audioFiles.isEmpty {
                         Button(isSelectionMode ? "Done" : "Select") {
+                            TranceHaptics.shared.light()
                             if isSelectionMode {
                                 selectedFiles.removeAll()
                             }
                             isSelectionMode.toggle()
                         }
+                        .font(TranceTypography.body)
+                        .foregroundColor(.roseGold)
                     }
                 }
 
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingImporter = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack(spacing: TranceSpacing.small) {
+                        // Queue management button
+                        if analysisManager.currentAnalysis != nil || !analysisManager.analysisQueue.isEmpty {
+                            Button {
+                                showingQueueManagement = true
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "list.bullet.circle.fill")
+                                        .symbolRenderingMode(.hierarchical)
+                                    if !analysisManager.analysisQueue.isEmpty {
+                                        Text("\(analysisManager.analysisQueue.count)")
+                                            .font(.caption2)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 2)
+                                            .background(Color.roseGold, in: Capsule())
+                                    }
+                                }
+                                .foregroundColor(.roseGold)
+                            }
+                        }
+
+                        // Import button with Trance styling
+                        Button {
+                            TranceHaptics.shared.light()
+                            showingImporter = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .symbolRenderingMode(.hierarchical)
+                                .font(.title2)
+                                .foregroundColor(.roseGold)
+                        }
                     }
                 }
             }
@@ -119,6 +174,25 @@ struct AudioLibraryView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingQueueManagement) {
+                QueueManagementView(analysisManager: AnalysisStateManager.shared)
+            }
+            .alert("Rename File", isPresented: $showingRenameAlert) {
+                TextField("New name", text: $newFilename)
+                Button("Cancel", role: .cancel) {
+                    newFilename = ""
+                    fileToRename = nil
+                }
+                Button("Save") {
+                    if let file = fileToRename {
+                        renameFile(file, newName: newFilename)
+                    }
+                    newFilename = ""
+                    fileToRename = nil
+                }
+            } message: {
+                Text("Enter a new name for this audio file.")
+            }
             .onAppear {
                 loadAudioFiles()
             }
@@ -130,49 +204,131 @@ struct AudioLibraryView: View {
         }
     }
 
-    // MARK: - Empty State
+    // MARK: - Empty State with Trance Design
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No Audio Files", systemImage: "waveform.circle")
-        } description: {
-            Text("Import audio to create custom light therapy sessions")
-        } actions: {
-            Button {
-                showingImporter = true
-            } label: {
-                Label("Import Audio", systemImage: "square.and.arrow.down")
-                    .frame(maxWidth: .infinity)
+        VStack(spacing: TranceSpacing.statusBar) {
+            Spacer()
+
+            // Elegant centered icon
+            VStack(spacing: TranceSpacing.card) {
+                // Simple icon with rose gold styling
+                Image(systemName: "waveform.circle.fill")
+                    .font(.system(size: 80, weight: .light))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.roseGold, .roseDeep],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(
+                        color: Color.roseGold.opacity(0.3),
+                        radius: 20,
+                        x: 0,
+                        y: 10
+                    )
+
+                VStack(spacing: TranceSpacing.inner) {
+                    Text("Your Audio Library")
+                        .font(TranceTypography.greeting)
+                        .foregroundColor(.textPrimary)
+                        .multilineTextAlignment(.center)
+
+                    Text("Transform your audio into personalized\nlight therapy experiences")
+                        .font(TranceTypography.body)
+                        .foregroundColor(.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(2)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .padding(.horizontal, 40)
+
+            Spacer()
+
+            // Import button with Trance styling
+            VStack(spacing: TranceSpacing.card) {
+                Button {
+                    TranceHaptics.shared.medium()
+                    showingImporter = true
+                } label: {
+                    HStack(spacing: TranceSpacing.list) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Import Audio Files")
+                                .font(TranceTypography.body)
+                                .fontWeight(.semibold)
+
+                            Text("MP3, M4A & more formats")
+                                .font(TranceTypography.caption)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "arrow.right")
+                            .font(.caption)
+                            .opacity(0.7)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, TranceSpacing.content)
+                    .padding(.vertical, TranceSpacing.card)
+                }
+                .background(
+                    LinearGradient(
+                        colors: [.roseGold, .roseDeep],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
+                .shadow(
+                    color: TranceShadow.button.color,
+                    radius: TranceShadow.button.radius,
+                    x: TranceShadow.button.x,
+                    y: TranceShadow.button.y
+                )
+                .padding(.horizontal, TranceSpacing.screen)
+
+                // Helpful tip
+                HStack(spacing: TranceSpacing.icon) {
+                    Image(systemName: "sparkles")
+                        .font(TranceTypography.caption)
+                        .foregroundColor(.roseGold)
+
+                    Text("AI will analyze your audio to create custom light sessions")
+                        .font(TranceTypography.caption)
+                        .foregroundColor(.textLight)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, TranceSpacing.screen)
+            }
+
+            Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Audio List
+    // MARK: - Audio Library Content with Trance Design
 
-    private var audioList: some View {
-        List {
-            ForEach(audioFiles) { file in
-                AudioFileRow(
-                    file: file,
-                    audioManager: audioManager,
-                    analysisManager: analysisManager,
-                    isSelectionMode: isSelectionMode,
-                    isSelected: selectedFiles.contains(file.id),
-                    onAnalyze: {
-                        startAnalysis(for: file)
-                    },
-                    onPlayWithLights: {
-                        playWithLights(file)
-                    },
-                    onDelete: {
-                        deleteFile(file)
-                    },
-                    onToggleSelection: {
-                        toggleSelection(for: file)
-                    }
-                )
+    private var audioLibraryContent: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                // Search bar
+                searchSection
+
+                // Import options section
+                importOptionsSection
+
+                // Audio files grid
+                audioFilesGrid
+
+                // Bottom spacing for selection toolbar
+                if isSelectionMode {
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(height: 100)
+                }
             }
         }
         .fullScreenCover(isPresented: $showingSyncPlayer) {
@@ -186,15 +342,175 @@ struct AudioLibraryView: View {
         }
     }
 
+    // MARK: - Search Section
+
+    private var searchSection: some View {
+        GlassCard {
+            HStack(spacing: TranceSpacing.list) {
+                Image(systemName: "magnifyingglass")
+                    .font(TranceTypography.body)
+                    .foregroundColor(.textLight)
+
+                TextField("Search audio files...", text: $searchText)
+                    .font(TranceTypography.body)
+                    .foregroundColor(.textPrimary)
+
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(TranceTypography.body)
+                            .foregroundColor(.textLight)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, TranceSpacing.screen)
+        .padding(.top, TranceSpacing.card)
+    }
+
+    // MARK: - Import Options Section
+
+    private var importOptionsSection: some View {
+        GlassCard(label: "Add Audio") {
+            VStack(spacing: TranceSpacing.card) {
+                // Import from Files
+                Button {
+                    TranceHaptics.shared.light()
+                    showingImporter = true
+                } label: {
+                    HStack(spacing: TranceSpacing.list) {
+                        Image(systemName: "folder.fill")
+                            .font(.title2)
+                            .foregroundColor(.roseGold)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Import from Files")
+                                .font(TranceTypography.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(.textPrimary)
+
+                            Text("Choose MP3, M4A, or WAV files")
+                                .font(TranceTypography.caption)
+                                .foregroundColor(.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.textLight)
+                    }
+                    .padding(.vertical, TranceSpacing.inner)
+                }
+
+                Rectangle()
+                    .fill(Color.glassBorder.opacity(0.3))
+                    .frame(height: 1)
+
+                // Record Audio (placeholder for now)
+                Button {
+                    TranceHaptics.shared.light()
+                    // TODO: Implement audio recording
+                } label: {
+                    HStack(spacing: TranceSpacing.list) {
+                        Image(systemName: "mic.fill")
+                            .font(.title2)
+                            .foregroundColor(.warmAccent)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Record Audio")
+                                .font(TranceTypography.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(.textPrimary)
+
+                            Text("Record directly in the app")
+                                .font(TranceTypography.caption)
+                                .foregroundColor(.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Text("Coming Soon")
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textLight)
+                            .padding(.horizontal, TranceSpacing.inner)
+                            .padding(.vertical, TranceSpacing.micro)
+                            .background(Color.glassBorder.opacity(0.2))
+                            .clipShape(RoundedRectangle(cornerRadius: TranceRadius.pill))
+                    }
+                    .padding(.vertical, TranceSpacing.inner)
+                }
+                .disabled(true)
+            }
+        }
+        .padding(.horizontal, TranceSpacing.screen)
+        .padding(.top, TranceSpacing.cardMargin)
+    }
+
+    // MARK: - Audio Files Grid
+
+    private var audioFilesGrid: some View {
+        LazyVStack(spacing: TranceSpacing.cardMargin) {
+            if !filteredAudioFiles.isEmpty {
+                GlassCard(label: "Your Files (\(filteredAudioFiles.count))") {
+                    LazyVStack(spacing: TranceSpacing.card) {
+                        ForEach(filteredAudioFiles) { file in
+                            AudioFileRow(
+                                file: file,
+                                audioManager: audioManager,
+                                analysisManager: analysisManager,
+                                isSelectionMode: isSelectionMode,
+                                isSelected: selectedFiles.contains(file.id),
+                                onAnalyze: { startAnalysis(for: file) },
+                                onPlayWithLights: { playWithLights(file) },
+                                onRename: {
+                                    fileToRename = file
+                                    newFilename = file.displayName
+                                    showingRenameAlert = true
+                                },
+                                onDelete: { deleteFile(file) },
+                                onToggleSelection: { toggleSelection(for: file) }
+                            )
+
+                            if file.id != filteredAudioFiles.last?.id {
+                                Rectangle()
+                                    .fill(Color.glassBorder.opacity(0.3))
+                                    .frame(height: 1)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, TranceSpacing.screen)
+                .padding(.top, TranceSpacing.cardMargin)
+            }
+        }
+    }
+
+    // MARK: - Filtered Audio Files
+
+    private var filteredAudioFiles: [AudioFile] {
+        if searchText.isEmpty {
+            return audioFiles
+        }
+        return audioFiles.filter { file in
+            file.filename.localizedCaseInsensitiveContains(searchText) ||
+            file.transcription?.localizedCaseInsensitiveContains(searchText) == true
+        }
+    }
+
     // MARK: - Playback Handlers
 
     private func playWithLights(_ file: AudioFile) {
         Task {
             // Load the generated session
             if let session = await loadGeneratedSession(for: file) {
-                selectedFile = file
-                selectedLightSession = session
-                showingSyncPlayer = true
+                await MainActor.run {
+                    selectedFile = file
+                    selectedLightSession = session
+                    showingSyncPlayer = true
+                }
             }
         }
     }
@@ -231,22 +547,25 @@ struct AudioLibraryView: View {
     // MARK: - Analysis Handler
 
     private func startAnalysis(for file: AudioFile) {
+        print("🔬 Queuing file for analysis: \(file.filename)")
         selectedFile = file
 
         Task {
-            await analysisManager.startAnalysis(for: file)
+            await analysisManager.queueForAnalysis(file)
 
             // Poll for completion
             while analysisManager.currentAnalysis != nil {
                 if let completed = analysisManager.getCompletedAnalysis(for: file) {
-                    // Update file with results
-                    var updatedFile = file
-                    updatedFile.analysisResult = completed.analysis
-                    updatedFile.transcription = completed.transcription.fullText
+                    await MainActor.run {
+                        // Update file with results
+                        var updatedFile = file
+                        updatedFile.analysisResult = completed.analysis
+                        updatedFile.transcription = completed.transcription.fullText
 
-                    if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
-                        audioFiles[index] = updatedFile
-                        saveAudioFiles()
+                        if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
+                            audioFiles[index] = updatedFile
+                            saveAudioFiles()
+                        }
                     }
                     break
                 }
@@ -310,21 +629,42 @@ struct AudioLibraryView: View {
         print("🗑 Deleted: \(file.filename)")
     }
 
+    private func renameFile(_ file: AudioFile, newName: String) {
+        let cleanName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty else { return }
+        
+        if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
+            // Keep the original extension
+            let urlExtension = file.url.pathExtension
+            let finalName = cleanName.hasSuffix("." + urlExtension) || urlExtension.isEmpty 
+                ? cleanName 
+                : cleanName + "." + urlExtension
+                
+            audioFiles[index].filename = finalName
+            saveAudioFiles()
+            print("✏️ Renamed to: \(finalName)")
+        }
+    }
+
     // MARK: - Selection Management
 
     private func toggleSelection(for file: AudioFile) {
         if selectedFiles.contains(file.id) {
             selectedFiles.remove(file.id)
+            print("📋 Deselected: \(file.filename)")
         } else {
             selectedFiles.insert(file.id)
+            print("📋 Selected: \(file.filename)")
         }
+        print("📋 Total selected: \(selectedFiles.count)")
     }
 
     private func analyzeSelectedFiles() {
         let filesToAnalyze = audioFiles.filter { selectedFiles.contains($0.id) }
+        print("🔬 Queuing \(filesToAnalyze.count) files for analysis: \(filesToAnalyze.map { $0.filename })")
 
         Task {
-            await analysisManager.startAnalysis(for: filesToAnalyze)
+            await analysisManager.queueForAnalysis(filesToAnalyze)
         }
 
         // Exit selection mode
@@ -335,19 +675,42 @@ struct AudioLibraryView: View {
     private func handleImport(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
-            // Import multiple files
+            // Import multiple files with progress tracking
             Task {
-                for url in urls {
+                var importedFiles: [AudioFile] = []
+                let totalFiles = urls.count
+
+                print("📥 Starting import of \(totalFiles) audio files...")
+
+                for (index, url) in urls.enumerated() {
                     guard url.startAccessingSecurityScopedResource() else {
-                        print("❌ Failed to access file: \(url)")
+                        print("❌ Failed to access file: \(url.lastPathComponent)")
                         continue
                     }
 
+                    print("📥 Processing file \(index + 1)/\(totalFiles): \(url.lastPathComponent)")
+
+                    // Import with timeout handling
                     if let file = await audioManager.importAudio(from: url) {
-                        addAudioFile(file)
+                        await MainActor.run {
+                            addAudioFile(file)
+                        }
+                        importedFiles.append(file)
+                        print("✅ Imported (\(index + 1)/\(totalFiles)): \(file.filename)")
+                    } else {
+                        print("⚠️ Skipped (\(index + 1)/\(totalFiles)): \(url.lastPathComponent) - Import failed")
                     }
 
                     url.stopAccessingSecurityScopedResource()
+                }
+
+                // Automatically queue all imported files for analysis
+                if !importedFiles.isEmpty {
+                    print("🔬 Auto-queuing \(importedFiles.count) files for analysis...")
+                    await analysisManager.queueForAnalysis(importedFiles)
+                    print("✅ Import complete: \(importedFiles.count)/\(totalFiles) files processed and queued")
+                } else {
+                    print("⚠️ No files were successfully imported")
                 }
             }
 
@@ -357,149 +720,179 @@ struct AudioLibraryView: View {
     }
 }
 
-// MARK: - Audio File Row
+// MARK: - Audio File Row Component
 
 struct AudioFileRow: View {
-
     let file: AudioFile
-    var audioManager: AudioManager
-    var analysisManager: AnalysisStateManager
-    var isSelectionMode: Bool = false
-    var isSelected: Bool = false
-    var onAnalyze: (() -> Void)?
-    var onPlayWithLights: (() -> Void)?
-    var onDelete: (() -> Void)?
-    var onToggleSelection: (() -> Void)?
+    let audioManager: AudioManager
+    let analysisManager: AnalysisStateManager
+    let isSelectionMode: Bool
+    let isSelected: Bool
+    let onAnalyze: () -> Void
+    let onPlayWithLights: () -> Void
+    let onRename: () -> Void
+    let onDelete: () -> Void
+    let onToggleSelection: () -> Void
 
     @State private var isPlaying = false
     @State private var hasGeneratedSession = false
-    @State private var showingDeleteConfirmation = false
 
-    /// Whether this file is currently being analyzed
     private var isAnalyzing: Bool {
         analysisManager.currentAnalysis?.audioFile.id == file.id
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 16) {
-                // Selection circle or play button
+        HStack(spacing: TranceSpacing.list) {
+            // Selection/Play button
+            Button {
+                TranceHaptics.shared.light()
                 if isSelectionMode {
-                    Button {
-                        onToggleSelection?()
-                    } label: {
-                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                            .font(.title)
-                            .foregroundStyle(isSelected ? .blue : .gray)
-                    }
-                    .buttonStyle(.plain)
+                    onToggleSelection()
                 } else {
-                    // Play button
-                    Button {
-                        togglePlayback()
-                    } label: {
-                        Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.title)
-                            .foregroundStyle(.blue)
-                    }
-                    .buttonStyle(.plain)
+                    togglePlayback()
                 }
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(
+                            isSelectionMode && isSelected ? Color.roseGold :
+                            Color.glassBorder.opacity(0.3)
+                        )
+                        .frame(width: 44, height: 44)
 
-                // File info
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(file.filename)
-                        .font(.headline)
-                        .lineLimit(1)
-
-                    HStack(spacing: 12) {
-                        Label(file.durationFormatted, systemImage: "clock")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Label(file.fileSizeFormatted, systemImage: "doc")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        if file.isAnalyzed {
-                            Label("Analyzed", systemImage: "sparkles")
-                                .font(.caption)
-                                .foregroundStyle(.green)
-                        }
+                    if isSelectionMode {
+                        Image(systemName: isSelected ? "checkmark" : "")
+                            .font(.body.weight(.medium))
+                            .foregroundColor(.white)
+                    } else {
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.body.weight(.medium))
+                            .foregroundColor(isPlaying ? .white : .roseGold)
                     }
                 }
-
-                Spacer()
             }
 
-            // Action buttons (hidden in selection mode)
-            if !isSelectionMode {
-                HStack(spacing: 10) {
-                // Analyze / Re-analyze button
-                Button {
-                    onAnalyze?()
-                } label: {
-                    if isAnalyzing {
-                        HStack(spacing: 6) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Analyzing...")
-                                .font(.subheadline)
+            // File info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(file.displayName)
+                        .font(TranceTypography.body)
+                        .fontWeight(.medium)
+                        .foregroundColor(.textPrimary)
+                        .lineLimit(2)
+
+                    Spacer()
+
+                    // Analysis status badges
+                    HStack(spacing: TranceSpacing.icon) {
+                        if file.isAnalyzed {
+                            Image(systemName: "sparkles")
+                                .font(.caption)
+                                .foregroundColor(.phaseInduction)
                         }
-                        .frame(maxWidth: .infinity)
-                    } else {
-                        Label(
-                            hasGeneratedSession ? "Re-analyze" : "Analyze",
-                            systemImage: "waveform.badge.magnifyingglass"
-                        )
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity)
+
+                        if hasGeneratedSession {
+                            Image(systemName: "lightbulb.fill")
+                                .font(.caption)
+                                .foregroundColor(.roseGold)
+                        }
+
+                        if isAnalyzing {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .tint(.roseGold)
+                        }
                     }
                 }
-                .buttonStyle(.bordered)
-                .disabled(isAnalyzing)
 
-                // Play with Lights button (if session available)
-                if hasGeneratedSession {
+                // Metadata
+                HStack(spacing: TranceSpacing.list) {
+                    Text(file.durationFormatted)
+                        .font(TranceTypography.caption)
+                        .foregroundColor(.textSecondary)
+
+                    Text("•")
+                        .font(TranceTypography.caption)
+                        .foregroundColor(.textLight)
+
+                    Text(file.fileSizeFormatted)
+                        .font(TranceTypography.caption)
+                        .foregroundColor(.textSecondary)
+
+                    if let result = file.analysisResult {
+                        Text("•")
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textLight)
+
+                        Text(result.contentType.rawValue.capitalized)
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textLight)
+                    }
+                }
+
+                // Action button for session playback
+                if hasGeneratedSession && !isSelectionMode {
                     Button {
-                        onPlayWithLights?()
+                        TranceHaptics.shared.medium()
+                        onPlayWithLights()
                     } label: {
-                        Label("Play with Lights", systemImage: "lightbulb.fill")
-                            .font(.subheadline)
-                            .frame(maxWidth: .infinity)
+                        HStack(spacing: TranceSpacing.icon) {
+                            Image(systemName: "lightbulb.fill")
+                                .font(.caption)
+                            Text("Play with Lights")
+                                .font(TranceTypography.caption)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.roseGold)
+                        .padding(.horizontal, TranceSpacing.inner)
+                        .padding(.vertical, TranceSpacing.micro)
+                        .background(Color.roseGold.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.pill))
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
-                }
-
-                // Delete button
-                Button {
-                    showingDeleteConfirmation = true
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.subheadline)
-                }
-                .buttonStyle(.bordered)
-                .tint(.red)
                 }
             }
         }
-        .padding(.vertical, 8)
-        .confirmationDialog(
-            "Delete \(file.filename)?",
-            isPresented: $showingDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                onDelete?()
+        .contentShape(Rectangle())
+        .contextMenu {
+            if !isSelectionMode {
+                Button {
+                    onRename()
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
-        } message: {
-            Text("This will remove the audio file and its generated light session.")
+        }
+        .overlay(alignment: .trailing) {
+            if !isSelectionMode {
+                Menu {
+                    Button {
+                        onRename()
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.title3)
+                        .foregroundColor(.textLight)
+                        .padding(.vertical, TranceSpacing.list)
+                        .padding(.leading, TranceSpacing.list)
+                }
+            }
         }
         .task {
             await checkForGeneratedSession()
         }
         .onChange(of: analysisManager.currentAnalysis?.stage) {
-            // Re-check when analysis stage changes (especially when it completes)
             Task {
                 await checkForGeneratedSession()
             }
@@ -522,7 +915,6 @@ struct AudioFileRow: View {
     }
 
     private func checkForGeneratedSession() async {
-        // Check if generated session exists
         let fileManager = FileManager.default
         let documentsURL = URL.documentsDirectory
         let sessionsURL = documentsURL.appendingPathComponent("GeneratedSessions", isDirectory: true)

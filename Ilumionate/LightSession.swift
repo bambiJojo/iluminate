@@ -10,7 +10,7 @@ import Foundation
 /// Represents a complete light entrainment session loaded from JSON.
 /// This is the root structure that contains all session metadata and the
 /// timeline of light control points.
-struct LightSession: Codable, Identifiable {
+struct LightSession: Codable, Identifiable, Sendable {
     let id: UUID
     let session_name: String
     let duration_sec: Double
@@ -54,7 +54,7 @@ struct LightSession: Codable, Identifiable {
 /// A single control point in the light score timeline.
 /// Represents the target state of the light engine at a specific time.
 /// The runtime player interpolates between consecutive moments.
-struct LightMoment: Codable {
+struct LightMoment: Codable, Sendable {
     let time: Double          // seconds from session start
     let frequency: Double     // target frequency in Hz
     let intensity: Double     // brightness intensity 0.0–1.0
@@ -109,7 +109,7 @@ struct LightMoment: Codable {
 
 /// Waveform types that can be specified in session JSON.
 /// Must match the Waveform enum in EngineWaveforms.swift
-enum WaveformType: String, Codable, CaseIterable {
+enum WaveformType: String, Codable, CaseIterable, Sendable {
     case sine
     case triangle
     case softPulse = "soft_pulse"

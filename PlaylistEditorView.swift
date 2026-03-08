@@ -13,15 +13,22 @@ struct PlaylistEditorView: View {
     var isNew: Bool
     var onSave: (Playlist) -> Void
     @Environment(\.dismiss) private var dismiss
+    
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var showingAudioPicker = false
     @State private var availableAudioFiles: [AudioFile] = []
 
     var body: some View {
         NavigationStack {
-            List {
-                // Name section
-                Section {
+            ZStack {
+                // Theme-aware background
+                Color.bgPrimary
+                    .ignoresSafeArea()
+
+                List {
+                    // Name section
+                    Section {
                     TextField("Playlist Name", text: $playlist.name)
                         .font(.headline)
                 } header: {
@@ -52,15 +59,17 @@ struct PlaylistEditorView: View {
                         ForEach(playlist.items) { item in
                             HStack {
                                 Image(systemName: "line.3.horizontal")
+                                    .symbolRenderingMode(.hierarchical)
                                     .foregroundStyle(.tertiary)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.filename)
                                         .font(.body)
+                                        .foregroundStyle(Color.textPrimary)
                                         .lineLimit(1)
                                     Text(item.durationFormatted)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(Color.textSecondary)
                                 }
 
                                 Spacer()
@@ -69,6 +78,7 @@ struct PlaylistEditorView: View {
                                     removeItem(item)
                                 } label: {
                                     Image(systemName: "minus.circle.fill")
+                                        .symbolRenderingMode(.hierarchical)
                                         .foregroundStyle(.red)
                                 }
                                 .buttonStyle(.plain)
@@ -89,7 +99,7 @@ struct PlaylistEditorView: View {
                         Spacer()
                         Text("\(playlist.itemCount) tracks")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textSecondary)
                     }
                 }
 
@@ -109,8 +119,13 @@ struct PlaylistEditorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.title3)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color.textPrimary)
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -130,6 +145,8 @@ struct PlaylistEditorView: View {
                         addItem(from: file)
                     }
                 )
+            }
+                .scrollContentBackground(.hidden)
             }
         }
     }
@@ -217,12 +234,14 @@ struct AudioPickerView: View {
 
                             if alreadyAdded {
                                 Image(systemName: "checkmark.circle.fill")
+                                    .symbolRenderingMode(.hierarchical)
                                     .foregroundStyle(.green)
                             } else {
                                 Button {
                                     onAdd(file)
                                 } label: {
                                     Image(systemName: "plus.circle.fill")
+                                        .symbolRenderingMode(.hierarchical)
                                         .font(.title2)
                                 }
                                 .buttonStyle(.plain)

@@ -2,13 +2,14 @@
 //  SessionPlayerView.swift
 //  Ilumionate
 //
-//  Created by Byron Quine on 2/9/26.
+//  Redesigned session player with Trance design system
+//  Featuring MandalaVisualizer center piece and glass morphism
 //
 
 import SwiftUI
 import Combine
 
-/// Full-screen session player with controls and progress display
+/// Full-screen session player with Trance design and MandalaVisualizer
 struct SessionPlayerView: View {
 
     let session: LightSession
@@ -21,7 +22,9 @@ struct SessionPlayerView: View {
     @State private var showingControls = true
     @State private var validationResult: ValidationResult?
     @State private var displayTime: Double = 0.0
-    private let uiUpdateTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    @State private var uiUpdateTimer: Timer?
+    @State private var isSyncEnabled = true
+    @State private var currentPhase = "Induction Phase"
 
     init(session: LightSession, audioFile: AudioFile? = nil, engine: LightEngine) {
         self.session = session
@@ -32,289 +35,324 @@ struct SessionPlayerView: View {
 
     var body: some View {
         ZStack {
-            // Background - driven by engine brightness
-            SessionView(engine: engine)
+            // Trance background with rose-gold gradients
+            Color.bgPrimary
+                .ignoresSafeArea()
 
-            // Lock overlay (always present, invisible until activated)
-            SessionLockView {
-                stopSession()
-                dismiss()
-            }
+            // Ambient light overlay based on engine brightness
+            RadialGradient(
+                colors: [
+                    Color.roseGold.opacity(engine.brightness * 0.4),
+                    Color.blush.opacity(engine.brightness * 0.2),
+                    .clear
+                ],
+                center: .center,
+                startRadius: 100,
+                endRadius: 400
+            )
+            .ignoresSafeArea()
+            .blendMode(.softLight)
 
-            // Controls overlay
+            // Main player interface
             if showingControls {
-                controlsOverlay
-                    .transition(.opacity)
-            }
-
-            // Floating controls button (always visible when controls are hidden)
-            if !showingControls {
+                playerInterface
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            } else {
+                // Minimal interface with just mandala
                 VStack {
-                    HStack {
-                        Spacer()
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                showingControls = true
-                            }
-                        } label: {
-                            Image(systemName: "slider.horizontal.3")
-                                .font(.title3)
-                                .foregroundStyle(.white)
-                                .padding(12)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
-                        }
-                        .padding()
-                    }
                     Spacer()
+                    MandalaVisualizer(size: 250, brightness: engine.brightness)
+                    Spacer()
+
+                    // Tap to show controls hint
+                    Text("Tap to show controls")
+                        .font(TranceTypography.caption)
+                        .foregroundColor(.textLight)
+                        .padding(.bottom, TranceSpacing.statusBar)
+                }
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showingControls = true
+                    }
                 }
                 .transition(.opacity)
             }
+
+            // Pause overlay
+            if !player.isPlaying && !player.isComplete {
+                pauseOverlay
+                    .transition(.opacity)
+            }
         }
         .onAppear {
-            print("🎬 SessionPlayerView appeared")
-            print("📊 Session: \(session.displayName)")
+            startUITimer()
 
-            // Validate session before starting
+            // Validate session
             validationResult = SessionDiagnostics.validateSession(session)
+            #if DEBUG
             if let result = validationResult {
                 print(result.summary)
-
-                // Log any warnings or errors
-                for error in result.errors {
-                    print("❌ Error:", error)
-                }
-                for warning in result.warnings {
-                    print("⚠️ Warning:", warning)
-                }
-
-                // Analyze session
-                let analysis = SessionDiagnostics.analyzeSession(session)
-                print("📊 Effectiveness:", analysis.estimatedEntrainmentEffectiveness.emoji,
-                      analysis.estimatedEntrainmentEffectiveness.rawValue)
-
-                if !analysis.suggestions.isEmpty {
-                    print("💡 Suggestions:")
-                    for suggestion in analysis.suggestions {
-                        print("  -", suggestion)
-                    }
-                }
             }
+            #endif
 
-            print("⚡️ Starting session...")
-
-            // Setup audio sync if audio file is provided
+            // Setup audio sync if needed
             if let audioFile = audioFile {
                 setupAudioSync(audioFile)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.prepareSession()
+                }
+            } else {
+                prepareSession()
             }
 
-            startSession()
-
-            // Hide controls after 3 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    showingControls = false
+            // Auto-hide controls after 5 seconds only if playing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                if player.isPlaying {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showingControls = false
+                    }
                 }
             }
         }
         .onDisappear {
-            print("🛑 SessionPlayerView disappeared")
+            stopUITimer()
             stopSession()
             audioSync?.stop()
         }
-        .onReceive(uiUpdateTimer) { _ in
-            displayTime = player.currentTime
-        }
-        .statusBar(hidden: !showingControls)
+        .statusBarHidden(!showingControls)
+        .preferredColorScheme(.light) // Force light mode for Trance design
     }
 
-    // MARK: - Controls Overlay
+    // MARK: - Main Player Interface
 
-    private var controlsOverlay: some View {
-        VStack {
-            // Top bar
+    private var playerInterface: some View {
+        VStack(spacing: TranceSpacing.content) {
+            // Top controls
             HStack {
-                // Home button
                 Button {
                     stopSession()
                     dismiss()
                 } label: {
-                    Image(systemName: "house.fill")
+                    Image(systemName: "xmark")
                         .font(.title3)
-                        .foregroundStyle(.white)
+                        .foregroundColor(.textSecondary)
                 }
 
                 Spacer()
 
-                VStack(alignment: .center) {
+                VStack(spacing: 2) {
                     Text(session.displayName)
-                        .font(.headline)
-                    Text(formatTime(displayTime) + " / " + session.durationFormatted)
-                        .font(.caption)
-                        .monospacedDigit()
+                        .font(TranceTypography.trackTitle)
+                        .foregroundColor(.textPrimary)
+                        .lineLimit(1)
+
+                    PhasePill(phase: currentPhase)
                 }
 
                 Spacer()
 
-                // Hide controls button
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showingControls = false
                     }
                 } label: {
-                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                    Image(systemName: "minus")
                         .font(.title3)
-                        .foregroundStyle(.white)
+                        .foregroundColor(.textSecondary)
                 }
             }
-            .padding()
-            .background(.ultraThinMaterial)
+            .padding(.horizontal, TranceSpacing.screen)
+            .padding(.top, TranceSpacing.statusBar)
 
             Spacer()
 
-            // Bottom controls
-            VStack(spacing: 16) {
-                // Progress bar
-                ProgressView(value: player.progress)
-                    .tint(.white)
+            // Mandala visualizer center piece
+            MandalaVisualizer(size: 220, brightness: engine.brightness)
+                .padding(.vertical, TranceSpacing.content)
 
-                // Audio volume control (if audio is present)
-                if audioSync != nil {
-                    VStack(spacing: 8) {
-                        HStack {
-                            Image(systemName: "speaker.fill")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.7))
+            Spacer()
 
-                            Slider(value: Binding(
-                                get: { audioSync?.audioVolume ?? 1.0 },
-                                set: { audioSync?.audioVolume = Float($0) }
-                            ), in: 0.0...1.0)
-                                .tint(.white)
-
-                            Image(systemName: "speaker.wave.3.fill")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
-
-                        Text("Audio: \(Int((audioSync?.audioVolume ?? 1.0) * 100))%")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.6))
+            // Player controls section
+            VStack(spacing: TranceSpacing.cardMargin) {
+                // Audio scrubber with time display
+                VStack(spacing: TranceSpacing.small) {
+                    AudioScrubber(progress: .constant(player.progress)) { newProgress in
+                        let newTime = Double(session.duration_sec) * newProgress
+                        player.seek(to: newTime)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(12)
+
+                    HStack {
+                        Text(formatTime(displayTime))
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textSecondary)
+                            .monospacedDigit()
+                        Spacer()
+                        Text(formatTime(Double(session.duration_sec)))
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textSecondary)
+                            .monospacedDigit()
+                    }
+                }
+                .padding(.horizontal, TranceSpacing.screen)
+
+                // Main play button
+                Button {
+                    TranceHaptics.shared.medium()
+                    if player.isPlaying {
+                        player.pause()
+                        engine.pause()
+                        audioSync?.pause()
+                    } else {
+                        player.play()
+                        engine.resume()
+                        if audioSync?.hasAudioLoaded == true {
+                            audioSync?.play()
+                        }
+                        
+                        // Auto-hide controls after they hit play
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            if player.isPlaying {
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    showingControls = false
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [.roseGold, .roseDeep],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 80, height: 80)
+                            .shadow(
+                                color: TranceShadow.button.color,
+                                radius: TranceShadow.button.radius,
+                                x: TranceShadow.button.x,
+                                y: TranceShadow.button.y
+                            )
+
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.title)
+                            .foregroundColor(.white)
+                            .offset(x: player.isPlaying ? 0 : 2) // Optical alignment for play
+                    }
+                }
+                .scaleEffect(player.isPlaying ? 1.05 : 1.0)
+                .animation(.easeInOut(duration: 0.2), value: player.isPlaying)
+
+                // Additional controls
+                if let audioFile = audioFile {
+                    GlassCard(label: "SYNC OPTIONS") {
+                        VStack(spacing: TranceSpacing.list) {
+                            SyncToggle(isOn: $isSyncEnabled)
+
+                            if audioSync != nil {
+                                HStack {
+                                    Image(systemName: "speaker.wave.2.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.textSecondary)
+
+                                    Slider(value: Binding(
+                                        get: { Double(audioSync?.audioVolume ?? 1.0) },
+                                        set: { audioSync?.audioVolume = Float($0) }
+                                    ), in: 0.0...1.0)
+                                    .tint(.roseGold)
+
+                                    Text("\(Int((audioSync?.audioVolume ?? 1.0) * 100))%")
+                                        .font(TranceTypography.caption)
+                                        .foregroundColor(.textSecondary)
+                                        .frame(width: 32)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, TranceSpacing.screen)
                 }
 
                 // Brightness control
-                VStack(spacing: 8) {
+                GlassCard(label: "LIGHT INTENSITY") {
                     HStack {
                         Image(systemName: "sun.min.fill")
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundColor(.textSecondary)
 
                         Slider(value: $engine.userBrightnessMultiplier, in: 0.1...1.0)
-                            .tint(.white)
+                            .tint(.roseGold)
 
                         Image(systemName: "sun.max.fill")
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundColor(.textSecondary)
+
+                        Text("\(Int(engine.userBrightnessMultiplier * 100))%")
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textSecondary)
+                            .frame(width: 32)
                     }
-
-                    Text("Brightness: \(Int(engine.userBrightnessMultiplier * 100))%")
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.6))
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-                .background(.ultraThinMaterial)
-                .cornerRadius(12)
-
-                // Playback controls
-                HStack(spacing: 40) {
-                    Button {
-                        if player.isPlaying {
-                            player.pause()
-                            audioSync?.pause()
-                        } else {
-                            player.play()
-                            audioSync?.play()
-                        }
-                    } label: {
-                        Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 60))
-                    }
-                    .disabled(player.isComplete)
-                }
-
-                // Exit hint
-                Text("Tap screen to exit")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
-                    .padding(.bottom, 40)
+                .padding(.horizontal, TranceSpacing.screen)
             }
-            .padding()
-            .background(.ultraThinMaterial)
+            .padding(.bottom, TranceSpacing.statusBar)
         }
-        .foregroundStyle(.white)
+        .animation(.easeInOut(duration: 0.3), value: showingControls)
+    }
+
+    // MARK: - Pause Overlay
+
+    private var pauseOverlay: some View {
+        ZStack {
+            Color.bgPrimary.opacity(0.95)
+                .ignoresSafeArea()
+
+            VStack(spacing: TranceSpacing.content) {
+                Image(systemName: "pause.circle.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.roseGold)
+
+                Text("Session Paused")
+                    .font(TranceTypography.trackTitle)
+                    .foregroundColor(.textPrimary)
+
+                Text("Tap play to continue")
+                    .font(TranceTypography.body)
+                    .foregroundColor(.textSecondary)
+            }
+        }
         .onTapGesture {
-            // Tap controls area to keep them visible
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showingControls = true
+            }
         }
     }
 
+
     // MARK: - Session Control
 
-    private func startSession() {
-        print("🚀 startSession() called")
-        print("📝 Session: \(session.displayName)")
-        print("⏱ Duration: \(session.duration_sec)s")
-        print("📊 Light score moments: \(session.light_score.count)")
-
-        // Log session details in debug builds
+    private func prepareSession() {
         #if DEBUG
+        print("🚀 prepareSession() - \(session.displayName)")
+        print("⏱ Duration: \(session.duration_sec)s, Moments: \(session.light_score.count)")
         print(SessionDiagnostics.logSessionDetails(session))
         #endif
 
         // Attach the player to the engine
         engine.attachSession(player: player)
-        print("🔗 Player attached to engine")
 
-        // Start the engine if not already running
+        // Start the engine if not already running, but pause it immediately
         if !engine.isRunning {
-            print("▶️ Starting engine...")
             engine.start()
-            print("✅ Engine started, isRunning: \(engine.isRunning)")
-        } else {
-            print("⚠️ Engine already running")
         }
-
-        // Start playback
-        print("▶️ Starting player...")
-        player.play()
-        print("✅ Player started, isPlaying: \(player.isPlaying)")
-
-        // Start audio if available
-        if audioSync?.hasAudioLoaded == true {
-            audioSync?.play()
-            print("▶️ Audio playback started")
-        }
-
-        // Check initial state
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            let engineSnapshot = SessionDiagnostics.captureEngineState(self.engine)
-            let playerSnapshot = SessionDiagnostics.capturePlayerState(self.player)
-
-            print("📊 Engine state after 0.5s:")
-            print(engineSnapshot.description)
-            print("\n📊 Player state after 0.5s:")
-            print(playerSnapshot.description)
-        }
+        engine.pause()
+        
+        // Ensure player is loaded but paused
+        player.seek(to: 0.0)
     }
 
     private func stopSession() {
-        print("🛑 stopSession() called")
         player.stop()
         engine.detachSession()
         engine.stop()
@@ -328,24 +366,25 @@ struct SessionPlayerView: View {
 
         audioSync = AudioSyncController()
 
-        do {
-            try audioSync?.loadAudio(from: audioFile.url)
+        // Load audio asynchronously to prevent UI freezing
+        Task {
+            do {
+                try await audioSync?.loadAudioAsync(from: audioFile.url)
 
-            // Sync callbacks - keep lights synchronized with audio time
-            audioSync?.onTimeUpdate = { [weak player] _ in
-                // Optional: Update UI with current time
-                // For now, lights are driven by their own timer
+                await MainActor.run {
+                    // Sync callbacks
+                    audioSync?.onTimeUpdate = { _ in }
+
+                    audioSync?.onPlaybackFinished = {
+                        stopSession()
+                        dismiss()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    print("❌ Failed to setup audio: \(error)")
+                }
             }
-
-            audioSync?.onPlaybackFinished = {
-                print("🏁 Audio finished, stopping session")
-                stopSession()
-                dismiss()
-            }
-
-            print("✅ Audio sync ready")
-        } catch {
-            print("❌ Failed to setup audio: \(error)")
         }
     }
 
@@ -355,6 +394,23 @@ struct SessionPlayerView: View {
         let minutes = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", minutes, secs)
+    }
+
+
+    // MARK: - Timer Management
+
+    private func startUITimer() {
+        stopUITimer() // Ensure no duplicate timers
+        uiUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            Task { @MainActor in
+                self.displayTime = self.player.currentTime
+            }
+        }
+    }
+
+    private func stopUITimer() {
+        uiUpdateTimer?.invalidate()
+        uiUpdateTimer = nil
     }
 }
 
