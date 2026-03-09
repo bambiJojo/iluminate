@@ -54,12 +54,12 @@ struct TranceTabBar: View {
         .padding(.vertical, 10)
         .background {
             Capsule()
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 8)
+                .fill(.regularMaterial)
+                .shadow(color: TranceShadow.card.color.opacity(0.15), radius: 16, x: 0, y: 8)
         }
         .overlay {
             Capsule()
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                .stroke(Color.glassBorder, lineWidth: 1)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
@@ -81,13 +81,13 @@ struct TranceTabBar: View {
                 Image(systemName: tab.sfSymbol)
                     .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
                     .symbolEffect(.bounce, value: selected)
-                    .foregroundStyle(isSelected ? tabAccentColor : .white.opacity(0.45))
+                    .foregroundStyle(isSelected ? tabAccentColor : Color.textSecondary)
                     .scaleEffect(isSelected ? 1.1 : 1.0)
                     .animation(.spring(response: 0.3, dampingFraction: 0.65), value: selected)
 
                 Text(tab.title)
                     .font(.system(size: 9, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? tabAccentColor : .white.opacity(0.45))
+                    .foregroundStyle(isSelected ? tabAccentColor : Color.textSecondary)
                     .animation(.easeInOut(duration: 0.2), value: selected)
             }
             .frame(maxWidth: .infinity)
