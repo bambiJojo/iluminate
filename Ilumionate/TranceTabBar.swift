@@ -11,29 +11,26 @@ import SwiftUI
 // MARK: - Tab Enum
 
 enum TranceTab: String, CaseIterable {
-    case home      = "home"
-    case library   = "library"
-    case machine   = "machine"
-    case playlists = "playlists"
-    case store     = "store"
+    case home     = "home"
+    case library  = "library"
+    case machine  = "machine"
+    case analyzer = "analyzer"
 
     var title: String {
         switch self {
-        case .home:      "Home"
-        case .library:   "Library"
-        case .machine:   "Machine"
-        case .playlists: "Playlists"
-        case .store:     "Store"
+        case .home:     "Home"
+        case .library:  "Library"
+        case .machine:  "Machine"
+        case .analyzer: "Analyzer"
         }
     }
 
     var sfSymbol: String {
         switch self {
-        case .home:      "house.fill"
-        case .library:   "books.vertical.fill"
-        case .machine:   "lightbulb.fill"
-        case .playlists: "music.note.list"
-        case .store:     "bag.fill"
+        case .home:     "house.fill"
+        case .library:  "books.vertical.fill"
+        case .machine:  "lightbulb.fill"
+        case .analyzer: "sparkles"
         }
     }
 }
@@ -77,28 +74,21 @@ struct TranceTabBar: View {
             }
             TranceHaptics.shared.light()
         } label: {
-            VStack(spacing: 3) {
-                Image(systemName: tab.sfSymbol)
-                    .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
-                    .symbolEffect(.bounce, value: selected)
-                    .foregroundStyle(isSelected ? tabAccentColor : Color.textSecondary)
-                    .scaleEffect(isSelected ? 1.1 : 1.0)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.65), value: selected)
-
-                Text(tab.title)
-                    .font(.system(size: 9, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? tabAccentColor : Color.textSecondary)
-                    .animation(.easeInOut(duration: 0.2), value: selected)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background {
-                if isSelected {
-                    Capsule()
-                        .fill(tabAccentColor.opacity(0.18))
-                        .matchedGeometryEffect(id: "TAB_INDICATOR", in: tabAnimation)
+            Image(systemName: tab.sfSymbol)
+                .font(.system(size: 20, weight: isSelected ? .semibold : .regular))
+                .symbolEffect(.bounce, value: selected)
+                .foregroundStyle(isSelected ? tabAccentColor : Color.textSecondary)
+                .scaleEffect(isSelected ? 1.1 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.65), value: selected)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background {
+                    if isSelected {
+                        Capsule()
+                            .fill(tabAccentColor.opacity(0.18))
+                            .matchedGeometryEffect(id: "TAB_INDICATOR", in: tabAnimation)
+                    }
                 }
-            }
         }
         .buttonStyle(PlainButtonStyle())
     }

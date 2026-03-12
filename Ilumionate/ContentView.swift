@@ -16,9 +16,19 @@ struct ContentView: View {
     @State private var selectedSession: LightSession?
     @State private var showingAudioLibrary = false
     @State private var showingSessionPlayer = false
-    @State private var showingSettings = false
     @State private var showingOnboarding = false
     @State private var isLoading = true
+
+    // Appearance — mirrors SettingsView's AppStorage key
+    @AppStorage("appearanceMode") private var appearanceModeRaw = "system"
+
+    private var preferredScheme: ColorScheme? {
+        switch appearanceModeRaw {
+        case "light": return .light
+        case "dark":  return .dark
+        default:      return nil
+        }
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -33,42 +43,24 @@ struct ContentView: View {
                             selectedSession: $selectedSession,
                             sessions: sessions,
                             audioFiles: audioFiles,
+                            engine: engine,
                             onRefresh: loadSessions
                         )
-                        .navigationTitle("Home")
-                        .navigationBarTitleDisplayMode(.inline)
                     }
 
                 case .library:
-                    NavigationStack {
-                        AudioLibraryView(engine: engine)
-                            .navigationTitle("Library")
-                            .navigationBarTitleDisplayMode(.large)
-                    }
+                    // LibraryView owns its own NavigationStack
+                    LibraryView(engine: engine)
+                        .environment(FolderStore.shared)
 
                 case .machine:
                     NavigationStack {
                         MindMachineView()
                     }
-                    
-                case .playlists:
-                    // Playlist library relies on engine to launch playlist sessions
-                    PlaylistLibraryView(engine: engine)
 
-                case .store:
+                case .analyzer:
                     NavigationStack {
-                        VStack {
-                            Text("Store")
-                                .font(TranceTypography.screenTitle)
-                                .foregroundColor(.textPrimary)
-                            Text("Coming soon...")
-                                .font(TranceTypography.body)
-                                .foregroundColor(.textSecondary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.bgPrimary)
-                        .navigationTitle("Store")
-                        .navigationBarTitleDisplayMode(.large)
+                        AnalyzerView()
                     }
                 }
             }
@@ -81,20 +73,16 @@ struct ContentView: View {
             loadAudioFiles()
             checkForFirstLaunch()
         }
-        .fullScreenCover(isPresented: $showingSessionPlayer) {
-            if let session = selectedSession {
-                SessionPlayerView(session: session, engine: engine)
-            }
+        .fullScreenCover(item: $selectedSession) { session in
+            SessionPlayerView(session: session, engine: engine)
         }
         .sheet(isPresented: $showingAudioLibrary) {
             AudioLibraryView(engine: engine)
         }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-        }
         .fullScreenCover(isPresented: $showingOnboarding) {
             OnboardingView()
         }
+        .preferredColorScheme(preferredScheme)
     }
 
     // MARK: - Actions

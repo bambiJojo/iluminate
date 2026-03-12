@@ -42,6 +42,75 @@ class AudioLightSyncPlayer {
 
     // MARK: - Public Methods
 
+    /// Whether a light session is currently loaded
+    var hasLightSync: Bool { lightPlayer != nil }
+
+    /// Load audio only — no light session required. Light sync can be enabled later via enableLightSync(_:).
+    func loadAudio(audioFile: AudioFile) async throws {
+        stop()
+
+        #if os(iOS)
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .default)
+            try audioSession.setActive(true)
+        } catch {
+            print("⚠️ Failed to setup audio session: \(error)")
+        }
+        #endif
+
+        do {
+            audioPlayer = try AVAudioPlayer(contentsOf: audioFile.url)
+            audioPlayer?.prepareToPlay()
+            audioPlayer?.volume = volume
+            duration = audioPlayer?.duration ?? 0
+            currentAudioFile = audioFile
+            print("✅ Audio loaded (audio-only mode): \(Int(duration)) seconds")
+        } catch {
+            throw AudioLightSyncError.audioLoadFailed(error)
+        }
+    }
+
+    /// Attach a light session to a running audio player and start syncing lights.
+    func enableLightSync(lightSession: LightSession) {
+        let wasPlaying = isPlaying
+        let currentPos = currentTime
+
+        if wasPlaying {
+            audioPlayer?.pause()
+            stopPlaybackTimer()
+            isPlaying = false
+        }
+
+        let player = LightScorePlayer(session: lightSession)
+        player.seek(to: currentPos)
+        lightPlayer = player
+        currentLightSession = lightSession
+
+        lightEngine.attachSession(player: player)
+        if !lightEngine.isRunning {
+            lightEngine.start()
+        }
+
+        if wasPlaying {
+            audioPlayer?.play()
+            player.play()
+            startPlaybackTimer()
+            isPlaying = true
+        }
+        print("💡 Light sync enabled")
+    }
+
+    /// Detach the current light session, leaving audio playing.
+    func disableLightSync() {
+        lightEngine.detachSession()
+        lightEngine.stop()
+        lightPlayer?.stop()
+        lightPlayer = nil
+        currentLightSession = nil
+        print("💡 Light sync disabled")
+    }
+
     /// Load and prepare audio file with its generated light session
     func loadAudioWithLights(audioFile: AudioFile, lightSession: LightSession) async throws {
         print("🎵🔆 Loading synchronized playback...")
@@ -81,7 +150,8 @@ class AudioLightSyncPlayer {
         // Verify light session duration matches audio
         let timeDifference = abs(lightSession.duration_sec - duration)
         if timeDifference > 5.0 { // Allow 5 second tolerance
-            print("⚠️ Warning: Light session duration (\(lightSession.duration_sec)s) doesn't match audio duration (\(duration)s)")
+            print("⚠️ Warning: Light session duration (\(Int(lightSession.duration_sec))s) " +
+                  "doesn't match audio duration (\(Int(duration))s)")
         }
 
         // Create light player
@@ -103,104 +173,61 @@ class AudioLightSyncPlayer {
         print("🎬 Ready for synchronized playback")
     }
 
-    /// Start synchronized playback
+    /// Start playback. Works in audio-only mode (no light session required).
     func play() {
-        guard let audioPlayer = audioPlayer,
-              let lightPlayer = lightPlayer else {
-            print("❌ Cannot play: audio or lights not loaded")
+        guard let audioPlayer = audioPlayer else {
+            print("❌ Cannot play: audio not loaded")
             return
         }
 
-        print("▶️ Starting synchronized playback...")
-
-        // Ensure engine is running
-        if !lightEngine.isRunning {
-            lightEngine.start()
+        if let lightPlayer = lightPlayer {
+            if !lightEngine.isRunning { lightEngine.start() }
+            if !lightEngine.hasActiveSession { lightEngine.attachSession(player: lightPlayer) }
+            lightPlayer.play()
         }
 
-        // Ensure session is attached
-        if !lightEngine.hasActiveSession {
-            lightEngine.attachSession(player: lightPlayer)
-        }
-
-        // Start audio
         audioPlayer.play()
-
-        // Start lights
-        lightPlayer.play()
-
-        // Start playback timer for position tracking
         startPlaybackTimer()
-
         isPlaying = true
-        print("✅ Playback started")
+        print("▶️ Playback started")
     }
 
-    /// Pause synchronized playback
+    /// Pause playback.
     func pause() {
         guard isPlaying else { return }
-
-        print("⏸️ Pausing synchronized playback...")
-
         audioPlayer?.pause()
         lightPlayer?.pause()
         stopPlaybackTimer()
-
         isPlaying = false
-        print("✅ Playback paused at \(Int(currentTime))s")
+        print("⏸️ Playback paused at \(Int(currentTime))s")
     }
 
-    /// Stop synchronized playback
+    /// Stop and reset playback.
     func stop() {
-        guard audioPlayer != nil || lightPlayer != nil else { return }
-
-        print("⏹️ Stopping synchronized playback...")
-
+        guard audioPlayer != nil else { return }
         audioPlayer?.stop()
         audioPlayer?.currentTime = 0
-
-        lightPlayer?.stop()
-
-        // Detach session from engine and stop engine
-        lightEngine.detachSession()
-        lightEngine.stop()
-
+        if lightPlayer != nil {
+            lightPlayer?.stop()
+            lightEngine.detachSession()
+            lightEngine.stop()
+        }
         stopPlaybackTimer()
-
         currentTime = 0
         isPlaying = false
-
-        print("✅ Playback stopped")
+        print("⏹️ Playback stopped")
     }
 
-    /// Seek to specific time in both audio and lights
+    /// Seek to a specific time in audio and (if loaded) lights.
     func seek(to time: TimeInterval) {
-        guard let audioPlayer = audioPlayer,
-              let lightPlayer = lightPlayer else {
-            return
-        }
-
+        guard let audioPlayer = audioPlayer else { return }
         let wasPlaying = isPlaying
-
-        // Pause if playing
-        if wasPlaying {
-            pause()
-        }
-
-        // Seek audio
+        if wasPlaying { pause() }
         audioPlayer.currentTime = time
-
-        // Seek lights
-        lightPlayer.seek(to: time)
-
+        lightPlayer?.seek(to: time)
         currentTime = time
-
         print("⏩ Seeked to \(Int(time))s")
-
-        // Resume if was playing
-        if wasPlaying {
-            play()
-        }
+        if wasPlaying { play() }
     }
 
     /// Set volume (0.0 to 1.0)

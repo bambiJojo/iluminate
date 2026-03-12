@@ -190,7 +190,9 @@ actor AIAnalysisManager {
         Be concise and focus on what will create the best synergistic effect.
         """
 
-        session = LanguageModelSession(instructions: instructions)
+        let addendum = await MainActor.run { AnalysisPreferences.shared.aiSystemAddendum }
+        let finalInstructions = addendum.isEmpty ? instructions : instructions + "\n\n" + addendum
+        session = LanguageModelSession(instructions: finalInstructions)
 
         await onProgress(ProgressInfo(progress: 0.3, message: "Building analysis prompt..."))
 

@@ -57,14 +57,23 @@ struct HomeView: View {
 
     let sessions: [LightSession]
     let audioFiles: [AudioFile]
+    let engine: LightEngine
     let onRefresh: (() -> Void)?
 
     @State private var animateCards = false
     @State private var isRefreshing = false
     @State private var showingProfile = false
+    @State private var playerFile: AudioFile?
+
+    // Flash session state — for Mind Machine quick presets
+    @State private var showingFlashMode = false
+    @State private var flashFrequency: Double = 10.0
+    @State private var flashIntensity: Double = 0.75
+    @State private var flashKelvin: Int = 4000
+    @State private var flashPattern: MindMachineModel.LightPattern = .sine
 
     // Persist user name and last session progress
-    @AppStorage("userName") private var userName = ""
+    @AppStorage("profileName") private var userName = ""
     @AppStorage("lastSessionId") private var lastSessionId = ""
     @AppStorage("lastSessionProgress") private var lastSessionProgress: Double = 0.0
 
@@ -73,12 +82,14 @@ struct HomeView: View {
          selectedSession: Binding<LightSession?>,
          sessions: [LightSession],
          audioFiles: [AudioFile] = [],
+         engine: LightEngine,
          onRefresh: (() -> Void)? = nil) {
         self._showingAudioLibrary = showingAudioLibrary
         self._showingSessionPlayer = showingSessionPlayer
         self._selectedSession = selectedSession
         self.sessions = sessions
         self.audioFiles = audioFiles
+        self.engine = engine
         self.onRefresh = onRefresh
     }
 
@@ -115,22 +126,23 @@ struct HomeView: View {
                     .navigationBarTitleDisplayMode(.large)
             }
         }
+        .fullScreenCover(isPresented: $showingFlashMode) {
+            FlashModeView(
+                frequency: flashFrequency,
+                intensity: flashIntensity,
+                colorTemperature: flashKelvin,
+                pattern: flashPattern
+            )
+        }
+        .fullScreenCover(item: $playerFile) { file in
+            AudioLightPlayerView(audioFile: file, engine: engine)
+        }
     }
 
     // MARK: - Greeting Section
 
     private var greetingSection: some View {
         HStack {
-            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                Text(currentGreeting)
-                    .font(TranceTypography.greeting)
-                    .foregroundColor(.textPrimary)
-
-                Text(displayName)
-                    .font(TranceTypography.greetingAccent)
-                    .foregroundColor(.roseGold)
-            }
-
             Spacer()
 
             // Profile circle — taps to open settings
@@ -143,10 +155,10 @@ struct HomeView: View {
                         LinearGradient(colors: [.roseGold, .blush],
                                        startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
-                    .frame(width: 52, height: 52)
+                    .frame(width: 48, height: 48)
                     .overlay(
                         Text(profileInitial)
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.white)
                     )
                     .shadow(
@@ -342,42 +354,46 @@ struct HomeView: View {
     }
 
     private func audioFileRow(file: AudioFile, index: Int) -> some View {
-        HStack(spacing: TranceSpacing.list) {
-            // Track number / icon
-            ZStack {
-                RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                    .fill(sessionColors[index % sessionColors.count].opacity(0.15))
-                    .frame(width: 44, height: 44)
-                Image(systemName: file.isAnalyzed ? "waveform.circle.fill" : "waveform.circle")
-                    .font(.system(size: 20))
-                    .foregroundColor(sessionColors[index % sessionColors.count])
-            }
+        Button {
+            TranceHaptics.shared.medium()
+            playerFile = file
+        } label: {
+            HStack(spacing: TranceSpacing.list) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
+                        .fill(sessionColors[index % sessionColors.count].opacity(0.15))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: file.isAnalyzed ? "waveform.circle.fill" : "waveform.circle")
+                        .font(.system(size: 20))
+                        .foregroundColor(sessionColors[index % sessionColors.count])
+                }
 
-            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                Text(file.displayName)
-                    .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                    Text(file.displayName)
+                        .font(TranceTypography.body)
+                        .foregroundColor(.textPrimary)
+                        .lineLimit(1)
 
-                HStack(spacing: TranceSpacing.small) {
-                    Text(file.durationFormatted)
-                        .font(TranceTypography.caption)
-                        .foregroundColor(.textSecondary)
-
-                    if file.isAnalyzed {
-                        Text("· Analyzed")
+                    HStack(spacing: TranceSpacing.small) {
+                        Text(file.durationFormatted)
                             .font(TranceTypography.caption)
-                            .foregroundColor(.roseGold)
+                            .foregroundColor(.textSecondary)
+                        if file.isAnalyzed {
+                            Text("· Light Sync Ready")
+                                .font(TranceTypography.caption)
+                                .foregroundColor(.roseGold)
+                        }
                     }
                 }
+
+                Spacer()
+
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(.roseGold)
             }
-
-            Spacer()
-
-            Image(systemName: "play.circle")
-                .font(.system(size: 22))
-                .foregroundColor(.textLight)
         }
+        .buttonStyle(PlainButtonStyle())
     }
 
     private var recentAudioFiles: [AudioFile] {
@@ -431,9 +447,18 @@ struct HomeView: View {
 
                     ForEach(Array(sessions.prefix(3).enumerated()), id: \.element.id) { index, session in
                         Button {
-                            TranceHaptics.shared.light()
-                            selectedSession = session
-                            showingSessionPlayer = true
+                            TranceHaptics.shared.heavy()
+                            // Use first moment's frequency to drive FlashModeView
+                            flashFrequency = session.light_score.first?.frequency ?? 10.0
+                            flashIntensity = session.light_score.first?.intensity ?? 0.75
+                            switch flashFrequency {
+                            case ..<4:  flashKelvin = 2700
+                            case ..<8:  flashKelvin = 3200
+                            case ..<13: flashKelvin = 4000
+                            default:    flashKelvin = 5500
+                            }
+                            flashPattern = .sine
+                            showingFlashMode = true
                         } label: {
                             HStack(spacing: TranceSpacing.list) {
                                 ZStack {
@@ -536,21 +561,25 @@ struct HomeView: View {
 
     // MARK: - Actions
 
-    private func launchQuickSession(name: String, frequency: Double, durationMinutes: Int, color: Color) {
-        TranceHaptics.shared.medium()
-        let duration = Double(durationMinutes * 60)
-        let session = LightSession(
-            session_name: name,
-            duration_sec: duration,
-            light_score: [
-                LightMoment(time: 0,        frequency: frequency * 1.5, intensity: 0.5, waveform: .sine),
-                LightMoment(time: duration * 0.1, frequency: frequency, intensity: 0.7, waveform: .sine, ramp_duration: 15),
-                LightMoment(time: duration * 0.8, frequency: frequency, intensity: 0.8, waveform: .softPulse),
-                LightMoment(time: duration * 0.95, frequency: frequency * 0.7, intensity: 0.3, waveform: .sine, ramp_duration: 20)
-            ]
-        )
-        selectedSession = session
-        showingSessionPlayer = true
+    private func launchQuickSession(
+        name: String,
+        frequency: Double,
+        durationMinutes: Int,
+        color: Color,
+        bilateral: Bool = false
+    ) {
+        TranceHaptics.shared.heavy()
+        flashFrequency = frequency
+        flashIntensity = 0.75
+        // Map brainwave to a comfortable Kelvin temperature
+        switch frequency {
+        case ..<4:   flashKelvin = 2700  // warm amber — delta/sleep
+        case ..<8:   flashKelvin = 3200  // soft warm — theta/relax
+        case ..<13:  flashKelvin = 4000  // neutral white — alpha/focus
+        default:     flashKelvin = 5500  // cool daylight — beta/energy
+        }
+        flashPattern = bilateral ? .sine : .sine
+        showingFlashMode = true
     }
 
     private func handleRefresh() async {
@@ -561,6 +590,115 @@ struct HomeView: View {
         isRefreshing = false
     }
 }
+
+// MARK: - Animated Wordmark
+
+struct WordmarkView: View {
+    @State private var shimmerOffset: CGFloat = -1.0
+    @State private var wavePhase: Double = 0
+
+    // Fixed bar heights — a hand-crafted waveform silhouette
+    private let bars: [CGFloat] = [
+        0.25, 0.45, 0.60, 0.80, 0.55, 0.95, 0.70, 0.40,
+        0.85, 0.60, 0.45, 0.75, 0.50, 0.35, 0.65, 0.90,
+        0.55, 0.40, 0.70, 0.30
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Wordmark text with shimmer overlay
+            shimmeringTitle
+
+            // Micro waveform
+            waveformBar
+        }
+    }
+
+    // MARK: Shimmering Title
+
+    private var shimmeringTitle: some View {
+        Text("LumeSync")
+            .font(.system(size: 28, weight: .thin, design: .rounded))
+            .tracking(2)
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [.textPrimary, .roseGold, .bwTheta, .roseGold, .textPrimary],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .opacity(0.9)
+            )
+            .overlay(
+                // Shimmer highlight that glides across
+                GeometryReader { geo in
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear,            location: 0.0),
+                            .init(color: .white.opacity(0.45), location: 0.45),
+                            .init(color: .white.opacity(0.70), location: 0.5),
+                            .init(color: .white.opacity(0.45), location: 0.55),
+                            .init(color: .clear,            location: 1.0),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: geo.size.width * 0.5)
+                    .offset(x: shimmerOffset * geo.size.width * 1.5)
+                    .blendMode(.plusLighter)
+                }
+                .clipped()
+            )
+            .onAppear {
+                withAnimation(
+                    .linear(duration: 3.5)
+                    .repeatForever(autoreverses: false)
+                    .delay(0.8)
+                ) {
+                    shimmerOffset = 1.5
+                }
+            }
+    }
+
+    // MARK: Waveform Bar
+
+    private var waveformBar: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, size in
+                let count = bars.count
+                let spacing: CGFloat = 3
+                let barW: CGFloat = (size.width - CGFloat(count - 1) * spacing) / CGFloat(count)
+                let maxH = size.height
+
+                for (i, base) in bars.enumerated() {
+                    // Gentle breathing per bar using sine with individual phase offset
+                    let phase = t * 1.4 + Double(i) * 0.42
+                    let breathe = 0.15 * sin(phase)
+                    let h = CGFloat(clamp(Double(base) + breathe, 0.12, 1.0)) * maxH
+
+                    let x = CGFloat(i) * (barW + spacing)
+                    let rect = CGRect(x: x, y: maxH - h, width: barW, height: h)
+                    let path = Path(roundedRect: rect, cornerRadius: barW / 2)
+
+                    // Color shifts subtly across the bar row
+                    let t01 = Double(i) / Double(count - 1)
+                    let color = Color(
+                        red:   lerp(0.831, 0.690, t01),
+                        green: lerp(0.471, 0.490, t01),
+                        blue:  lerp(0.604, 0.784, t01)
+                    ).opacity(lerp(0.5, 0.25, t01))
+
+                    ctx.fill(path, with: .color(color))
+                }
+            }
+        }
+        .frame(width: 130, height: 12)
+    }
+}
+
+// Small math helpers (file-private)
+private func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double { max(lo, min(hi, v)) }
+private func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
 
 // MARK: - Category Session Sheet
 
@@ -636,6 +774,7 @@ struct CategorySessionSheet: View {
         @State private var showingAudioLibrary = false
         @State private var showingSessionPlayer = false
         @State private var selectedSession: LightSession?
+        @State private var engine = LightEngine()
 
         var body: some View {
             HomeView(
@@ -643,6 +782,7 @@ struct CategorySessionSheet: View {
                 showingSessionPlayer: $showingSessionPlayer,
                 selectedSession: $selectedSession,
                 sessions: [],
+                engine: engine,
                 onRefresh: nil
             )
         }

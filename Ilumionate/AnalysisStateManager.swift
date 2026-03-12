@@ -85,6 +85,15 @@ class AnalysisStateManager: Sendable {
         print("🧹 Cleared analysis queue")
     }
 
+    /// Move a file to the front of the analysis queue for immediate processing
+    func prioritizeInQueue(audioFile: AudioFile) {
+        guard let index = analysisQueue.firstIndex(where: { $0.id == audioFile.id }),
+              index > 0 else { return }
+        let file = analysisQueue.remove(at: index)
+        analysisQueue.insert(file, at: 0)
+        print("⚡ Prioritized \(audioFile.filename) to front of queue")
+    }
+
     // MARK: - Analysis Control
 
     /// Add a single audio file to queue and start automatic background processing
