@@ -144,8 +144,8 @@ final class LightEngine {
         return Self.gammaLookupTable[index]
     }
 
-    /// Cache for bilateral calculations to avoid redundant waveform evaluations
-    private var bilateralCache: (offset: Double, rightValue: Double) = (0.0, 0.0)
+    // bilateralCache removed — the cache keyed only on offset but rightValue also
+    // depends on the per-frame phase accumulator, so it always returned stale data.
 
     // MARK: - Configuration
 
@@ -179,23 +179,37 @@ final class LightEngine {
     /// Waveform shape for brightness modulation.
     var waveform: Waveform = .sine
 
-    /// When true, left and right fields are driven with a phase offset
-    /// to create a bilateral alternating stimulation effect.
+    /// When true, left and right fields are driven with a slowly drifting phase offset
+    /// that cycles between 0 (synchronized) and `bilateralPhaseOffset` (full separation).
+    /// This avoids the habituation caused by a fixed 180° alternation.
     var bilateralMode: Bool = false {
         didSet {
-            if bilateralMode != oldValue {
-                // Start a transition when bilateral mode changes
-                isBilateralTransitioning = true
-                bilateralTransitionElapsed = 0.0
+            guard bilateralMode != oldValue else { return }
+            isBilateralTransitioning = true
+            bilateralTransitionElapsed = 0.0
+            if bilateralMode {
+                bilateralDriftPhase = 0.0  // always start from synchronized state
+            } else {
+                bilateralFadeOutStartOffset = currentBilateralOffset
             }
         }
     }
 
-    /// Phase offset for the right field in cycles [0, 1).
-    /// 0.5 = perfect alternation (right is inverted), 0.25 = quadrature.
+    /// Peak phase offset for the right field in cycles [0, 1).
+    /// The drift oscillator cycles between 0 and this value.
+    /// 0.5 = full alternation (180°), 0.25 = quadrature.
     var bilateralPhaseOffset: Double = 0.5 {
         didSet { bilateralPhaseOffset = max(0.0, min(bilateralPhaseOffset, 1.0)) }
     }
+
+    /// Drift-cycle rate in Hz. One cycle = sync → apart → sync.
+    /// 0.033 ≈ 30 s (deep),  0.05 ≈ 20 s (default),  0.1 ≈ 10 s (active).
+    var bilateralDriftRate: Double = 0.05 {
+        didSet { bilateralDriftRate = max(0.01, min(bilateralDriftRate, 0.5)) }
+    }
+
+    /// Normalised drift position [0, 1].  0 = synchronized, 0.5 = max separation.
+    private(set) var bilateralDriftProgress: Double = 0.0
 
     /// Duration in seconds for transitioning between mono and bilateral modes.
     var bilateralTransitionDuration: Double = 3.0
@@ -210,6 +224,11 @@ final class LightEngine {
     /// This is preserved during session playback and multiplies with session intensity.
     /// Use this for the brightness slider in the UI.
     var userBrightnessMultiplier: Double = 1.0
+
+    /// User-controlled frequency scale in [0.5, 2.0].
+    /// Scales the actual oscillation rate without changing the session's source frequency.
+    /// E.g., 0.5× halves the flash rate; 2.0× doubles it.
+    var userFrequencyMultiplier: Double = 1.0
 
     // MARK: - Private State
 
@@ -235,8 +254,14 @@ final class LightEngine {
     /// Elapsed time during bilateral transition
     private var bilateralTransitionElapsed: Double = 0.0
 
-    /// Current interpolated bilateral phase offset (0.0 = mono, target = full bilateral)
+    /// Current interpolated bilateral phase offset (0.0 = mono, drifting to peak when on)
     private var currentBilateralOffset: Double = 0.0
+
+    /// Drift oscillator accumulator — advances at bilateralDriftRate Hz while bilateral is on
+    private var bilateralDriftPhase: Double = 0.0
+
+    /// The offset value captured at the moment bilateral turns off, used for a clean fade-out
+    private var bilateralFadeOutStartOffset: Double = 0.0
 
     // MARK: - Session Mode
 
@@ -273,11 +298,11 @@ final class LightEngine {
         // Use a proxy to avoid retaining self in the display link target.
         // Clear any existing proxy first to prevent memory leaks
         proxy = nil
-        let p = DisplayLinkProxy()
-        p.engine = self
-        proxy = p
+        let linkProxy = DisplayLinkProxy()
+        linkProxy.engine = self
+        proxy = linkProxy
 
-        let link = CADisplayLink(target: p, selector: #selector(DisplayLinkProxy.tick(_:)))
+        let link = CADisplayLink(target: linkProxy, selector: #selector(DisplayLinkProxy.tick(_:)))
 
         // Start with adaptive refresh rate based on current frequency
         targetRefreshRate = calculateOptimalRefreshRate()
@@ -335,210 +360,189 @@ final class LightEngine {
     // MARK: - Display Tick
 
     fileprivate func tick(_ link: CADisplayLink) {
-        // CRASH DEBUG: Monitor CADisplayLink for issues
+        #if DEBUG
         let tickStart = CFAbsoluteTimeGetCurrent()
+        #endif
 
         guard lastTimestamp > 0 else {
-            print("🔴 CRASH DEBUG: CADisplayLink first tick - timestamp: \(link.timestamp)")
-            OrbCrashLogger.shared.logEngineOperation("FirstTick", details: "CADisplayLink first callback")
             lastTimestamp = link.timestamp
             lastFPSCheck = link.timestamp
             return
         }
 
-        let dt = link.timestamp - lastTimestamp
+        let deltaTime = link.timestamp - lastTimestamp
         lastTimestamp = link.timestamp
 
-        // Early return when paused — freeze brightness and don't advance phase or session time.
-        // We still update lastTimestamp each tick so that on resume, dt is just one normal
-        // frame interval (~8ms) rather than the entire pause duration (which would cause a
-        // massive phase jump and broken oscillator output — the first-launch bug).
+        // Early return when paused — keep timestamp fresh to prevent phase jump on resume.
         if isPaused {
             brightness = 0.0
             brightnessLeft = 0.0
             brightnessRight = 0.0
-            lastTimestamp = link.timestamp   // ← keep timestamp fresh while paused
             return
         }
 
-        // Performance monitoring
+        updatePerformanceCounters(timestamp: link.timestamp)
+        updateAdaptiveRefreshRate(link.timestamp)
+        updateBilateralTransition(deltaTime: deltaTime)
+        applySessionState()
+        advanceFrequency(deltaTime: deltaTime)
+
+        // Phase accumulation — scaled by user frequency multiplier
+        phase += currentFrequency * userFrequencyMultiplier * deltaTime
+        if phase >= 1000.0 { phase -= 1000.0 }
+
+        let (leftOut, rightOut) = evaluateOscillator()
+        brightness = leftOut
+        brightnessLeft = leftOut
+        brightnessRight = rightOut
+
+        #if DEBUG
+        let tickDuration = CFAbsoluteTimeGetCurrent() - tickStart
+        if tickDuration > 0.016 {
+            print("⚠️ Light Engine slow tick: \(String(format: "%.3f", tickDuration * 1000))ms")
+        }
+        if frameCounter % 240 == 0 {
+            let freqStr = String(format: "%.1f", currentFrequency)
+            let brightStr = String(format: "%.3f", brightness)
+            print("🔄 Engine: brightness=\(brightStr) freq=\(freqStr)Hz")
+        }
+        #endif
+    }
+
+    // MARK: - Tick Helpers
+
+    /// Updates FPS counter and power-efficiency tracking.
+    private func updatePerformanceCounters(timestamp: CFTimeInterval) {
         frameCounter += 1
         cumulativeFramesRendered += 1
 
-        // Calculate power efficiency gains
         if targetRefreshRate < 120 {
-            let framesSavedThisTick = 120 - targetRefreshRate
-            cumulativeFramesSaved += framesSavedThisTick
+            cumulativeFramesSaved += 120 - targetRefreshRate
         }
 
-        if link.timestamp - lastFPSCheck >= 1.0 {
-            currentFPS = Int(Double(frameCounter) / (link.timestamp - lastFPSCheck))
+        guard timestamp - lastFPSCheck >= 1.0 else { return }
+        currentFPS = Int(Double(frameCounter) / (timestamp - lastFPSCheck))
 
-            // Calculate power efficiency percentage
-            if cumulativeFramesRendered > 0 {
-                powerEfficiencyGain = (Double(cumulativeFramesSaved) / Double(cumulativeFramesRendered + cumulativeFramesSaved)) * 100.0
-            }
-
-            frameCounter = 0
-            lastFPSCheck = link.timestamp
-
-            // Only log performance warnings, not every FPS update
-            if currentFPS < 50 {
-                print("⚠️ Light Engine FPS: \(currentFPS) (target: \(targetRefreshRate)+)")
-            }
+        if cumulativeFramesRendered > 0 {
+            let saved = Double(cumulativeFramesSaved)
+            let total = Double(cumulativeFramesRendered + cumulativeFramesSaved)
+            powerEfficiencyGain = (saved / total) * 100.0
         }
 
-        // Adaptive refresh rate optimization (check once per second)
-        updateAdaptiveRefreshRate(link.timestamp)
+        frameCounter = 0
+        lastFPSCheck = timestamp
 
-        // --- Bilateral mode transition ---
-        // Smoothly interpolate the phase offset when transitioning between mono and bilateral
-        if isBilateralTransitioning {
-            bilateralTransitionElapsed += dt
+        if currentFPS < 50 {
+            print("⚠️ Light Engine FPS: \(currentFPS) (target: \(targetRefreshRate)+)")
+        }
+    }
 
-            let progress = min(bilateralTransitionElapsed / bilateralTransitionDuration, 1.0)
+    /// Advances the bilateral drift oscillator and interpolates the phase offset.
+    ///
+    /// When bilateral is ON the offset cycles between 0 (sync) and bilateralPhaseOffset
+    /// (full separation) using the formula:
+    ///   offset = (bilateralPhaseOffset / 2) × (1 − cos(2π × driftPhase))
+    /// A 3-second ease-in envelope is applied when the mode first activates.
+    ///
+    /// When bilateral is OFF the offset fades from wherever it was to 0.
+    private func updateBilateralTransition(deltaTime: Double) {
+        if bilateralMode {
+            // Advance drift oscillator
+            bilateralDriftPhase += bilateralDriftRate * deltaTime
+            if bilateralDriftPhase >= 1.0 { bilateralDriftPhase -= 1.0 }
+            bilateralDriftProgress = bilateralDriftPhase
 
-            // Use ease-out curve for smooth feel
-            let easedProgress = 1.0 - pow(1.0 - progress, 3.0)
+            // Cosine drift: spans 0 → bilateralPhaseOffset → 0 each cycle
+            let drifted = (bilateralPhaseOffset / 2.0) * (1.0 - cos(2.0 * .pi * bilateralDriftPhase))
 
-            if bilateralMode {
-                // Transitioning TO bilateral: 0 → target offset
-                currentBilateralOffset = bilateralPhaseOffset * easedProgress
+            if isBilateralTransitioning {
+                bilateralTransitionElapsed += deltaTime
+                let progress = min(bilateralTransitionElapsed / bilateralTransitionDuration, 1.0)
+                let eased = 1.0 - pow(1.0 - progress, 3.0)
+                currentBilateralOffset = drifted * eased
+                if progress >= 1.0 { isBilateralTransitioning = false }
             } else {
-                // Transitioning FROM bilateral: current offset → 0
-                currentBilateralOffset = bilateralPhaseOffset * (1.0 - easedProgress)
-            }
-
-            // Complete transition
-            if progress >= 1.0 {
-                isBilateralTransitioning = false
-                currentBilateralOffset = bilateralMode ? bilateralPhaseOffset : 0.0
+                currentBilateralOffset = drifted
             }
         } else {
-            // No transition in progress, use direct value
-            currentBilateralOffset = bilateralMode ? bilateralPhaseOffset : 0.0
-        }
-
-        // --- Session-driven mode ---
-        // If a session player is attached, let it drive the parameters
-        if let player = sessionPlayer {
-            player.updateTime()
-            let state = player.currentState()
-
-            // Apply session state to engine
-            waveform = state.waveform
-
-            // Update bilateral transition duration if specified in session
-            if let transitionDuration = state.bilateralTransitionDuration {
-                bilateralTransitionDuration = transitionDuration
-            }
-
-            // Set bilateral mode (this will trigger the transition via didSet)
-            bilateralMode = state.bilateral
-
-            // Update color temperature (smoothly interpolated by the player)
-            colorTemperature = state.colorTemperature
-
-            // Update intensity range based on session intensity
-            // Session intensity is multiplied by user brightness multiplier
-            // Clamp to [0.0, 1.0] to prevent invalid UIColor values
-            let clampedMultiplier = max(0.1, min(userBrightnessMultiplier, 1.0))
-            maximumBrightness = max(0.0, min(1.0, state.intensity * clampedMultiplier))
-
-            // Ramp to the target frequency with optional custom ramp duration
-            if abs(state.frequency - currentFrequency) > 0.01 {
-                if let rampDur = state.rampDuration {
-                    // Use moment-specific ramp duration
-                    activeRamp = FrequencyRamp(
-                        fromFrequency: currentFrequency,
-                        toFrequency: state.frequency,
-                        duration: rampDur,
-                        curve: rampCurve
-                    )
-                } else if activeRamp == nil {
-                    // Start a new ramp with default duration
-                    activeRamp = FrequencyRamp(
-                        fromFrequency: currentFrequency,
-                        toFrequency: state.frequency,
-                        duration: rampDuration,
-                        curve: rampCurve
-                    )
+            bilateralDriftProgress = 0.0
+            if isBilateralTransitioning {
+                bilateralTransitionElapsed += deltaTime
+                let progress = min(bilateralTransitionElapsed / bilateralTransitionDuration, 1.0)
+                let eased = 1.0 - pow(1.0 - progress, 3.0)
+                currentBilateralOffset = bilateralFadeOutStartOffset * (1.0 - eased)
+                if progress >= 1.0 {
+                    isBilateralTransitioning = false
+                    currentBilateralOffset = 0.0
                 }
-            }
-        }
-
-        // --- Frequency ramp ---
-        // If a ramp is active, advance it. Otherwise track targetFrequency directly.
-        if activeRamp != nil {
-            currentFrequency = activeRamp!.advance(dt: dt)
-            if activeRamp!.isComplete {
-                activeRamp = nil
-                currentFrequency = sessionPlayer != nil
-                    ? sessionPlayer!.currentState().frequency
-                    : targetFrequency
-            }
-        } else {
-            currentFrequency = sessionPlayer != nil
-                ? sessionPlayer!.currentState().frequency
-                : targetFrequency
-        }
-
-        // --- Phase accumulator ---
-        phase += currentFrequency * dt
-        if phase >= 1000.0 { phase -= 1000.0 }
-
-        // --- Waveform evaluation ---
-        let rawLeft = waveform.evaluate(at: phase)
-
-        // --- Bilateral phase offset with smooth transition (optimized) ---
-        // Use the interpolated offset instead of the direct value
-        // This creates a gradual "slipping apart" effect
-        let rawRight: Double
-        if currentBilateralOffset > 0.001 {
-            // Check if we can use cached value
-            if abs(bilateralCache.offset - currentBilateralOffset) < 0.0001 {
-                rawRight = bilateralCache.rightValue
             } else {
-                rawRight = waveform.evaluate(at: phase + currentBilateralOffset)
-                bilateralCache = (currentBilateralOffset, rawRight)
+                currentBilateralOffset = 0.0
             }
-        } else {
-            rawRight = rawLeft
+        }
+    }
+
+    /// Applies state from the attached session player if one is active.
+    private func applySessionState() {
+        guard let player = sessionPlayer else { return }
+        player.updateTime()
+        let state = player.currentState()
+
+        waveform = state.waveform
+        if let transitionDuration = state.bilateralTransitionDuration {
+            bilateralTransitionDuration = transitionDuration
+        }
+        bilateralMode = state.bilateral
+        colorTemperature = state.colorTemperature
+
+        let clampedMultiplier = max(0.1, min(userBrightnessMultiplier, 1.0))
+        maximumBrightness = max(0.0, min(1.0, state.intensity * clampedMultiplier))
+
+        guard abs(state.frequency - currentFrequency) > 0.01 else { return }
+        if let rampDur = state.rampDuration {
+            activeRamp = FrequencyRamp(
+                fromFrequency: currentFrequency,
+                toFrequency: state.frequency,
+                duration: rampDur,
+                curve: rampCurve
+            )
+        } else if activeRamp == nil {
+            activeRamp = FrequencyRamp(
+                fromFrequency: currentFrequency,
+                toFrequency: state.frequency,
+                duration: rampDuration,
+                curve: rampCurve
+            )
+        }
+    }
+
+    /// Advances the active frequency ramp or tracks the target directly.
+    private func advanceFrequency(deltaTime: Double) {
+        let baseFrequency = sessionPlayer?.currentState().frequency ?? targetFrequency
+        guard activeRamp != nil else {
+            currentFrequency = baseFrequency
+            return
         }
 
-        // --- Intensity mapping (optimized) ---
-        // Apply gamma correction using fast lookup table instead of expensive pow()
+        currentFrequency = activeRamp!.advance(dt: deltaTime)
+        if activeRamp?.isComplete == true {
+            activeRamp = nil
+            currentFrequency = baseFrequency
+        }
+    }
+
+    /// Evaluates the waveform oscillator for left and right channels.
+    /// The right channel is offset by currentBilateralOffset (which drifts over time).
+    private func evaluateOscillator() -> (left: Double, right: Double) {
+        let rawLeft = waveform.evaluate(at: phase)
+        let rawRight = currentBilateralOffset > 0.001
+            ? waveform.evaluate(at: phase + currentBilateralOffset)
+            : rawLeft
+
         let correctedLeft = applyGammaCorrection(rawLeft)
         let correctedRight = applyGammaCorrection(rawRight)
-
-        // Apply pause state - keep brightness at 0 when paused
-        if isPaused {
-            brightness = 0.0
-            brightnessLeft = 0.0
-            brightnessRight = 0.0
-        } else {
-            brightness = max(0.0, min(1.0, minimumBrightness + correctedLeft * (maximumBrightness - minimumBrightness)))
-            brightnessLeft = brightness
-            brightnessRight = max(0.0, min(1.0, minimumBrightness + correctedRight * (maximumBrightness - minimumBrightness)))
-        }
-
-        // CRASH DEBUG: Monitor tick completion and performance
-        let tickEnd = CFAbsoluteTimeGetCurrent()
-        let tickDuration = tickEnd - tickStart
-
-        // Warn if tick takes too long (potential main thread blocking)
-        if tickDuration > 0.016 { // 16ms = 60fps frame time
-            let warning = "Slow tick: \(String(format: "%.3f", tickDuration * 1000))ms"
-            print("⚠️ CRASH DEBUG: \(warning)")
-            OrbCrashLogger.shared.logPotentialCrash("Slow CADisplayLink tick", context: warning)
-        }
-
-        // Periodic health check every 60 ticks (~1 second)
-        frameCounter += 1
-        if frameCounter % 60 == 0 {
-            let engineState = "brightness: \(String(format: "%.3f", brightness)), freq: \(String(format: "%.1f", currentFrequency))Hz"
-            print("🔄 CRASH DEBUG: Engine health check - \(engineState)")
-            OrbCrashLogger.shared.logEngineOperation("HealthCheck", details: engineState)
-        }
+        let range = maximumBrightness - minimumBrightness
+        let leftOut = max(0.0, min(1.0, minimumBrightness + correctedLeft * range))
+        let rightOut = max(0.0, min(1.0, minimumBrightness + correctedRight * range))
+        return (leftOut, rightOut)
     }
 }

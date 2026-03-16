@@ -10,6 +10,8 @@ import SwiftUI
 struct MandalaVisualizer: View {
     @State private var isAnimating = false
     @State private var rotationAngle: Double = 0
+    @State private var animationScale: CGFloat = 1.0
+    @State private var isVisible = true
 
     let size: CGFloat
     let brightness: Double // 0.0-1.0 from light engine
@@ -20,6 +22,9 @@ struct MandalaVisualizer: View {
     }
 
     var body: some View {
+        // Evaluate once per body call instead of on every sub-expression
+        let shouldReduceAnimations = brightness < 0.1
+        let animationDuration: Double = shouldReduceAnimations ? 6.0 : 3.0
         ZStack {
             // Outer ring with rotation
             Circle()
@@ -44,33 +49,37 @@ struct MandalaVisualizer: View {
                     }
                 )
 
-            // Middle rings
-            ForEach(0..<3, id: \.self) { index in
-                let ringSize = size * (0.8 - Double(index) * 0.2)
-                let opacity = 0.2 + Double(index) * 0.1
+            // Middle rings - optimized for performance
+            if !shouldReduceAnimations {
+                ForEach(0..<3, id: \.self) { index in
+                    let ringSize = size * (0.8 - Double(index) * 0.2)
+                    let opacity = 0.2 + Double(index) * 0.1
 
-                Circle()
-                    .stroke(
-                        Color.roseGold.opacity(opacity * brightness),
-                        lineWidth: 1.5
-                    )
-                    .frame(width: ringSize, height: ringSize)
-                    .scaleEffect(isAnimating ? 1.05 : 0.95)
-                    .opacity(isAnimating ? 0.8 : 0.4)
-                    .animation(
-                        .easeInOut(duration: 3.0)
-                        .delay(Double(index) * 0.3)
-                        .repeatForever(autoreverses: true),
-                        value: isAnimating
-                    )
+                    Circle()
+                        .stroke(
+                            Color.roseGold.opacity(opacity * brightness),
+                            lineWidth: 1.5
+                        )
+                        .frame(width: ringSize, height: ringSize)
+                        .scaleEffect(animationScale)
+                        .opacity(isAnimating ? 0.8 : 0.4)
+                        .animation(
+                            .easeInOut(duration: animationDuration)
+                            .delay(Double(index) * 0.3)
+                            .repeatForever(autoreverses: true),
+                            value: isAnimating
+                        )
+                }
             }
 
             // Central core with mandala pattern
             ZStack {
-                // Core gradient
+                // Core gradient - adaptive complexity
                 Circle()
                     .fill(
-                        RadialGradient(
+                        shouldReduceAnimations
+                        ? AnyShapeStyle(Color.roseGold.opacity(brightness * 0.6))
+                        : AnyShapeStyle(RadialGradient(
                             colors: [
                                 Color.roseGold.opacity(brightness * 0.8),
                                 Color.blush.opacity(brightness * 0.4),
@@ -80,10 +89,10 @@ struct MandalaVisualizer: View {
                             center: .center,
                             startRadius: 0,
                             endRadius: size * 0.25
-                        )
+                        ))
                     )
                     .frame(width: size * 0.5, height: size * 0.5)
-                    .scaleEffect(isAnimating ? 1.1 : 0.9)
+                    .scaleEffect(animationScale)
 
                 // Inner mandala petals
                 ForEach(0..<12, id: \.self) { index in
@@ -102,22 +111,35 @@ struct MandalaVisualizer: View {
             }
         }
         .onAppear {
-            startAnimations()
+            isVisible = true
+            startAnimations(reduced: brightness < 0.1)
+        }
+        .onDisappear {
+            isVisible = false
+        }
+        .onChange(of: brightness) { oldValue, newValue in
+            // Restart animations only when performance tier changes
+            if (oldValue < 0.1) != (newValue < 0.1) {
+                startAnimations(reduced: newValue < 0.1)
+            }
         }
     }
 
-    private func startAnimations() {
-        // Breathing animation
+    private func startAnimations(reduced: Bool) {
+        guard isVisible else { return }
+        let duration: Double = reduced ? 6.0 : 3.0
+
         withAnimation(
-            .easeInOut(duration: 3.0)
+            .easeInOut(duration: duration)
             .repeatForever(autoreverses: true)
         ) {
             isAnimating = true
+            animationScale = reduced ? 1.02 : 1.1
         }
 
-        // Rotation animation
+        let rotationDuration = reduced ? 40.0 : 20.0
         withAnimation(
-            .linear(duration: 20.0)
+            .linear(duration: rotationDuration)
             .repeatForever(autoreverses: false)
         ) {
             rotationAngle = 360

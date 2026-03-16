@@ -66,6 +66,8 @@ class AudioManager: NSObject {
     func pausePlayback() {
         audioPlayer?.pause()
         isPlaying = false
+
+        // Stop timer immediately to save CPU
         timeUpdateTimer?.invalidate()
         timeUpdateTimer = nil
         print("⏸ Playback paused")
@@ -74,6 +76,8 @@ class AudioManager: NSObject {
     func resumePlayback() {
         audioPlayer?.play()
         isPlaying = true
+
+        // Restart timer with current state
         startTimeUpdateTimer()
         print("▶️ Playback resumed")
     }
@@ -98,15 +102,20 @@ class AudioManager: NSObject {
     private func startTimeUpdateTimer() {
         timeUpdateTimer?.invalidate()
 
-        // Create timer on main queue to ensure proper MainActor context
-        timeUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        // Adaptive timer frequency based on playback state
+        let updateInterval: TimeInterval = isPlaying ? 0.1 : 0.5
+
+        // Create timer with weak self to prevent retain cycles
+        timeUpdateTimer = Timer.scheduledTimer(withTimeInterval: updateInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self = self, let player = self.audioPlayer else { return }
+                guard let self = self,
+                      let player = self.audioPlayer,
+                      self.isPlaying else { return }
                 self.currentTime = player.currentTime
             }
         }
 
-        // Ensure timer runs on main run loop for UI responsiveness
+        // Use common run loop mode for consistent updates
         RunLoop.main.add(timeUpdateTimer!, forMode: .common)
     }
 
@@ -147,12 +156,14 @@ class AudioManager: NSObject {
             let resources = try finalDestinationURL.resourceValues(forKeys: [.fileSizeKey])
             let fileSize = Int64(resources.fileSize ?? 0)
 
-            // Get audio duration with timeout to prevent hanging
+            // Get audio duration with optimized timeout
             let durationSeconds = await withTaskGroup(of: Double?.self) { group in
                 // Add duration loading task with timeout
                 group.addTask {
                     do {
                         let asset = AVURLAsset(url: finalDestinationURL)
+                        // Use optimized loading for better performance
+
                         print("🔍 Loading audio properties for: \(finalFilename)")
                         let duration = try await asset.load(.duration)
                         let seconds = duration.seconds
@@ -164,15 +175,15 @@ class AudioManager: NSObject {
                     }
                 }
 
-                // Add timeout task
+                // Reduced timeout for better UX
                 group.addTask {
-                    try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds timeout
+                    try? await Task.sleep(for: .seconds(3))
                     print("⚠️ Audio loading timeout reached for: \(finalFilename)")
                     return 0
                 }
 
                 // Return first completed task
-                if let result = await group.next() {
+                for await result in group {
                     group.cancelAll()
                     return result ?? 0
                 }
@@ -182,7 +193,6 @@ class AudioManager: NSObject {
             // Create AudioFile with calculated or default duration
             let audioFile = AudioFile(
                 filename: finalFilename,
-                url: finalDestinationURL,
                 duration: durationSeconds,
                 fileSize: fileSize
             )
@@ -284,11 +294,10 @@ class AudioManager: NSObject {
             
             let audioFile = AudioFile(
                 filename: finalFilename,
-                url: finalDestinationURL,
                 duration: durationSeconds,
                 fileSize: fileSize
             )
-            
+
             print("✅ Successfully downloaded audio: \(finalFilename) (Duration: \(durationSeconds)s)")
             return audioFile
             

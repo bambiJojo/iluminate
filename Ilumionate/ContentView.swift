@@ -22,6 +22,9 @@ struct ContentView: View {
     // Appearance — mirrors SettingsView's AppStorage key
     @AppStorage("appearanceMode") private var appearanceModeRaw = "system"
 
+    // Synced to engine on appear and on change
+    @AppStorage("userFrequencyMultiplier") private var userFrequencyMultiplierPref = 1.0
+
     private var preferredScheme: ColorScheme? {
         switch appearanceModeRaw {
         case "light": return .light
@@ -32,10 +35,14 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Main content area — fills full screen; bottom padding reserves space for floating bar
-            Group {
-                switch selectedTab {
-                case .home:
+            // Main content area — fills full screen; bottom padding reserves space for floating bar.
+            // Using if/else-if inside a ZStack so SwiftUI sees the view being inserted/removed
+            // and can apply the .transition crossfade during the animation.
+            // ZStack + .animation drives the 0.25 s opacity crossfade whenever
+            // selectedTab changes. Each branch carries .transition(.opacity) so
+            // SwiftUI fades out the leaving view and fades in the arriving view.
+            ZStack {
+                if selectedTab == .home {
                     NavigationStack {
                         HomeView(
                             showingAudioLibrary: $showingAudioLibrary,
@@ -47,31 +54,36 @@ struct ContentView: View {
                             onRefresh: loadSessions
                         )
                     }
-
-                case .library:
+                    .transition(.opacity)
+                } else if selectedTab == .library {
                     // LibraryView owns its own NavigationStack
                     LibraryView(engine: engine)
                         .environment(FolderStore.shared)
-
-                case .machine:
+                        .transition(.opacity)
+                } else if selectedTab == .machine {
                     NavigationStack {
                         MindMachineView()
                     }
-
-                case .analyzer:
+                    .transition(.opacity)
+                } else if selectedTab == .analyzer {
                     NavigationStack {
                         AnalyzerView()
                     }
+                    .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.25), value: selectedTab)
 
-            // Tab bar
             TranceTabBar(selected: $selectedTab)
         }
         .onAppear {
             loadSessions()
             loadAudioFiles()
             checkForFirstLaunch()
+            engine.userFrequencyMultiplier = userFrequencyMultiplierPref
+        }
+        .onChange(of: userFrequencyMultiplierPref) { _, newValue in
+            engine.userFrequencyMultiplier = newValue
         }
         .fullScreenCover(item: $selectedSession) { session in
             SessionPlayerView(session: session, engine: engine)
@@ -89,22 +101,18 @@ struct ContentView: View {
 
     private func loadSessions() {
         isLoading = true
-        sessions = []
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            let sessionNames = LightScoreReader.discoverBundledSessions()
-
-            for name in sessionNames {
-                do {
-                    let session = try LightScoreReader.loadSession(named: name)
-                    sessions.append(session)
-                } catch {
-                    print("❌ Failed to load session '\(name)': \(error)")
-                }
+        let sessionNames = LightScoreReader.discoverBundledSessions()
+        var loaded: [LightSession] = []
+        for name in sessionNames {
+            do {
+                let session = try LightScoreReader.loadSession(named: name)
+                loaded.append(session)
+            } catch {
+                print("❌ Failed to load session '\(name)': \(error)")
             }
-
-            isLoading = false
         }
+        sessions = loaded
+        isLoading = false
     }
 
     private func loadAudioFiles() {
@@ -118,9 +126,12 @@ struct ContentView: View {
     private func checkForFirstLaunch() {
         let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         if !hasCompletedOnboarding {
-            // Delay slightly to ensure the main view has loaded
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                showingOnboarding = true
+            // Use modern async/await for better performance
+            Task {
+                try? await Task.sleep(for: .milliseconds(800))
+                await MainActor.run {
+                    showingOnboarding = true
+                }
             }
         }
     }

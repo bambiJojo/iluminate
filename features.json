@@ -1,0 +1,229 @@
+{
+    "app_name": "Hypnosis Mind Machine",
+    "version": "1.0",
+    "platform": {
+        "initial": [
+            "iPhone"
+        ],
+        "future": [
+            "iOS",
+            "Android"
+        ]
+    },
+    "design_philosophy": {
+        "player_style": "minimal_trance_friendly",
+        "interaction_goal": "avoid_interrupting_trance_state",
+        "primary_focus": "audio_driven_light_entrainment"
+    },
+    "audio_library": {
+        "import_sources": [
+            "local_device_files"
+        ],
+        "future_import_sources": [
+            "icloud",
+            "dropbox",
+            "google_drive"
+        ],
+        "organization": {
+            "folders": true,
+            "tags": true,
+            "playlists": true,
+            "ai_auto_organization": true
+        },
+        "metadata": {
+            "fields": [
+                "title",
+                "author",
+                "description",
+                "tags"
+            ],
+            "custom_metadata_fields": true
+        },
+        "listening_history": {
+            "enabled_by_default": false,
+            "optional_user_setting": true,
+            "features": [
+                "listening_time_statistics"
+            ]
+        },
+        "library_size": {
+            "limit": "unlimited",
+            "indexed_database": true
+        },
+        "supported_audio_formats": [
+            "mp3",
+            "m4a",
+            "wav",
+            "flac"
+        ]
+    },
+    "audio_player": {
+        "controls": [
+            "play",
+            "pause",
+            "volume_control",
+            "mind_machine_toggle",
+            "mind_machine_intensity_slider",
+            "lock_screen",
+            "exit_player"
+        ],
+        "features": {
+            "background_playback": true,
+            "speed_control": false,
+            "sleep_timer": false,
+            "resume_playback": false,
+            "crossfade": false,
+            "looping": false
+        },
+        "lock_screen_behavior": {
+            "audio_continues": true,
+            "lights_continue": true,
+            "touch_protection": true
+        },
+        "audio_layering": {
+            "player_tracks": "single_audio_file",
+            "mind_machine_sessions": [
+                "voice",
+                "music",
+                "binaural_beats",
+                "tones"
+            ]
+        }
+    },
+    "mind_machine_engine": {
+        "visual_modes": [
+            "full_screen_flash",
+            "color_pulse",
+            "bilateral_flash"
+        ],
+        "design_assumption": "eyes_closed_use",
+        "frequency_control": {
+            "timeline_based": true,
+            "ai_adaptive": true
+        },
+        "custom_sessions": {
+            "version_1": "basic_custom_sessions",
+            "future_versions": [
+                "timeline_editor",
+                "creator_visual_editor",
+                "session_marketplace"
+            ]
+        }
+    },
+    "audio_analysis_engine": {
+        "analysis_timing": {
+            "background_analysis_after_import": true,
+            "deep_analysis_preprocessing": true
+        },
+        "analysis_duration": "up_to_several_minutes",
+        "analysis_methods": [
+            "amplitude_envelope_detection",
+            "beat_detection",
+            "frequency_spectrum_analysis",
+            "speech_rhythm_detection",
+            "pause_detection",
+            "emphasis_detection"
+        ],
+        "ai_hypnosis_analysis": {
+            "detect_trance_structure": true,
+            "interpret_speech_patterns": true,
+            "detect_repetition_patterns": true
+        },
+        "output": {
+            "light_score": {
+                "time_based_events": [
+                    "flash_frequency",
+                    "brightness",
+                    "color",
+                    "bilateral_pattern"
+                ]
+            }
+        },
+        "user_controls": {
+            "regenerate_light_score": true
+        },
+        "storage": {
+            "light_score_saved_with_audio": true
+        }
+    },
+    "visual_engine": {
+        "hardware_support": {
+            "version_1": [
+                "phone_screen"
+            ],
+            "future": [
+                "external_led_devices",
+                "vr_headsets",
+                "smart_lighting"
+            ]
+        },
+        "flash_layouts": [
+            "full_screen",
+            "bilateral_split"
+        ],
+        "brightness_behavior": {
+            "default": "follow_system_brightness",
+            "future_options": [
+                "dynamic_flash_brightness",
+                "ai_brightness_optimization"
+            ]
+        },
+        "visual_complexity": "minimal_functional",
+        "dark_room_mode": {
+            "ambient_light_detection": true,
+            "adaptive_brightness": true
+        }
+    },
+    "session_system": {
+        "session_definition": "audio_plus_light_score",
+        "session_types": [
+            "audio_driven_sessions",
+            "built_in_sessions",
+            "light_only_sessions"
+        ],
+        "built_in_sessions": {
+            "initial_count": "8_to_12"
+        },
+        "session_start_flow": [
+            "play_pressed",
+            "countdown_start_screen",
+            "ui_dim",
+            "session_lock_mode",
+            "session_begin"
+        ],
+        "session_lock_mode": {
+            "reduced_touch_interaction": true,
+            "minimal_ui": true
+        },
+        "session_end_behavior": {
+            "audio_sessions": "end_when_audio_ends",
+            "custom_sessions": "audio_matches_light_session_duration"
+        }
+    },
+    "user_settings": {
+        "mind_machine_controls": {
+            "brightness_slider": true,
+            "flash_intensity": true,
+            "frequency_multiplier": true
+        },
+        "light_score_management": {
+            "regeneration_replaces_previous_score": true
+        },
+        "offline_functionality": {
+            "core_app": "fully_offline",
+            "exceptions": [
+                "downloading_audio_from_websites"
+            ]
+        },
+        "user_tracking": {
+            "tracking_enabled": false
+        }
+    },
+    "safety": {
+        "seizure_warning": {
+            "shown_on_first_launch": true,
+            "shown_before_first_light_session": true,
+            "user_acknowledgement_required": true
+        }
+    }
+}

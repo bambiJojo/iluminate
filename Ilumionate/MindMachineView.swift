@@ -9,7 +9,7 @@ import SwiftUI
 
 @MainActor
 @Observable
-final class MindMachineModel {
+final class MindMachineModel: Sendable {
     var frequency: Double = 10.0        // Hz
     var intensity: Double = 0.75        // 0.0 to 1.0
     var colorTemperature: Int = 3000     // Kelvin
@@ -18,6 +18,22 @@ final class MindMachineModel {
 
     // Color temperature options
     let temperatureOptions = [2700, 3000, 4000, 5000, 6500]
+
+    enum VisualMode: String, CaseIterable {
+        case fullScreenFlash = "Flash"
+        case colorPulse      = "Color"
+        case bilateralFlash  = "Bilateral"
+
+        var icon: String {
+            switch self {
+            case .fullScreenFlash: return "flashlight.on.fill"
+            case .colorPulse:      return "paintpalette.fill"
+            case .bilateralFlash:  return "circle.lefthalf.filled"
+            }
+        }
+    }
+
+    var selectedVisualMode: VisualMode = .fullScreenFlash
 
     enum LightPattern: String, CaseIterable {
         case sine = "Sine"
@@ -56,6 +72,7 @@ final class MindMachineModel {
 struct MindMachineView: View {
     @State private var model = MindMachineModel()
     @State private var showingFlashMode = false
+    @State private var showingSettings = false
 
     var body: some View {
         ScrollView {
@@ -76,23 +93,43 @@ struct MindMachineView: View {
                     }
                 }
 
+                // Visual mode selector
+                visualModeCard
+
                 // Pattern selection
                 patternSelectionSection
             }
             .padding(.horizontal, TranceSpacing.screen)
             .padding(.top, TranceSpacing.statusBar)
-            .padding(.bottom, TranceSpacing.screen)
+            .padding(.bottom, TranceSpacing.tabBarClearance)
         }
         .background(Color.bgPrimary)
         .navigationTitle("Mind Machine")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Settings", systemImage: "gearshape") {
+                    TranceHaptics.shared.light()
+                    showingSettings = true
+                }
+                .foregroundStyle(Color.roseGold)
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+        }
         .fullScreenCover(isPresented: $showingFlashMode) {
-            FlashModeView(
-                frequency: model.frequency,
-                intensity: model.intensity,
-                colorTemperature: model.colorTemperature,
-                pattern: model.selectedPattern
-            )
+            switch model.selectedVisualMode {
+            case .colorPulse:
+                ColorPulseView(frequency: model.frequency, intensity: model.intensity)
+            default:
+                FlashModeView(
+                    frequency: model.frequency,
+                    intensity: model.intensity,
+                    colorTemperature: model.colorTemperature,
+                    pattern: model.selectedPattern
+                )
+            }
         }
     }
 
@@ -101,14 +138,13 @@ struct MindMachineView: View {
     private var lightVisualizationSection: some View {
         GlassCard(label: "Light Visualization") {
             VStack(spacing: TranceSpacing.list) {
-                PulseOrb(frequency: model.frequency)
-                    .frame(width: 180, height: 180)
-                    .overlay(
-                        Circle()
-                            .fill(Color.fromKelvin(model.colorTemperature))
-                            .opacity(0.15)
-                            .blendMode(.screen)
-                    )
+                PhoneScreenOrb(
+                    frequency: model.frequency,
+                    intensity: model.intensity,
+                    kelvin: model.colorTemperature,
+                    brainwaveColor: brainwaveColor
+                )
+                .frame(width: 120, height: 200)
 
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -273,6 +309,24 @@ struct MindMachineView: View {
         }
     }
 
+    // MARK: - Visual Mode Card
+
+    private var visualModeCard: some View {
+        GlassCard(label: "Visual Mode") {
+            HStack(spacing: TranceSpacing.list) {
+                ForEach(MindMachineModel.VisualMode.allCases, id: \.self) { mode in
+                    VisualModeButton(
+                        mode: mode,
+                        isSelected: model.selectedVisualMode == mode
+                    ) {
+                        model.selectedVisualMode = mode
+                        TranceHaptics.shared.selection()
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Helper Properties
 
     private var brainwaveZone: String {
@@ -320,6 +374,33 @@ struct MindMachineView: View {
         default:
             return .roseGold
         }
+    }
+}
+
+// MARK: - Visual Mode Button Component
+
+struct VisualModeButton: View {
+    let mode: MindMachineModel.VisualMode
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: TranceSpacing.micro) {
+                Image(systemName: mode.icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(isSelected ? Color.roseGold : Color.textSecondary)
+                Text(mode.rawValue)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(isSelected ? Color.textPrimary : Color.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, TranceSpacing.inner)
+            .background(isSelected ? Color.roseGold.opacity(0.12) : Color.clear)
+            .clipShape(.rect(cornerRadius: TranceRadius.tabItem))
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
 }
 
@@ -407,6 +488,87 @@ struct CustomSlider: View {
             }
         }
         .frame(height: 20)
+    }
+}
+
+// MARK: - Phone Screen Orb
+
+/// A subtle phone-silhouette visualizer that breathes at the session frequency.
+struct PhoneScreenOrb: View {
+    let frequency: Double
+    let intensity: Double
+    let kelvin: Int
+    let brainwaveColor: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            // Slow sine breath — one in-out per cycle defined by frequency
+            let cycleLen = max(0.5, 1.0 / frequency)
+            let phase = (t.truncatingRemainder(dividingBy: cycleLen)) / cycleLen  // 0..1
+            let breath = 0.5 + 0.5 * sin(phase * .pi * 2)         // 0..1 smooth
+
+            ZStack {
+                // Ambient glow behind the phone — very soft
+                RoundedRectangle(cornerRadius: 28)
+                    .fill(brainwaveColor.opacity(0.12 + 0.10 * breath))
+                    .blur(radius: 18)
+                    .scaleEffect(1.08 + 0.06 * breath)
+
+                // Phone body
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.bgSecondary,
+                                brainwaveColor.opacity(0.06 + 0.10 * breath)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22)
+                            .stroke(Color.glassBorder, lineWidth: 1.5)
+                    )
+
+                // Screen glow fill — reads kelvin + intensity
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.fromKelvin(kelvin).opacity(
+                                    (0.15 + 0.45 * breath) * intensity
+                                ),
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 55
+                        )
+                    )
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 20)
+
+                // Top notch pill
+                VStack {
+                    Capsule()
+                        .fill(Color.glassBorder.opacity(0.8))
+                        .frame(width: 30, height: 5)
+                        .padding(.top, 10)
+                    Spacer()
+                }
+
+                // Bottom home-bar line
+                VStack {
+                    Spacer()
+                    Capsule()
+                        .fill(Color.glassBorder.opacity(0.6))
+                        .frame(width: 36, height: 4)
+                        .padding(.bottom, 10)
+                }
+            }
+        }
     }
 }
 

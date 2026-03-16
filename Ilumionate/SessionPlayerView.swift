@@ -26,6 +26,10 @@ struct SessionPlayerView: View {
     @State private var isSyncEnabled = true
     @State private var currentPhase = "Induction Phase"
 
+    // Countdown start: nil = hidden, 3/2/1 = counting
+    @State private var countdownValue: Int? = nil
+    @State private var savedBrightness: CGFloat = 1.0
+
     // Persist last-played position for HomeView "Continue Session" card
     @AppStorage("lastSessionId") private var lastSessionId = ""
     @AppStorage("lastSessionProgress") private var lastSessionProgress: Double = 0.0
@@ -82,10 +86,17 @@ struct SessionPlayerView: View {
                 .transition(.opacity)
             }
 
-            // Pause overlay
-            if !player.isPlaying && !player.isComplete {
+            // Pause overlay (only when not counting down)
+            if !player.isPlaying && !player.isComplete && countdownValue == nil {
                 pauseOverlay
                     .transition(.opacity)
+            }
+
+            // Countdown overlay
+            if let count = countdownValue {
+                countdownOverlay(count: count)
+                    .transition(.opacity)
+                    .zIndex(10)
             }
         }
         .onAppear {
@@ -102,18 +113,24 @@ struct SessionPlayerView: View {
             // Setup audio sync if needed
             if let audioFile = audioFile {
                 setupAudioSync(audioFile)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    self.prepareSession()
+                Task {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    await MainActor.run {
+                        self.prepareSession()
+                    }
                 }
             } else {
                 prepareSession()
             }
 
             // Auto-hide controls after 5 seconds only if playing
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                if player.isPlaying {
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        showingControls = false
+            Task {
+                try? await Task.sleep(for: .seconds(5))
+                await MainActor.run {
+                    if player.isPlaying {
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            showingControls = false
+                        }
                     }
                 }
             }
@@ -207,21 +224,8 @@ struct SessionPlayerView: View {
                         engine.pause()
                         audioSync?.pause()
                         saveProgress()
-                    } else {
-                        player.play()
-                        engine.resume()
-                        if audioSync?.hasAudioLoaded == true {
-                            audioSync?.play()
-                        }
-                        
-                        // Auto-hide controls after they hit play
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                            if player.isPlaying {
-                                withAnimation(.easeInOut(duration: 0.5)) {
-                                    showingControls = false
-                                }
-                            }
-                        }
+                    } else if countdownValue == nil {
+                        startCountdownAndPlay()
                     }
                 } label: {
                     ZStack {
@@ -251,7 +255,7 @@ struct SessionPlayerView: View {
                 .animation(.easeInOut(duration: 0.2), value: player.isPlaying)
 
                 // Additional controls
-                if let audioFile = audioFile {
+                if audioFile != nil {
                     GlassCard(label: "SYNC OPTIONS") {
                         VStack(spacing: TranceSpacing.list) {
                             SyncToggle(isOn: $isSyncEnabled)
@@ -306,6 +310,38 @@ struct SessionPlayerView: View {
         .animation(.easeInOut(duration: 0.3), value: showingControls)
     }
 
+    // MARK: - Countdown Overlay
+
+    private func countdownOverlay(count: Int) -> some View {
+        ZStack {
+            Color.bgPrimary.opacity(0.92)
+                .ignoresSafeArea()
+
+            VStack(spacing: TranceSpacing.content) {
+                Text("\(count)")
+                    .font(.system(size: 120, weight: .bold, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.roseGold, .roseDeep],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .shadow(color: Color.roseGold.opacity(0.4), radius: 20, x: 0, y: 8)
+                    .id(count)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 1.4).combined(with: .opacity),
+                        removal: .scale(scale: 0.6).combined(with: .opacity)
+                    ))
+
+                Text("Get ready…")
+                    .font(TranceTypography.body)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .animation(.easeInOut(duration: 0.35), value: count)
+        }
+    }
+
     // MARK: - Pause Overlay
 
     private var pauseOverlay: some View {
@@ -357,7 +393,49 @@ struct SessionPlayerView: View {
         player.seek(to: 0.0)
     }
 
+    private func startCountdownAndPlay() {
+        // Maximise screen brightness for best light therapy output
+        savedBrightness = UIScreen.main.brightness
+        UIScreen.main.brightness = 1.0
+
+        countdownValue = 3
+        TranceHaptics.shared.light()
+
+        Task {
+            for count in stride(from: 2, through: 1, by: -1) {
+                try? await Task.sleep(for: .seconds(1))
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        countdownValue = count
+                    }
+                    TranceHaptics.shared.light()
+                }
+            }
+            try? await Task.sleep(for: .seconds(1))
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    countdownValue = nil
+                }
+                TranceHaptics.shared.medium()
+                player.play()
+                engine.resume()
+                if audioSync?.hasAudioLoaded == true { audioSync?.play() }
+            }
+            // Auto-hide controls 3 s after playback begins
+            try? await Task.sleep(for: .seconds(3))
+            await MainActor.run {
+                if player.isPlaying {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showingControls = false
+                    }
+                }
+            }
+        }
+    }
+
     private func stopSession() {
+        UIScreen.main.brightness = savedBrightness  // Restore screen brightness
+        countdownValue = nil
         saveProgress()
         player.stop()
         engine.detachSession()
@@ -368,7 +446,8 @@ struct SessionPlayerView: View {
     private func saveProgress() {
         // Only save if session is not complete and has real progress
         guard session.duration_sec > 0 else { return }
-        let progress = player.currentTime / session.duration_sec
+        let listenedDuration = player.currentTime
+        let progress = listenedDuration / session.duration_sec
         // Don't overwrite with 0 or 1 (completed)
         if progress > 0.01 && progress < 0.99 {
             lastSessionId = session.id.uuidString
@@ -377,6 +456,25 @@ struct SessionPlayerView: View {
             // Session finished — clear the card
             lastSessionId = ""
             lastSessionProgress = 0.0
+        }
+        // Record to history (minimum 30 s threshold applied inside manager)
+        SessionHistoryManager.shared.record(
+            sessionName: session.displayName,
+            category: sessionCategory,
+            durationListened: listenedDuration,
+            totalDuration: session.duration_sec
+        )
+    }
+
+    /// Infer a brainwave category from the session's first light moment frequency.
+    private var sessionCategory: String {
+        guard let first = session.light_score.first else { return "Trance" }
+        switch first.frequency {
+        case ..<4.0:  return "Sleep"
+        case ..<8.0:  return "Relax"
+        case ..<14.0: return "Focus"
+        case ..<30.0: return "Energy"
+        default:      return "Trance"
         }
     }
 
@@ -422,16 +520,40 @@ struct SessionPlayerView: View {
 
     private func startUITimer() {
         stopUITimer() // Ensure no duplicate timers
-        uiUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+
+        // Adaptive update frequency based on UI state
+        let updateInterval: TimeInterval = showingControls ? 0.1 : 0.5
+
+        uiUpdateTimer = Timer.scheduledTimer(withTimeInterval: updateInterval, repeats: true) { _ in
             Task { @MainActor in
                 self.displayTime = self.player.currentTime
+
+                // Update phase detection less frequently when controls are hidden
+                if self.showingControls || Int(self.displayTime) % 5 == 0 {
+                    self.updateCurrentPhase()
+                }
             }
         }
+
+        // Run timer on common run loop mode for better performance
+        RunLoop.main.add(uiUpdateTimer!, forMode: .common)
     }
 
     private func stopUITimer() {
         uiUpdateTimer?.invalidate()
         uiUpdateTimer = nil
+    }
+
+    private func updateCurrentPhase() {
+        // Simple phase detection based on session progress
+        let progress = displayTime / Double(session.duration_sec)
+        if progress < 0.2 {
+            currentPhase = "Induction Phase"
+        } else if progress < 0.8 {
+            currentPhase = "Entrainment Phase"
+        } else {
+            currentPhase = "Integration Phase"
+        }
     }
 }
 

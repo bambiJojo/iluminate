@@ -57,8 +57,8 @@ class AudioAnalyzer: Sendable {
         progress = 0.0
         statusMessage = "Loading ML Models (may download)..."
 
-        // Ensure WhisperKit is initialized before proceeding
-        await whisperManager.initialize()
+        // Initialize WhisperKit with priority for better UX
+        await whisperManager.initializeWithPriority()
 
         statusMessage = "Preparing audio..."
 
@@ -115,27 +115,42 @@ actor WhisperManager {
 
     func initialize() async {
         guard whisperKit == nil else { return }
+        modelState = .loading
 
         do {
             print("🔄 Initializing WhisperKit...")
-            do {
-                // Initialize with tiny model for performance
-                whisperKit = try await WhisperKit(model: "tiny")
-            } catch {
-                print("⚠️ WhisperKit initialization failed. Attempting to clear corrupted cache...")
-                let fileManager = FileManager.default
-                let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                let cacheURL = documentsURL.appendingPathComponent("huggingface/models", isDirectory: true)
-                try? fileManager.removeItem(at: cacheURL)
-                
-                print("🔄 Retrying WhisperKit initialization after cache clear...")
-                whisperKit = try await WhisperKit(model: "tiny")
-            }
+            try await initializeWhisperKit()
             modelState = .loaded
             print("✅ WhisperKit initialized successfully")
         } catch {
             print("❌ Failed to initialize WhisperKit: \(error)")
             modelState = .failed(error)
+        }
+    }
+
+    func initializeWithPriority() async {
+        guard whisperKit == nil else { return }
+
+        await Task(priority: .userInitiated) {
+            await initialize()
+        }.value
+    }
+
+    private func initializeWhisperKit() async throws {
+        do {
+            // Use base model for significantly better word-error-rate vs tiny
+            whisperKit = try await WhisperKit(model: "base")
+        } catch {
+            print("⚠️ WhisperKit initialization failed. Attempting to clear corrupted cache...")
+
+            // Clear potentially corrupted cache
+            let fileManager = FileManager.default
+            let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let cacheURL = documentsURL.appendingPathComponent("huggingface/models", isDirectory: true)
+            try? fileManager.removeItem(at: cacheURL)
+
+            print("🔄 Retrying WhisperKit initialization after cache clear...")
+            whisperKit = try await WhisperKit(model: "base")
         }
     }
 
@@ -167,6 +182,20 @@ actor WhisperManager {
             throw AnalyzerError.whisperKitNotInitialized
         }
 
+        // MP3 files can fail inside WhisperKit's internal AVFoundation pipeline.
+        // Pre-convert to M4A in a temp directory so WhisperKit always receives
+        // a format it handles reliably.
+        let transcribeURL: URL
+        var tempURL: URL?
+        if audioFile.url.pathExtension.lowercased() == "mp3" {
+            let converted = try await convertMP3ToM4A(audioFile.url)
+            tempURL = converted
+            transcribeURL = converted
+        } else {
+            transcribeURL = audioFile.url
+        }
+        defer { if let url = tempURL { try? FileManager.default.removeItem(at: url) } }
+
         // Get audio duration for progress calculation
         let asset = AVURLAsset(url: audioFile.url)
         let duration = try await asset.load(.duration)
@@ -174,18 +203,24 @@ actor WhisperManager {
 
         await onProgress(ProgressInfo(progress: 0.1, message: "Starting transcription..."))
 
-        // Create transcription task
-        currentTask = Task {
-            try await whisper.transcribe(
-                audioPath: audioFile.url.path(percentEncoded: false),
-                decodeOptions: DecodingOptions(verbose: true)
+        // Create transcription task with optimizations
+        currentTask = Task(priority: .userInitiated) {
+            let decodeOptions = DecodingOptions(
+                verbose: false,  // Reduce overhead
+                language: nil,   // nil = auto-detect; WhisperKit identifies the spoken language
+                temperature: 0.0 // Deterministic output
+            )
+
+            return try await whisper.transcribe(
+                audioPath: transcribeURL.path(percentEncoded: false),
+                decodeOptions: decodeOptions
             ) { transcriptionProgress in
                 Task {
-                    // WhisperKit processes in ~30 second windows, roughly advancing 28s at a time.
+                    // Optimized progress calculation
                     let estimatedSecondsProcessed = Double(transcriptionProgress.windowId) * 28.0
-                    let progressRatio = estimatedSecondsProcessed / audioDuration
-                    let clampedRatio = min(max(progressRatio, 0.0), 1.0)
-                    let overallProgress = 0.1 + (clampedRatio * 0.85)
+                    let progressRatio = min(estimatedSecondsProcessed / audioDuration, 1.0)
+                    let overallProgress = 0.1 + (progressRatio * 0.85)
+
                     await onProgress(ProgressInfo(
                         progress: overallProgress,
                         message: "Transcribing... \(Int(overallProgress * 100))%"
@@ -215,11 +250,17 @@ actor WhisperManager {
 
         await onProgress(ProgressInfo(progress: 1.0, message: "Transcription complete"))
 
+        // WhisperKit sets `language` to the ISO 639-1 code it detected (e.g. "en", "fr").
+        // Fall back to the device locale language code when auto-detection is inconclusive.
+        let detectedLanguage = whisperResult.language
+            ?? Locale.current.language.languageCode?.identifier
+            ?? "en"
+
         let result = AudioTranscriptionResult(
             fullText: whisperResult.text,
             segments: segments,
             duration: audioFile.duration,
-            locale: Locale.current
+            detectedLanguage: detectedLanguage
         )
 
         print("✅ Transcription completed: \(result.fullText.prefix(100))...")
@@ -232,6 +273,23 @@ actor WhisperManager {
         currentTask?.cancel()
         currentTask = nil
     }
+
+    // MARK: - MP3 Pre-Conversion
+
+    /// Exports an MP3 to a temporary M4A file so WhisperKit always receives a
+    /// format that AVFoundation's internal pipeline handles without errors.
+    private func convertMP3ToM4A(_ sourceURL: URL) async throws -> URL {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString + ".m4a")
+
+        let asset = AVURLAsset(url: sourceURL)
+        guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
+            throw AnalyzerError.audioFileInvalid
+        }
+
+        try await session.export(to: tempURL, as: .m4a)
+        return tempURL
+    }
 }
 
 // MARK: - Audio Transcription Result
@@ -243,14 +301,15 @@ struct AudioTranscriptionResult: Codable, Sendable {
     let duration: TimeInterval
     let locale: String
 
-    init(fullText: String, segments: [AudioTranscriptionSegment], duration: TimeInterval, locale: Locale) {
+    /// - Parameter detectedLanguage: ISO 639-1 language code returned by WhisperKit (e.g. "en", "fr").
+    nonisolated init(fullText: String, segments: [AudioTranscriptionSegment], duration: TimeInterval, detectedLanguage: String) {
         self.fullText = fullText
         self.segments = segments
         self.duration = duration
-        self.locale = locale.identifier
+        self.locale = detectedLanguage
     }
 
-    var wordCount: Int {
+    nonisolated var wordCount: Int {
         fullText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
     }
 
@@ -268,7 +327,7 @@ struct AudioTranscriptionSegment: Codable, Identifiable, Sendable {
     let duration: TimeInterval
     let confidence: Double
 
-    init(id: UUID = UUID(), text: String, timestamp: TimeInterval, duration: TimeInterval, confidence: Double) {
+    nonisolated init(id: UUID = UUID(), text: String, timestamp: TimeInterval, duration: TimeInterval, confidence: Double) {
         self.id = id
         self.text = text
         self.timestamp = timestamp

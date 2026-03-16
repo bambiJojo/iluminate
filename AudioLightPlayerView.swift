@@ -306,8 +306,11 @@ struct AudioLightPlayerView: View {
             player = syncPlayer
             syncPlayer.play()
             await checkForLightSession()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                withAnimation(.easeInOut(duration: 0.3)) { showingControls = false }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showingControls = false
+                }
             }
         } catch {
             errorMessage = error.localizedDescription

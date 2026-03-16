@@ -94,15 +94,19 @@ class AudioSyncController {
             stop()
         }
 
-        // Load audio on background queue
-        try await withCheckedThrowingContinuation { continuation in
-            Task.detached {
+        // Load audio with proper concurrency isolation
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Task {
                 do {
-                    // Create audio player on background thread
+                    // Create audio player safely
                     let player = try AVAudioPlayer(contentsOf: url)
 
-                    // Switch back to main actor for property updates
-                    await MainActor.run {
+                    // Update properties on MainActor
+                    await MainActor.run { [weak self] in
+                        guard let self = self else {
+                            continuation.resume(throwing: AudioSyncError.failedToLoadAudio(NSError(domain: "AudioSync", code: -1)))
+                            return
+                        }
                         self.audioPlayer = player
                         self.audioPlayer?.prepareToPlay()
                         self.audioPlayer?.volume = self.audioVolume
@@ -112,9 +116,8 @@ class AudioSyncController {
                         self.currentTime = 0.0
 
                         print("✅ Audio loaded asynchronously, duration: \(self.duration)s")
+                        continuation.resume()
                     }
-
-                    continuation.resume()
                 } catch {
                     print("❌ Failed to load audio asynchronously: \(error)")
                     continuation.resume(throwing: AudioSyncError.failedToLoadAudio(error))
@@ -174,11 +177,13 @@ class AudioSyncController {
         stopTimer()
 
         updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor in
-                self.updateTime()
+            Task { @MainActor [weak self] in
+                await self?.updateTime()
             }
         }
+
+        // Ensure timer runs during scrolling and other UI interactions
+        RunLoop.main.add(updateTimer!, forMode: .common)
     }
 
     private func stopTimer() {
@@ -186,7 +191,7 @@ class AudioSyncController {
         updateTimer = nil
     }
 
-    private func updateTime() {
+    private func updateTime() async {
         guard let player = audioPlayer else { return }
 
         currentTime = player.currentTime
@@ -194,11 +199,11 @@ class AudioSyncController {
 
         // Check if finished
         if !player.isPlaying && currentTime >= duration - 0.1 {
-            handlePlaybackFinished()
+            await handlePlaybackFinished()
         }
     }
 
-    private func handlePlaybackFinished() {
+    private func handlePlaybackFinished() async {
         isPlaying = false
         stopTimer()
         onPlaybackFinished?()

@@ -5,6 +5,7 @@
 //  Created by Byron Quine on 2/24/26.
 //
 
+import CryptoKit
 import Foundation
 import Observation
 
@@ -32,12 +33,13 @@ class AnalysisStateManager: Sendable {
     var currentAnalysis: ActiveAnalysis?
     var analysisQueue: [AudioFile] = []
     var completedAnalyses: [CompletedAnalysis] = []
+    var failedAnalyses: [FailedAnalysis] = []
     var onAnalysisComplete: (@Sendable (AudioFile, CompletedAnalysis) -> Void)?
 
     // MARK: - Initialization
 
     private init() {
-        // Private initializer to enforce singleton usage
+        loadCachedResults()
     }
 
     // MARK: - Actor-Isolated State Management
@@ -190,12 +192,91 @@ class AnalysisStateManager: Sendable {
         return analysis.progress
     }
 
+    // MARK: - Persistent Cache
+
+    /// In-memory cache: content-addressed key → AnalysisResult.
+    private var cachedResults: [String: AnalysisResult] = [:]
+
+    // MARK: Content-Addressed Key
+
+    /// WhisperKit model version baked into every cache key.
+    /// Incrementing this string automatically invalidates all existing entries
+    /// and forces re-analysis — do this after upgrading the WhisperKit model.
+    nonisolated static let currentModelVersion = "base-v1"
+
+    /// Maximum bytes read from the audio file for fingerprinting.
+    nonisolated private static let cacheKeyChunkBytes = 64 * 1024 // 64 KB
+
+    /// Returns a content-addressed cache key: SHA-256 of the first 64 KB
+    /// of the audio file, followed by a colon and the model version string.
+    ///
+    /// Falls back to the file's UUID string when the audio file cannot be
+    /// read (e.g., synthetic `AudioFile` objects in unit tests).
+    nonisolated static func cacheKey(for audioFile: AudioFile) -> String {
+        contentAddressedKey(audioFileURL: audioFile.url) ?? audioFile.id.uuidString
+    }
+
+    /// Computes SHA-256 of the first `cacheKeyChunkBytes` of `url`.
+    /// Returns `nil` when the file cannot be read.
+    nonisolated static func contentAddressedKey(
+        audioFileURL url: URL,
+        modelVersion: String = currentModelVersion
+    ) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let chunk = (try? handle.read(upToCount: cacheKeyChunkBytes)) ?? Data()
+        guard !chunk.isEmpty else { return nil }
+        let hex = SHA256.hash(data: chunk).map { String(format: "%02x", $0) }.joined()
+        return "\(hex):\(modelVersion)"
+    }
+
+    // MARK: Cache API
+
+    /// Returns the cached analysis result for a file, or nil if none exists.
+    func cachedResult(for audioFile: AudioFile) -> AnalysisResult? {
+        cachedResults[Self.cacheKey(for: audioFile)]
+    }
+
+    /// Returns true if a cached result already exists for this file,
+    /// so callers can skip expensive re-analysis.
+    func hasCachedResult(for audioFile: AudioFile) -> Bool {
+        cachedResults[Self.cacheKey(for: audioFile)] != nil
+    }
+
+    /// Evicts the cached result for a single file (e.g., when the user re-analyzes manually).
+    func evictCachedResult(for audioFile: AudioFile) {
+        cachedResults.removeValue(forKey: Self.cacheKey(for: audioFile))
+        saveCachedResults()
+    }
+
+    /// URL of the on-disk analysis cache. Internal so tests can verify the path.
+    static var cacheURL: URL {
+        URL.documentsDirectory.appending(path: "AnalysisCache.json")
+    }
+
+    private func loadCachedResults() {
+        guard let data = try? Data(contentsOf: Self.cacheURL) else { return }
+        if let decoded = try? JSONDecoder().decode([String: AnalysisResult].self, from: data) {
+            cachedResults = decoded
+            print("📂 Loaded \(cachedResults.count) cached analysis result(s)")
+        }
+    }
+
+    private func saveCachedResults() {
+        guard let data = try? JSONEncoder().encode(cachedResults) else { return }
+        try? data.write(to: Self.cacheURL, options: .atomic)
+    }
+
     // MARK: - Private Methods
 
     /// Handle analysis completion with proper actor isolation
     private func handleAnalysisComplete(audioFile: AudioFile, result: CompletedAnalysis) async {
         completedAnalyses.append(result)
         onAnalysisComplete?(audioFile, result)
+
+        // Persist the analysis result, keyed by content fingerprint
+        cachedResults[Self.cacheKey(for: audioFile)] = result.analysis
+        saveCachedResults()
 
         // Remove from queue
         analysisQueue.removeAll { $0.id == audioFile.id }
@@ -294,8 +375,8 @@ actor AnalysisCoordinator {
                     isUserInitiated: priority == .userInitiated
                 )
 
-                // Create and track task
-                let task = Task.detached(priority: optimalPriority) {
+                // Create and track task with proper actor inheritance
+                let task = Task(priority: optimalPriority) {
                     await self.performSingleAnalysis(
                         audioFile: audioFile,
                         audioAnalyzer: audioAnalyzer,
@@ -384,8 +465,8 @@ actor AnalysisCoordinator {
     }
 
     private func saveLightSession(_ session: LightSession, for audioFile: AudioFile) async throws {
-        // File I/O on utility priority
-        try await Task.detached(priority: .utility) {
+        // File I/O with proper concurrency handling
+        try await Task(priority: .utility) {
             let fileManager = FileManager.default
             let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let sessionsURL = documentsURL.appendingPathComponent("GeneratedSessions", isDirectory: true)
@@ -492,8 +573,8 @@ actor AnalysisCoordinator {
                 isUserInitiated: priority == .userInitiated
             )
 
-            // Create task for single file processing
-            let task = Task.detached(priority: optimalPriority) {
+            // Create task for single file processing with proper concurrency
+            let task = Task(priority: optimalPriority) {
                 await self.performSingleAnalysisWithStateUpdates(
                     audioFile: audioFile,
                     analysisManager: analysisManager,
@@ -624,11 +705,15 @@ actor AnalysisCoordinator {
                 analysisManager.removeFromQueue(audioFile: audioFile)
             }
         } catch {
-            print("❌ Analysis failed: \(audioFile.filename) - \(error)")
+            let msg = error.localizedDescription
+            print("❌ Analysis failed: \(audioFile.filename) - \(msg)")
             await MainActor.run {
                 analysisManager.currentAnalysis?.stage = .failed
-                analysisManager.currentAnalysis?.errorMessage = error.localizedDescription
+                analysisManager.currentAnalysis?.errorMessage = msg
                 analysisManager.removeFromQueue(audioFile: audioFile)
+                analysisManager.failedAnalyses.append(
+                    FailedAnalysis(audioFile: audioFile, errorMessage: msg, failedAt: Date())
+                )
             }
         }
     }

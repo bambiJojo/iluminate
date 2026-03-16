@@ -12,45 +12,75 @@ import AVFoundation
 // MARK: - In-App Browser View
 
 struct InAppBrowserView: View {
+    let initialURL: String
     let onFileDownloaded: (AudioFile) -> Void
 
-    @State private var urlText = "https://"
+    @State private var urlText: String
+
     @State private var isLoading = false
+    @State private var estimatedProgress: Double = 0.0
+    @State private var canGoBack = false
+    @State private var canGoForward = false
+    
     @State private var downloadedFile: AudioFile?
     @State private var showingSuccessBanner = false
     @State private var errorMessage: String?
-    @State private var webViewRef: BrowserWebViewCoordinator?
+    
+    // We hold a reference to the web view to trigger navigations from the SwiftUI bar
+    @State private var webView: WKWebView?
 
     @Environment(\.dismiss) private var dismiss
+    
+    init(initialURL: String = "https://google.com", onFileDownloaded: @escaping (AudioFile) -> Void) {
+        self.initialURL = initialURL
+        self.onFileDownloaded = onFileDownloaded
+        _urlText = State(initialValue: initialURL)
+    }
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
+            ZStack(alignment: .bottom) {
+                // Background color extending behind safe area
+                Color.bgPrimary.ignoresSafeArea()
+                
                 // Web View
                 BrowserWebView(
+                    initialURL: initialURL,
                     urlText: $urlText,
                     isLoading: $isLoading,
+                    estimatedProgress: $estimatedProgress,
+                    canGoBack: $canGoBack,
+                    canGoForward: $canGoForward,
+                    webViewRef: $webView,
                     onFileDownloaded: handleDownload,
                     onError: { errorMessage = $0 }
                 )
                 .ignoresSafeArea(edges: .bottom)
 
-                // Loading overlay at very top
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(.linear)
-                        .tint(.roseGold)
-                        .frame(height: 3)
-                }
-
-                // Success banner
+                // Floating Address Bar
+                FloatingAddressBar(
+                    urlText: $urlText,
+                    isLoading: isLoading,
+                    estimatedProgress: estimatedProgress,
+                    canGoBack: canGoBack,
+                    canGoForward: canGoForward,
+                    onGoBack: { webView?.goBack() },
+                    onGoForward: { webView?.goForward() },
+                    onReload: { webView?.reload() },
+                    onSubmit: { urlString in
+                        loadURL(urlString)
+                    }
+                )
+                .padding(.horizontal, TranceSpacing.content)
+                .padding(.bottom, TranceSpacing.content) // Added padding so it sits properly above screen edge
+                
+                // Success banner (if needed) overlaying at the top instead of bottom so it doesn't conflict with floating bar
                 if showingSuccessBanner, let file = downloadedFile {
                     VStack {
-                        Spacer()
                         successBanner(file: file)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        Spacer()
                     }
-                    .ignoresSafeArea(edges: .bottom)
                 }
             }
             .navigationTitle("Browse Audio")
@@ -70,6 +100,21 @@ struct InAppBrowserView: View {
                 if let msg = errorMessage { Text(msg) }
             }
         }
+    }
+
+    private func loadURL(_ urlString: String) {
+        var cleaned = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        // If it looks like a search query, use DuckDuckGo
+        if !cleaned.contains(".") || cleaned.contains(" ") {
+            let encoded = cleaned.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            cleaned = "https://duckduckgo.com/?q=\(encoded)"
+        } else if !cleaned.hasPrefix("http://") && !cleaned.hasPrefix("https://") {
+            cleaned = "https://" + cleaned
+        }
+        if let url = URL(string: cleaned) {
+            webView?.load(URLRequest(url: url))
+        }
+        urlText = cleaned
     }
 
     private func handleDownload(_ file: AudioFile) {
@@ -113,13 +158,140 @@ struct InAppBrowserView: View {
         }
         .padding(.horizontal, TranceSpacing.content)
         .padding(.vertical, TranceSpacing.card)
-        .padding(.bottom, TranceSpacing.statusBar)
+        .padding(.top, TranceSpacing.statusBar)
         .background(.ultraThinMaterial)
         .overlay(
             Rectangle()
                 .fill(Color.roseGold.opacity(0.5))
                 .frame(height: 1),
-            alignment: .top
+            alignment: .bottom
+        )
+    }
+}
+
+// MARK: - Floating Address Bar
+
+struct FloatingAddressBar: View {
+    @Binding var urlText: String
+    
+    let isLoading: Bool
+    let estimatedProgress: Double
+    let canGoBack: Bool
+    let canGoForward: Bool
+    
+    let onGoBack: () -> Void
+    let onGoForward: () -> Void
+    let onReload: () -> Void
+    let onSubmit: (String) -> Void
+    
+    @FocusState private var isFocused: Bool
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: TranceSpacing.small) {
+                // Back Button
+                Button(action: {
+                    TranceHaptics.shared.light()
+                    onGoBack()
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(canGoBack ? .roseGold : .textLight.opacity(0.5))
+                        .frame(width: 32, height: 32)
+                }
+                .disabled(!canGoBack)
+                
+                // Forward Button
+                Button(action: {
+                    TranceHaptics.shared.light()
+                    onGoForward()
+                }) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(canGoForward ? .roseGold : .textLight.opacity(0.5))
+                        .frame(width: 32, height: 32)
+                }
+                .disabled(!canGoForward)
+
+                // URL Field
+                HStack {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.textLight)
+                    
+                    TextField("Search or enter website", text: $urlText)
+                        .font(TranceTypography.body)
+                        .foregroundColor(.textPrimary)
+                        .keyboardType(.URL)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .submitLabel(.go)
+                        .focused($isFocused)
+                        .onSubmit {
+                            onSubmit(urlText)
+                        }
+                    
+                    if isLoading {
+                        Button(action: {
+                            TranceHaptics.shared.light()
+                            // No stop loading exposed yet, just reload for now
+                            onReload()
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.textLight)
+                                .padding(4)
+                                .background(Color.glassBorder.opacity(0.2), in: Circle())
+                        }
+                    } else if !urlText.isEmpty && isFocused {
+                        Button(action: { urlText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.textLight)
+                        }
+                    } else {
+                        Button(action: {
+                            TranceHaptics.shared.light()
+                            onReload()
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.textLight)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.glassBorder.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .padding(12)
+            
+            // Progress Bar
+            if isLoading {
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(Color.roseGold)
+                        .frame(width: geo.size.width * CGFloat(estimatedProgress))
+                        .animation(.linear(duration: 0.2), value: estimatedProgress)
+                }
+                .frame(height: 2)
+                .background(Color.clear)
+            } else {
+                Spacer().frame(height: 2)
+            }
+        }
+        .background(.ultraThinMaterial)
+        .background(Color.bgCard)
+        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
+        .overlay(
+            RoundedRectangle(cornerRadius: TranceRadius.glassCard)
+                .stroke(Color.glassBorder, lineWidth: 1)
+        )
+        .shadow(
+            color: TranceShadow.card.color,
+            radius: TranceShadow.card.radius,
+            x: TranceShadow.card.x,
+            y: TranceShadow.card.y
         )
     }
 }
@@ -127,8 +299,14 @@ struct InAppBrowserView: View {
 // MARK: - WKWebView Wrapper
 
 struct BrowserWebView: UIViewRepresentable {
+    let initialURL: String
     @Binding var urlText: String
     @Binding var isLoading: Bool
+    @Binding var estimatedProgress: Double
+    @Binding var canGoBack: Bool
+    @Binding var canGoForward: Bool
+    @Binding var webViewRef: WKWebView?
+    
     let onFileDownloaded: (AudioFile) -> Void
     let onError: (String) -> Void
 
@@ -136,163 +314,61 @@ struct BrowserWebView: UIViewRepresentable {
         BrowserWebViewCoordinator(
             urlText: $urlText,
             isLoading: $isLoading,
+            estimatedProgress: $estimatedProgress,
+            canGoBack: $canGoBack,
+            canGoForward: $canGoForward,
             onFileDownloaded: onFileDownloaded,
             onError: onError
         )
     }
 
-    func makeUIView(context: Context) -> UIView {
-        let container = UIView()
-
-        // Configure WebView
+    func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        context.coordinator.webView = webView
-
-        // URL bar + nav controls
-        let toolbar = makeToolbar(coordinator: context.coordinator)
-        toolbar.translatesAutoresizingMaskIntoConstraints = false
-
-        container.addSubview(toolbar)
-        container.addSubview(webView)
-
-        NSLayoutConstraint.activate([
-            toolbar.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
-            toolbar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            toolbar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            toolbar.heightAnchor.constraint(equalToConstant: 52),
-
-            webView.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
-
-        // Load default search page
-        loadURL("https://freemusicarchive.org", in: webView)
-        return container
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {}
-
-    private func makeToolbar(coordinator: BrowserWebViewCoordinator) -> UIView {
-        let container = UIView()
-        container.backgroundColor = UIColor(Color.bgPrimary)
-
-        // Border bottom
-        let border = UIView()
-        border.backgroundColor = UIColor(Color.glassBorder).withAlphaComponent(0.3)
-        border.translatesAutoresizingMaskIntoConstraints = false
-
-        // Back button
-        let backBtn = UIButton(type: .system)
-        backBtn.setImage(UIImage(systemName: "chevron.left"), for: .normal)
-        backBtn.tintColor = UIColor(Color.roseGold)
-        backBtn.addTarget(coordinator, action: #selector(BrowserWebViewCoordinator.goBack), for: .touchUpInside)
-        backBtn.translatesAutoresizingMaskIntoConstraints = false
-        coordinator.backButton = backBtn
-
-        // Forward button
-        let fwdBtn = UIButton(type: .system)
-        fwdBtn.setImage(UIImage(systemName: "chevron.right"), for: .normal)
-        fwdBtn.tintColor = UIColor(Color.roseGold)
-        fwdBtn.addTarget(coordinator, action: #selector(BrowserWebViewCoordinator.goForward), for: .touchUpInside)
-        fwdBtn.translatesAutoresizingMaskIntoConstraints = false
-        coordinator.forwardButton = fwdBtn
-
-        // URL field
-        let urlField = UITextField()
-        urlField.text = urlText
-        urlField.font = UIFont.systemFont(ofSize: 14)
-        urlField.textColor = UIColor(Color.textPrimary)
-        urlField.backgroundColor = UIColor(Color.glassBorder).withAlphaComponent(0.15)
-        urlField.layer.cornerRadius = 10
-        urlField.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 10, height: 0))
-        urlField.leftViewMode = .always
-        urlField.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 10, height: 0))
-        urlField.rightViewMode = .always
-        urlField.returnKeyType = .go
-        urlField.autocorrectionType = .no
-        urlField.autocapitalizationType = .none
-        urlField.keyboardType = .URL
-        urlField.delegate = coordinator
-        urlField.translatesAutoresizingMaskIntoConstraints = false
-        coordinator.urlField = urlField
-
-        // Reload button
-        let reloadBtn = UIButton(type: .system)
-        reloadBtn.setImage(UIImage(systemName: "arrow.clockwise"), for: .normal)
-        reloadBtn.tintColor = UIColor(Color.roseGold)
-        reloadBtn.addTarget(coordinator, action: #selector(BrowserWebViewCoordinator.reload), for: .touchUpInside)
-        reloadBtn.translatesAutoresizingMaskIntoConstraints = false
-        coordinator.reloadButton = reloadBtn
-
-        container.addSubview(border)
-        container.addSubview(backBtn)
-        container.addSubview(fwdBtn)
-        container.addSubview(urlField)
-        container.addSubview(reloadBtn)
-
-        NSLayoutConstraint.activate([
-            border.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            border.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            border.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            border.heightAnchor.constraint(equalToConstant: 1),
-
-            backBtn.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
-            backBtn.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            backBtn.widthAnchor.constraint(equalToConstant: 36),
-            backBtn.heightAnchor.constraint(equalToConstant: 36),
-
-            fwdBtn.leadingAnchor.constraint(equalTo: backBtn.trailingAnchor, constant: 2),
-            fwdBtn.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            fwdBtn.widthAnchor.constraint(equalToConstant: 36),
-            fwdBtn.heightAnchor.constraint(equalToConstant: 36),
-
-            urlField.leadingAnchor.constraint(equalTo: fwdBtn.trailingAnchor, constant: 8),
-            urlField.trailingAnchor.constraint(equalTo: reloadBtn.leadingAnchor, constant: -8),
-            urlField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            urlField.heightAnchor.constraint(equalToConstant: 36),
-
-            reloadBtn.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
-            reloadBtn.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            reloadBtn.widthAnchor.constraint(equalToConstant: 36),
-            reloadBtn.heightAnchor.constraint(equalToConstant: 36),
-        ])
-
-        return container
-    }
-
-    private func loadURL(_ urlString: String, in webView: WKWebView) {
-        var cleaned = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !cleaned.hasPrefix("http://") && !cleaned.hasPrefix("https://") {
-            cleaned = "https://" + cleaned
-        }
-        if let url = URL(string: cleaned) {
+        
+        // Add KVO Observers
+        context.coordinator.setupObservers(for: webView)
+        
+        // Load initial page
+        if let url = URL(string: initialURL) {
             webView.load(URLRequest(url: url))
         }
+        
+        DispatchQueue.main.async {
+            self.webViewRef = webView
+        }
+        
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: BrowserWebViewCoordinator) {
+        coordinator.removeObservers(from: uiView)
     }
 }
 
-// MARK: - Coordinator (WKNavigationDelegate + UITextFieldDelegate + WKDownloadDelegate)
+// MARK: - Coordinator (WKNavigationDelegate + WKDownloadDelegate)
 
 @MainActor
-final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, UITextFieldDelegate, WKDownloadDelegate {
+final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, WKDownloadDelegate {
     @Binding var urlText: String
     @Binding var isLoading: Bool
+    @Binding var estimatedProgress: Double
+    @Binding var canGoBack: Bool
+    @Binding var canGoForward: Bool
+    
     let onFileDownloaded: (AudioFile) -> Void
     let onError: (String) -> Void
 
-    weak var webView: WKWebView?
-    weak var backButton: UIButton?
-    weak var forwardButton: UIButton?
-    weak var urlField: UITextField?
-    weak var reloadButton: UIButton?
-
     private var downloadDestinationURL: URL?
+    
+    private var progressObserver: NSKeyValueObservation?
+    private var canGoBackObserver: NSKeyValueObservation?
+    private var canGoForwardObserver: NSKeyValueObservation?
+    private var urlObserver: NSKeyValueObservation?
 
     // Recognized audio MIME types and extensions
     private let audioMIMETypes: Set<String> = [
@@ -306,58 +382,63 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, UITextFie
     init(
         urlText: Binding<String>,
         isLoading: Binding<Bool>,
+        estimatedProgress: Binding<Double>,
+        canGoBack: Binding<Bool>,
+        canGoForward: Binding<Bool>,
         onFileDownloaded: @escaping (AudioFile) -> Void,
         onError: @escaping (String) -> Void
     ) {
         _urlText = urlText
         _isLoading = isLoading
+        _estimatedProgress = estimatedProgress
+        _canGoBack = canGoBack
+        _canGoForward = canGoForward
         self.onFileDownloaded = onFileDownloaded
         self.onError = onError
     }
-
-    // MARK: - Button Actions
-
-    @objc func goBack() {
-        webView?.goBack()
+    
+    func setupObservers(for webView: WKWebView) {
+        progressObserver = webView.observe(\.estimatedProgress, options: [.new]) { [weak self] _, change in
+            if let progress = change.newValue {
+                Task { @MainActor [weak self] in self?.estimatedProgress = progress }
+            }
+        }
+        canGoBackObserver = webView.observe(\.canGoBack, options: [.new]) { [weak self] _, change in
+            if let canGoBack = change.newValue {
+                Task { @MainActor [weak self] in self?.canGoBack = canGoBack }
+            }
+        }
+        canGoForwardObserver = webView.observe(\.canGoForward, options: [.new]) { [weak self] _, change in
+            if let canGoForward = change.newValue {
+                Task { @MainActor [weak self] in self?.canGoForward = canGoForward }
+            }
+        }
+        urlObserver = webView.observe(\.url, options: [.new]) { [weak self] _, change in
+            if let url = change.newValue, let urlString = url?.absoluteString {
+                Task { @MainActor [weak self] in self?.urlText = urlString }
+            }
+        }
     }
-
-    @objc func goForward() {
-        webView?.goForward()
-    }
-
-    @objc func reload() {
-        webView?.reload()
-    }
-
-    private func updateNavButtons() {
-        backButton?.isEnabled = webView?.canGoBack ?? false
-        forwardButton?.isEnabled = webView?.canGoForward ?? false
-        backButton?.alpha = (webView?.canGoBack ?? false) ? 1.0 : 0.35
-        forwardButton?.alpha = (webView?.canGoForward ?? false) ? 1.0 : 0.35
+    
+    func removeObservers(from webView: WKWebView) {
+        progressObserver?.invalidate()
+        canGoBackObserver?.invalidate()
+        canGoForwardObserver?.invalidate()
+        urlObserver?.invalidate()
     }
 
     // MARK: - WKNavigationDelegate
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         isLoading = true
-        if let url = webView.url {
-            urlField?.text = url.absoluteString
-        }
-        updateNavButtons()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         isLoading = false
-        if let url = webView.url {
-            urlField?.text = url.absoluteString
-            urlText = url.absoluteString
-        }
-        updateNavButtons()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         isLoading = false
-        updateNavButtons()
     }
 
     /// Intercept navigation actions — if it's a direct link to an audio file, trigger download
@@ -442,27 +523,6 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, UITextFie
         }
     }
 
-    // MARK: - UITextFieldDelegate
-
-    nonisolated func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        textField.resignFirstResponder()
-        let text = textField.text ?? ""
-        Task { @MainActor in
-            var cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            // If it looks like a search query, use DuckDuckGo
-            if !cleaned.contains(".") || cleaned.contains(" ") {
-                let encoded = cleaned.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                cleaned = "https://duckduckgo.com/?q=\(encoded)"
-            } else if !cleaned.hasPrefix("http://") && !cleaned.hasPrefix("https://") {
-                cleaned = "https://" + cleaned
-            }
-            if let url = URL(string: cleaned) {
-                self.webView?.load(URLRequest(url: url))
-            }
-        }
-        return true
-    }
-
     // MARK: - Direct Download (for audio URL extension links)
 
     private func downloadDirectly(from url: URL) {
@@ -521,7 +581,6 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, UITextFie
 
             let audioFile = AudioFile(
                 filename: uniqueURL.lastPathComponent,
-                url: uniqueURL,
                 duration: durationSeconds,
                 fileSize: fileSize
             )

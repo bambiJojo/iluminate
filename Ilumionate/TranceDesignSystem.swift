@@ -2,86 +2,109 @@
 //  TranceDesignSystem.swift
 //  Ilumionate
 //
-//  Trance Design System - Pink Light Mode
-//  Complete implementation following the app_design_spec.md
+//  Trance Design System — Pink Light Mode + Dark Mode
 //
 
 import SwiftUI
 
-// MARK: - Design Tokens
-
-// MARK: - Trance Color Palette
-
-struct TranceColors {
-    // MARK: - Backgrounds
-    static let bgPrimary    = Color(red: 1.0, green: 0.961, blue: 0.969)    // FFF5F7 near-white blush
-    static let bgSecondary  = Color(red: 1.0, green: 0.925, blue: 0.941)    // FFECF0 soft rose tint
-    static let bgCard       = Color(red: 1.0, green: 0.894, blue: 0.910).opacity(0.55) // FFE4E8 glass card fill
-
-    // MARK: - Accents
-    static let roseGold     = Color(red: 0.831, green: 0.471, blue: 0.604)  // D4789A primary accent
-    static let roseDeep     = Color(red: 0.753, green: 0.376, blue: 0.502)  // C06080 pressed / CTA gradient end
-    static let blush        = Color(red: 0.973, green: 0.784, blue: 0.831)  // F8C8D4 soft highlights
-    static let lavender     = Color(red: 0.910, green: 0.816, blue: 0.941)  // E8D0F0 tertiary accent
-    static let warmAccent   = Color(red: 0.961, green: 0.780, blue: 0.557)  // F5C78E amber/warm touches
-
-    // MARK: - Text
-    static let textPrimary   = Color(red: 0.290, green: 0.125, blue: 0.208) // 4A2035 dark plum
-    static let textSecondary = Color(red: 0.541, green: 0.376, blue: 0.459) // 8A6075 mauve
-    static let textLight     = Color(red: 0.690, green: 0.533, blue: 0.596) // B08898 muted labels
-
-    // MARK: - Borders & Glass
-    static let glassBorder  = Color(red: 0.910, green: 0.627, blue: 0.690).opacity(0.3) // E8A0B0
-    static let glassFill    = Color.white.opacity(0.15)
-
-    // MARK: - Brainwave Zone Colors
-    static let bwDelta  = Color(red: 0.545, green: 0.420, blue: 0.659)  // 8B6BA8 indigo
-    static let bwTheta  = Color(red: 0.690, green: 0.490, blue: 0.784)  // B07DC8 lavender-purple
-    static let bwAlpha  = Color(red: 0.831, green: 0.471, blue: 0.604)  // D4789A rose
-    static let bwBeta   = Color(red: 0.910, green: 0.541, blue: 0.604)  // E88A9A warm pink
-    static let bwGamma  = Color(red: 0.961, green: 0.722, blue: 0.478)  // F5B87A peach gold
-
-    // MARK: - Hypnosis Phase Colors
-    static let phaseIntro         = Color(red: 0.471, green: 0.627, blue: 0.824) // 78A0D2 blue
-    static let phaseInduction     = Color(red: 0.306, green: 0.804, blue: 0.769) // 4ECDC4 teal
-    static let phaseDeepener      = Color(red: 0.545, green: 0.420, blue: 0.659) // 8B6BA8 indigo
-    static let phaseFractionation = Color(red: 0.910, green: 0.627, blue: 0.376) // E8A060 amber
-    static let phaseSuggestion    = Color(red: 0.831, green: 0.471, blue: 0.604) // D4789A rose
-    static let phaseAwakening     = Color(red: 0.961, green: 0.780, blue: 0.557) // F5C78E peach
-
-    // MARK: - Flash Mode Colors
-    static let flashOn  = Color(red: 0.973, green: 0.784, blue: 0.831)  // F8C8D4 active pulse
-    static let flashOff = Color(red: 1.0, green: 0.961, blue: 0.969)    // FFF5F7 rest state
-}
+// MARK: - Dynamic Color Helper
 
 extension Color {
-    // MARK: - Convenience accessors for Trance colors
-    static let bgPrimary = TranceColors.bgPrimary
-    static let bgSecondary = TranceColors.bgSecondary
-    static let bgCard = TranceColors.bgCard
-    static let roseGold = TranceColors.roseGold
-    static let roseDeep = TranceColors.roseDeep
-    static let blush = TranceColors.blush
-    static let lavender = TranceColors.lavender
-    static let warmAccent = TranceColors.warmAccent
-    static let textPrimary = TranceColors.textPrimary
-    static let textSecondary = TranceColors.textSecondary
-    static let textLight = TranceColors.textLight
-    static let glassBorder = TranceColors.glassBorder
-    static let glassFill = TranceColors.glassFill
-    static let bwDelta = TranceColors.bwDelta
-    static let bwTheta = TranceColors.bwTheta
-    static let bwAlpha = TranceColors.bwAlpha
-    static let bwBeta = TranceColors.bwBeta
-    static let bwGamma = TranceColors.bwGamma
-    static let phaseIntro = TranceColors.phaseIntro
-    static let phaseInduction = TranceColors.phaseInduction
-    static let phaseDeepener = TranceColors.phaseDeepener
+    /// Creates a color that adapts between light and dark mode.
+    init(light: Color, dark: Color) {
+        self.init(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(dark)
+                : UIColor(light)
+        })
+    }
+}
+
+// MARK: - Trance Color Palette (Light + Dark)
+
+struct TranceColors {
+
+    // MARK: Backgrounds
+    static let bgPrimary   = Color(light: Color(hex: "FFF5F7"), dark: Color(hex: "1A0D14"))
+    static let bgSecondary = Color(light: Color(hex: "FFECF0"), dark: Color(hex: "261219"))
+    static let bgCard      = Color(
+        light: Color(hex: "FFE4E8").opacity(0.55),
+        dark:  Color(hex: "2E1520").opacity(0.65)
+    )
+
+    // MARK: Accents
+    static let roseGold   = Color(light: Color(hex: "D4789A"), dark: Color(hex: "E896B4"))
+    static let roseDeep   = Color(light: Color(hex: "C06080"), dark: Color(hex: "D4789A"))
+    static let blush      = Color(light: Color(hex: "F8C8D4"), dark: Color(hex: "5A2A3A"))
+    static let lavender   = Color(light: Color(hex: "E8D0F0"), dark: Color(hex: "3A2050"))
+    static let warmAccent = Color(light: Color(hex: "F5C78E"), dark: Color(hex: "C4884A"))
+
+    // MARK: Text
+    static let textPrimary   = Color(light: Color(hex: "4A2035"), dark: Color(hex: "F5E8EE"))
+    static let textSecondary = Color(light: Color(hex: "8A6075"), dark: Color(hex: "B08898"))
+    static let textLight     = Color(light: Color(hex: "B08898"), dark: Color(hex: "6E4E5E"))
+
+    // MARK: Borders & Glass
+    static let glassBorder = Color(
+        light: Color(hex: "E8A0B0").opacity(0.3),
+        dark:  Color(hex: "7A3A55").opacity(0.35)
+    )
+    static let glassFill = Color(
+        light: Color.white.opacity(0.15),
+        dark:  Color.white.opacity(0.08)
+    )
+
+    // MARK: Brainwave Zone Colors (vivid — unchanged between modes)
+    static let bwDelta = Color(hex: "8B6BA8")
+    static let bwTheta = Color(hex: "B07DC8")
+    static let bwAlpha = Color(hex: "D4789A")
+    static let bwBeta  = Color(hex: "E88A9A")
+    static let bwGamma = Color(hex: "F5B87A")
+
+    // MARK: Hypnosis Phase Colors (vivid — unchanged)
+    static let phaseIntro         = Color(hex: "78A0D2")
+    static let phaseInduction     = Color(hex: "4ECDC4")
+    static let phaseDeepener      = Color(hex: "8B6BA8")
+    static let phaseFractionation = Color(hex: "E8A060")
+    static let phaseSuggestion    = Color(hex: "D4789A")
+    static let phaseAwakening     = Color(hex: "F5C78E")
+
+    // MARK: Flash Mode Colors
+    // flashOn stays rose in both modes (light therapy needs visibility).
+    // flashOff goes near-black in dark for better contrast / immersion.
+    static let flashOn  = Color(light: Color(hex: "F8C8D4"), dark: Color(hex: "F8C8D4"))
+    static let flashOff = Color(light: Color(hex: "FFF5F7"), dark: Color(hex: "0A0508"))
+}
+
+// MARK: - Color Extension — Semantic Accessors
+
+extension Color {
+    static let bgPrimary          = TranceColors.bgPrimary
+    static let bgSecondary        = TranceColors.bgSecondary
+    static let bgCard             = TranceColors.bgCard
+    static let roseGold           = TranceColors.roseGold
+    static let roseDeep           = TranceColors.roseDeep
+    static let blush              = TranceColors.blush
+    static let lavender           = TranceColors.lavender
+    static let warmAccent         = TranceColors.warmAccent
+    static let textPrimary        = TranceColors.textPrimary
+    static let textSecondary      = TranceColors.textSecondary
+    static let textLight          = TranceColors.textLight
+    static let glassBorder        = TranceColors.glassBorder
+    static let glassFill          = TranceColors.glassFill
+    static let bwDelta            = TranceColors.bwDelta
+    static let bwTheta            = TranceColors.bwTheta
+    static let bwAlpha            = TranceColors.bwAlpha
+    static let bwBeta             = TranceColors.bwBeta
+    static let bwGamma            = TranceColors.bwGamma
+    static let phaseIntro         = TranceColors.phaseIntro
+    static let phaseInduction     = TranceColors.phaseInduction
+    static let phaseDeepener      = TranceColors.phaseDeepener
     static let phaseFractionation = TranceColors.phaseFractionation
-    static let phaseSuggestion = TranceColors.phaseSuggestion
-    static let phaseAwakening = TranceColors.phaseAwakening
-    static let flashOn = TranceColors.flashOn
-    static let flashOff = TranceColors.flashOff
+    static let phaseSuggestion    = TranceColors.phaseSuggestion
+    static let phaseAwakening     = TranceColors.phaseAwakening
+    static let flashOn            = TranceColors.flashOn
+    static let flashOff           = TranceColors.flashOff
 }
 
 // MARK: - Spacing Scale
@@ -97,6 +120,8 @@ struct TranceSpacing {
     static let content: CGFloat = 20   // content horizontal inset
     static let screen: CGFloat = 22    // screen horizontal padding
     static let statusBar: CGFloat = 28 // status bar horizontal padding
+    /// Bottom clearance needed so content/toolbars don't hide under the floating tab bar.
+    static let tabBarClearance: CGFloat = 100
 }
 
 // MARK: - Corner Radius Scale
@@ -145,7 +170,7 @@ struct TranceShadow {
         y: 8.0
     )
 
-    // Phone frame (dev preview only)
+    // Phone frame (dev preview only)2
     static let phoneFrame = (
         color: Color(red: 0.353, green: 0.188, blue: 0.271).opacity(0.12), // 5A3045
         radius: 40.0,
@@ -185,6 +210,37 @@ struct TranceTypography {
 
     // Tab label
     static let tabLabel = Font.system(size: 10, weight: .medium)
+}
+
+// MARK: - Button Styles
+
+struct TranceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(TranceTypography.body)
+            .fontWeight(.semibold)
+            .foregroundStyle(.white)
+            .padding(.horizontal, TranceSpacing.content)
+            .padding(.vertical, TranceSpacing.card)
+            .background(
+                RoundedRectangle(cornerRadius: TranceRadius.button)
+                    .fill(
+                        LinearGradient(
+                            colors: [.roseGold, .roseDeep],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .shadow(
+                color: TranceShadow.button.color,
+                radius: TranceShadow.button.radius,
+                x: TranceShadow.button.x,
+                y: TranceShadow.button.y
+            )
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
 }
 
 // MARK: - Glass Background View Modifier

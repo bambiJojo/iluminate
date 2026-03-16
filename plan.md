@@ -45,15 +45,15 @@ This plan implements the complete "Trance" design specification with pink/rose-g
 - [x] **Create TranceTab enum** with Home, Library, Machine, Store, Profile
 - [x] **Implement TranceTabBar component** with glass morphism
 - [x] **Update ContentView.swift** with new tab structure
-- [ ] **Configure NavigationStack** for each tab
-- [ ] **Implement tab animations** with 0.25s crossfade
+- [x] **Configure NavigationStack** for each tab
+- [x] **Implement tab animations** with 0.25s crossfade
 
 ### 2.2 Navigation Flow Setup
 **Priority: HIGH**
-- [ ] **Setup NavigationLink flows** between screens
-- [ ] **Implement fullScreenCover** for Player and Flash modes
-- [ ] **Configure sheet presentations** for settings/analyzer
-- [ ] **Add transition animations** (0.3s spring for pushes)
+- [x] **Setup NavigationLink flows** between screens
+- [x] **Implement fullScreenCover** for Player and Flash modes
+- [x] **Configure sheet presentations** for settings/analyzer
+- [x] **Add transition animations** (0.3s spring for pushes)
 
 ---
 
@@ -73,8 +73,8 @@ This plan implements the complete "Trance" design specification with pink/rose-g
 - [x] **SessionContinueCard component** - Resume previous session
 - [x] **QuickStartCard component** - Alpha/Theta quick access
 - [x] **LibraryThumbnail component** - 72×72 gradient thumbnails
-- [ ] **Implement staggered animations** for card entrance
-- [ ] **Add pull-to-refresh** functionality
+- [x] **Implement staggered animations** for card entrance
+- [x] **Add pull-to-refresh** functionality
 
 ---
 
@@ -121,7 +121,7 @@ This plan implements the complete "Trance" design specification with pink/rose-g
 **Priority: HIGH**
 - [x] **Full-screen flash view** with frequency control
 - [x] **Bilateral drift mode** with left/right split
-- [ ] **Screen brightness control** (set to 1.0 during flash)
+- [x] **Screen brightness control** (set to 1.0 during flash, restored on stop)
 - [x] **Accessibility check** for reduce motion
 - [x] **Safety warnings** for photosensitive users
 
@@ -132,10 +132,10 @@ This plan implements the complete "Trance" design specification with pink/rose-g
 ### 6.1 Audio Library Redesign
 **Priority: MEDIUM**
 - [x] **Redesign AudioLibraryView.swift** with glass cards
-- [ ] **Implement import options** (files, mic, library)
-- [ ] **Create audio file grid** with waveform previews
-- [ ] **Add analysis status indicators** with phase colors
-- [ ] **Implement batch operations** UI
+- [x] **Implement import options** (files, URL, in-app browser — surfaced in empty state + toolbar)
+- [x] **Create audio file grid** with waveform previews (deterministic per-file waveform thumbnail)
+- [x] **Add analysis status indicators** with phase colors (Trance phase color system)
+- [x] **Implement batch operations** UI (selection mode with delete + analyze all)
 
 ### 6.2 Session Library
 **Priority: MEDIUM**
@@ -171,18 +171,27 @@ This plan implements the complete "Trance" design specification with pink/rose-g
 
 ### 8.1 Settings Redesign
 **Priority: LOW**
-- [x] **Redesign SettingsView.swift** with glass cards
-- [ ] **Implement notification settings** with SyncToggle style
+- [x] **Redesign SettingsView.swift** with glass cards (split into 3 files for SwiftLint compliance)
+- [x] **Implement notification settings** with SyncToggle style (Session Notifications toggle)
 - [ ] **Add accessibility options** (reduce motion, etc.)
-- [ ] **Create data export options**
-- [ ] **Configure app preferences**
+- [x] **Create data export options** (Export Session Data via share sheet)
+- [x] **Configure app preferences** (intensity, duration, bilateral, frequency scale, history toggle)
 
 ### 8.2 Profile Features
 **Priority: LOW**
-- [ ] **Create ProfileView.swift** with user stats
-- [ ] **Implement wellness tracking** visualization
-- [ ] **Add session history** with progress rings
+- [x] **Create ProfileView.swift** with user stats
+- [x] **Implement wellness tracking** visualization (weekly activity bar chart)
+- [x] **Add session history** with completion status and listen time
 - [ ] **Create achievements/milestones** section
+
+### 8.3 Features.json Audit (2026-03-15)
+Comprehensive audit of all features.json items; implementation of 3 MISSING + 8 PARTIAL items:
+- [x] **Listening history opt-in toggle** — `listeningHistoryEnabled` AppStorage key, `false` by default; `SessionHistoryManager.record()` respects it; toggle in Settings → Privacy
+- [x] **Frequency multiplier** — `userFrequencyMultiplier` in `LightEngine` (applied in phase accumulation); 0.5×–2.0× slider in Settings → Session Defaults; synced from `ContentView`
+- [x] **Countdown start screen** — 3-2-1 animated overlay in `SessionPlayerView` before each session begins; haptic feedback at each count; controls auto-hide after playback starts
+- [x] **Color pulse visual mode** — `ColorPulseView` with `TimelineView`-based hue-cycling brightness pulse at therapeutic frequency; visual mode selector (Flash / Color / Bilateral) in `MindMachineView`; safety warning shown before entering
+- [x] **SettingsView SwiftLint compliance** — split into `SettingsView.swift` + `SettingsView+ProfileSection.swift` + `SettingsView+Sections.swift` (all under 400 lines)
+- [x] **LightEngine SwiftLint compliance** — `tick()` function refactored into `updatePerformanceCounters`, `updateBilateralTransition`, `applySessionState`, `advanceFrequency`, `evaluateOscillator` helpers; cyclomatic complexity reduced from 22 → 3 in main tick
 
 ---
 

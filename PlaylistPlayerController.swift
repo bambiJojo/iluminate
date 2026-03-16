@@ -10,7 +10,7 @@ import AVFoundation
 
 @MainActor
 @Observable
-class PlaylistPlayerController {
+class PlaylistPlayerController: Sendable {
 
     // MARK: - Public State
 
@@ -210,7 +210,7 @@ class PlaylistPlayerController {
         guard !filesToAnalyze.isEmpty else { return }
         print("🔍 Analyzing \(filesToAnalyze.count) tracks for dead-time detection...")
 
-        Task.detached {
+        Task(priority: .utility) {
             let analyzer = AudioEnergyAnalyzer()
             for (id, url) in filesToAnalyze {
                 do {
@@ -490,7 +490,7 @@ class PlaylistPlayerController {
 
         playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
 
                 if let audioPlayer = self.audioPlayer {
                     self.currentTime = audioPlayer.currentTime
@@ -517,6 +517,9 @@ class PlaylistPlayerController {
                 }
             }
         }
+
+        // Ensure timer continues during UI interactions
+        RunLoop.main.add(playbackTimer!, forMode: .common)
     }
 
     private func stopPlaybackTimer() {

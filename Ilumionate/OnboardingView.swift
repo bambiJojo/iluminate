@@ -1,6 +1,6 @@
 //
 //  OnboardingView.swift
-//  Ilumionate
+//  LumeSync
 //
 //  Created by Claude on 3/5/26.
 //
@@ -10,43 +10,85 @@ import SwiftUI
 /// Focused onboarding flow for hypnosis audio player + mind machine
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var currentStep = 0
-    @State private var animateElements = false
+    
+    // Geometry Effect namespace for smooth transitions
+    @Namespace private var animation
+    
+    // State to track the current phase of onboarding
+    @State private var currentPhase: OnboardingPhase = .welcome
+    
+    // User selections
+    @State private var selectedGoal: OnboardingGoal? = nil
+    
+    // Animation flags for entry/exit
+    @State private var isAnimating: Bool = false
     @State private var showWelcomeSession = false
-    @State private var hasCompletedIntroSession = false
     @State private var lightEngine = LightEngine()
-
-    let totalSteps = 5
-
+    
+    // Complex Animation Properties (from reference design style)
+    @State private var characterOffset: CGFloat = 0
+    @State private var bgOffset: CGFloat = .zero
+    @State private var textOffset: CGFloat = .zero
+    
+    // Phases of the onboarding flow
+    enum OnboardingPhase: Int, CaseIterable {
+        case welcome = 0
+        case questionnaire
+        case personalizedResponse
+        case warning
+        case completed
+    }
+    
     var body: some View {
         ZStack {
-            // Dynamic background that changes with steps
-            backgroundForStep(currentStep)
+            // Background
+            backgroundForPhase(currentPhase)
                 .ignoresSafeArea()
-                .animation(.easeInOut(duration: 1.0), value: currentStep)
-
-            VStack(spacing: 0) {
-                // Progress indicator
-                progressIndicator
-
+                .animation(.easeInOut(duration: 0.8), value: currentPhase)
+            
+            VStack {
+                // Header (Progress or Welcome)
+                if currentPhase != .welcome && currentPhase != .completed {
+                    progressIndicator()
+                        .padding(.top, 20)
+                }
+                
                 Spacer()
-
-                // Step content
-                stepContent
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
-                    ))
-
+                
+                // Main Content
+                Group {
+                    switch currentPhase {
+                    case .welcome:
+                        welcomePhase
+                            .transition(.asymmetric(insertion: .opacity, removal: .move(edge: .leading).combined(with: .opacity)))
+                    case .questionnaire:
+                        questionnairePhase
+                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+                    case .personalizedResponse:
+                        personalizedResponsePhase
+                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+                    case .warning:
+                        warningPhase
+                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+                    case .completed:
+                        completedPhase
+                            .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
+                    }
+                }
+                
                 Spacer()
-
-                // Navigation buttons
-                navigationButtons
-                    .padding(.bottom, TranceSpacing.cardMargin)
+                
+                // Footer (Navigation)
+                navigationFooter
+                    .padding(.bottom, 40)
             }
+            .padding(.horizontal, 24)
         }
         .onAppear {
-            animateElements = true
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+                isAnimating = true
+                characterOffset = -20
+            }
         }
         .fullScreenCover(isPresented: $showWelcomeSession) {
             if let welcomeSession = loadWelcomeSession() {
@@ -55,769 +97,328 @@ struct OnboardingView: View {
                     engine: lightEngine
                 )
                 .onDisappear {
-                    hasCompletedIntroSession = true
                     withAnimation(.easeInOut(duration: 0.8)) {
-                        currentStep = 4 // Move to final step
+                        currentPhase = .completed
                     }
                 }
             }
         }
-    }
-
-    // MARK: - Progress Indicator
-
-    private var progressIndicator: some View {
-        VStack(spacing: TranceSpacing.card) {
-            HStack(spacing: TranceSpacing.list) {
-                ForEach(0..<totalSteps, id: \.self) { step in
-                    Circle()
-                        .fill(step <= currentStep ? Color.bwTheta : Color.roseGold)
-                        .frame(width: step == currentStep ? 12 : 8, height: step == currentStep ? 12 : 8)
-                        .scaleEffect(step == currentStep && animateElements ? 1.2 : 1.0)
-                        .animation(.easeInOut(duration: 0.3), value: currentStep)
-                }
-            }
-
-            Text("Step \(currentStep + 1) of \(totalSteps)")
-                .font(TranceTypography.caption)
-                .foregroundStyle(.secondary)
+        .persistentSystemOverlays(.hidden)
+        .statusBarHidden()
+        .onAppear {
+            AppDelegate.orientationLock = UIInterfaceOrientationMask.portrait
         }
-        .padding(.top, TranceSpacing.screen)
-    }
-
-    // MARK: - Step Content
-
-    @ViewBuilder
-    private var stepContent: some View {
-        Group {
-            switch currentStep {
-            case 0:
-                welcomeStep
-            case 1:
-                hypnosisPlayerStep
-            case 2:
-                mindMachineStep
-            case 3:
-                positioningInstructionsStep
-            case 4:
-                completedStep
-            default:
-                EmptyView()
-            }
-        }
-        .padding(.horizontal, TranceSpacing.cardMargin)
-    }
-
-    // MARK: - Step Views
-
-    private var welcomeStep: some View {
-        VStack(spacing: TranceSpacing.screen) {
-            // Hero icon with dual symbols
-            HStack(spacing: TranceSpacing.cardMargin) {
-                // Hypnosis/Audio symbol
-                ZStack {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color.bwGamma.opacity(0.3),
-                                    Color.roseDeep.opacity(0.1),
-                                    Color.clear
-                                ],
-                                center: .center,
-                                startRadius: 15,
-                                endRadius: 60
-                            )
-                        )
-                        .frame(width: 120, height: 120)
-
-                    Image(systemName: "waveform")
-                        .font(.system(size: 40, weight: .light))
-                        .foregroundStyle(Color.bwGamma)
-                }
-                .scaleEffect(animateElements ? 1.0 : 0.8)
-                .opacity(animateElements ? 1.0 : 0.0)
-                .animation(.spring(response: 0.8, dampingFraction: 0.6), value: animateElements)
-
-                // Mind Machine/Light symbol
-                ZStack {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color.lavender.opacity(0.3),
-                                    Color.warmAccent.opacity(0.1),
-                                    Color.clear
-                                ],
-                                center: .center,
-                                startRadius: 15,
-                                endRadius: 60
-                            )
-                        )
-                        .frame(width: 120, height: 120)
-
-                    Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 40, weight: .light))
-                        .foregroundStyle(Color.lavender)
-                }
-                .scaleEffect(animateElements ? 1.0 : 0.8)
-                .opacity(animateElements ? 1.0 : 0.0)
-                .animation(.spring(response: 0.8, dampingFraction: 0.6).delay(0.2), value: animateElements)
-            }
-
-            VStack(spacing: TranceSpacing.card) {
-                Text("Welcome to Ilumionate")
-                    .font(TranceTypography.screenTitle)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-
-                Text("Your personal hypnosis audio player and mind machine for deep relaxation and transformation")
-                    .font(TranceTypography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(4)
-            }
-            .opacity(animateElements ? 1.0 : 0.0)
-            .offset(y: animateElements ? 0 : 20)
-            .animation(.easeOut(duration: 0.8).delay(0.5), value: animateElements)
+        .onDisappear {
+            AppDelegate.orientationLock = UIInterfaceOrientationMask.all
         }
     }
-
-    private var hypnosisPlayerStep: some View {
-        VStack(spacing: TranceSpacing.cardMargin) {
-            // Animated audio waveform
-            VStack(spacing: TranceSpacing.card) {
-                HStack(spacing: TranceSpacing.list) {
-                    ForEach(0..<8, id: \.self) { index in
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color.bwGamma.opacity(0.8))
-                            .frame(width: 6, height: CGFloat([25, 45, 35, 55, 40, 60, 30, 20][index]))
-                            .scaleEffect(y: animateElements ? 1.0 : 0.3)
-                            .animation(
-                                .easeInOut(duration: 1.2)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(index) * 0.15),
-                                value: animateElements
-                            )
-                    }
-                }
-
-                Image(systemName: "headphones")
-                    .font(.system(size: 32, weight: .light))
-                    .foregroundStyle(Color.roseDeep)
-            }
-
-            VStack(spacing: TranceSpacing.card) {
-                Text("Hypnosis Audio Player")
-                    .font(TranceTypography.screenTitle)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-
-                VStack(spacing: TranceSpacing.list) {
-                    featurePoint(
-                        icon: "square.and.arrow.down",
-                        title: "Import Your Files",
-                        description: "Add your own hypnosis sessions, meditations, and audio files"
-                    )
-
-                    featurePoint(
-                        icon: "music.note.list",
-                        title: "Create Playlists",
-                        description: "Organize your sessions into collections for different goals"
-                    )
-
-                    featurePoint(
-                        icon: "play.circle.fill",
-                        title: "Seamless Playback",
-                        description: "High-quality audio playback with progress tracking"
-                    )
-                }
-            }
-        }
-    }
-
-    private var mindMachineStep: some View {
-        VStack(spacing: TranceSpacing.cardMargin) {
-            // Interactive light demonstration
-            VStack(spacing: TranceSpacing.card) {
-                ZStack {
-                    Circle()
-                        .stroke(Color.lavender.opacity(0.3), lineWidth: 2)
-                        .frame(width: 120, height: 120)
-
-                    Circle()
-                        .fill(Color.warmAccent)
-                        .frame(width: 80, height: 80)
-                        .opacity(animateElements ? 0.8 : 0.2)
-                        .scaleEffect(animateElements ? 1.0 : 0.6)
-                        .animation(
-                            .easeInOut(duration: 1.0)
-                            .repeatForever(autoreverses: true),
-                            value: animateElements
-                        )
-
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 28, weight: .light))
-                        .foregroundStyle(.white)
-                }
-
-                Text("Light Synchronization")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(spacing: TranceSpacing.card) {
-                Text("Mind Machine")
-                    .font(TranceTypography.screenTitle)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-
-                VStack(spacing: TranceSpacing.list) {
-                    featurePoint(
-                        icon: "lightbulb.fill",
-                        title: "Built-in Sessions",
-                        description: "Pre-designed light therapy sessions for relaxation and focus"
-                    )
-
-                    featurePoint(
-                        icon: "waveform.path",
-                        title: "Audio Sync",
-                        description: "Synchronize pulsing lights with your hypnosis audio files"
-                    )
-
-                    featurePoint(
-                        icon: "brain.head.profile",
-                        title: "Brainwave Entrainment",
-                        description: "Gentle light patterns guide your mind into desired states"
-                    )
-                }
-            }
-        }
-    }
-
-    private var positioningInstructionsStep: some View {
-        VStack(spacing: TranceSpacing.cardMargin) {
-            // Visual demonstration of phone positioning
-            VStack(spacing: TranceSpacing.card) {
-                // Phone positioning diagram
-                ZStack {
-                    // Face outline
-                    Ellipse()
-                        .stroke(Color.lavender.opacity(0.3), lineWidth: 2)
-                        .frame(width: 100, height: 130)
-
-                    // Closed eyes
-                    HStack(spacing: 20) {
-                        // Left eye
-                        Capsule()
-                            .fill(Color.roseDeep.opacity(0.6))
-                            .frame(width: 16, height: 4)
-
-                        // Right eye
-                        Capsule()
-                            .fill(Color.roseDeep.opacity(0.6))
-                            .frame(width: 16, height: 4)
-                    }
-                    .offset(y: -20)
-
-                    // Phone above face
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.warmAccent.opacity(0.8))
-                        .frame(width: 60, height: 120)
-                        .offset(y: -90)
-                        .scaleEffect(animateElements ? 1.0 : 0.8)
-                        .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: animateElements)
-
-                    // Light rays emanating from phone
-                    ForEach(0..<5, id: \.self) { index in
-                        Rectangle()
-                            .fill(Color.bwAlpha.opacity(0.4))
-                            .frame(width: 2, height: 30)
-                            .offset(y: -60)
-                            .rotationEffect(.degrees(Double(index - 2) * 15))
-                            .opacity(animateElements ? 0.8 : 0.2)
-                            .animation(
-                                .easeInOut(duration: 1.5)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(index) * 0.1),
-                                value: animateElements
-                            )
-                    }
-                }
-                .frame(height: 200)
-
-                Text("Position & Close Eyes")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(spacing: TranceSpacing.card) {
-                Text("How to Use the Light Machine")
-                    .font(TranceTypography.screenTitle)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-
-                VStack(spacing: TranceSpacing.list) {
-                    positioningStep(
-                        number: 1,
-                        icon: "iphone.gen3",
-                        title: "Position Your Phone",
-                        description: "Hold your phone 6-12 inches directly above your face, screen facing down"
-                    )
-
-                    positioningStep(
-                        number: 2,
-                        icon: "eye.slash.fill",
-                        title: "Close Your Eyes",
-                        description: "Gently close your eyes and let the light penetrate through your eyelids"
-                    )
-
-                    positioningStep(
-                        number: 3,
-                        icon: "brain.head.profile",
-                        title: "Allow Deep Trance",
-                        description: "Let the pulsing light gently massage your mind and guide you into deep relaxation"
-                    )
-                }
-            }
-        }
-    }
-
-    private var prepareForSessionStep: some View {
-        VStack(spacing: TranceSpacing.cardMargin) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64, weight: .light))
-                .foregroundStyle(Color.green)
-
-            VStack(spacing: TranceSpacing.card) {
-                Text("Prepare for Your First Session")
-                    .font(TranceTypography.screenTitle)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-
-                VStack(spacing: TranceSpacing.list) {
-                    preparationTip(
-                        icon: "moon.stars.fill",
-                        text: "Find a quiet, comfortable space"
-                    )
-
-                    preparationTip(
-                        icon: "eye.fill",
-                        text: "Sit upright with a relaxed posture"
-                    )
-
-                    preparationTip(
-                        icon: "speaker.wave.2.fill",
-                        text: "Optional: Use headphones for audio sessions"
-                    )
-
-                    preparationTip(
-                        icon: "clock.fill",
-                        text: "Allow 3 minutes for your introduction"
-                    )
-                }
-            }
-        }
-    }
-
-    private var introSessionStep: some View {
-        VStack(spacing: TranceSpacing.cardMargin) {
-            // Pulsing session preview
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color.lavender.opacity(0.6),
-                                Color.roseDeep.opacity(0.3),
-                                Color.clear
-                            ],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 100
-                        )
-                    )
-                    .frame(width: 180, height: 180)
-
-                VStack(spacing: TranceSpacing.list) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 48, weight: .light))
-                        .foregroundStyle(.primary)
-
-                    Text("3 min")
-                        .font(TranceTypography.sectionTitle)
-                        .foregroundStyle(.primary)
-                }
-            }
-
-            VStack(spacing: TranceSpacing.card) {
-                Text("Ready for Your Introduction?")
-                    .font(TranceTypography.screenTitle)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-
-                Text("Experience a gentle 3-minute session designed to introduce you to the fundamentals of light therapy")
-                    .font(TranceTypography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Button {
-                    TranceHaptics.shared.light()
-                    showWelcomeSession = true
-                } label: {
-                    HStack(spacing: TranceSpacing.list) {
-                        Image(systemName: "play.fill")
-                        Text("Start Introduction Session")
-                    }
-                    .font(TranceTypography.body)
-                    .foregroundStyle(.white)
-                    .padding(TranceSpacing.card)
-                    .background(
-                        RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                            .fill(Color.bwTheta)
-                            .shadow(
-                                color: Color.bwTheta.opacity(0.3),
-                                radius: 12,
-                                x: 0,
-                                y: 6
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var completedStep: some View {
-        VStack(spacing: TranceSpacing.screen) {
-            // Success animation
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color.green.opacity(0.3),
-                                Color.bwAlpha.opacity(0.1),
-                                Color.clear
-                            ],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 80
-                        )
-                    )
-                    .frame(width: 160, height: 160)
-
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 64, weight: .light))
-                    .foregroundStyle(Color.green)
-            }
-            .scaleEffect(animateElements ? 1.0 : 0.8)
-            .opacity(animateElements ? 1.0 : 0.0)
-            .animation(.spring(response: 0.8, dampingFraction: 0.6), value: animateElements)
-
-            VStack(spacing: TranceSpacing.card) {
-                Text("You're Ready to Begin!")
-                    .font(TranceTypography.screenTitle)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-
-                Text("Your personal hypnosis and light therapy experience awaits. Import your audio files and start your journey to deeper relaxation and transformation.")
-                    .font(TranceTypography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(4)
-
-                VStack(spacing: TranceSpacing.list) {
-                    nextStepPoint(
-                        icon: "waveform.circle.fill",
-                        text: "Import your hypnosis audio files"
-                    )
-
-                    nextStepPoint(
-                        icon: "lightbulb.circle.fill",
-                        text: "Try built-in mind machine sessions"
-                    )
-
-                    nextStepPoint(
-                        icon: "music.note.list",
-                        text: "Create personalized playlists"
-                    )
-                }
-            }
-        }
-    }
-
-    // MARK: - Navigation Buttons
-
-    private var navigationButtons: some View {
+    
+    // MARK: - Navigation Footer
+    private var navigationFooter: some View {
         HStack {
-            if currentStep > 0 {
-                Button {
-                    TranceHaptics.shared.light()
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        currentStep -= 1
-                    }
-                } label: {
-                    HStack(spacing: TranceSpacing.list) {
-                        Image(systemName: "chevron.left")
-                        Text("Previous")
-                    }
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, TranceSpacing.cardMargin)
-                    .padding(.vertical, TranceSpacing.card)
-                    .background(
-                        RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                            .fill(Color.roseGold.opacity(0.3))
-                    )
+            // Back Button
+            if currentPhase != .welcome && currentPhase != .completed {
+                Button(action: previousPhase) {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 50, height: 50)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(Circle())
                 }
-                .buttonStyle(.plain)
             }
-
+            
             Spacer()
-
-            if currentStep < totalSteps - 1 {
-                Button {
-                    TranceHaptics.shared.light()
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        currentStep += 1
-                        animateElements = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            animateElements = true
-                        }
+            
+            // Next / Continue Button
+            Button(action: nextPhase) {
+                HStack {
+                    Text(buttonTextForPhase(currentPhase))
+                        .font(TranceTypography.body)
+                        .fontWeight(.semibold)
+                    
+                    if currentPhase != .questionnaire {
+                        Image(systemName: "arrow.right")
                     }
-                } label: {
-                    HStack(spacing: TranceSpacing.list) {
-                        Text(currentStep == 3 ? "Let's Begin" : "Next")
-                        Image(systemName: "chevron.right")
-                    }
-                    .font(TranceTypography.body)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, TranceSpacing.cardMargin)
-                    .padding(.vertical, TranceSpacing.card)
-                    .background(
-                        RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                            .fill(Color.bwTheta)
-                            .shadow(
-                                color: Color.bwTheta.opacity(0.3),
-                                radius: 8,
-                                x: 0,
-                                y: 4
-                            )
-                    )
                 }
-                .buttonStyle(.plain)
-            } else {
-                Button {
-                    TranceHaptics.shared.medium()
-                    UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-                    dismiss()
-                } label: {
-                    HStack(spacing: TranceSpacing.list) {
-                        Text("Start Using Ilumionate")
-                        Image(systemName: "arrow.right.circle.fill")
-                    }
-                    .font(TranceTypography.body)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, TranceSpacing.cardMargin)
-                    .padding(.vertical, TranceSpacing.card)
-                    .background(
-                        RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                            .fill(Color.green)
-                            .shadow(
-                                color: Color.green.opacity(0.3),
-                                radius: 12,
-                                x: 0,
-                                y: 6
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
+                .foregroundColor(.white)
+                .padding(.horizontal, (currentPhase == .questionnaire && selectedGoal == nil) ? 0 : 20)
+                .frame(width: (currentPhase == .questionnaire && selectedGoal == nil) ? 50 : nil, height: 50)
+                .background(Color.bwTheta)
+                .clipShape(Capsule())
+                .shadow(color: Color.bwTheta.opacity(0.3), radius: 10, x: 0, y: 5)
             }
-        }
-        .padding(.horizontal, TranceSpacing.cardMargin)
-    }
-
-    // MARK: - Background Views
-
-    @ViewBuilder
-    private func backgroundForStep(_ step: Int) -> some View {
-        switch step {
-        case 0:
-            // Welcome - soft gradient
-            LinearGradient(
-                colors: [
-                    Color.white,
-                    Color.roseGold.opacity(0.3)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case 1, 2:
-            // Learning - gentle animation
-            Color.bgPrimary
-        case 3:
-            // Positioning instructions - focused
-            LinearGradient(
-                colors: [
-                    Color.warmAccent.opacity(0.1),
-                    Color.lavender.opacity(0.1),
-                    Color.white
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        case 4:
-            // Completion - success
-            LinearGradient(
-                colors: [
-                    Color.green.opacity(0.1),
-                    Color.white
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        default:
-            Color.clear
+            .disabled(currentPhase == .questionnaire && selectedGoal == nil)
+            .opacity((currentPhase == .questionnaire && selectedGoal == nil) ? 0.5 : 1)
+            .animation(.easeInOut, value: selectedGoal)
         }
     }
-
-    // MARK: - Helper Views
-
-    private func positioningStep(number: Int, icon: String, title: String, description: String) -> some View {
-        HStack(spacing: TranceSpacing.card) {
-            // Step number with icon
-            VStack(spacing: 4) {
-                ZStack {
-                    Circle()
-                        .fill(Color.warmAccent.opacity(0.3))
-                        .frame(width: 40, height: 40)
-
-                    Text("\(number)")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.warmAccent)
-                }
-
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundStyle(Color.lavender)
-            }
-
-            // Content
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(TranceTypography.body)
-                    .foregroundStyle(.primary)
-
-                Text(description)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, TranceSpacing.list)
-    }
-
-    private func featurePoint(icon: String, title: String, description: String) -> some View {
-        HStack(spacing: TranceSpacing.card) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(Color.bwTheta)
-                .frame(width: 24)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(TranceTypography.body)
-                    .foregroundStyle(.primary)
-
-                Text(description)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            Spacer()
-        }
-        .padding(TranceSpacing.list)
-        .background(
-            RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                .fill(Color.white.opacity(0.8))
-        )
-    }
-
-    private func workflowStep(number: Int, text: String) -> some View {
-        HStack(spacing: TranceSpacing.card) {
+    
+    // MARK: - Phases
+    
+    // 1. Welcome Phase
+    private var welcomePhase: some View {
+        VStack(spacing: 30) {
             ZStack {
                 Circle()
-                    .fill(Color.bwTheta.opacity(0.2))
-                    .frame(width: 32, height: 32)
-
-                Text("\(number)")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(Color.bwTheta)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.bwGamma.opacity(0.4), Color.clear],
+                            center: .center, startRadius: 20, endRadius: 150
+                        )
+                    )
+                    .frame(width: 300, height: 300)
+                    .scaleEffect(isAnimating ? 1.05 : 0.95)
+                    .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: isAnimating)
+                
+                Image(systemName: "sparkles")
+                    .font(.system(size: 80, weight: .light))
+                    .foregroundColor(Color.warmAccent)
+                    .offset(y: characterOffset)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.5).repeatForever(autoreverses: true), value: characterOffset)
+                    .onAppear {
+                        characterOffset = 10
+                    }
             }
-
-            Text(text)
-                .font(TranceTypography.body)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-
-            Spacer()
+            .frame(height: 350)
+            
+            VStack(spacing: 16) {
+                Text("Welcome to LumeSync")
+                    .font(TranceTypography.screenTitle)
+                    .foregroundColor(.primary)
+                
+                Text("Your personal hypnosis audio player and mind machine for deep relaxation and transformation.")
+                    .font(TranceTypography.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
         }
-        .padding(TranceSpacing.list)
     }
-
-    private func preparationTip(icon: String, text: String) -> some View {
-        HStack(spacing: TranceSpacing.card) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(Color.bwAlpha)
-                .frame(width: 24)
-
-            Text(text)
-                .font(TranceTypography.body)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-
-            Spacer()
+    
+    // 2. Questionnaire Phase
+    private var questionnairePhase: some View {
+        VStack(alignment: .leading, spacing: 30) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("What brings you here?")
+                    .font(TranceTypography.screenTitle)
+                
+                Text("Help us tailor your mind machine experience.")
+                    .font(TranceTypography.body)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.bottom, 20)
+            
+            VStack(spacing: 16) {
+                ForEach(OnboardingGoal.allCases) { goal in
+                    Button {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            selectedGoal = goal
+                        }
+                    } label: {
+                        HStack(spacing: 16) {
+                            Image(systemName: goal.icon)
+                                .font(.title2)
+                                .foregroundColor(selectedGoal == goal ? .white : .bwTheta)
+                                .frame(width: 30)
+                            
+                            Text(goal.rawValue)
+                                .font(TranceTypography.body)
+                                .foregroundColor(selectedGoal == goal ? .white : .primary)
+                            
+                            Spacer()
+                            
+                            if selectedGoal == goal {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.white)
+                                    .matchedGeometryEffect(id: "check", in: animation)
+                            }
+                        }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(selectedGoal == goal ? Color.bwTheta : Color.white.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(selectedGoal == goal ? Color.clear : Color.bwAlpha.opacity(0.3), lineWidth: 1)
+                        )
+                        .scaleEffect(selectedGoal == goal ? 1.02 : 1.0)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
-        .padding(TranceSpacing.list)
-        .background(
-            RoundedRectangle(cornerRadius: TranceRadius.button)
-                .fill(Color.bwAlpha.opacity(0.1))
-        )
     }
-
-    private func nextStepPoint(icon: String, text: String) -> some View {
-        HStack(spacing: TranceSpacing.card) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(Color.green)
-                .frame(width: 24)
-
-            Text(text)
-                .font(TranceTypography.body)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-
-            Spacer()
+    
+    // 3. Personalized Response Phase
+    private var personalizedResponsePhase: some View {
+        VStack(spacing: 40) {
+            if let goal = selectedGoal {
+                // Animated Icon specific to goal
+                ZStack {
+                    Circle()
+                        .fill(Color.bwTheta.opacity(0.2))
+                        .frame(width: 140, height: 140)
+                    
+                    Image(systemName: goal.icon)
+                        .font(.system(size: 60))
+                        .foregroundColor(.bwTheta)
+                        .scaleEffect(isAnimating ? 1.1 : 0.9)
+                        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
+                }
+                .padding(.top, 40)
+                
+                VStack(spacing: 20) {
+                    Text(goal.personalizedResponseTitle)
+                        .font(TranceTypography.screenTitle)
+                        .multilineTextAlignment(.center)
+                    
+                    Text(goal.personalizedResponseDescription)
+                        .font(TranceTypography.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+                .padding(.horizontal, 10)
+            }
         }
-        .padding(TranceSpacing.list)
-        .background(
-            RoundedRectangle(cornerRadius: TranceRadius.button)
-                .fill(Color.green.opacity(0.1))
-        )
     }
-
-    // MARK: - Helper Methods
-
+    
+    // 4. Warning Phase
+    private var warningPhase: some View {
+        VStack(spacing: 30) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 80))
+                .foregroundColor(.roseDeep)
+                .shadow(color: .roseDeep.opacity(0.5), radius: 10, x: 0, y: 5)
+                .padding(.top, 20)
+            
+            VStack(spacing: 16) {
+                Text("Important Warning")
+                    .font(TranceTypography.screenTitle)
+                    .foregroundColor(.roseDeep)
+                
+                Text("This app uses flashing lights and visual patterns as part of the brainwave entrainment process.")
+                    .font(TranceTypography.body.bold())
+                    .multilineTextAlignment(.center)
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    warningBullet("Do NOT use this app if you have a history of epilepsy or seizures.")
+                    warningBullet("Close your eyes during light sessions. The light will penetrate your eyelids.")
+                    warningBullet("Hold the screen 6-12 inches from your face.")
+                }
+                .padding(.top, 10)
+                .padding(.horizontal, 10)
+            }
+        }
+    }
+    
+    // 5. Completed Phase
+    private var completedPhase: some View {
+        VStack(spacing: 40) {
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.green.opacity(0.4), Color.clear],
+                            center: .center, startRadius: 20, endRadius: 150
+                        )
+                    )
+                    .frame(width: 200, height: 200)
+                
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 80, weight: .light))
+                    .foregroundColor(.green)
+            }
+            
+            VStack(spacing: 16) {
+                Text("You're ready.")
+                    .font(TranceTypography.screenTitle)
+                
+                Text("Your LumeSync journey begins now. Find a quiet space, upload an audio file, and let the mind machine guide you.")
+                    .font(TranceTypography.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+    
+    // MARK: - Helpers
+    
+    private func backgroundForPhase(_ phase: OnboardingPhase) -> some View {
+        switch phase {
+        case .welcome:
+            return LinearGradient(colors: [Color.bgPrimary, Color.roseGold.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .questionnaire:
+            return LinearGradient(colors: [Color.bgPrimary, Color.bgSecondary], startPoint: .top, endPoint: .bottom)
+        case .personalizedResponse:
+            return LinearGradient(colors: [Color.bgSecondary, Color.lavender.opacity(0.2)], startPoint: .top, endPoint: .bottom)
+        case .warning:
+            return LinearGradient(colors: [Color.bgPrimary, Color.roseDeep.opacity(0.1)], startPoint: .top, endPoint: .bottom)
+        case .completed:
+            return LinearGradient(colors: [Color.bgPrimary, Color.green.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+    
+    private func buttonTextForPhase(_ phase: OnboardingPhase) -> String {
+        switch phase {
+        case .welcome: return "Get Started"
+        case .questionnaire: return selectedGoal != nil ? "Continue" : ""
+        case .personalizedResponse: return "Next"
+        case .warning: return "I Understand & Accept"
+        case .completed: return "Enter LumeSync"
+        }
+    }
+    
+    private func nextPhase() {
+        TranceHaptics.shared.medium()
+        if currentPhase == .completed {
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+            dismiss()
+        } else if let next = OnboardingPhase(rawValue: currentPhase.rawValue + 1) {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                currentPhase = next
+            }
+        }
+    }
+    
+    private func previousPhase() {
+        TranceHaptics.shared.light()
+        if let prev = OnboardingPhase(rawValue: currentPhase.rawValue - 1) {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                currentPhase = prev
+            }
+        }
+    }
+    
+    private func warningBullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 6))
+                .foregroundColor(.roseDeep)
+                .padding(.top, 6)
+            
+            Text(text)
+                .font(TranceTypography.caption)
+                .foregroundColor(.secondary)
+            
+            Spacer(minLength: 0)
+        }
+    }
+    
+    private func progressIndicator() -> some View {
+        HStack(spacing: 8) {
+            ForEach(1..<OnboardingPhase.allCases.count - 1, id: \.self) { index in
+                Capsule()
+                    .fill(currentPhase.rawValue >= index ? Color.bwTheta : Color.gray.opacity(0.3))
+                    .frame(width: currentPhase.rawValue == index ? 24 : 8, height: 8)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: currentPhase)
+            }
+        }
+    }
+    
     private func loadWelcomeSession() -> LightSession? {
         return try? LightScoreReader.loadSession(named: "welcome_introduction")
     }
-}
-
-#Preview {
-    OnboardingView()
 }

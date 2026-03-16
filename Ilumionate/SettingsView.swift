@@ -1,35 +1,92 @@
 //
 //  SettingsView.swift
-//  Ilumionate
+//  LumeSync
 //
-//  Redesigned SettingsView for Trance UI
+//  Core struct, properties, body and helper utilities for Settings.
+//  Sections are split into SettingsView+ProfileSection and SettingsView+Sections.
 //
 
 import SwiftUI
 
+// MARK: - App Info helpers
+
+extension Bundle {
+    var appVersion: String { infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0" }
+    var buildNumber: String { infoDictionary?["CFBundleVersion"] as? String ?? "1" }
+}
+
+// MARK: - SettingsView
+
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    
+    @Environment(\.openURL) private var openURL
+
+    // Profile
+    @AppStorage("profileName") var profileName = ""
+    @AppStorage("profileGoal") var profileGoal = ""
+    @State var isEditingProfile = false
+    @State var draftName = ""
+    @State var draftGoal = ""
+
+    // Appearance
+    @AppStorage("appearanceMode") var appearanceModeRaw = "system"
+
+    enum AppearanceMode: String, CaseIterable {
+        case system = "system"
+        case light  = "light"
+        case dark   = "dark"
+
+        var label: String {
+            switch self {
+            case .system: return "System"
+            case .light:  return "Light"
+            case .dark:   return "Dark"
+            }
+        }
+
+        var colorScheme: ColorScheme? {
+            switch self {
+            case .system: return nil
+            case .light:  return .light
+            case .dark:   return .dark
+            }
+        }
+    }
+
+    var appearanceMode: Binding<AppearanceMode> {
+        Binding(
+            get: { AppearanceMode(rawValue: appearanceModeRaw) ?? .system },
+            set: { appearanceModeRaw = $0.rawValue }
+        )
+    }
+
     // Core Settings
-    @State private var hapticFeedbackEnabled = true
-    @State private var autoLockEnabled = true
-    @State private var sessionNotifications = true
-    @State private var breathingGuidanceEnabled = true
-    
+    @AppStorage("hapticFeedbackEnabled") var hapticFeedbackEnabled = true
+    @AppStorage("autoLockEnabled") var autoLockEnabled = true
+    @AppStorage("sessionNotifications") var sessionNotifications = true
+    @AppStorage("breathingGuidanceEnabled") var breathingGuidanceEnabled = true
+
     // Session Defaults
-    @State private var defaultIntensity = 0.7
-    @State private var preferredSessionDuration = 15.0
-    @State private var bilateralModeDefault = false
-    
+    @AppStorage("defaultIntensity") var defaultIntensity = 0.7
+    @AppStorage("preferredSessionDuration") var preferredSessionDuration = 15.0
+    @AppStorage("bilateralModeDefault") var bilateralModeDefault = false
+    @AppStorage("userFrequencyMultiplier") var userFrequencyMultiplier = 1.0
+
     // Audio & Display
-    @State private var audioQualityMode = AudioQuality.high
-    @State private var displayBrightness = 0.8
-    @State private var keepScreenOn = true
-    
+    @AppStorage("audioQualityRaw") var audioQualityRaw = "High"
+    @AppStorage("displayBrightness") var displayBrightness = 0.8
+    @AppStorage("keepScreenOn") var keepScreenOn = true
+
     // Privacy
-    @State private var analyticsEnabled = false
-    @State private var showDeveloperOptions = false
-    
+    @AppStorage("analyticsEnabled") var analyticsEnabled = false
+    @AppStorage("listeningHistoryEnabled") var listeningHistoryEnabled = false
+
+    @State var showDeveloperOptions = false
+    @State var showClearDataAlert = false
+    @State var showClearDataDone = false
+    @State var showExportDone = false
+    @State var showAbout = false
+
     enum AudioQuality: String, CaseIterable {
         case low = "Low"
         case medium = "Medium"
@@ -37,23 +94,37 @@ struct SettingsView: View {
         case lossless = "Lossless"
     }
 
+    var audioQualityMode: Binding<AudioQuality> {
+        Binding(
+            get: { AudioQuality(rawValue: audioQualityRaw) ?? .high },
+            set: { audioQualityRaw = $0.rawValue }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.bgPrimary
                     .ignoresSafeArea()
-                
+
                 ScrollView {
                     VStack(spacing: TranceSpacing.cardMargin) {
+                        appearanceSection
+                        profileSection
                         coreSettingsSection
                         sessionDefaultsSection
                         audioDisplaySection
                         privacyDataSection
                         supportAboutSection
-                        
+
                         if showDeveloperOptions {
                             developerOptionsSection
                         }
+
+                        Text("LumeSync v\(Bundle.main.appVersion) (\(Bundle.main.buildNumber))")
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textLight)
+                            .padding(.bottom, TranceSpacing.card)
                     }
                     .padding(.horizontal, TranceSpacing.screen)
                     .padding(.vertical, TranceSpacing.cardMargin)
@@ -61,6 +132,7 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .preferredColorScheme(appearanceMode.wrappedValue.colorScheme)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -68,184 +140,42 @@ struct SettingsView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(Color.textSecondary)
                     }
                 }
             }
-        }
-    }
-    
-    // MARK: - Core Settings Section
-    private var coreSettingsSection: some View {
-        GlassCard(label: "Core Settings") {
-            VStack(spacing: TranceSpacing.list) {
-                settingsToggle(
-                    title: "Haptic Feedback",
-                    binding: $hapticFeedbackEnabled,
-                    icon: "iphone.radiowaves.left.and.right",
-                    color: .roseGold
-                )
-                
-                settingsToggle(
-                    title: "Session Lock",
-                    binding: $autoLockEnabled,
-                    icon: "lock.circle",
-                    color: .bwTheta
-                )
-                
-                settingsToggle(
-                    title: "Notifications",
-                    binding: $sessionNotifications,
-                    icon: "bell.circle",
-                    color: .bwAlpha
-                )
-                
-                settingsToggle(
-                    title: "Breathing Guidance",
-                    binding: $breathingGuidanceEnabled,
-                    icon: "wind.circle",
-                    color: .bwDelta
-                )
+            .sheet(isPresented: $isEditingProfile) { profileEditor }
+            .alert("Clear All Data?", isPresented: $showClearDataAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clear", role: .destructive) { clearAllData() }
+            } message: {
+                Text("This will permanently delete all audio files, playlists, and sessions. This cannot be undone.")
             }
-        }
-    }
-    
-    // MARK: - Session Defaults
-    private var sessionDefaultsSection: some View {
-        GlassCard(label: "Session Defaults") {
-            VStack(spacing: TranceSpacing.list) {
-                settingsSlider(
-                    title: "Default Intensity",
-                    value: $defaultIntensity,
-                    range: 0.1...1.0,
-                    format: { "\($0 * 100)%" },
-                    color: .bwBeta
-                )
-                
-                settingsSlider(
-                    title: "Preferred Duration",
-                    value: $preferredSessionDuration,
-                    range: 5...60,
-                    format: { "\($0) min" },
-                    color: .bwDelta
-                )
-                
-                settingsToggle(
-                    title: "Bilateral Mode Default",
-                    binding: $bilateralModeDefault,
-                    icon: "brain.head.profile",
-                    color: .bwGamma
-                )
+            .alert("Data Exported", isPresented: $showExportDone) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Your session data has been exported via the share sheet.")
             }
-        }
-    }
-    
-    // MARK: - Audio & Display Section
-    private var audioDisplaySection: some View {
-        GlassCard(label: "Audio & Display") {
-            VStack(spacing: TranceSpacing.list) {
-                HStack(spacing: TranceSpacing.list) {
-                    Image(systemName: "speaker.wave.2")
-                        .font(.system(size: 16))
-                        .foregroundColor(.bwGamma)
-                        .frame(width: 24)
-                    
-                    Text("Audio Quality")
-                        .font(TranceTypography.body)
-                        .foregroundColor(.textPrimary)
-                    
-                    Spacer()
-                    
-                    Picker("Audio Quality", selection: $audioQualityMode) {
-                        ForEach(AudioQuality.allCases, id: \.self) { quality in
-                            Text(quality.rawValue).tag(quality)
-                        }
-                    }
-                    .tint(.textSecondary)
-                }
-                
-                settingsSlider(
-                    title: "Display Brightness",
-                    value: $displayBrightness,
-                    range: 0.1...1.0,
-                    format: { "\($0 * 100)%" },
-                    color: .bwTheta
-                )
-                
-                settingsToggle(
-                    title: "Keep Screen On",
-                    binding: $keepScreenOn,
-                    icon: "sun.max.circle",
-                    color: .bwAlpha
-                )
+            .alert("Cleared", isPresented: $showClearDataDone) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("All app data has been removed from this device.")
             }
+            .sheet(isPresented: $showAbout) { aboutSheet }
         }
     }
-    
-    // MARK: - Privacy & Data Section
-    private var privacyDataSection: some View {
-        GlassCard(label: "Privacy & Data") {
-            VStack(spacing: TranceSpacing.list) {
-                settingsToggle(
-                    title: "Anonymous Analytics",
-                    binding: $analyticsEnabled,
-                    icon: "chart.bar",
-                    color: .textSecondary
-                )
-                
-                settingsButton(title: "Export Session Data", icon: "square.and.arrow.up.circle") {
-                    TranceHaptics.shared.light()
-                }
-                
-                settingsButton(title: "Clear All Data", icon: "trash.circle", color: .roseDeep) {
-                    TranceHaptics.shared.heavy()
-                }
-            }
-        }
+
+    // MARK: - Profile initials
+
+    private var initials: String {
+        let words = profileName.split(separator: " ").prefix(2)
+        let joined = words.map { String($0.prefix(1)).uppercased() }.joined()
+        return joined.isEmpty ? "?" : joined
     }
-    
-    // MARK: - Support & About Section
-    private var supportAboutSection: some View {
-        GlassCard(label: "Support") {
-            VStack(spacing: TranceSpacing.list) {
-                settingsButton(title: "Help & Support", icon: "questionmark.circle") {
-                    TranceHaptics.shared.light()
-                }
-                
-                settingsButton(title: "About Ilumionate", icon: "heart.circle") {
-                    TranceHaptics.shared.light()
-                }
-                
-                Button("") {
-                    showDeveloperOptions.toggle()
-                }
-                .frame(width: 1, height: 1)
-                .opacity(0.01)
-                .onTapGesture(count: 5) {
-                    showDeveloperOptions.toggle()
-                    TranceHaptics.shared.heavy()
-                }
-            }
-        }
-    }
-    
-    // MARK: - Developer Options Section
-    private var developerOptionsSection: some View {
-        GlassCard(label: "Developer Settings") {
-            VStack(spacing: TranceSpacing.list) {
-                settingsButton(title: "Engine Diagnostics", icon: "cpu", color: .roseDeep) {
-                    TranceHaptics.shared.light()
-                }
-                
-                settingsButton(title: "Reset Preferences", icon: "arrow.clockwise.circle", color: .roseDeep) {
-                    TranceHaptics.shared.heavy()
-                }
-            }
-        }
-    }
-    
-    // MARK: - Helper Modifiers
-    private func settingsToggle(
+
+    // MARK: - Helper Views
+
+    func settingsToggle(
         title: String,
         binding: Binding<Bool>,
         icon: String,
@@ -254,22 +184,19 @@ struct SettingsView: View {
         HStack(spacing: TranceSpacing.list) {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundColor(color)
+                .foregroundStyle(color)
                 .frame(width: 24)
-            
             Text(title)
                 .font(TranceTypography.body)
-                .foregroundColor(.textPrimary)
-            
+                .foregroundStyle(Color.textPrimary)
             Spacer()
-            
             Toggle("", isOn: binding)
                 .toggleStyle(RoseToggleStyle())
                 .labelsHidden()
         }
     }
-    
-    private func settingsSlider(
+
+    func settingsSlider(
         title: String,
         value: Binding<Double>,
         range: ClosedRange<Double>,
@@ -280,15 +207,12 @@ struct SettingsView: View {
             HStack {
                 Text(title)
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
-                
+                    .foregroundStyle(Color.textPrimary)
                 Spacer()
-                
                 Text(format(value.wrappedValue))
                     .font(TranceTypography.caption)
-                    .foregroundColor(.textSecondary)
+                    .foregroundStyle(Color.textSecondary)
             }
-            
             CustomSlider(
                 value: value,
                 range: range,
@@ -298,8 +222,8 @@ struct SettingsView: View {
             )
         }
     }
-    
-    private func settingsButton(
+
+    func settingsButton(
         title: String,
         icon: String,
         color: Color = .textSecondary,
@@ -309,21 +233,84 @@ struct SettingsView: View {
             HStack(spacing: TranceSpacing.list) {
                 Image(systemName: icon)
                     .font(.system(size: 16))
-                    .foregroundColor(color)
+                    .foregroundStyle(color)
                     .frame(width: 24)
-                
                 Text(title)
                     .font(TranceTypography.body)
-                    .foregroundColor(color == .textSecondary ? .textPrimary : color)
-                
+                    .foregroundStyle(color == .textSecondary ? Color.textPrimary : color)
                 Spacer()
-                
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14))
-                    .foregroundColor(.textLight)
+                    .foregroundStyle(Color.textLight)
             }
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Actions
+
+    func exportSessionData() {
+        let summary = """
+        LumeSync Export – \(Date().formatted(.dateTime.day().month().year()))
+
+        Profile
+        -------
+        Name: \(profileName.isEmpty ? "Not set" : profileName)
+        Goal: \(profileGoal.isEmpty ? "Not set" : profileGoal)
+
+        Settings
+        --------
+        Audio Quality: \(audioQualityRaw)
+        Default Intensity: \(String(format: "%.0f%%", defaultIntensity * 100))
+        Session Duration: \(String(format: "%.0f min", preferredSessionDuration))
+        Bilateral Mode: \(bilateralModeDefault)
+        Haptics: \(hapticFeedbackEnabled)
+        Keep Screen On: \(keepScreenOn)
+        Analytics: \(analyticsEnabled)
+        """
+
+        let activityVC = UIActivityViewController(
+            activityItems: [summary],
+            applicationActivities: nil
+        )
+
+        guard
+            let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+            let rootVC = windowScene.windows.first?.rootViewController
+        else { return }
+
+        var topVC = rootVC
+        while let presented = topVC.presentedViewController { topVC = presented }
+        topVC.present(activityVC, animated: true)
+    }
+
+    func clearAllData() {
+        UserDefaults.standard.removeObject(forKey: "audioFiles")
+        let docs = URL.documentsDirectory
+        if let items = try? FileManager.default.contentsOfDirectory(
+            at: docs,
+            includingPropertiesForKeys: nil
+        ) {
+            for item in items { try? FileManager.default.removeItem(at: item) }
+        }
+        TranceHaptics.shared.heavy()
+        showClearDataDone = true
+    }
+
+    func resetPreferences() {
+        hapticFeedbackEnabled = true
+        autoLockEnabled = true
+        sessionNotifications = true
+        breathingGuidanceEnabled = true
+        defaultIntensity = 0.7
+        preferredSessionDuration = 15.0
+        bilateralModeDefault = false
+        userFrequencyMultiplier = 1.0
+        audioQualityRaw = "High"
+        displayBrightness = 0.8
+        keepScreenOn = true
+        analyticsEnabled = false
+        listeningHistoryEnabled = false
     }
 }
 

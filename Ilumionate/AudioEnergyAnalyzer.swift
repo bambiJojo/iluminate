@@ -34,6 +34,8 @@ struct DeadTimeProfile: Codable {
 /// Safe to run on a background thread — no @MainActor requirement.
 struct AudioEnergyAnalyzer: Sendable {
 
+    nonisolated init() {}
+
     struct Config: Sendable {
         /// Duration of each analysis window in seconds
         var windowDuration: TimeInterval = 0.5
@@ -103,7 +105,7 @@ struct AudioEnergyAnalyzer: Sendable {
     }
 
     /// Scan from one edge of the buffer inward, counting consecutive dead windows.
-    private func scanEdge(
+    private nonisolated func scanEdge(
         buffer: AVAudioPCMBuffer,
         windowFrames: AVAudioFrameCount,
         config: Config,
@@ -177,7 +179,7 @@ struct AudioEnergyAnalyzer: Sendable {
     }
 
     /// Classify a single window of audio samples by computing RMS energy and variance.
-    private func classifyWindow(
+    private nonisolated func classifyWindow(
         channelData: UnsafePointer<UnsafeMutablePointer<Float>>,
         channelCount: Int,
         start: Int,

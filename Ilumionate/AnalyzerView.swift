@@ -1,4 +1,4 @@
-//
+ //
 //  AnalyzerView.swift
 //  Ilumionate
 //
@@ -16,7 +16,21 @@ struct AnalyzerView: View {
     @State private var prefs = AnalysisPreferences.shared
     @State private var audioFiles: [AudioFile] = []
     @State private var showingClearQueueConfirm = false
-    @State private var customInstructionsText: String = AnalysisPreferences.shared.customInstructions
+    @State private var showingSettings = false
+
+    /// Merges UserDefaults-persisted files with in-memory completed analyses so
+    /// newly finished sessions appear immediately without requiring a tab switch.
+    /// Accessing `analysisManager.completedAnalyses` here registers @Observable
+    /// tracking — the view re-renders as soon as a new analysis finishes.
+    private var allAnalyzedFiles: [AudioFile] {
+        var byId: [UUID: AudioFile] = Dictionary(uniqueKeysWithValues: audioFiles.map { ($0.id, $0) })
+        for completed in analysisManager.completedAnalyses {
+            var updated = completed.audioFile
+            updated.analysisResult = completed.analysis
+            byId[updated.id] = updated
+        }
+        return Array(byId.values)
+    }
 
     var body: some View {
         ZStack {
@@ -25,6 +39,7 @@ struct AnalyzerView: View {
                 VStack(spacing: TranceSpacing.content) {
                     liveStatusSection
                     libraryIntelligenceSection
+                    AnalyzedSessionsSection(audioFiles: allAnalyzedFiles)
                     customizeSection
                 }
                 .padding(.horizontal, TranceSpacing.screen)
@@ -35,6 +50,13 @@ struct AnalyzerView: View {
         .navigationTitle("Analyzer")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Settings", systemImage: "gearshape") {
+                    TranceHaptics.shared.light()
+                    showingSettings = true
+                }
+                .foregroundStyle(Color.roseGold)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 if analysisManager.currentAnalysis != nil || !analysisManager.analysisQueue.isEmpty {
                     Button(role: .destructive) { showingClearQueueConfirm = true } label: {
@@ -44,6 +66,9 @@ struct AnalyzerView: View {
                     .foregroundStyle(Color.roseGold)
                 }
             }
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
         }
         .confirmationDialog("Clear all queued analyses?", isPresented: $showingClearQueueConfirm,
                             titleVisibility: .visible) {
@@ -66,6 +91,9 @@ struct AnalyzerView: View {
             if !analysisManager.analysisQueue.isEmpty {
                 queueCard
             }
+            if !analysisManager.failedAnalyses.isEmpty {
+                failureLogCard
+            }
         }
     }
 
@@ -80,7 +108,13 @@ struct AnalyzerView: View {
                             .lineLimit(1)
                         Text(stageName(active.stage))
                             .font(TranceTypography.caption)
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(active.stage == .failed ? .red : Color.roseGold)
+                        if active.stage == .failed, let msg = active.errorMessage {
+                            Text(msg)
+                                .font(TranceTypography.caption)
+                                .foregroundStyle(.red.opacity(0.8))
+                                .lineLimit(2)
+                        }
                     }
                     Spacer()
                     ProgressRing(progress: active.progress, size: 52)
@@ -137,6 +171,42 @@ struct AnalyzerView: View {
                     if index < analysisManager.analysisQueue.count - 1 {
                         Divider().padding(.leading, 36)
                     }
+                }
+            }
+        }
+    }
+
+    private var failureLogCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                    Text("Recent Failures · \(analysisManager.failedAnalyses.count)")
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    Button {
+                        analysisManager.failedAnalyses.removeAll()
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                }
+                Divider()
+                ForEach(analysisManager.failedAnalyses.suffix(5)) { failure in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(failure.audioFile.displayName)
+                            .font(TranceTypography.body)
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(1)
+                        Text(failure.errorMessage)
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(.red.opacity(0.8))
+                            .lineLimit(2)
+                    }
+                    .padding(.vertical, 2)
                 }
             }
         }
@@ -316,25 +386,6 @@ struct AnalyzerView: View {
                     label: "Content Hint",
                     description: "Tells the AI what kind of content to expect, improving accuracy"
                 )
-                Divider()
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Custom AI Instructions")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                    TextEditor(text: $customInstructionsText)
-                        .font(TranceTypography.body)
-                        .foregroundStyle(Color.textPrimary)
-                        .frame(height: 80)
-                        .padding(8)
-                        .background(Color.glassBorder.opacity(0.3))
-                        .cornerRadius(8)
-                        .onChange(of: customInstructionsText) {
-                            prefs.customInstructions = customInstructionsText
-                        }
-                    Text("Added to the AI system prompt for every analysis")
-                        .font(.caption2)
-                        .foregroundStyle(Color.textSecondary.opacity(0.7))
-                }
             }
         }
     }

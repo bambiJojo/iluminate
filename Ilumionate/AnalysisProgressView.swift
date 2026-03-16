@@ -369,7 +369,6 @@ extension AnalysisStage {
     AnalysisProgressView(
         audioFile: AudioFile(
             filename: "test.m4a",
-            url: URL(fileURLWithPath: "/tmp/test.m4a"),
             duration: 300,
             fileSize: 1024000
         )

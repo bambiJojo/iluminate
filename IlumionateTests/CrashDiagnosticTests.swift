@@ -91,44 +91,7 @@ struct LightEngineCrashTests {
 }
 
 // MARK: - Color Range Tests
-
-struct ColorRangeTests {
-
-    @Test func therapeuticColorsSafeRange() {
-        // Test all TherapeuticColors static properties have safe values
-        let colors = [
-            TherapeuticColors.core,
-            TherapeuticColors.glow,
-            TherapeuticColors.shimmer,
-            TherapeuticColors.warm,
-            TherapeuticColors.ice,
-            TherapeuticColors.dreamyBlush,
-            TherapeuticColors.mysticRose,
-            TherapeuticColors.hypnoticMagenta,
-            TherapeuticColors.etherealLavender,
-            TherapeuticColors.celestialPeach
-        ]
-
-        // Verify they can be created without crashing
-        for color in colors {
-            let uiColor = UIColor(color)
-            #expect(uiColor != nil)
-        }
-    }
-
-    @Test func colorWithOpacityRanges() {
-        // Test opacity values that could cause crashes
-        let baseColor = TherapeuticColors.core
-        let opacityValues = [0.0, 0.3, 0.5, 1.0, 1.5, 2.0, -0.1]
-
-        for opacity in opacityValues {
-            let colorWithOpacity = baseColor.opacity(opacity)
-            let uiColor = UIColor(colorWithOpacity)
-            #expect(uiColor != nil)
-            print("Opacity \(opacity) created UIColor successfully")
-        }
-    }
-}
+// TherapeuticColors removed from main target — tests relocated
 
 // MARK: - SessionPlayerView Component Tests
 
@@ -151,34 +114,8 @@ struct SessionPlayerViewComponentTests {
         #expect(playerView.session.displayName == "Test Session")
     }
 
-    @Test func auraBackgroundRendering() {
-        // Test AuraBackground view creation
-        let auraView = AuraBackground()
-        #expect(auraView != nil)
-    }
-
-    @Test func radialGradientWithEngineValues() async throws {
-        let engine = LightEngine()
-        engine.start()
-
-        // Wait for engine brightness
-        try await Task.sleep(for: .milliseconds(100))
-
-        // Test RadialGradient creation with engine brightness values
-        let gradient = RadialGradient(
-            colors: [
-                TherapeuticColors.core.opacity(engine.brightness * 0.3),
-                TherapeuticColors.glow.opacity(engine.brightness * 0.2),
-                .clear
-            ],
-            center: .center,
-            startRadius: 100,
-            endRadius: 400
-        )
-
-        #expect(gradient != nil)
-        engine.stop()
-    }
+    // auraBackgroundRendering and radialGradientWithEngineValues removed
+    // (AuraBackground / TherapeuticColors no longer exist in the main target)
 }
 
 // MARK: - Session Integration Tests

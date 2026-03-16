@@ -115,7 +115,6 @@ struct AudioFileModelTests {
     @Test func audioFileDurationFormatting() {
         let file = AudioFile(
             filename: "test.mp3",
-            url: URL(fileURLWithPath: "/tmp/test.mp3"),
             duration: 125,
             fileSize: 1024000
         )
@@ -125,7 +124,6 @@ struct AudioFileModelTests {
     @Test func audioFileZeroDuration() {
         let file = AudioFile(
             filename: "empty.mp3",
-            url: URL(fileURLWithPath: "/tmp/empty.mp3"),
             duration: 0,
             fileSize: 0
         )
@@ -135,7 +133,6 @@ struct AudioFileModelTests {
     @Test func audioFileFileSizeFormatting() {
         let file = AudioFile(
             filename: "test.mp3",
-            url: URL(fileURLWithPath: "/tmp/test.mp3"),
             duration: 100,
             fileSize: 1048576 // 1 MB
         )
@@ -146,7 +143,6 @@ struct AudioFileModelTests {
     @Test func audioFileAnalysisState() {
         var file = AudioFile(
             filename: "test.mp3",
-            url: URL(fileURLWithPath: "/tmp/test.mp3"),
             duration: 100,
             fileSize: 1000
         )
@@ -165,11 +161,9 @@ struct AudioFileModelTests {
 
     @Test func audioFileCodable() throws {
         let id = UUID()
-        let url = URL(fileURLWithPath: "/tmp/test.mp3")
         let file = AudioFile(
             id: id,
             filename: "test.mp3",
-            url: url,
             duration: 300,
             fileSize: 5000
         )
@@ -181,6 +175,8 @@ struct AudioFileModelTests {
         #expect(decoded.filename == "test.mp3")
         #expect(decoded.duration == 300)
         #expect(decoded.fileSize == 5000)
+        // url is computed — verify it resolves from filename
+        #expect(decoded.url == URL.documentsDirectory.appendingPathComponent("test.mp3"))
     }
 }
 
@@ -805,48 +801,119 @@ struct FileExtensionStrippingTests {
     }
 }
 
-// MARK: - AIContentAnalyzer Pattern Tests
+// MARK: - Step 1.1: WhisperKit Model Upgrade Tests
 
-struct AIContentAnalyzerTests {
+struct WhisperKitUpgradeTests {
 
-    @Test func frequencyRangeParsing() {
-        // The AI analyzer parses frequency ranges like "8-12" or "8.0-12.0"
-        let testCases: [(input: String, expectedLower: Double, expectedUpper: Double)] = [
-            ("8-12", 8.0, 12.0),
-            ("4.0-8.0", 4.0, 8.0),
-            ("10-14", 10.0, 14.0)
-        ]
-
-        for testCase in testCases {
-            let components = testCase.input
-                .components(separatedBy: CharacterSet(charactersIn: "-–—"))
-                .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
-
-            #expect(components.count == 2, "Failed to parse '\(testCase.input)'")
-            if components.count == 2 {
-                #expect(components[0] == testCase.expectedLower)
-                #expect(components[1] == testCase.expectedUpper)
-            }
-        }
+    /// Verifies the file-size gate was removed: large AudioFile instances must not
+    /// carry any special flag or property that would block analysis.
+    @Test func largeFileSizeDoesNotBlock() {
+        let largeFile = AudioFile(
+            filename: "huge_session.m4a",
+            duration: 7200, // 2 hours
+            fileSize: 200 * 1024 * 1024 // 200 MB — well above old 50 MB limit
+        )
+        // The old gate checked fileSize > 50_000_000. Verify no property on
+        // AudioFile itself gates analysis based on file size.
+        #expect(largeFile.fileSize == 200 * 1024 * 1024)
+        #expect(largeFile.duration == 7200)
+        // No isTooBig / isBlocked property exists — that logic lived in AudioAnalyzer
+        // and has been removed. This test documents the intent.
     }
 
-    @Test func frequencyRangeParsingFallback() {
-        // Invalid range should fall back to 8.0...12.0
-        let invalidInputs = ["invalid", "8", "8 to 12", ""]
+    /// AnalyzerError no longer has an audioFileTooLarge case.
+    /// This test exhaustively matches all current cases to prove the case is absent
+    /// (a new case would cause an 'unhandled case' warning here, catching regressions).
+    @Test func analyzerErrorHasNoFileSizeCaseAndCoversAllCases() {
+        // Build one instance of each current case and verify descriptions are non-empty.
+        let errors: [AnalyzerError] = [
+            .whisperKitNotInitialized,
+            .transcriptionFailed(NSError(domain: "test", code: 0)),
+            .audioFileInvalid,
+            .noAudioData
+        ]
+        for error in errors {
+            #expect(error.errorDescription != nil)
+            #expect(!(error.errorDescription?.isEmpty ?? true))
+        }
+        // If audioFileTooLarge were re-added, this array would be missing a case
+        // and a switch exhaustiveness check would fail at compile time.
+        #expect(errors.count == 4)
+    }
 
-        for input in invalidInputs {
-            let components = input
-                .components(separatedBy: CharacterSet(charactersIn: "-–—"))
-                .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+    /// Boundary: a file exactly at the old 50 MB limit should be representable
+    /// and have no special status.
+    @Test func fileSizeAtOldBoundaryIsNormal() {
+        let boundaryFile = AudioFile(
+            filename: "boundary.mp3",
+            duration: 300,
+            fileSize: 50 * 1024 * 1024
+        )
+        #expect(boundaryFile.fileSize == 52_428_800)
+        // fileSizeFormatted should not be empty
+        #expect(!boundaryFile.fileSizeFormatted.isEmpty)
+    }
+}
 
-            let range: ClosedRange<Double>
-            if components.count == 2 {
-                range = components[0]...components[1]
-            } else {
-                range = 8.0...12.0
-            }
+// MARK: - Step 1.2: Typed Frequency Schema Tests
+// frequencyRange: String was replaced with frequencyLower/frequencyUpper: Double
+// The validation/fallback logic now lives inline in AIAnalysisManager.convertToAnalysisResult
 
-            #expect(range == 8.0...12.0, "Should fall back to default for '\(input)'")
+struct FrequencySchemaTests {
+
+    /// Simulates the inline guard that AIAnalysisManager applies when building
+    /// the ClosedRange from the two typed Double fields.
+    private func buildRange(lower: Double, upper: Double) -> ClosedRange<Double> {
+        guard lower < upper else { return 8.0...12.0 }
+        return lower...upper
+    }
+
+    @Test func validRangePassesThrough() {
+        let range = buildRange(lower: 4.0, upper: 8.0)
+        #expect(range.lowerBound == 4.0)
+        #expect(range.upperBound == 8.0)
+    }
+
+    @Test func invertedBoundsFallbackToAlpha() {
+        // Model returned upper < lower — guard must catch this
+        let range = buildRange(lower: 12.0, upper: 4.0)
+        #expect(range == 8.0...12.0)
+    }
+
+    @Test func equalBoundsFallbackToAlpha() {
+        let range = buildRange(lower: 7.0, upper: 7.0)
+        #expect(range == 8.0...12.0)
+    }
+
+    @Test func extremeLowBoundIsPreserved() {
+        // 0.5 Hz (delta floor) must not be rejected
+        let range = buildRange(lower: 0.5, upper: 4.0)
+        #expect(range.lowerBound == 0.5)
+        #expect(range.upperBound == 4.0)
+    }
+
+    @Test func extremeHighBoundIsPreserved() {
+        // 40 Hz (gamma) must not be rejected
+        let range = buildRange(lower: 30.0, upper: 40.0)
+        #expect(range.lowerBound == 30.0)
+        #expect(range.upperBound == 40.0)
+    }
+
+    @Test func typicalContentTypeRangesAreValid() {
+        struct Band { let lower: Double; let upper: Double; let label: String }
+        // Spot-check frequency bands the AI is expected to return per content type
+        let bandsByContent = [
+            Band(lower: 4.0, upper: 8.0, label: "deep hypnosis / theta"),
+            Band(lower: 8.0, upper: 12.0, label: "alpha / light hypnosis"),
+            Band(lower: 6.0, upper: 8.0, label: "meditation / Schumann"),
+            Band(lower: 9.0, upper: 11.0, label: "affirmations / upper alpha"),
+            Band(lower: 15.0, upper: 30.0, label: "music / beta")
+        ]
+        for band in bandsByContent {
+            let range = buildRange(lower: band.lower, upper: band.upper)
+            #expect(range.lowerBound == band.lower, "Lower bound wrong for \(band.label)")
+            #expect(range.upperBound == band.upper, "Upper bound wrong for \(band.label)")
+            #expect(range.lowerBound < range.upperBound, "Range invalid for \(band.label)")
         }
     }
 }

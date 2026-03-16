@@ -45,12 +45,5 @@ struct MinimalCrashTest {
         #expect(view.session.displayName == "Minimal Test")
     }
 
-    @Test func createTherapeuticColors() {
-        print("Testing TherapeuticColors...")
-        let core = TherapeuticColors.core
-        let glow = TherapeuticColors.glow
-        #expect(core != nil)
-        #expect(glow != nil)
-        print("✅ TherapeuticColors created successfully")
-    }
+    // createTherapeuticColors removed — TherapeuticColors no longer in main target
 }

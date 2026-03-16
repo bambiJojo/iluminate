@@ -24,9 +24,16 @@ struct LibraryView: View {
 
     @State private var audioFiles: [AudioFile] = []
     @State private var sortOption: LibrarySortOption = .newest
+    // Cached derived collections — recomputed only when audioFiles or sortOption change
+    @State private var cachedSortedFiles: [AudioFile] = []
+    @State private var cachedRecentFiles: [AudioFile] = []
+    @State private var cachedCreatorCount: Int = 0
+    @State private var cachedFavoritesCount: Int = 0
     @State private var showingPlaylists = false
     @State private var showingSessionsManager = false
-    @State private var syncPlayerItem: SyncPlayerItem?
+    @State private var showingSettings = false
+    @State private var playerFile: AudioFile?
+    @State private var fileForPlaylist: AudioFile?
 
     @Environment(FolderStore.self) private var folderStore
 
@@ -64,10 +71,23 @@ struct LibraryView: View {
             .sheet(isPresented: $showingSessionsManager) {
                 AudioLibraryView(engine: engine)
             }
-            .fullScreenCover(item: $syncPlayerItem) { item in
-                AudioLightPlayerView(audioFile: item.audioFile, engine: engine)
+            .fullScreenCover(item: $playerFile) { file in
+                AudioLightPlayerView(audioFile: file, engine: engine)
             }
-            .onAppear { loadAudioFiles() }
+            .sheet(item: $fileForPlaylist) { file in
+                AddToPlaylistSheet(itemTitle: file.displayName) { playlist in
+                    addFile(file, to: playlist)
+                }
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
+            }
+            .onAppear {
+                loadAudioFiles()
+                recomputeDerivedCollections()
+            }
+            .onChange(of: audioFiles) { _, _ in recomputeDerivedCollections() }
+            .onChange(of: sortOption) { _, _ in recomputeDerivedCollections() }
         }
     }
 
@@ -169,7 +189,7 @@ struct LibraryView: View {
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(sortedAudioFiles) { file in
-                        LibrarySessionRow(file: file, onPlay: { playWithLights(file) })
+                        LibrarySessionRow(file: file, onPlay: { playWithLights(file) }, onAddToPlaylist: { fileForPlaylist = file })
                         if file.id != sortedAudioFiles.last?.id {
                             rowDivider
                                 .padding(.leading, 56)
@@ -196,6 +216,13 @@ struct LibraryView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigationBarTrailing) {
+            Button("Settings", systemImage: "gearshape") {
+                TranceHaptics.shared.light()
+                showingSettings = true
+            }
+            .foregroundStyle(Color.roseGold)
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
             Button {
                 TranceHaptics.shared.light()
                 showingSessionsManager = true
@@ -213,24 +240,23 @@ struct LibraryView: View {
 
     // MARK: - Helpers
 
-    private var creatorCount: Int {
-        Set(audioFiles.compactMap { $0.creator?.isEmpty == false ? $0.creator : nil }).count
-    }
-
+    private var creatorCount: Int { cachedCreatorCount }
     private var folderCount: Int { folderStore.folders.count }
+    private var favoritesCount: Int { cachedFavoritesCount }
+    private var recentFiles: [AudioFile] { cachedRecentFiles }
+    private var sortedAudioFiles: [AudioFile] { cachedSortedFiles }
 
-    private var favoritesCount: Int { audioFiles.filter { $0.favorite }.count }
-
-    private var recentFiles: [AudioFile] {
-        audioFiles
+    private func recomputeDerivedCollections() {
+        cachedCreatorCount = Set(audioFiles.compactMap {
+            $0.creator?.isEmpty == false ? $0.creator : nil
+        }).count
+        cachedFavoritesCount = audioFiles.filter { $0.favorite }.count
+        cachedRecentFiles = audioFiles
             .filter { $0.lastPlayedDate != nil }
             .sorted { ($0.lastPlayedDate ?? .distantPast) > ($1.lastPlayedDate ?? .distantPast) }
             .prefix(10)
             .map { $0 }
-    }
-
-    private var sortedAudioFiles: [AudioFile] {
-        audioFiles.sorted { lhs, rhs in
+        cachedSortedFiles = audioFiles.sorted { lhs, rhs in
             switch sortOption {
             case .newest:     return lhs.createdDate > rhs.createdDate
             case .name:       return lhs.filename.localizedStandardCompare(rhs.filename) == .orderedAscending
@@ -247,19 +273,16 @@ struct LibraryView: View {
     }
 
     private func playWithLights(_ file: AudioFile) {
-        Task {
-            if let session = await loadGeneratedSession(for: file) {
-                await MainActor.run {
-                    syncPlayerItem = SyncPlayerItem(audioFile: file, lightSession: session)
-                }
-            }
-        }
+        TranceHaptics.shared.medium()
+        playerFile = file
     }
 
-    private func loadGeneratedSession(for file: AudioFile) async -> LightSession? {
-        let sessionsDir = URL.documentsDirectory.appending(path: "GeneratedSessions")
-        let sessionURL = sessionsDir.appending(path: "\(file.id).json")
-        return try? LightScoreReader.loadSession(from: sessionURL)
+    private func addFile(_ file: AudioFile, to playlist: Playlist) {
+        var playlists = PlaylistStore.load()
+        guard let index = playlists.firstIndex(where: { $0.id == playlist.id }) else { return }
+        let item = PlaylistItem(audioFileId: file.id, filename: file.filename, duration: file.duration)
+        playlists[index].items.append(item)
+        PlaylistStore.save(playlists)
     }
 
     // MARK: - Reusable Sub-views
@@ -443,9 +466,13 @@ private struct SessionMiniCard: View {
 struct LibrarySessionRow: View {
     let file: AudioFile
     let onPlay: () -> Void
+    var onAddToPlaylist: (() -> Void)?
 
     var body: some View {
-        Button(action: onPlay) {
+        Button(action: {
+            print("🎯 LibrarySessionRow: button tapped for \(file.displayName)")
+            onPlay()
+        }) {
             HStack(spacing: TranceSpacing.list) {
                 // Content type icon badge
                 ZStack {
@@ -483,9 +510,16 @@ struct LibrarySessionRow: View {
                         .foregroundColor(Color(hex: "E85D75"))
                 }
 
-                Image(systemName: "play.circle")
-                    .font(.system(size: 22))
-                    .foregroundColor(.roseGold)
+                if let onAddToPlaylist {
+                    Button {
+                        onAddToPlaylist()
+                    } label: {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 22))
+                            .foregroundColor(.roseGold)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(.vertical, TranceSpacing.card)
         }
@@ -521,10 +555,8 @@ struct LibraryFavoritesView: View {
     let audioFiles: [AudioFile]
     @Bindable var engine: LightEngine
     @State private var syncPlayerItem: SyncPlayerItem?
-
-    private var favorites: [AudioFile] {
-        audioFiles.filter { $0.favorite }.sorted { $0.filename < $1.filename }
-    }
+    @State private var fileForPlaylist: AudioFile?
+    @State private var favorites: [AudioFile] = []
 
     var body: some View {
         ZStack {
@@ -545,7 +577,7 @@ struct LibraryFavoritesView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(favorites) { file in
-                            LibrarySessionRow(file: file) { playWithLights(file) }
+                            LibrarySessionRow(file: file, onPlay: { playWithLights(file) }, onAddToPlaylist: { fileForPlaylist = file })
                             if file.id != favorites.last?.id {
                                 Rectangle().fill(Color.glassBorder.opacity(0.3)).frame(height: 1)
                                     .padding(.leading, 56)
@@ -558,8 +590,19 @@ struct LibraryFavoritesView: View {
             }
         }
         .navigationTitle("Favorites")
+        .onAppear {
+            favorites = audioFiles.filter { $0.favorite }.sorted { $0.filename < $1.filename }
+        }
+        .onChange(of: audioFiles) { _, new in
+            favorites = new.filter { $0.favorite }.sorted { $0.filename < $1.filename }
+        }
         .fullScreenCover(item: $syncPlayerItem) { item in
             AudioLightPlayerView(audioFile: item.audioFile, engine: engine)
+        }
+        .sheet(item: $fileForPlaylist) { file in
+            AddToPlaylistSheet(itemTitle: file.displayName) { playlist in
+                addFile(file, to: playlist)
+            }
         }
     }
 
@@ -571,5 +614,13 @@ struct LibraryFavoritesView: View {
                 await MainActor.run { syncPlayerItem = SyncPlayerItem(audioFile: file, lightSession: session) }
             }
         }
+    }
+
+    private func addFile(_ file: AudioFile, to playlist: Playlist) {
+        var playlists = PlaylistStore.load()
+        guard let index = playlists.firstIndex(where: { $0.id == playlist.id }) else { return }
+        let item = PlaylistItem(audioFileId: file.id, filename: file.filename, duration: file.duration)
+        playlists[index].items.append(item)
+        PlaylistStore.save(playlists)
     }
 }

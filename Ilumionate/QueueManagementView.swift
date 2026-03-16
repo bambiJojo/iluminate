@@ -7,6 +7,18 @@
 
 import SwiftUI
 
+// Conditional Glass button style helper for backward compatibility
+extension View {
+    @ViewBuilder
+    func glassButtonStyleIfAvailable() -> some View {
+        if #available(iOS 26.0, *) {
+            self.buttonStyle(GlassButtonStyle())
+        } else {
+            self.buttonStyle(.bordered)
+        }
+    }
+}
+
 /// View for managing the audio analysis queue
 struct QueueManagementView: View {
 
@@ -34,7 +46,7 @@ struct QueueManagementView: View {
                     Button("Done") {
                         dismiss()
                     }
-                    .buttonStyle(GlassButtonStyle())
+                    .glassButtonStyleIfAvailable()
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -43,7 +55,7 @@ struct QueueManagementView: View {
                             analysisManager.clearQueue()
                         }
                         .foregroundStyle(Color.red)
-                        .buttonStyle(GlassButtonStyle())
+                        .glassButtonStyleIfAvailable()
                     }
                 }
             }
@@ -240,7 +252,7 @@ struct QueueFileRow: View {
                         .foregroundStyle(isFirst ? .secondary : Color.roseDeep)
                 }
                 .disabled(isFirst)
-                .buttonStyle(GlassButtonStyle())
+                .glassButtonStyleIfAvailable()
 
                 // Move down button
                 Button {
@@ -251,7 +263,7 @@ struct QueueFileRow: View {
                         .foregroundStyle(isLast ? .secondary : Color.roseDeep)
                 }
                 .disabled(isLast)
-                .buttonStyle(GlassButtonStyle())
+                .glassButtonStyleIfAvailable()
 
                 // Remove button
                 Button {
@@ -261,7 +273,7 @@ struct QueueFileRow: View {
                         .font(TranceTypography.caption)
                         .foregroundStyle(Color.red)
                 }
-                .buttonStyle(GlassButtonStyle())
+                .glassButtonStyleIfAvailable()
             }
         }
         .padding(.vertical, 8)

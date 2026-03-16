@@ -16,7 +16,7 @@ enum AudioLightSyncPlayerError: Error {
 /// Manages synchronized playback of audio and light sessions
 @MainActor
 @Observable
-class AudioLightSyncPlayer {
+class AudioLightSyncPlayer: Sendable {
 
     // MARK: - State
 
@@ -244,7 +244,7 @@ class AudioLightSyncPlayer {
 
         playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self = self else { return }
+                guard let self else { return }
 
                 if let audioPlayer = self.audioPlayer {
                     self.currentTime = audioPlayer.currentTime

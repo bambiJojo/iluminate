@@ -60,10 +60,12 @@ struct HomeView: View {
     let engine: LightEngine
     let onRefresh: (() -> Void)?
 
-    @State private var animateCards = false
     @State private var isRefreshing = false
     @State private var showingProfile = false
     @State private var playerFile: AudioFile?
+    @State private var cardsVisible = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Flash session state — for Mind Machine quick presets
     @State private var showingFlashMode = false
@@ -97,15 +99,20 @@ struct HomeView: View {
         ScrollView {
             VStack(spacing: TranceSpacing.content) {
                 greetingSection
+                    .cardEntrance(visible: cardsVisible, delay: 0.00, reduceMotion: reduceMotion)
 
                 if lastSessionProgress > 0,
                    let lastSession = sessions.first(where: { $0.id.uuidString == lastSessionId }) ?? sessions.first {
                     continueSessionCard(session: lastSession)
+                        .cardEntrance(visible: cardsVisible, delay: 0.08, reduceMotion: reduceMotion)
                 }
 
                 quickStartSection
+                    .cardEntrance(visible: cardsVisible, delay: 0.15, reduceMotion: reduceMotion)
                 recentAudioSection
+                    .cardEntrance(visible: cardsVisible, delay: 0.22, reduceMotion: reduceMotion)
                 mindMachineSection
+                    .cardEntrance(visible: cardsVisible, delay: 0.30, reduceMotion: reduceMotion)
             }
             .padding(.horizontal, TranceSpacing.screen)
             .padding(.bottom, 100)
@@ -113,18 +120,20 @@ struct HomeView: View {
         .refreshable {
             await handleRefresh()
         }
-        .background(Color.bgPrimary.ignoresSafeArea())
         .onAppear {
-            withAnimation(.easeOut(duration: 0.6)) {
-                animateCards = true
+            // Reset before animating so re-entry (tab switch) always replays the entrance.
+            cardsVisible = false
+            Task {
+                // One frame of invisible state lets SwiftUI capture the layout
+                // before the spring kicks in.
+                try? await Task.sleep(for: .milliseconds(30))
+                cardsVisible = true
             }
         }
+        .onDisappear { cardsVisible = false }
+        .background(Color.bgPrimary.ignoresSafeArea())
         .sheet(isPresented: $showingProfile) {
-            NavigationStack {
-                SettingsView()
-                    .navigationTitle("Profile & Settings")
-                    .navigationBarTitleDisplayMode(.large)
-            }
+            ProfileView()
         }
         .fullScreenCover(isPresented: $showingFlashMode) {
             FlashModeView(
@@ -232,9 +241,6 @@ struct HomeView: View {
             }
             .buttonStyle(PlainButtonStyle())
         }
-        .opacity(animateCards ? 1 : 0)
-        .offset(y: animateCards ? 0 : 20)
-        .animation(.easeOut(duration: 0.6).delay(0.2), value: animateCards)
     }
 
     // MARK: - Quick Start Section
@@ -253,9 +259,6 @@ struct HomeView: View {
                 }
             }
         }
-        .opacity(animateCards ? 1 : 0)
-        .offset(y: animateCards ? 0 : 20)
-        .animation(.easeOut(duration: 0.6).delay(0.3), value: animateCards)
     }
 
     private func quickStartMiniCard(title: String, subtitle: String, color: Color, action: @escaping () -> Void) -> some View {
@@ -348,9 +351,6 @@ struct HomeView: View {
                 }
             }
         }
-        .opacity(animateCards ? 1 : 0)
-        .offset(y: animateCards ? 0 : 20)
-        .animation(.easeOut(duration: 0.6).delay(0.4), value: animateCards)
     }
 
     private func audioFileRow(file: AudioFile, index: Int) -> some View {
@@ -448,17 +448,8 @@ struct HomeView: View {
                     ForEach(Array(sessions.prefix(3).enumerated()), id: \.element.id) { index, session in
                         Button {
                             TranceHaptics.shared.heavy()
-                            // Use first moment's frequency to drive FlashModeView
-                            flashFrequency = session.light_score.first?.frequency ?? 10.0
-                            flashIntensity = session.light_score.first?.intensity ?? 0.75
-                            switch flashFrequency {
-                            case ..<4:  flashKelvin = 2700
-                            case ..<8:  flashKelvin = 3200
-                            case ..<13: flashKelvin = 4000
-                            default:    flashKelvin = 5500
-                            }
-                            flashPattern = .sine
-                            showingFlashMode = true
+                            // Open the full light-score session in SessionPlayerView
+                            selectedSession = session
                         } label: {
                             HStack(spacing: TranceSpacing.list) {
                                 ZStack {
@@ -492,9 +483,6 @@ struct HomeView: View {
                 }
             }
         }
-        .opacity(animateCards ? 1 : 0)
-        .offset(y: animateCards ? 0 : 20)
-        .animation(.easeOut(duration: 0.6).delay(0.5), value: animateCards)
     }
 
     private func mindMachinePresetCard(emoji: String, title: String, subtitle: String, color: Color, action: @escaping () -> Void) -> some View {
@@ -764,6 +752,25 @@ struct CategorySessionSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Card Entrance Modifier
+
+private extension View {
+    /// Slides the view up from a 20-pt offset while fading in.
+    /// When `reduceMotion` is true the slide is suppressed and a quick fade
+    /// is used instead, honoring the user's accessibility preference.
+    func cardEntrance(visible: Bool, delay: Double, reduceMotion: Bool) -> some View {
+        self
+            .opacity(visible ? 1 : 0)
+            .offset(y: (visible || reduceMotion) ? 0 : 20)
+            .animation(
+                reduceMotion
+                    ? .easeIn(duration: 0.15).delay(delay)
+                    : .spring(response: 0.55, dampingFraction: 0.82).delay(delay),
+                value: visible
+            )
     }
 }
 

@@ -129,10 +129,6 @@ class AudioLightScoreGenerator {
     }
 
     private func createMomentFromKeyMoment(_ keyMoment: KeyMoment, analysis: AnalysisResult) -> LightMoment? {
-        // Parse suggested action to determine light parameters
-        let action = keyMoment.suggestedAction.lowercased()
-        let description = keyMoment.description.lowercased()
-
         let intensity: Double
         let frequency: Double
         let waveform: WaveformType
@@ -141,20 +137,16 @@ class AudioLightScoreGenerator {
         let bilateralTransition: Double
         let colorTemp: Double?
 
-        // Deep trance / deepening indicators
-        if action.contains("deepen") || description.contains("deeper") ||
-           description.contains("down") || description.contains("relax") {
-            intensity = 0.9 // Strong for deep trance
-            frequency = 4.5 // Deep theta
+        switch keyMoment.action {
+        case .deepen:
+            intensity = 0.9
+            frequency = 4.5  // Deep theta
             waveform = .softPulse
-            rampDuration = 25.0 // Slow descent
+            rampDuration = 25.0
             bilateral = false
             bilateralTransition = 4.0
-            colorTemp = 2300 // Warm amber
-        }
-        // Increase energy/alertness
-        else if action.contains("increase") || action.contains("intensif") ||
-                action.contains("energize") {
+            colorTemp = 2300  // Warm amber
+        case .energize:
             intensity = 0.6
             frequency = 12.0 // Alpha/beta border
             waveform = .softPulse
@@ -162,49 +154,38 @@ class AudioLightScoreGenerator {
             bilateral = false
             bilateralTransition = 2.0
             colorTemp = 4500
-        }
-        // Decrease/calm down
-        else if action.contains("decrease") || action.contains("reduce") ||
-                action.contains("calm") || action.contains("slow") {
+        case .reduceIntensity:
             intensity = 0.7
-            frequency = 6.0 // Theta
+            frequency = 6.0  // Theta
             waveform = .sine
             rampDuration = 15.0
             bilateral = false
             bilateralTransition = 3.0
             colorTemp = 2800
-        }
-        // Confusion or complex patterns
-        else if action.contains("confus") || description.contains("confus") ||
-                description.contains("complex") || description.contains("overload") {
-            intensity = 0.75
-            frequency = 11.0 // Higher for mental activity
-            waveform = .triangle // Sharp for confusion
-            rampDuration = 3.0 // Quick onset
-            bilateral = true // KEY: bilateral for confusion
-            bilateralTransition = 0.8 // Rapid activation
-            colorTemp = 4000
-        }
-        // Suggestion/command moments
-        else if action.contains("suggest") || action.contains("command") ||
-                description.contains("embed") {
-            intensity = 0.85 // Strong for suggestion acceptance
-            frequency = 5.0 // Mid theta - receptive state
+        case .increaseIntensity:
+            intensity = 0.85
+            frequency = 5.0  // Mid theta — receptive state
             waveform = .sine
             rampDuration = 12.0
             bilateral = false
             bilateralTransition = 3.0
             colorTemp = 2500
-        }
-        // Default behavior
-        else {
-            intensity = analysis.suggestedIntensity
-            frequency = (analysis.suggestedFrequencyRange.lowerBound + analysis.suggestedFrequencyRange.upperBound) / 2
+        case .warm:
+            intensity = 0.65
+            frequency = 7.0  // Theta-alpha border
             waveform = .sine
-            rampDuration = 10.0
-            bilateral = shouldUseBilateral(for: keyMoment, analysis: analysis)
+            rampDuration = 12.0
+            bilateral = false
             bilateralTransition = 3.0
-            colorTemp = analysis.suggestedColorTemperature
+            colorTemp = 2800
+        case .cool:
+            intensity = 0.55
+            frequency = 10.0 // Alpha
+            waveform = .sine
+            rampDuration = 8.0
+            bilateral = false
+            bilateralTransition = 2.0
+            colorTemp = 5000
         }
 
         return LightMoment(

@@ -7,28 +7,77 @@
 
 import Foundation
 
+/// Multi-dimensional rating system for hypno audio
+struct DetailedRating: Codable, Sendable, Equatable {
+    var effectiveness: Int // How effective was the session? (1-5)
+    var relaxation: Int // How relaxing was it? (1-5)
+    var voiceQuality: Int // Voice quality/delivery (1-5)
+    var notes: String? // Quick notes like "Great for sleep", "Too fast"
+    var ratedDate: Date
+
+    var overallRating: Int {
+        Int(round(Double(effectiveness + relaxation + voiceQuality) / 3.0))
+    }
+
+    init(effectiveness: Int = 0, relaxation: Int = 0, voiceQuality: Int = 0, notes: String? = nil, ratedDate: Date = Date()) {
+        self.effectiveness = effectiveness
+        self.relaxation = relaxation
+        self.voiceQuality = voiceQuality
+        self.notes = notes
+        self.ratedDate = ratedDate
+    }
+}
+
 /// Represents an audio file that can be used for session generation
 struct AudioFile: Identifiable, Codable, Sendable {
     let id: UUID
     var filename: String
-    let url: URL
     let duration: TimeInterval
     let fileSize: Int64
     let createdDate: Date
 
-    // Optional analysis data
     var transcription: String?
     var analysisResult: AnalysisResult?
     var deadTimeProfile: DeadTimeProfile?
 
-    init(id: UUID = UUID(), filename: String, url: URL, duration: TimeInterval,
-         fileSize: Int64, createdDate: Date = Date()) {
+    // User Organization Data
+    var creator: String? // Voice/narrator/hypnotist name for grouping in Library
+    var isFavorite: Bool?
+    var rating: Int? // 0 to 5 (legacy - kept for compatibility)
+    var detailedRating: DetailedRating?
+    var tags: [String]?
+    var lastPlayedDate: Date?
+    var playCount: Int?
+    var sessionNotes: String? // User notes about the session
+
+    // Computed from filename so the URL is always valid after app updates.
+    // iOS sandbox container paths include a dynamic UUID that changes on update;
+    // storing only the filename and reconstructing the URL at runtime avoids stale paths.
+    nonisolated var url: URL { URL.documentsDirectory.appendingPathComponent(filename) }
+
+    // Exclude `url` from serialization — it is always derived from `filename`.
+    // Old stored data may contain a `url` field; Codable ignores unknown keys.
+    enum CodingKeys: String, CodingKey {
+        case id, filename, duration, fileSize, createdDate
+        case transcription, analysisResult, deadTimeProfile
+        case creator, isFavorite, rating, detailedRating, tags
+        case lastPlayedDate, playCount, sessionNotes
+    }
+
+    init(id: UUID = UUID(), filename: String, duration: TimeInterval,
+         fileSize: Int64, createdDate: Date = Date(),
+         isFavorite: Bool? = nil, rating: Int? = nil, tags: [String]? = nil,
+         lastPlayedDate: Date? = nil, playCount: Int? = nil) {
         self.id = id
         self.filename = filename
-        self.url = url
         self.duration = duration
         self.fileSize = fileSize
         self.createdDate = createdDate
+        self.isFavorite = isFavorite
+        self.rating = rating
+        self.tags = tags
+        self.lastPlayedDate = lastPlayedDate
+        self.playCount = playCount
     }
 
     // MARK: - Computed Properties
@@ -59,6 +108,31 @@ struct AudioFile: Identifiable, Codable, Sendable {
             .replacingOccurrences(of: ".m4a", with: "")
             .replacingOccurrences(of: ".wav", with: "")
             .replacingOccurrences(of: ".aac", with: "")
+    }
+    
+    // Safe accessors for optional user data
+    var favorite: Bool { isFavorite ?? false }
+    var userRating: Int {
+        detailedRating?.overallRating ?? rating ?? 0
+    }
+    var userTags: [String] { tags ?? [] }
+    var effectivenessRating: Int { detailedRating?.effectiveness ?? 0 }
+    var relaxationRating: Int { detailedRating?.relaxation ?? 0 }
+    var voiceQualityRating: Int { detailedRating?.voiceQuality ?? 0 }
+}
+
+extension AudioFile: Equatable {
+    static func == (lhs: AudioFile, rhs: AudioFile) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.filename == rhs.filename &&
+        lhs.isFavorite == rhs.isFavorite &&
+        lhs.rating == rhs.rating &&
+        lhs.detailedRating == rhs.detailedRating &&
+        lhs.tags == rhs.tags &&
+        lhs.creator == rhs.creator &&
+        lhs.lastPlayedDate == rhs.lastPlayedDate &&
+        lhs.playCount == rhs.playCount &&
+        lhs.sessionNotes == rhs.sessionNotes
     }
 }
 
@@ -127,13 +201,13 @@ struct KeyMoment: Codable, Identifiable, Sendable {
     let id: UUID
     let time: TimeInterval
     let description: String
-    let suggestedAction: String // e.g., "increase intensity", "shift to warmer colors"
+    let action: LightAction
 
-    nonisolated init(id: UUID = UUID(), time: TimeInterval, description: String, suggestedAction: String) {
+    nonisolated init(id: UUID = UUID(), time: TimeInterval, description: String, action: LightAction) {
         self.id = id
         self.time = time
         self.description = description
-        self.suggestedAction = suggestedAction
+        self.action = action
     }
 }
 

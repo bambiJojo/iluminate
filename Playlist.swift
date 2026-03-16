@@ -59,6 +59,14 @@ struct PlaylistItem: Identifiable, Codable {
         let seconds = Int(duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
+
+    var displayName: String {
+        filename
+            .replacingOccurrences(of: ".mp3", with: "")
+            .replacingOccurrences(of: ".m4a", with: "")
+            .replacingOccurrences(of: ".wav", with: "")
+            .replacingOccurrences(of: ".aac", with: "")
+    }
 }
 
 // MARK: - Playlist Storage

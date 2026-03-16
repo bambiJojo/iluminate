@@ -30,32 +30,18 @@ struct PlaylistLibraryView: View {
                     }
                 }
             }
-            .navigationTitle("Playlist Library")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        TranceHaptics.shared.light()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .symbolRenderingMode(.hierarchical)
-                            .font(.title3)
-                            .foregroundStyle(.primary)
-                    }
-                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         TranceHaptics.shared.light()
                         createNewPlaylist()
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                                .symbolRenderingMode(.hierarchical)
-                            .font(.title2)
-                            .foregroundStyle(Color.bwTheta)
-                            .shadow(
-                                color: Color.bwTheta.opacity(0.3),
-                                radius: 4
+                            .symbolRenderingMode(.hierarchical)
+                            .font(.system(size: 32))
+                            .foregroundStyle(
+                                LinearGradient(colors: [.roseGold, .blush],
+                                               startPoint: .topLeading, endPoint: .bottomTrailing)
                             )
                     }
                     .accessibilityLabel("Create New Playlist")
@@ -286,8 +272,8 @@ struct PlaylistLibraryView: View {
                     .padding(.horizontal, TranceSpacing.card)
                 }
 
-                // Bottom spacing
-                Spacer(minLength: TranceSpacing.screen)
+                // Bottom spacing for tab bar clearance
+                Spacer(minLength: TranceSpacing.tabBarClearance)
             }
             .padding(.vertical, TranceSpacing.list)
         }
@@ -346,6 +332,105 @@ struct PlaylistLibraryView: View {
                     y: 4
                 )
         )
+    }
+}
+
+// MARK: - Add To Playlist Sheet
+
+struct AddToPlaylistSheet: View {
+    let itemTitle: String
+    let onAdd: (Playlist) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var playlists: [Playlist] = []
+    @State private var addedPlaylistId: UUID?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.bgPrimary.ignoresSafeArea()
+
+                if playlists.isEmpty {
+                    VStack(spacing: TranceSpacing.card) {
+                        Image(systemName: "music.note.list")
+                            .font(.system(size: 48, weight: .ultraLight))
+                            .foregroundStyle(Color.roseGold)
+                        Text("No Playlists Yet")
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(.primary)
+                        Text("Create a playlist first from the Playlists tab")
+                            .font(TranceTypography.body)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(TranceSpacing.screen)
+                } else {
+                    List {
+                        Section {
+                            ForEach(playlists) { playlist in
+                                Button {
+                                    onAdd(playlist)
+                                    addedPlaylistId = playlist.id
+                                    TranceHaptics.shared.medium()
+                                    Task { @MainActor in
+                                        try? await Task.sleep(for: .milliseconds(800))
+                                        dismiss()
+                                    }
+                                } label: {
+                                    HStack(spacing: TranceSpacing.list) {
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .fill(Color.roseGold.opacity(0.15))
+                                                .frame(width: 36, height: 36)
+                                            Image(systemName: "music.note.list")
+                                                .font(.system(size: 16))
+                                                .foregroundStyle(Color.roseGold)
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(playlist.name)
+                                                .font(TranceTypography.body)
+                                                .foregroundStyle(.primary)
+                                            Text("\(playlist.itemCount) tracks")
+                                                .font(TranceTypography.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+
+                                        Spacer()
+
+                                        if addedPlaylistId == playlist.id {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(Color.roseGold)
+                                        } else {
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundStyle(Color.roseGold)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        } header: {
+                            Text("Add \"\(itemTitle)\" to")
+                                .font(TranceTypography.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                    .scrollContentBackground(.hidden)
+                }
+            }
+            .navigationTitle("Add to Playlist")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .onAppear {
+                playlists = PlaylistStore.load()
+            }
+        }
     }
 }
 
