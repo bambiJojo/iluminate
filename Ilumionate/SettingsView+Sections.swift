@@ -93,6 +93,22 @@ extension SettingsView {
                     format: { String(format: "%.1f×", $0) },
                     color: .roseGold
                 )
+                HStack(spacing: TranceSpacing.list) {
+                    Image(systemName: "timer")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.bwAlpha)
+                        .frame(width: 24)
+                    Text("Countdown Timer")
+                        .font(TranceTypography.body)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    Picker("Countdown", selection: $countdownDuration) {
+                        Text("1s").tag(1)
+                        Text("3s").tag(3)
+                        Text("10s").tag(10)
+                    }
+                    .tint(.textSecondary)
+                }
                 settingsToggle(
                     title: "Bilateral Mode Default",
                     binding: $bilateralModeDefault,

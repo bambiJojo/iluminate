@@ -11,14 +11,8 @@ import SwiftUI
 struct AnalysisProgressView: View {
 
     let audioFile: AudioFile
-    @State private var audioAnalyzer = AudioAnalyzer()
-    @State private var aiAnalyzer = AIContentAnalyzer()
+    @State private var viewModel = AnalysisProgressViewModel()
     @Environment(\.dismiss) private var dismiss
-
-    @State private var currentStage: AnalysisStage = .starting
-    @State private var transcriptionResult: AudioTranscriptionResult?
-    @State private var analysisResult: AnalysisResult?
-    @State private var errorMessage: String?
 
     var onAnalysisComplete: (AudioFile, AnalysisResult) -> Void
 
@@ -39,9 +33,9 @@ struct AnalysisProgressView: View {
                     Spacer()
 
                     // Results or error
-                    if let result = analysisResult {
+                    if let result = viewModel.analysisResult {
                         resultsPreview(result)
-                    } else if let error = errorMessage {
+                    } else if let error = viewModel.errorMessage {
                         errorView(error)
                     }
 
@@ -65,11 +59,11 @@ struct AnalysisProgressView: View {
                             .font(.title3)
                             .foregroundStyle(.primary)
                     }
-                    .disabled(currentStage == .complete)
+                    .disabled(viewModel.stage == .complete)
                 }
             }
             .task {
-                await startAnalysis()
+                await viewModel.startAnalysis(for: audioFile)
             }
         }
     }
@@ -85,14 +79,14 @@ struct AnalysisProgressView: View {
                     .frame(width: 150, height: 150)
 
                 Circle()
-                    .trim(from: 0, to: overallProgress)
+                    .trim(from: 0, to: viewModel.overallProgress)
                     .stroke(
-                        currentStage == .complete ? Color.green : Color.bwGamma,
+                        viewModel.stage == .complete ? Color.green : Color.bwGamma,
                         style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
                     .frame(width: 150, height: 150)
                     .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 0.3), value: overallProgress)
+                    .animation(.easeInOut(duration: 0.3), value: viewModel.overallProgress)
 
                 // Rotating background spiral
                 Circle()
@@ -100,17 +94,17 @@ struct AnalysisProgressView: View {
                     .frame(width: 180, height: 180)
 
                 // Icon or percentage
-                if currentStage == .complete {
+                if viewModel.stage == .complete {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 50, weight: .bold))
                         .foregroundStyle(Color.green)
-                } else if currentStage == .failed {
+                } else if viewModel.stage == .failed {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 50, weight: .bold))
                         .foregroundStyle(Color.red)
                 } else {
                     VStack(spacing: 4) {
-                        Text("\(Int(overallProgress * 100))%")
+                        Text("\(Int(viewModel.overallProgress * 100))%")
                             .font(TranceTypography.greetingAccent)
                             .foregroundStyle(.primary)
 
@@ -129,19 +123,19 @@ struct AnalysisProgressView: View {
     private var stageIndicator: some View {
         VStack(spacing: 12) {
             // Current stage title
-            Text(currentStage.title)
+            Text(viewModel.stage.title)
                 .font(TranceTypography.sectionTitle)
                 .foregroundStyle(.primary)
 
             // Stage description
-            Text(currentStage.description)
+            Text(viewModel.stage.description)
                 .font(TranceTypography.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             // Progress bar for current stage
-            if currentStage != .complete && currentStage != .failed {
-                ProgressView(value: currentStageProgress)
+            if viewModel.stage != .complete && viewModel.stage != .failed {
+                ProgressView(value: viewModel.currentStageProgress)
                     .tint(Color.bwGamma)
                     .frame(width: 200)
             }
@@ -218,23 +212,26 @@ struct AnalysisProgressView: View {
 
     private var actionButton: some View {
         Group {
-            if currentStage == .complete, let result = analysisResult {
+            if viewModel.stage == .complete, let result = viewModel.analysisResult {
                 Button {
                     var updatedFile = audioFile
                     updatedFile.analysisResult = result
-                    if let transcription = transcriptionResult {
+                    if let transcription = viewModel.transcriptionResult {
                         updatedFile.transcription = transcription.fullText
                     }
                     onAnalysisComplete(updatedFile, result)
                     dismiss()
                 } label: {
-                    Label("Continue to Session Generation", systemImage: "arrow.right.circle.fill")
-                        .font(TranceTypography.sectionTitle)
-                        .frame(maxWidth: .infinity)
+                    Label(
+                        "Continue to Session Generation",
+                        systemImage: "arrow.right.circle.fill"
+                    )
+                    .font(TranceTypography.sectionTitle)
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(GlassButtonStyle())
                 .padding(.horizontal)
-            } else if currentStage == .failed {
+            } else if viewModel.stage == .failed {
                 Button {
                     dismiss()
                 } label: {
@@ -248,70 +245,9 @@ struct AnalysisProgressView: View {
         }
     }
 
-    // MARK: - Analysis Logic
-
-    private func startAnalysis() async {
-        do {
-            // Stage 1: Transcription
-            currentStage = .transcribing
-            transcriptionResult = try await audioAnalyzer.transcribe(audioFile: audioFile)
-
-            // Stage 2: AI Analysis
-            currentStage = .analyzing
-            guard let transcription = transcriptionResult else {
-                throw AnalyzerError.noAudioData
-            }
-
-            analysisResult = try await aiAnalyzer.analyzeContent(
-                transcription: transcription,
-                audioFile: audioFile
-            )
-
-            // Complete
-            currentStage = .complete
-
-        } catch {
-            currentStage = .failed
-            errorMessage = error.localizedDescription
-            print("❌ Analysis failed: \(error)")
-        }
-    }
-
     private func cancelAnalysis() {
         Task {
-            await audioAnalyzer.cancelTranscription()
-        }
-    }
-
-    // MARK: - Progress Calculation
-
-    private var overallProgress: Double {
-        switch currentStage {
-        case .starting:
-            return 0.0
-        case .transcribing:
-            return 0.0 + (audioAnalyzer.progress * 0.4)
-        case .analyzing:
-            return 0.4 + (aiAnalyzer.progress * 0.4)
-        case .generatingSession:
-            return 0.8
-        case .complete:
-            return 1.0
-        case .failed:
-            return 0.0
-        }
-    }
-
-    private var currentStageProgress: Double {
-        switch currentStage {
-        case .transcribing:
-            return audioAnalyzer.progress
-        case .analyzing:
-            return aiAnalyzer.progress
-        case .generatingSession:
-            return 1.0
-        default:
-            return 0.0
+            await viewModel.cancel()
         }
     }
 }

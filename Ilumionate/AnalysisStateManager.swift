@@ -38,15 +38,27 @@ class AnalysisStateManager: Sendable {
 
     // MARK: - Initialization
 
+    /// Production singleton — uses the live ML-backed implementations.
     private init() {
+        self.audioAnalyzer = AudioAnalyzer()
+        self.aiAnalyzer = AIContentAnalyzer()
+        loadCachedResults()
+        Task { await resumeInterruptedAnalyses() }
+    }
+
+    /// Testable initializer — inject mock services for unit testing.
+    /// Not intended for production use; use `shared` instead.
+    init(transcriber: any AudioTranscribingService, analyzer: any ContentAnalyzingService) {
+        self.audioAnalyzer = transcriber
+        self.aiAnalyzer = analyzer
         loadCachedResults()
     }
 
     // MARK: - Actor-Isolated State Management
 
     private let analysisCoordinator = AnalysisCoordinator()
-    private let audioAnalyzer = AudioAnalyzer()
-    private let aiAnalyzer = AIContentAnalyzer()
+    private let audioAnalyzer: any AudioTranscribingService
+    private let aiAnalyzer: any ContentAnalyzingService
     private let performanceOptimizer = PerformanceOptimizer.shared
 
     // MARK: - Queue Management
@@ -254,6 +266,25 @@ class AnalysisStateManager: Sendable {
         URL.documentsDirectory.appending(path: "AnalysisCache.json")
     }
 
+    /// Re-queues any audio files whose analysis was interrupted before completion.
+    private func resumeInterruptedAnalyses() async {
+        let pending = await AnalysisProgressStore.shared.allPending()
+        guard !pending.isEmpty else { return }
+
+        print("🔁 Resuming \(pending.count) interrupted analysis/analyses…")
+        let filesToResume = pending
+            .filter { !hasCachedResult(for: $0.audioFile) }
+            .map(\.audioFile)
+
+        guard !filesToResume.isEmpty else {
+            // All checkpoints already have finished results — clean up stale entries
+            await AnalysisProgressStore.shared.clearAll()
+            return
+        }
+
+        await queueForAnalysis(filesToResume)
+    }
+
     private func loadCachedResults() {
         guard let data = try? Data(contentsOf: Self.cacheURL) else { return }
         if let decoded = try? JSONDecoder().decode([String: AnalysisResult].self, from: data) {
@@ -338,8 +369,8 @@ actor AnalysisCoordinator {
 
     func processQueue(
         audioFiles: [AudioFile],
-        audioAnalyzer: AudioAnalyzer,
-        aiAnalyzer: AIContentAnalyzer,
+        audioAnalyzer: any AudioTranscribingService,
+        aiAnalyzer: any ContentAnalyzingService,
         performanceOptimizer: PerformanceOptimizer,
         priority: TaskPriority,
         onComplete: @Sendable @escaping (AudioFile, CompletedAnalysis) async -> Void
@@ -399,8 +430,8 @@ actor AnalysisCoordinator {
 
     private func performSingleAnalysis(
         audioFile: AudioFile,
-        audioAnalyzer: AudioAnalyzer,
-        aiAnalyzer: AIContentAnalyzer,
+        audioAnalyzer: any AudioTranscribingService,
+        aiAnalyzer: any ContentAnalyzingService,
         performanceOptimizer: PerformanceOptimizer,
         onComplete: @Sendable @escaping (AudioFile, CompletedAnalysis) async -> Void
     ) async {
@@ -526,8 +557,8 @@ actor AnalysisCoordinator {
     /// Process files one at a time from the queue until empty
     func processQueueAutomatically(
         analysisManager: AnalysisStateManager,
-        audioAnalyzer: AudioAnalyzer,
-        aiAnalyzer: AIContentAnalyzer,
+        audioAnalyzer: any AudioTranscribingService,
+        aiAnalyzer: any ContentAnalyzingService,
         performanceOptimizer: PerformanceOptimizer,
         priority: TaskPriority,
         onComplete: @Sendable @escaping (AudioFile, CompletedAnalysis) async -> Void
@@ -609,19 +640,26 @@ actor AnalysisCoordinator {
         print("🏁 Automatic queue processing finished")
     }
 
-    /// Perform single analysis with proper state updates
+    /// Perform single analysis with proper state updates, resuming from any saved checkpoint.
     private func performSingleAnalysisWithStateUpdates(
         audioFile: AudioFile,
         analysisManager: AnalysisStateManager,
-        audioAnalyzer: AudioAnalyzer,
-        aiAnalyzer: AIContentAnalyzer,
+        audioAnalyzer: any AudioTranscribingService,
+        aiAnalyzer: any ContentAnalyzingService,
         performanceOptimizer: PerformanceOptimizer,
         onComplete: @Sendable @escaping (AudioFile, CompletedAnalysis) async -> Void
     ) async {
-        do {
-            print("🔄 Starting analysis: \(audioFile.filename)")
+        // Load any checkpoint saved from a previous run.
+        let checkpoint = await AnalysisProgressStore.shared.checkpoint(for: audioFile)
+        let resumingFrom = checkpoint?.resumeStage ?? .transcribing
 
-            // Use background task registration for iOS background processing
+        if checkpoint != nil {
+            print("🔁 Resuming \(audioFile.filename) from stage: \(resumingFrom)")
+        } else {
+            print("🔄 Starting analysis: \(audioFile.filename)")
+        }
+
+        do {
             try await performanceOptimizer.withBackgroundTask(name: "AudioAnalysis-\(audioFile.filename)") {
 
                 // Start progress syncing loop
@@ -643,26 +681,46 @@ actor AnalysisCoordinator {
                 }
                 defer { progressTracker.cancel() }
 
-                // Stage 1: Transcription
-                await MainActor.run {
-                    analysisManager.currentAnalysis?.stage = .transcribing
+                // Stage 1: Transcription (skip if checkpoint already has it)
+                let transcriptionResult: AudioTranscriptionResult
+                if let saved = checkpoint?.transcription {
+                    print("⏭️ Skipping transcription (checkpoint found) for \(audioFile.filename)")
+                    transcriptionResult = saved
+                    await MainActor.run {
+                        analysisManager.currentAnalysis?.stage = .analyzing
+                        analysisManager.currentAnalysis?.progress = 0.4
+                    }
+                } else {
+                    await MainActor.run {
+                        analysisManager.currentAnalysis?.stage = .transcribing
+                    }
+                    transcriptionResult = try await audioAnalyzer.transcribe(audioFile: audioFile)
+                    try Task.checkCancellation()
+                    await AnalysisProgressStore.shared.saveTranscription(transcriptionResult, for: audioFile)
                 }
 
-                let transcriptionResult = try await audioAnalyzer.transcribe(audioFile: audioFile)
-                try Task.checkCancellation()
-
-                // Stage 2: AI Analysis
-                await MainActor.run {
-                    analysisManager.currentAnalysis?.stage = .analyzing
+                // Stage 2: AI Analysis (skip if checkpoint already has it)
+                let analysisResult: AnalysisResult
+                if let saved = checkpoint?.analysis {
+                    print("⏭️ Skipping AI analysis (checkpoint found) for \(audioFile.filename)")
+                    analysisResult = saved
+                    await MainActor.run {
+                        analysisManager.currentAnalysis?.stage = .generatingSession
+                        analysisManager.currentAnalysis?.progress = 0.8
+                    }
+                } else {
+                    await MainActor.run {
+                        analysisManager.currentAnalysis?.stage = .analyzing
+                    }
+                    analysisResult = try await aiAnalyzer.analyzeContent(
+                        transcription: transcriptionResult,
+                        audioFile: audioFile
+                    )
+                    try Task.checkCancellation()
+                    await AnalysisProgressStore.shared.saveAnalysis(analysisResult, for: audioFile)
                 }
 
-                let analysisResult = try await aiAnalyzer.analyzeContent(
-                    transcription: transcriptionResult,
-                    audioFile: audioFile
-                )
-                try Task.checkCancellation()
-
-                // Stage 3: Generate Light Session
+                // Stage 3: Generate Light Session (always run — it's fast)
                 await MainActor.run {
                     analysisManager.currentAnalysis?.stage = .generatingSession
                     analysisManager.currentAnalysis?.progress = 0.8
@@ -678,13 +736,14 @@ actor AnalysisCoordinator {
                 // Stage 4: Save Session
                 try await self.saveLightSession(lightSession, for: audioFile)
 
-                // Stage 5: Mark complete
+                // Stage 5: Mark complete and clear checkpoint
+                await AnalysisProgressStore.shared.clear(for: audioFile)
+
                 await MainActor.run {
                     analysisManager.currentAnalysis?.stage = .complete
                     analysisManager.currentAnalysis?.progress = 1.0
                 }
 
-                // Complete
                 let completedAnalysis = CompletedAnalysis(
                     audioFile: audioFile,
                     transcription: transcriptionResult,
@@ -692,13 +751,13 @@ actor AnalysisCoordinator {
                     completedAt: Date()
                 )
 
-                // Call completion handler
                 await onComplete(audioFile, completedAnalysis)
 
                 print("✅ Analysis completed: \(audioFile.filename)")
             }
         } catch is CancellationError {
-            print("🛑 Analysis cancelled: \(audioFile.filename)")
+            // Keep the checkpoint — progress is preserved for next launch.
+            print("🛑 Analysis cancelled: \(audioFile.filename) — checkpoint preserved for resume")
             await MainActor.run {
                 analysisManager.currentAnalysis?.stage = .failed
                 analysisManager.currentAnalysis?.errorMessage = "Cancelled"
@@ -707,6 +766,7 @@ actor AnalysisCoordinator {
         } catch {
             let msg = error.localizedDescription
             print("❌ Analysis failed: \(audioFile.filename) - \(msg)")
+            // Keep checkpoint on transient errors; it will be retried on next launch.
             await MainActor.run {
                 analysisManager.currentAnalysis?.stage = .failed
                 analysisManager.currentAnalysis?.errorMessage = msg

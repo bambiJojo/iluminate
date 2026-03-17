@@ -325,7 +325,7 @@ struct FolderDetailView: View {
         }
         .navigationTitle(name)
         .fullScreenCover(item: $syncPlayerItem) { item in
-            AudioLightPlayerView(audioFile: item.audioFile, engine: engine)
+            UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
         }
     }
 

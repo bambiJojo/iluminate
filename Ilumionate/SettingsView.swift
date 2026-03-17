@@ -71,6 +71,7 @@ struct SettingsView: View {
     @AppStorage("preferredSessionDuration") var preferredSessionDuration = 15.0
     @AppStorage("bilateralModeDefault") var bilateralModeDefault = false
     @AppStorage("userFrequencyMultiplier") var userFrequencyMultiplier = 1.0
+    @AppStorage("countdownDuration") var countdownDuration = 3
 
     // Audio & Display
     @AppStorage("audioQualityRaw") var audioQualityRaw = "High"

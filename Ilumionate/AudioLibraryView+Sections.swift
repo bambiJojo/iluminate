@@ -78,7 +78,7 @@ extension AudioLibraryView {
             }
         }
         .fullScreenCover(item: $playerFile) { file in
-            AudioLightPlayerView(audioFile: file, engine: engine)
+            UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
         }
     }
 

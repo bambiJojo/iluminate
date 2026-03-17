@@ -87,9 +87,8 @@ struct SessionGenerationView: View {
             }
             .fullScreenCover(isPresented: $showingPlayer) {
                 if let session = generatedSession {
-                    SessionPlayerView(
-                        session: session,
-                        audioFile: audioFile,
+                    UnifiedPlayerView(
+                        mode: .session(session: session, audioFile: audioFile),
                         engine: engine
                     )
                 }

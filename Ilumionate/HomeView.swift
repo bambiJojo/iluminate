@@ -62,6 +62,7 @@ struct HomeView: View {
 
     @State private var isRefreshing = false
     @State private var showingProfile = false
+    @State var showingSessionLibrary = false
     @State private var playerFile: AudioFile?
     @State private var cardsVisible = false
 
@@ -107,8 +108,13 @@ struct HomeView: View {
                         .cardEntrance(visible: cardsVisible, delay: 0.08, reduceMotion: reduceMotion)
                 }
 
+                if !sessions.isEmpty {
+                    featuredSessionsSection
+                        .cardEntrance(visible: cardsVisible, delay: 0.12, reduceMotion: reduceMotion)
+                }
+
                 quickStartSection
-                    .cardEntrance(visible: cardsVisible, delay: 0.15, reduceMotion: reduceMotion)
+                    .cardEntrance(visible: cardsVisible, delay: 0.18, reduceMotion: reduceMotion)
                 recentAudioSection
                     .cardEntrance(visible: cardsVisible, delay: 0.22, reduceMotion: reduceMotion)
                 mindMachineSection
@@ -135,16 +141,25 @@ struct HomeView: View {
         .sheet(isPresented: $showingProfile) {
             ProfileView()
         }
+        .sheet(isPresented: $showingSessionLibrary) {
+            SessionLibraryView(engine: engine)
+        }
         .fullScreenCover(isPresented: $showingFlashMode) {
-            FlashModeView(
-                frequency: flashFrequency,
-                intensity: flashIntensity,
-                colorTemperature: flashKelvin,
-                pattern: flashPattern
+            UnifiedPlayerView(
+                mode: .flashMode(
+                    frequency: flashFrequency,
+                    intensity: flashIntensity,
+                    colorTemperature: flashKelvin,
+                    pattern: flashPattern,
+                    binauralEnabled: false,
+                    binauralCarrier: 200,
+                    binauralVolume: 0.5
+                ),
+                engine: engine
             )
         }
         .fullScreenCover(item: $playerFile) { file in
-            AudioLightPlayerView(audioFile: file, engine: engine)
+            UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
         }
     }
 
@@ -448,7 +463,7 @@ struct HomeView: View {
                     ForEach(Array(sessions.prefix(3).enumerated()), id: \.element.id) { index, session in
                         Button {
                             TranceHaptics.shared.heavy()
-                            // Open the full light-score session in SessionPlayerView
+                            // Open the full light-score session in UnifiedPlayerView
                             selectedSession = session
                         } label: {
                             HStack(spacing: TranceSpacing.list) {

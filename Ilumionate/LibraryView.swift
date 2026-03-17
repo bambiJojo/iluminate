@@ -72,7 +72,7 @@ struct LibraryView: View {
                 AudioLibraryView(engine: engine)
             }
             .fullScreenCover(item: $playerFile) { file in
-                AudioLightPlayerView(audioFile: file, engine: engine)
+                UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
             }
             .sheet(item: $fileForPlaylist) { file in
                 AddToPlaylistSheet(itemTitle: file.displayName) { playlist in
@@ -597,7 +597,7 @@ struct LibraryFavoritesView: View {
             favorites = new.filter { $0.favorite }.sorted { $0.filename < $1.filename }
         }
         .fullScreenCover(item: $syncPlayerItem) { item in
-            AudioLightPlayerView(audioFile: item.audioFile, engine: engine)
+            UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
         }
         .sheet(item: $fileForPlaylist) { file in
             AddToPlaylistSheet(itemTitle: file.displayName) { playlist in

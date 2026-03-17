@@ -29,7 +29,7 @@ struct MinimalCrashTest {
         print("LightEngine stopped: \(!engine.isRunning)")
     }
 
-    @Test func createSessionPlayerView() {
+    @Test func createUnifiedPlayerView() {
         let session = LightSession(
             session_name: "Minimal Test",
             duration_sec: 10,
@@ -39,10 +39,11 @@ struct MinimalCrashTest {
         )
         let engine = LightEngine()
 
-        print("Creating SessionPlayerView...")
-        let view = SessionPlayerView(session: session, engine: engine)
-        print("✅ SessionPlayerView created successfully")
-        #expect(view.session.displayName == "Minimal Test")
+        print("Creating UnifiedPlayerView...")
+        let mode = PlayerMode.session(session: session, audioFile: nil)
+        #expect(mode.title == "Minimal Test")
+        let _ = UnifiedPlayerView(mode: mode, engine: engine)
+        print("✅ UnifiedPlayerView created successfully")
     }
 
     // createTherapeuticColors removed — TherapeuticColors no longer in main target

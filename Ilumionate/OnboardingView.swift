@@ -92,8 +92,8 @@ struct OnboardingView: View {
         }
         .fullScreenCover(isPresented: $showWelcomeSession) {
             if let welcomeSession = loadWelcomeSession() {
-                SessionPlayerView(
-                    session: welcomeSession,
+                UnifiedPlayerView(
+                    mode: .session(session: welcomeSession, audioFile: nil),
                     engine: lightEngine
                 )
                 .onDisappear {

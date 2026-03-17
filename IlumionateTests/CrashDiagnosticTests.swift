@@ -93,12 +93,12 @@ struct LightEngineCrashTests {
 // MARK: - Color Range Tests
 // TherapeuticColors removed from main target — tests relocated
 
-// MARK: - SessionPlayerView Component Tests
+// MARK: - UnifiedPlayerView Component Tests
 
 @MainActor
-struct SessionPlayerViewComponentTests {
+struct UnifiedPlayerViewComponentTests {
 
-    @Test func sessionPlayerViewInitialization() {
+    @Test func unifiedPlayerViewInitialization() {
         let session = LightSession(
             session_name: "Test Session",
             duration_sec: 300,
@@ -109,13 +109,11 @@ struct SessionPlayerViewComponentTests {
         )
         let engine = LightEngine()
 
-        // Test that SessionPlayerView can be created without crash
-        let playerView = SessionPlayerView(session: session, engine: engine)
-        #expect(playerView.session.displayName == "Test Session")
+        // Test that UnifiedPlayerView can be created without crash
+        let mode = PlayerMode.session(session: session, audioFile: nil)
+        #expect(mode.title == "Test Session")
+        let _ = UnifiedPlayerView(mode: mode, engine: engine)
     }
-
-    // auraBackgroundRendering and radialGradientWithEngineValues removed
-    // (AuraBackground / TherapeuticColors no longer exist in the main target)
 }
 
 // MARK: - Session Integration Tests

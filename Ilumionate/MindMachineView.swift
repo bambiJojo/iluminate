@@ -35,6 +35,14 @@ final class MindMachineModel: Sendable {
 
     var selectedVisualMode: VisualMode = .fullScreenFlash
 
+    // MARK: - Session Browser
+    var sessionCategory: SessionCategory = .all
+
+    // MARK: - Binaural Beats Settings
+    var binauralEnabled: Bool = false
+    var binauralCarrierFrequency: Double = 200.0   // Hz — left ear carrier
+    var binauralVolume: Double = 0.5
+
     enum LightPattern: String, CaseIterable {
         case sine = "Sine"
         case square = "Square"
@@ -70,9 +78,13 @@ final class MindMachineModel: Sendable {
 }
 
 struct MindMachineView: View {
-    @State private var model = MindMachineModel()
+    let engine: LightEngine
+    let sessions: [LightSession]
+
+    @State var model = MindMachineModel()
     @State private var showingFlashMode = false
     @State private var showingSettings = false
+    @State var selectedSession: LightSession?
 
     var body: some View {
         ScrollView {
@@ -96,8 +108,16 @@ struct MindMachineView: View {
                 // Visual mode selector
                 visualModeCard
 
+                // Binaural beats
+                binauralCard
+
                 // Pattern selection
                 patternSelectionSection
+
+                // Research sessions browser
+                if !sessions.isEmpty {
+                    sessionsBrowserSection
+                }
             }
             .padding(.horizontal, TranceSpacing.screen)
             .padding(.top, TranceSpacing.statusBar)
@@ -118,16 +138,28 @@ struct MindMachineView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
+        .fullScreenCover(item: $selectedSession) { session in
+            UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
+        }
         .fullScreenCover(isPresented: $showingFlashMode) {
             switch model.selectedVisualMode {
             case .colorPulse:
-                ColorPulseView(frequency: model.frequency, intensity: model.intensity)
+                UnifiedPlayerView(
+                    mode: .colorPulse(frequency: model.frequency, intensity: model.intensity),
+                    engine: engine
+                )
             default:
-                FlashModeView(
-                    frequency: model.frequency,
-                    intensity: model.intensity,
-                    colorTemperature: model.colorTemperature,
-                    pattern: model.selectedPattern
+                UnifiedPlayerView(
+                    mode: .flashMode(
+                        frequency: model.frequency,
+                        intensity: model.intensity,
+                        colorTemperature: model.colorTemperature,
+                        pattern: model.selectedPattern,
+                        binauralEnabled: model.binauralEnabled,
+                        binauralCarrier: model.binauralCarrierFrequency,
+                        binauralVolume: model.binauralVolume
+                    ),
+                    engine: engine
                 )
             }
         }
@@ -576,6 +608,6 @@ struct PhoneScreenOrb: View {
 
 #Preview {
     NavigationStack {
-        MindMachineView()
+        MindMachineView(engine: LightEngine(), sessions: [])
     }
 }

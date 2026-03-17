@@ -45,11 +45,11 @@ struct SessionLibraryView: View {
                 loadSessions()
             }
             .fullScreenCover(item: $selectedSession) { session in
-                SessionPlayerView(session: session, engine: engine)
+                UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
             }
             .fullScreenCover(isPresented: $showingSessionPlayer) {
                 if let session = selectedSession {
-                    SessionPlayerView(session: session, engine: engine)
+                    UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
                 }
             }
             .searchable(text: $searchText, prompt: "Search sessions...")

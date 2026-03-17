@@ -76,7 +76,7 @@ struct LibraryCreatorsView: View {
         }
         .navigationTitle("Creators")
         .fullScreenCover(item: $syncPlayerItem) { item in
-            AudioLightPlayerView(audioFile: item.audioFile, engine: engine)
+            UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
         }
     }
 
@@ -172,7 +172,7 @@ struct CreatorDetailView: View {
         }
         .navigationTitle(creatorName)
         .fullScreenCover(item: $syncPlayerItem) { item in
-            AudioLightPlayerView(audioFile: item.audioFile, engine: engine)
+            UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
         }
     }
 

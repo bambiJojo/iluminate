@@ -11,11 +11,9 @@
 		7988F3962F4FB70800E1DC5E /* PlaylistEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */; };
 		7988F3982F4FB79400E1DC5E /* PlaylistLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */; };
 		7988F39A2F4FB7F500E1DC5E /* PlaylistPlayerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3992F4FB7F500E1DC5E /* PlaylistPlayerController.swift */; };
-		7988F39C2F4FB82700E1DC5E /* PlaylistPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F39B2F4FB82700E1DC5E /* PlaylistPlayerView.swift */; };
 		79D548392F4F723B00B3B07F /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 79D548382F4F723B00B3B07F /* WhisperKit */; };
 		79D5483B2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */; };
 		79D5483D2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */; };
-		79D5483F2F4F7B9800B3B07F /* AudioLightPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483E2F4F7B9800B3B07F /* AudioLightPlayerView.swift */; };
 		79D548412F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */; };
 /* End PBXBuildFile section */
 
@@ -44,10 +42,8 @@
 		7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistEditorView.swift; sourceTree = "<group>"; };
 		7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistLibraryView.swift; sourceTree = "<group>"; };
 		7988F3992F4FB7F500E1DC5E /* PlaylistPlayerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistPlayerController.swift; sourceTree = "<group>"; };
-		7988F39B2F4FB82700E1DC5E /* PlaylistPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistPlayerView.swift; sourceTree = "<group>"; };
 		79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightScoreGenerator.swift; sourceTree = "<group>"; };
 		79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightSyncPlayer.swift; sourceTree = "<group>"; };
-		79D5483E2F4F7B9800B3B07F /* AudioLightPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightPlayerView.swift; sourceTree = "<group>"; };
 		79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ENHANCED_LIGHT_SCORE_GUIDE.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -105,13 +101,11 @@
 				795944042F38010900907305 /* Products */,
 				79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */,
 				79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */,
-				79D5483E2F4F7B9800B3B07F /* AudioLightPlayerView.swift */,
 				79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */,
 				7988F3932F4FB6E700E1DC5E /* Playlist.swift */,
 				7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */,
 				7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */,
 				7988F3992F4FB7F500E1DC5E /* PlaylistPlayerController.swift */,
-				7988F39B2F4FB82700E1DC5E /* PlaylistPlayerView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -282,11 +276,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				79D5483D2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift in Sources */,
-				79D5483F2F4F7B9800B3B07F /* AudioLightPlayerView.swift in Sources */,
 				79D5483B2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift in Sources */,
 				7988F3982F4FB79400E1DC5E /* PlaylistLibraryView.swift in Sources */,
 				7988F3962F4FB70800E1DC5E /* PlaylistEditorView.swift in Sources */,
-				7988F39C2F4FB82700E1DC5E /* PlaylistPlayerView.swift in Sources */,
 				7988F3942F4FB6E700E1DC5E /* Playlist.swift in Sources */,
 				7988F39A2F4FB7F500E1DC5E /* PlaylistPlayerController.swift in Sources */,
 			);
@@ -449,7 +441,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1006;
+				CURRENT_PROJECT_VERSION = 1007;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -467,7 +459,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.4;
+				MARKETING_VERSION = 0.5.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -489,7 +481,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1006;
+				CURRENT_PROJECT_VERSION = 1007;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -507,7 +499,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.4;
+				MARKETING_VERSION = 0.5.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

@@ -62,7 +62,7 @@ struct ContentView: View {
                         .transition(.opacity)
                 } else if selectedTab == .machine {
                     NavigationStack {
-                        MindMachineView()
+                        MindMachineView(engine: engine, sessions: sessions)
                     }
                     .transition(.opacity)
                 } else if selectedTab == .analyzer {
@@ -86,7 +86,7 @@ struct ContentView: View {
             engine.userFrequencyMultiplier = newValue
         }
         .fullScreenCover(item: $selectedSession) { session in
-            SessionPlayerView(session: session, engine: engine)
+            UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
         }
         .sheet(isPresented: $showingAudioLibrary) {
             AudioLibraryView(engine: engine)

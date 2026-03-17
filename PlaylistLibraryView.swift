@@ -66,7 +66,7 @@ struct PlaylistLibraryView: View {
                 }
             }
             .fullScreenCover(item: $playingPlaylist) { playlist in
-                PlaylistPlayerView(playlist: playlist, engine: engine)
+                UnifiedPlayerView(mode: .playlist(playlist: playlist), engine: engine)
             }
         }
     }
