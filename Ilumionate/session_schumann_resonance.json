@@ -1,0 +1,89 @@
+{
+  "session_name": "Schumann Resonance",
+  "duration_sec": 1200,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 12.0,
+      "intensity": 0.38,
+      "waveform": "sine",
+      "ramp_duration": 8.0,
+      "bilateral": false,
+      "color_temperature": 3000
+    },
+    {
+      "time": 120,
+      "frequency": 10.0,
+      "intensity": 0.46,
+      "waveform": "sine",
+      "ramp_duration": 18.0,
+      "bilateral": false,
+      "color_temperature": 2900
+    },
+    {
+      "time": 300,
+      "frequency": 8.0,
+      "intensity": 0.54,
+      "waveform": "soft_pulse",
+      "ramp_duration": 25.0,
+      "bilateral": false,
+      "color_temperature": 2800
+    },
+    {
+      "time": 480,
+      "frequency": 7.83,
+      "intensity": 0.60,
+      "waveform": "soft_pulse",
+      "ramp_duration": 30.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 660,
+      "frequency": 7.83,
+      "intensity": 0.63,
+      "waveform": "noise_sine",
+      "ramp_duration": 20.0,
+      "bilateral": true,
+      "bilateral_transition_duration": 12.0,
+      "color_temperature": 2700
+    },
+    {
+      "time": 840,
+      "frequency": 7.83,
+      "intensity": 0.60,
+      "waveform": "soft_pulse",
+      "ramp_duration": 15.0,
+      "bilateral": true,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1020,
+      "frequency": 9.0,
+      "intensity": 0.48,
+      "waveform": "sine",
+      "ramp_duration": 20.0,
+      "bilateral": false,
+      "bilateral_transition_duration": 8.0,
+      "color_temperature": 2800
+    },
+    {
+      "time": 1110,
+      "frequency": 10.5,
+      "intensity": 0.38,
+      "waveform": "sine",
+      "ramp_duration": 15.0,
+      "bilateral": false,
+      "color_temperature": 2900
+    },
+    {
+      "time": 1200,
+      "frequency": 12.0,
+      "intensity": 0.28,
+      "waveform": "sine",
+      "ramp_duration": 10.0,
+      "bilateral": false,
+      "color_temperature": 3000
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "session_name": "Delta Restoration",
+  "duration_sec": 1800,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 10.0,
+      "intensity": 0.38,
+      "waveform": "sine",
+      "ramp_duration": 8.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 180,
+      "frequency": 8.0,
+      "intensity": 0.46,
+      "waveform": "soft_pulse",
+      "ramp_duration": 25.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 360,
+      "frequency": 6.0,
+      "intensity": 0.55,
+      "waveform": "soft_pulse",
+      "ramp_duration": 30.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 540,
+      "frequency": 4.0,
+      "intensity": 0.64,
+      "waveform": "soft_pulse",
+      "ramp_duration": 35.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 720,
+      "frequency": 3.0,
+      "intensity": 0.72,
+      "waveform": "soft_pulse",
+      "ramp_duration": 40.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 900,
+      "frequency": 2.0,
+      "intensity": 0.78,
+      "waveform": "soft_pulse",
+      "ramp_duration": 45.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1080,
+      "frequency": 1.5,
+      "intensity": 0.82,
+      "waveform": "soft_pulse",
+      "ramp_duration": 50.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1260,
+      "frequency": 1.5,
+      "intensity": 0.84,
+      "waveform": "soft_pulse",
+      "ramp_duration": 10.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1440,
+      "frequency": 1.5,
+      "intensity": 0.84,
+      "waveform": "soft_pulse",
+      "ramp_duration": 10.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1620,
+      "frequency": 3.0,
+      "intensity": 0.65,
+      "waveform": "sine",
+      "ramp_duration": 40.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1800,
+      "frequency": 6.0,
+      "intensity": 0.40,
+      "waveform": "sine",
+      "ramp_duration": 35.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    }
+  ]
+}

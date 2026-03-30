@@ -1,0 +1,105 @@
+{
+  "session_name": "SMR Sleep Bridge",
+  "duration_sec": 1500,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 10.0,
+      "intensity": 0.40,
+      "waveform": "sine",
+      "ramp_duration": 8.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 120,
+      "frequency": 12.0,
+      "intensity": 0.36,
+      "waveform": "triangle",
+      "ramp_duration": 15.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 300,
+      "frequency": 13.5,
+      "intensity": 0.32,
+      "waveform": "triangle",
+      "ramp_duration": 20.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 480,
+      "frequency": 13.5,
+      "intensity": 0.30,
+      "waveform": "triangle",
+      "ramp_duration": 10.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 600,
+      "frequency": 12.0,
+      "intensity": 0.34,
+      "waveform": "sine",
+      "ramp_duration": 15.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 720,
+      "frequency": 9.0,
+      "intensity": 0.44,
+      "waveform": "soft_pulse",
+      "ramp_duration": 20.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 840,
+      "frequency": 6.5,
+      "intensity": 0.56,
+      "waveform": "soft_pulse",
+      "ramp_duration": 25.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 960,
+      "frequency": 4.0,
+      "intensity": 0.66,
+      "waveform": "soft_pulse",
+      "ramp_duration": 30.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1080,
+      "frequency": 2.5,
+      "intensity": 0.75,
+      "waveform": "soft_pulse",
+      "ramp_duration": 35.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1260,
+      "frequency": 1.5,
+      "intensity": 0.80,
+      "waveform": "soft_pulse",
+      "ramp_duration": 40.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1500,
+      "frequency": 1.5,
+      "intensity": 0.82,
+      "waveform": "soft_pulse",
+      "ramp_duration": 10.0,
+      "bilateral": false,
+      "color_temperature": 2700
+    }
+  ]
+}

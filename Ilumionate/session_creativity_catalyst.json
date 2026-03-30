@@ -1,0 +1,98 @@
+{
+  "session_name": "Creativity Catalyst",
+  "duration_sec": 1200,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 16.0,
+      "intensity": 0.33,
+      "waveform": "triangle",
+      "ramp_duration": 6.0,
+      "bilateral": false,
+      "color_temperature": 3500
+    },
+    {
+      "time": 120,
+      "frequency": 12.0,
+      "intensity": 0.40,
+      "waveform": "sine",
+      "ramp_duration": 18.0,
+      "bilateral": false,
+      "color_temperature": 3200
+    },
+    {
+      "time": 300,
+      "frequency": 10.0,
+      "intensity": 0.46,
+      "waveform": "sine",
+      "ramp_duration": 22.0,
+      "bilateral": false,
+      "color_temperature": 3000
+    },
+    {
+      "time": 420,
+      "frequency": 8.0,
+      "intensity": 0.52,
+      "waveform": "soft_pulse",
+      "ramp_duration": 25.0,
+      "bilateral": false,
+      "color_temperature": 2900
+    },
+    {
+      "time": 540,
+      "frequency": 7.0,
+      "intensity": 0.58,
+      "waveform": "soft_pulse",
+      "ramp_duration": 28.0,
+      "bilateral": true,
+      "bilateral_transition_duration": 8.0,
+      "color_temperature": 2800
+    },
+    {
+      "time": 720,
+      "frequency": 6.0,
+      "intensity": 0.62,
+      "waveform": "soft_pulse",
+      "ramp_duration": 30.0,
+      "bilateral": true,
+      "color_temperature": 2800
+    },
+    {
+      "time": 900,
+      "frequency": 6.0,
+      "intensity": 0.62,
+      "waveform": "noise_sine",
+      "ramp_duration": 12.0,
+      "bilateral": true,
+      "color_temperature": 2800
+    },
+    {
+      "time": 1020,
+      "frequency": 7.5,
+      "intensity": 0.52,
+      "waveform": "soft_pulse",
+      "ramp_duration": 22.0,
+      "bilateral": true,
+      "color_temperature": 2900
+    },
+    {
+      "time": 1110,
+      "frequency": 9.0,
+      "intensity": 0.42,
+      "waveform": "sine",
+      "ramp_duration": 18.0,
+      "bilateral": false,
+      "bilateral_transition_duration": 8.0,
+      "color_temperature": 3000
+    },
+    {
+      "time": 1200,
+      "frequency": 11.0,
+      "intensity": 0.33,
+      "waveform": "sine",
+      "ramp_duration": 12.0,
+      "bilateral": false,
+      "color_temperature": 3200
+    }
+  ]
+}

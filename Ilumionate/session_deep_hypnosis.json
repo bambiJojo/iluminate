@@ -1,0 +1,125 @@
+{
+  "session_name": "Deep Hypnosis",
+  "duration_sec": 1500,
+  "light_score": [
+    {
+      "time": 0,
+      "frequency": 16.0,
+      "intensity": 0.28,
+      "waveform": "triangle",
+      "ramp_duration": 6.0,
+      "bilateral": false,
+      "color_temperature": 3000
+    },
+    {
+      "time": 120,
+      "frequency": 14.0,
+      "intensity": 0.33,
+      "waveform": "sine",
+      "ramp_duration": 15.0,
+      "bilateral": false,
+      "color_temperature": 3000
+    },
+    {
+      "time": 240,
+      "frequency": 12.0,
+      "intensity": 0.40,
+      "waveform": "sine",
+      "ramp_duration": 18.0,
+      "bilateral": false,
+      "color_temperature": 2900
+    },
+    {
+      "time": 360,
+      "frequency": 10.0,
+      "intensity": 0.46,
+      "waveform": "sine",
+      "ramp_duration": 22.0,
+      "bilateral": false,
+      "color_temperature": 2800
+    },
+    {
+      "time": 480,
+      "frequency": 9.0,
+      "intensity": 0.52,
+      "waveform": "soft_pulse",
+      "ramp_duration": 22.0,
+      "bilateral": false,
+      "color_temperature": 2800
+    },
+    {
+      "time": 600,
+      "frequency": 12.0,
+      "intensity": 0.34,
+      "waveform": "sine",
+      "ramp_duration": 12.0,
+      "bilateral": false,
+      "color_temperature": 2900
+    },
+    {
+      "time": 660,
+      "frequency": 7.5,
+      "intensity": 0.58,
+      "waveform": "soft_pulse",
+      "ramp_duration": 18.0,
+      "bilateral": false,
+      "color_temperature": 2800
+    },
+    {
+      "time": 780,
+      "frequency": 6.0,
+      "intensity": 0.64,
+      "waveform": "soft_pulse",
+      "ramp_duration": 28.0,
+      "bilateral": true,
+      "bilateral_transition_duration": 10.0,
+      "color_temperature": 2700
+    },
+    {
+      "time": 960,
+      "frequency": 5.0,
+      "intensity": 0.70,
+      "waveform": "soft_pulse",
+      "ramp_duration": 35.0,
+      "bilateral": true,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1140,
+      "frequency": 4.5,
+      "intensity": 0.72,
+      "waveform": "soft_pulse",
+      "ramp_duration": 38.0,
+      "bilateral": true,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1320,
+      "frequency": 5.5,
+      "intensity": 0.64,
+      "waveform": "soft_pulse",
+      "ramp_duration": 28.0,
+      "bilateral": true,
+      "color_temperature": 2700
+    },
+    {
+      "time": 1440,
+      "frequency": 8.0,
+      "intensity": 0.46,
+      "waveform": "sine",
+      "ramp_duration": 20.0,
+      "bilateral": false,
+      "bilateral_transition_duration": 8.0,
+      "color_temperature": 2800
+    },
+    {
+      "time": 1500,
+      "frequency": 10.0,
+      "intensity": 0.33,
+      "waveform": "sine",
+      "ramp_duration": 12.0,
+      "bilateral": false,
+      "color_temperature": 2900
+    }
+  ]
+}
