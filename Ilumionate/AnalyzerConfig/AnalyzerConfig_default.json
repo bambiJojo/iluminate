@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "generation": 0,
+  "fitness": 0.0,
+
+  "keywordPipeline": {
+    "weights": {
+      "pre_talk": {
+        "welcome": 1.2, "hello": 0.8, "introduce": 1.0, "explain": 1.0,
+        "comfortable": 0.8, "position": 0.8, "ready": 0.8, "begin": 0.8,
+        "today": 0.5, "seated": 0.6, "lying": 0.6, "adjust": 0.6,
+        "how are you": 2.0, "let me explain": 2.5, "before we begin": 3.0,
+        "make yourself": 2.0, "find a comfortable": 2.5, "get comfortable": 2.5
+      },
+      "induction": {
+        "relax": 1.8, "relaxing": 1.8, "relaxed": 1.5, "breathe": 1.5,
+        "breath": 1.2, "breathing": 1.2, "calm": 1.5, "peaceful": 1.5,
+        "quiet": 1.2, "gentle": 1.0, "softly": 1.0, "slowly": 1.0,
+        "settle": 1.0, "release": 1.2, "tension": 1.0, "exhale": 1.5,
+        "inhale": 1.5, "shoulders": 1.0, "jaw": 1.0, "forehead": 1.0,
+        "eyelids": 1.5, "soften": 1.0, "unwind": 1.2, "unwinding": 1.2,
+        "heavy": 1.2, "close your eyes": 3.0, "eyes closed": 2.5,
+        "take a deep": 2.0, "let go": 2.0, "letting go": 2.0,
+        "count down": 3.0, "counting down": 3.0, "eyelids heavy": 3.0,
+        "eyelids are heavy": 3.0
+      },
+      "deepening": {
+        "deeper": 2.5, "deep": 0.6, "down": 1.5, "drift": 2.0,
+        "float": 2.0, "floating": 2.0, "sinking": 2.0, "falling": 1.5,
+        "descend": 2.0, "descending": 2.0, "deepen": 2.2, "deepening": 2.2,
+        "profoundly": 2.0, "weightless": 1.5, "sleep": 1.8, "trance": 2.0,
+        "melting": 2.0, "dissolve": 2.0, "waves": 1.2, "warmth": 1.2,
+        "nowhere": 1.5, "nothing": 1.2, "double": 1.5,
+        "deeper and deeper": 3.5, "going deeper": 3.0, "even deeper": 3.0,
+        "more and more": 2.0, "more relaxed": 2.5, "every breath": 2.5,
+        "with every breath": 3.0, "ten times": 2.0, "hundred times": 2.5,
+        "body scan": 2.5, "scan your body": 2.5, "feel yourself": 2.0,
+        "nothing to do": 2.0, "nowhere to go": 2.0, "one hundred": 1.8,
+        "staircase": 2.5, "going down": 2.0
+      },
+      "therapy": {
+        "deeply": 2.0, "completely": 1.8, "absolute": 1.5, "notice": 1.2,
+        "allow": 1.0, "in trance": 3.0, "not right now": 2.0,
+        "nothing matters": 2.5, "completely still": 2.0, "deeply relaxed": 3.0
+      },
+      "suggestions": {
+        "you will": 3.0, "from now on": 3.5, "every time": 3.0,
+        "each time": 3.0, "from this moment": 3.5, "you find": 2.0,
+        "you feel": 2.0, "your subconscious": 3.0, "inner mind": 2.5,
+        "notice now": 2.5, "in a moment": 1.5, "you are becoming": 3.0,
+        "you are now": 2.5
+      },
+      "post_hypnotic_conditioning": {
+        "post hypnotic": 3.5, "future pacing": 3.0, "carry with you": 2.5,
+        "take with you": 2.5, "remember this": 2.0
+      },
+      "emergence": {
+        "open your eyes": 3.5, "wide awake": 3.5, "fully awake": 3.5,
+        "coming back": 3.0, "come back": 3.0, "back in the room": 3.5,
+        "when you wake": 3.0, "as you return": 3.0, "slowly now": 1.5,
+        "gently now": 1.5, "feel good": 2.0, "great job": 2.0,
+        "well done": 2.5, "how do you feel": 2.5
+      }
+    },
+    "contextWindowSeconds": 5,
+    "smoothingWindowSize": 5,
+    "minimumPhaseDurationSeconds": 20,
+    "collapseThresholdFraction": 0.035
+  },
+
+  "chunkedAnalyzer": {
+    "chunkDurationSeconds": 15.0,
+    "chunkOverlapSeconds": 5.0,
+    "minChunks": 6,
+    "maxChunks": 60,
+    "systemInstructions": "You are a hypnosis session analyst. Classify a short transcript segment into the correct phase of a hypnosis session.\n\nPhases ALWAYS occur in this strict order — use the session position percentage to anchor your classification:\n1. pre_talk         (0–8%):  greeting, welcome, comfort, explaining the process\n2. induction        (5–22%): eye closure, breathing, \"relax\", counting down, body relaxation\n3. deepening        (18–40%): \"deeper\", drift, float, sinking, body scan, staircase\n4. therapy          (30–75%): deep passive trance — imagery, music, silence, minimal narration\n5. suggestions      (40–85%): ACTIVE commands — \"you will\", \"from now on\", \"whenever\", \"your subconscious\", direct therapeutic programming\n6. post_hypnotic_conditioning (70–92%): reinforcing suggestions, anchors, future-pacing\n7. emergence        (80–100%): counting up, \"come back\", alerting, re-orientation, waking\n\nCRITICAL RULES:\n- Session position is your strongest signal. Override ambiguous text with it.\n- therapy = passive (floating, drifting, imagery). suggestions = active commands (\"you will\").\n- If the text contains \"you will\", \"from now on\", \"whenever\", \"your subconscious\", or direct therapeutic commands → suggestions, not therapy.\n- Position >80% with ANY waking language → emergence.\n- Position <10% with calm/welcoming language → pre_talk, not induction.\n- Avoid labelling everything therapy. A 30-minute session has all 7 phases.\n\nRespond with ONLY the single raw phase value (e.g. \"suggestions\").\nNo explanation, no punctuation, no other text.",
+    "fewShotExamples": []
+  },
+
+  "prosody": {
+    "speechRateWindowSeconds": 3.0,
+    "pauseThresholdSeconds": 1.0,
+    "deliberatePauseMinSeconds": 3.0,
+    "musicOnlyPauseMinSeconds": 5.0
+  },
+
+  "techniqueDetection": {
+    "sensitivityThreshold": 0.6,
+    "minConfidence": 0.3
+  },
+
+  "sessionGeneration": {
+    "frequencyBands": {
+      "hypnosis": { "lower": 0.5, "upper": 10.0 },
+      "meditation": { "lower": 4.0, "upper": 12.0 },
+      "affirmations": { "lower": 9.0, "upper": 11.0 },
+      "music": { "lower": 8.0, "upper": 18.0 },
+      "guidedImagery": { "lower": 4.0, "upper": 10.0 },
+      "unknown": { "lower": 8.0, "upper": 12.0 }
+    },
+    "transitionSmoothingSeconds": 5.0,
+    "intensityCurve": "gradual"
+  }
+}

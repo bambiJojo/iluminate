@@ -45,6 +45,12 @@ struct WordTimestamp: Identifiable, Sendable {
 /// All methods are pure — the same input always produces the same output.
 struct HypnosisPhaseAnalyzer {
 
+    let config: AnalyzerConfig.KeywordPipeline
+
+    init(config: AnalyzerConfig.KeywordPipeline? = nil) {
+        self.config = config ?? AnalyzerConfigLoader.load().keywordPipeline
+    }
+
     // MARK: - Public Entry Point
 
     /// Converts WhisperKit segments into approximate word timestamps, then
@@ -61,8 +67,11 @@ struct HypnosisPhaseAnalyzer {
         var timeline    = resolveTimeline(hitMap: hitMap, bucketCount: bucketCount)
 
         timeline = enforcePhaseOrdering(timeline: timeline)
-        timeline = majorityVoteSmooth(timeline: timeline, windowSize: 5)
-        timeline = collapseShortRuns(timeline, minRun: max(20, Int(duration * 0.035)))
+        timeline = majorityVoteSmooth(timeline: timeline, windowSize: config.smoothingWindowSize)
+        timeline = collapseShortRuns(
+            timeline,
+            minRun: max(config.minimumPhaseDurationSeconds, Int(duration * config.collapseThresholdFraction))
+        )
 
         return consolidatePhaseSegments(timeline: timeline, duration: duration)
     }
@@ -153,12 +162,12 @@ struct HypnosisPhaseAnalyzer {
 
     // MARK: - Timeline Resolution
 
-    /// Assigns the best-scoring phase to each second, using a ±5s recency-biased window.
+    /// Assigns the best-scoring phase to each second, using a recency-biased context window.
     func resolveTimeline(
         hitMap: [[HypnosisMetadata.Phase: Double]],
         bucketCount: Int
     ) -> [HypnosisMetadata.Phase?] {
-        let contextRadius = 5
+        let contextRadius = config.contextWindowSeconds
         var timeline = [HypnosisMetadata.Phase?](repeating: nil, count: bucketCount)
 
         for secondIndex in 0..<bucketCount {

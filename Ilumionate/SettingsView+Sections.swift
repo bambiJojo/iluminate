@@ -229,6 +229,12 @@ extension SettingsView {
     var developerOptionsSection: some View {
         GlassCard(label: "Developer Settings") {
             VStack(spacing: TranceSpacing.list) {
+                NavigationLink("Analyzer Training") {
+                    CorpusManagerView()
+                }
+                .foregroundStyle(Color.roseGold)
+                .font(TranceTypography.body)
+
                 settingsButton(
                     title: "Print Engine Diagnostics",
                     icon: "cpu",

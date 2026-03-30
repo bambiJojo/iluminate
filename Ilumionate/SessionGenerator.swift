@@ -14,6 +14,14 @@ import Foundation
 @Observable
 class SessionGenerator {
 
+    // MARK: - Analyzer Config
+
+    let analyzerConfig: AnalyzerConfig.SessionGeneration
+
+    init(config: AnalyzerConfig.SessionGeneration? = nil) {
+        self.analyzerConfig = config ?? AnalyzerConfigLoader.load().sessionGeneration
+    }
+
     // MARK: - Configuration
 
     struct GenerationConfig {
