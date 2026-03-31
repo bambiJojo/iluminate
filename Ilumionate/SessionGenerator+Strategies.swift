@@ -105,10 +105,27 @@ extension SessionGenerator {
         duration: TimeInterval,
         config: GenerationConfig
     ) -> [LightMoment] {
+        var moments: [LightMoment]
         if let phases = analysis.hypnosisMetadata?.phases, !phases.isEmpty {
-            return generateHypnosisFromPhases(phases: phases, duration: duration, config: config)
+            moments = generateHypnosisFromPhases(phases: phases, duration: duration, config: config)
+        } else {
+            moments = generateHypnosisFromDuration(duration: duration, config: config)
         }
-        return generateHypnosisFromDuration(duration: duration, config: config)
+
+        // Apply prosodic modulation + technique-responsive moments
+        applyProsodicModulation(moments: &moments, analysis: analysis, config: config)
+
+        // Re-sort after technique moment insertion
+        moments.sort { $0.time < $1.time }
+
+        // Apply breath oscillation: adaptive (speech-synced) when prosody
+        // is available, fixed duration-based otherwise.
+        if let prosody = analysis.prosodicProfile {
+            applyAdaptiveBreathOscillation(&moments, prosody: prosody)
+        } else {
+            applyBreathOscillation(&moments, duration: duration)
+        }
+        return moments
     }
 
     /// Phase-accurate generation when the AI returned explicit hypnosis phases.
@@ -158,9 +175,7 @@ extension SessionGenerator {
 
         ensureEmergence(moments: &moments, duration: duration, config: config)
         smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
-        var sorted = moments.sorted { $0.time < $1.time }
-        applyBreathOscillation(&sorted, duration: duration)
-        return sorted
+        return moments.sorted { $0.time < $1.time }
     }
 
     /// Fallback generation when no phase data is available — uses canonical arc.
@@ -210,9 +225,7 @@ extension SessionGenerator {
 
         ensureEmergence(moments: &moments, duration: duration, config: config)
         smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
-        var sorted = moments.sorted { $0.time < $1.time }
-        applyBreathOscillation(&sorted, duration: duration)
-        return sorted
+        return moments.sorted { $0.time < $1.time }
     }
 
     // MARK: - Meditation
@@ -259,10 +272,15 @@ extension SessionGenerator {
 
         // Emergence
         ensureEmergence(moments: &moments, duration: duration, config: config)
+        applyProsodicModulation(moments: &moments, analysis: analysis, config: config)
+        moments.sort { $0.time < $1.time }
         smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
-        var sorted = moments.sorted { $0.time < $1.time }
-        applyBreathOscillation(&sorted, duration: duration)
-        return sorted
+        if let prosody = analysis.prosodicProfile {
+            applyAdaptiveBreathOscillation(&moments, prosody: prosody)
+        } else {
+            applyBreathOscillation(&moments, duration: duration)
+        }
+        return moments
     }
 
     // MARK: - Guided Imagery
@@ -314,8 +332,15 @@ extension SessionGenerator {
         }
 
         ensureEmergence(moments: &moments, duration: duration, config: config)
+        applyProsodicModulation(moments: &moments, analysis: analysis, config: config)
+        moments.sort { $0.time < $1.time }
         smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
-        return moments.sorted { $0.time < $1.time }
+        if let prosody = analysis.prosodicProfile {
+            applyAdaptiveBreathOscillation(&moments, prosody: prosody)
+        } else {
+            applyBreathOscillation(&moments, duration: duration)
+        }
+        return moments
     }
 
     // MARK: - Affirmations
@@ -352,11 +377,17 @@ extension SessionGenerator {
         }
 
         // Gentle emergence to leave the listener alert
-        moments.append(moment(time: holdEnd,      freq: 12.0, amp: 0.44 * mul, waveform: .sine, colorTemp: 4500))
-        moments.append(moment(time: duration,     freq: 14.0, amp: 0.50 * mul, waveform: .sine, colorTemp: 5000))
+        ensureEmergence(moments: &moments, duration: duration, config: config)
 
+        applyProsodicModulation(moments: &moments, analysis: analysis, config: config)
+        moments.sort { $0.time < $1.time }
         smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
-        return moments.sorted { $0.time < $1.time }
+        if let prosody = analysis.prosodicProfile {
+            applyAdaptiveBreathOscillation(&moments, prosody: prosody)
+        } else {
+            applyBreathOscillation(&moments, duration: duration)
+        }
+        return moments
     }
 
     // MARK: - Music
@@ -452,8 +483,10 @@ extension SessionGenerator {
         }
 
         ensureEmergence(moments: &moments, duration: duration, config: config)
+        applyProsodicModulation(moments: &moments, analysis: analysis, config: config)
+        moments.sort { $0.time < $1.time }
         smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
-        return moments.sorted { $0.time < $1.time }
+        return moments
     }
 
     // MARK: - Phase Mapping Helpers
@@ -527,14 +560,17 @@ extension SessionGenerator {
     }
 
     func frequencyRangeForPhase(_ phase: HypnosisMetadata.Phase) -> ClosedRange<Double> {
+        if let band = analyzerConfig.phaseBand(for: phase) {
+            return band.closedRange
+        }
         switch phase {
-        case .preTalk:    return 12.0...18.0
-        case .induction:  return 8.0...12.0
-        case .deepening:  return 5.0...8.0
-        case .therapy:    return 4.5...6.5
-        case .suggestions: return 5.0...7.0
+        case .preTalk:      return 12.0...18.0
+        case .induction:    return 8.0...12.0
+        case .deepening:    return 5.0...8.0
+        case .therapy:      return 4.5...6.5
+        case .suggestions:  return 5.0...7.0
         case .conditioning: return 5.5...7.5
-        case .emergence:  return 8.0...14.0
+        case .emergence:    return 8.0...14.0
         case .transitional: return 6.0...10.0
         }
     }

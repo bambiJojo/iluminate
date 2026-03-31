@@ -98,6 +98,16 @@
       "guidedImagery": { "lower": 4.0, "upper": 10.0 },
       "unknown": { "lower": 8.0, "upper": 12.0 }
     },
+    "phaseFrequencyBands": {
+      "pre_talk":                   { "lower": 12.0, "upper": 18.0 },
+      "induction":                  { "lower": 8.0,  "upper": 12.0 },
+      "deepening":                  { "lower": 5.0,  "upper": 8.0  },
+      "therapy":                    { "lower": 4.5,  "upper": 6.5  },
+      "suggestions":                { "lower": 5.0,  "upper": 7.0  },
+      "post_hypnotic_conditioning": { "lower": 5.5,  "upper": 7.5  },
+      "emergence":                  { "lower": 8.0,  "upper": 14.0 },
+      "transitional":               { "lower": 6.0,  "upper": 10.0 }
+    },
     "transitionSmoothingSeconds": 5.0,
     "intensityCurve": "gradual"
   }

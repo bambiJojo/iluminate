@@ -72,6 +72,8 @@ struct AnalyzerConfig: Codable, Sendable {
 
     struct SessionGeneration: Codable, Sendable {
         var frequencyBands: [String: FrequencyBand]
+        /// Per-hypnosis-phase frequency bands keyed by `HypnosisMetadata.Phase.rawValue`.
+        var phaseFrequencyBands: [String: FrequencyBand]
         var transitionSmoothingSeconds: Double
         var intensityCurve: String
 
@@ -84,6 +86,10 @@ struct AnalyzerConfig: Codable, Sendable {
 
         func band(for contentType: AnalysisResult.ContentType) -> FrequencyBand {
             frequencyBands[contentType.rawValue] ?? FrequencyBand(lower: 8.0, upper: 12.0)
+        }
+
+        func phaseBand(for phase: HypnosisMetadata.Phase) -> FrequencyBand? {
+            phaseFrequencyBands[phase.rawValue]
         }
     }
 }
