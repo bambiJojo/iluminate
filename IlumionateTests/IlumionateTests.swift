@@ -11,6 +11,7 @@ import Foundation
 
 // MARK: - Data Model Tests
 
+@Suite(.serialized)
 struct PlaylistModelTests {
 
     @Test func playlistCreation() {

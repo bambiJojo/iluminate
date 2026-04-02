@@ -13,7 +13,6 @@ struct SessionLibraryView: View {
 
     @State private var sessions: [LightSession] = []
     @State private var selectedSession: LightSession?
-    @State private var showingSessionPlayer = false
     @State private var searchText = ""
 
     var body: some View {
@@ -47,11 +46,6 @@ struct SessionLibraryView: View {
             .fullScreenCover(item: $selectedSession) { session in
                 UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
             }
-            .fullScreenCover(isPresented: $showingSessionPlayer) {
-                if let session = selectedSession {
-                    UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
-                }
-            }
             .searchable(text: $searchText, prompt: "Search sessions...")
         }
     }
@@ -82,7 +76,6 @@ struct SessionLibraryView: View {
                 ForEach(filteredSessions) { session in
                     Button {
                         selectedSession = session
-                        showingSessionPlayer = true
                     } label: {
                         SessionListCard(session: session)
                     }

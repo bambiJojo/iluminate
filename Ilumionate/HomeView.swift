@@ -599,6 +599,7 @@ struct HomeView: View {
 struct WordmarkView: View {
     @State private var shimmerOffset: CGFloat = -1.0
     @State private var wavePhase: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Fixed bar heights — a hand-crafted waveform silhouette
     private let bars: [CGFloat] = [
@@ -652,6 +653,7 @@ struct WordmarkView: View {
                 .clipped()
             )
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(
                     .linear(duration: 3.5)
                     .repeatForever(autoreverses: false)
@@ -665,37 +667,55 @@ struct WordmarkView: View {
     // MARK: Waveform Bar
 
     private var waveformBar: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            Canvas { ctx, size in
-                let count = bars.count
-                let spacing: CGFloat = 3
-                let barW: CGFloat = (size.width - CGFloat(count - 1) * spacing) / CGFloat(count)
-                let maxH = size.height
-
-                for (i, base) in bars.enumerated() {
-                    // Gentle breathing per bar using sine with individual phase offset
-                    let phase = t * 1.4 + Double(i) * 0.42
-                    let breathe = 0.15 * sin(phase)
-                    let h = CGFloat(clamp(Double(base) + breathe, 0.12, 1.0)) * maxH
-
-                    let x = CGFloat(i) * (barW + spacing)
-                    let rect = CGRect(x: x, y: maxH - h, width: barW, height: h)
-                    let path = Path(roundedRect: rect, cornerRadius: barW / 2)
-
-                    // Color shifts subtly across the bar row
-                    let t01 = Double(i) / Double(count - 1)
-                    let color = Color(
-                        red:   lerp(0.831, 0.690, t01),
-                        green: lerp(0.471, 0.490, t01),
-                        blue:  lerp(0.604, 0.784, t01)
-                    ).opacity(lerp(0.5, 0.25, t01))
-
-                    ctx.fill(path, with: .color(color))
-                }
+        Group {
+            if reduceMotion {
+                staticWaveformBar
+            } else {
+                animatedWaveformBar
             }
         }
         .frame(width: 130, height: 12)
+    }
+
+    private var animatedWaveformBar: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, size in
+                drawWaveformBars(ctx: ctx, size: size, t: t)
+            }
+        }
+    }
+
+    private var staticWaveformBar: some View {
+        Canvas { ctx, size in
+            drawWaveformBars(ctx: ctx, size: size, t: 0)
+        }
+    }
+
+    private func drawWaveformBars(ctx: GraphicsContext, size: CGSize, t: TimeInterval) {
+        let count = bars.count
+        let spacing: CGFloat = 3
+        let barW: CGFloat = (size.width - CGFloat(count - 1) * spacing) / CGFloat(count)
+        let maxH = size.height
+
+        for (i, base) in bars.enumerated() {
+            let phase = t * 1.4 + Double(i) * 0.42
+            let breathe = reduceMotion ? 0.0 : 0.15 * sin(phase)
+            let h = CGFloat(clamp(Double(base) + breathe, 0.12, 1.0)) * maxH
+
+            let x = CGFloat(i) * (barW + spacing)
+            let rect = CGRect(x: x, y: maxH - h, width: barW, height: h)
+            let path = Path(roundedRect: rect, cornerRadius: barW / 2)
+
+            let t01 = Double(i) / Double(count - 1)
+            let color = Color(
+                red:   lerp(0.831, 0.690, t01),
+                green: lerp(0.471, 0.490, t01),
+                blue:  lerp(0.604, 0.784, t01)
+            ).opacity(lerp(0.5, 0.25, t01))
+
+            ctx.fill(path, with: .color(color))
+        }
     }
 }
 

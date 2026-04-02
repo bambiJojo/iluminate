@@ -12,6 +12,7 @@ struct MandalaVisualizer: View {
     @State private var rotationAngle: Double = 0
     @State private var animationScale: CGFloat = 1.0
     @State private var isVisible = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let size: CGFloat
     let brightness: Double // 0.0-1.0 from light engine
@@ -112,7 +113,7 @@ struct MandalaVisualizer: View {
         }
         .onAppear {
             isVisible = true
-            startAnimations(reduced: brightness < 0.1)
+            startAnimations(reduced: reduceMotion || brightness < 0.1)
         }
         .onDisappear {
             isVisible = false
@@ -120,13 +121,22 @@ struct MandalaVisualizer: View {
         .onChange(of: brightness) { oldValue, newValue in
             // Restart animations only when performance tier changes
             if (oldValue < 0.1) != (newValue < 0.1) {
-                startAnimations(reduced: newValue < 0.1)
+                startAnimations(reduced: reduceMotion || newValue < 0.1)
             }
+        }
+        .onChange(of: reduceMotion) { _, newValue in
+            startAnimations(reduced: newValue || brightness < 0.1)
         }
     }
 
     private func startAnimations(reduced: Bool) {
         guard isVisible else { return }
+        guard !reduceMotion else {
+            // Static display when reduce motion is on — no animations started
+            isAnimating = true
+            animationScale = 1.0
+            return
+        }
         let duration: Double = reduced ? 6.0 : 3.0
 
         withAnimation(

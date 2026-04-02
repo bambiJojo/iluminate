@@ -20,8 +20,10 @@ struct AudioFileRow: View {
     let onUpdateRating: (Int) -> Void
     let onDetailedRating: () -> Void
     let onAddToPlaylist: () -> Void
+    var onGenerateSession: (() -> Void)? = nil
 
     @State private var hasGeneratedSession = false
+    @State private var analyzingPulse = false
 
     private var isAnalyzing: Bool {
         analysisManager.currentAnalysis?.audioFile.id == file.id
@@ -63,6 +65,17 @@ struct AudioFileRow: View {
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
+                        )
+                        .overlay(
+                            // Pulse overlay while analyzing
+                            RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
+                                .fill(waveformColor.opacity(analyzingPulse ? 0.18 : 0.0))
+                                .animation(
+                                    isAnalyzing
+                                        ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+                                        : .default,
+                                    value: analyzingPulse
+                                )
                         )
 
                     // Mini waveform (hidden while spinning or selected)
@@ -256,6 +269,38 @@ struct AudioFileRow: View {
                 .tint(.blue)
             }
         }
+        .contextMenu {
+            if file.isAnalyzed, let onGenerateSession {
+                Button {
+                    TranceHaptics.shared.medium()
+                    onGenerateSession()
+                } label: {
+                    Label(
+                        hasGeneratedSession ? "Redesign Light Session" : "Generate Light Session",
+                        systemImage: hasGeneratedSession ? "wand.and.sparkles" : "lightbulb.fill"
+                    )
+                }
+            }
+            Button {
+                TranceHaptics.shared.light()
+                onPlay()
+            } label: {
+                Label("Play Audio", systemImage: "play.fill")
+            }
+            Divider()
+            Button {
+                TranceHaptics.shared.light()
+                onRename()
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                TranceHaptics.shared.medium()
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
         .task {
             await checkForGeneratedSession()
         }
@@ -263,6 +308,12 @@ struct AudioFileRow: View {
             Task {
                 await checkForGeneratedSession()
             }
+        }
+        .onChange(of: isAnalyzing) { _, analyzing in
+            analyzingPulse = analyzing
+        }
+        .onAppear {
+            analyzingPulse = isAnalyzing
         }
     }
 

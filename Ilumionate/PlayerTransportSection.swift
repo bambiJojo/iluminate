@@ -15,6 +15,7 @@ struct PlayerTransportSection: View {
             // Previous track (playlist) or skip back 15s (audio)
             if viewModel.mode.hasTrackNavigation {
                 Button("Previous", systemImage: "backward.fill") {
+                    TranceHaptics.shared.light()
                     Task { await viewModel.skipPrevious() }
                 }
                 .labelStyle(.iconOnly)
@@ -23,6 +24,7 @@ struct PlayerTransportSection: View {
                 .disabled(viewModel.isFirstTrack && viewModel.currentTime < 3)
             } else if viewModel.mode.hasSkipControls {
                 Button("Back 15s", systemImage: "gobackward.15") {
+                    TranceHaptics.shared.light()
                     viewModel.skipBack15()
                 }
                 .labelStyle(.iconOnly)
@@ -32,6 +34,7 @@ struct PlayerTransportSection: View {
 
             // Play / Pause
             Button {
+                TranceHaptics.shared.medium()
                 viewModel.togglePlayPause()
             } label: {
                 playPauseIcon
@@ -40,6 +43,7 @@ struct PlayerTransportSection: View {
             // Next track (playlist) or skip forward 15s (audio)
             if viewModel.mode.hasTrackNavigation {
                 Button("Next", systemImage: "forward.fill") {
+                    TranceHaptics.shared.light()
                     Task { await viewModel.skipNext() }
                 }
                 .labelStyle(.iconOnly)
@@ -48,6 +52,7 @@ struct PlayerTransportSection: View {
                 .disabled(viewModel.isLastTrack)
             } else if viewModel.mode.hasSkipControls {
                 Button("Forward 15s", systemImage: "goforward.15") {
+                    TranceHaptics.shared.light()
                     viewModel.skipForward15()
                 }
                 .labelStyle(.iconOnly)

@@ -88,7 +88,7 @@ struct AudioLibraryView: View {
     @State var downloadError: String?
     @State var showingBrowser = false
     @State var showingAddSheet = false
- // TODO: Replace with actual playlist model
+    @State var sessionGenerationFile: AudioFile?
     @State var showingDeleteSelectedAlert = false
     @Environment(\.dismiss) var dismiss
 
@@ -230,6 +230,11 @@ struct AudioLibraryView: View {
             }
             .sheet(isPresented: $showingQueueManagement) {
                 QueueManagementView(analysisManager: AnalysisStateManager.shared)
+            }
+            .sheet(item: $sessionGenerationFile) { file in
+                if let analysis = file.analysisResult {
+                    SessionGenerationView(audioFile: file, analysis: analysis, engine: engine)
+                }
             }
             .alert("Delete \(selectedFiles.count) Files?", isPresented: $showingDeleteSelectedAlert) {
                 Button("Cancel", role: .cancel) { }

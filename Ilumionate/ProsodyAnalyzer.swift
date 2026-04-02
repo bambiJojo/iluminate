@@ -192,9 +192,9 @@ struct ProsodyAnalyzer: Sendable {
                 var bestRMS: Float = 0
                 for chan in 0..<context.channelCount {
                     let ptr = context.channelData[chan].advanced(by: startFrame)
-                    var sq: Float = 0
-                    vDSP_svesq(ptr, 1, &sq, vDSP_Length(length))
-                    if sq > bestRMS { bestRMS = sq; bestChannel = chan }
+                    var sumOfSquares: Float = 0
+                    vDSP_svesq(ptr, 1, &sumOfSquares, vDSP_Length(length))
+                    if sumOfSquares > bestRMS { bestRMS = sumOfSquares; bestChannel = chan }
                 }
             }
             let pitchCtx = PitchEstimationContext(

@@ -16,6 +16,7 @@ struct SessionGenerationView: View {
     @State private var generatedSession: LightSession?
     @State private var config = SessionGenerator.GenerationConfig.default
     @State private var showingPlayer = false
+    @State private var showingPreview = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -35,6 +36,31 @@ struct SessionGenerationView: View {
                         
                         customizationSection
                         
+                        // Preview Button
+                        Button {
+                            TranceHaptics.shared.light()
+                            showingPreview = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "eye.fill")
+                                    .font(.system(size: 20))
+                                Text("Preview Light Pattern")
+                                    .font(TranceTypography.body)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(.ultraThinMaterial)
+                            .foregroundStyle(Color.roseGold)
+                            .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: TranceRadius.button)
+                                    .strokeBorder(Color.roseGold.opacity(0.5), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .disabled(generatedSession == nil)
+                        .opacity(generatedSession == nil ? 0.4 : 1.0)
+
                         // Play Button
                         Button {
                             TranceHaptics.shared.medium()
@@ -89,6 +115,21 @@ struct SessionGenerationView: View {
                 if let session = generatedSession {
                     UnifiedPlayerView(
                         mode: .session(session: session, audioFile: audioFile),
+                        engine: engine
+                    )
+                }
+            }
+            .fullScreenCover(isPresented: $showingPreview) {
+                if let session = generatedSession {
+                    // Trim session to 30s for the preview so the user can feel
+                    // the light pattern without committing to the full duration.
+                    let previewSession = LightSession(
+                        session_name: "Preview — \(session.session_name)",
+                        duration_sec: min(30.0, session.duration_sec),
+                        light_score: session.light_score.filter { $0.time <= 30.0 }
+                    )
+                    UnifiedPlayerView(
+                        mode: .session(session: previewSession, audioFile: nil),
                         engine: engine
                     )
                 }
@@ -257,18 +298,42 @@ struct SessionGenerationView: View {
     }
     
     // MARK: - Logic
-    
+
     private func generateSession() {
-        generatedSession = generator.generateSession(
-            from: audioFile,
-            analysis: analysis,
-            config: config
-        )
+        let session = generator.generateSession(from: audioFile, analysis: analysis, config: config)
+        generatedSession = session
+        saveGeneratedSession(session)
     }
-    
+
     private func regenerateSession() {
         TranceHaptics.shared.selection()
         generateSession()
+    }
+
+    /// Persists the generated session to Documents/GeneratedSessions/{basename}_session.json
+    /// so AudioFileRow can detect it and display the lightbulb badge.
+    private func saveGeneratedSession(_ session: LightSession) {
+        let fileManager = FileManager.default
+        let sessionsURL = URL.documentsDirectory.appending(path: "GeneratedSessions")
+
+        do {
+            if !fileManager.fileExists(atPath: sessionsURL.path()) {
+                try fileManager.createDirectory(at: sessionsURL, withIntermediateDirectories: true)
+            }
+
+            let baseName = audioFile.filename
+                .replacing(".mp3", with: "")
+                .replacing(".m4a", with: "")
+                .replacing(".wav", with: "")
+            let fileURL = sessionsURL.appending(path: "\(baseName)_session.json")
+
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(session)
+            try data.write(to: fileURL)
+        } catch {
+            print("⚠️ Could not save generated session: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Helpers

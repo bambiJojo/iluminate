@@ -380,11 +380,28 @@ final class UnifiedPlayerViewModel {
         if let audioFile {
             let sync = AudioSyncController()
             audioSync = sync
+
+            // Wire time updates: audio drives the light player position.
+            sync.onTimeUpdate = { [weak player] time in
+                player?.sync(to: time)
+            }
+            // When audio ends, mark session complete.
+            sync.onPlaybackFinished = { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self, self.playbackState == .playing else { return }
+                    self.playbackState = .complete
+                    self.stopAll()
+                }
+            }
+
             Task {
                 do {
                     try await sync.loadAudioAsync(from: audioFile.url)
+                    // Switch to external time only after audio loads successfully
+                    // so a missing file gracefully falls back to internal timing.
+                    player.timeSource = .external
                 } catch {
-                    print("Failed to load session audio: \(error)")
+                    print("⚠️ Failed to load session audio: \(error)")
                 }
             }
         }

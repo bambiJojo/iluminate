@@ -182,34 +182,34 @@ struct TranceShadow {
 // MARK: - Typography
 
 struct TranceTypography {
-    // Screen title
-    static let screenTitle = Font.system(size: 18, weight: .semibold)
+    // Screen title — scales with Dynamic Type (.headline = 17pt base)
+    static let screenTitle = Font.system(.headline)
 
-    // Greeting
-    static let greeting = Font.system(size: 26, weight: .light)
-    static let greetingAccent = Font.system(size: 26, weight: .medium)
+    // Greeting — scales with Dynamic Type (.title = 28pt base)
+    static let greeting      = Font.system(.title, weight: .light)
+    static let greetingAccent = Font.system(.title, weight: .medium)
 
-    // Section title
-    static let sectionTitle = Font.system(size: 16, weight: .semibold)
+    // Section title — scales (.callout = 16pt base)
+    static let sectionTitle = Font.system(.callout, weight: .semibold)
 
-    // Card label
-    static let cardLabel = Font.system(size: 11, weight: .semibold)
+    // Card label — scales (.caption = 12pt base)
+    static let cardLabel = Font.system(.caption, weight: .semibold)
 
-    // Body
-    static let body = Font.system(size: 14, weight: .regular)
+    // Body — scales (.subheadline = 15pt base)
+    static let body = Font.system(.subheadline)
 
-    // Caption
-    static let caption = Font.system(size: 11, weight: .regular)
+    // Caption — scales (.caption = 12pt base)
+    static let caption = Font.system(.caption)
 
-    // Frequency display
-    static let frequency = Font.system(size: 18, weight: .semibold)
+    // Frequency display — scales (.headline = 17pt base)
+    static let frequency = Font.system(.headline, weight: .semibold)
 
-    // Track title and artist
-    static let trackTitle = Font.system(size: 20, weight: .semibold)
-    static let trackArtist = Font.system(size: 13, weight: .regular)
+    // Track title and artist — scales (.title3 = 20pt, .footnote = 13pt)
+    static let trackTitle  = Font.system(.title3, weight: .semibold)
+    static let trackArtist = Font.system(.footnote)
 
-    // Tab label
-    static let tabLabel = Font.system(size: 10, weight: .medium)
+    // Tab label — scales (.caption2 = 11pt base)
+    static let tabLabel = Font.system(.caption2, weight: .medium)
 }
 
 // MARK: - Button Styles

@@ -35,6 +35,21 @@ class LightScorePlayer {
     /// Whether the session has completed
     private(set) var isComplete: Bool = false
 
+    // MARK: - Time Source
+
+    /// Controls whether the player advances time internally (default) or
+    /// defers to an external clock such as an `AudioSyncController`.
+    enum TimeSource {
+        /// Player manages time via `CACurrentMediaTime` in `updateTime()`.
+        case `internal`
+        /// Caller drives time via `sync(to:)`. `updateTime()` is a no-op.
+        case external
+    }
+
+    /// Switch to `.external` before starting audio playback so the
+    /// light session stays locked to the audio position.
+    var timeSource: TimeSource = .internal
+
     // MARK: - Private State
 
     /// Sorted moments for efficient lookup
@@ -94,8 +109,9 @@ class LightScorePlayer {
 
     /// Update the current time based on real clock time.
     /// Call this from your CADisplayLink tick.
+    /// No-op when `timeSource == .external` — use `sync(to:)` instead.
     func updateTime() {
-        guard isPlaying else { return }
+        guard isPlaying, timeSource == .internal else { return }
 
         let elapsed = CACurrentMediaTime() - startTime
         currentTime = elapsed
@@ -106,6 +122,18 @@ class LightScorePlayer {
             isPlaying = false
             isComplete = true
         }
+    }
+
+    /// Synchronise the player to an external time source (e.g. an audio player).
+    ///
+    /// Only takes effect when `timeSource == .external`.
+    /// The player does not auto-advance; call this on every audio time update.
+    func sync(to externalTime: TimeInterval) {
+        guard timeSource == .external else { return }
+        let clamped = max(0, min(externalTime, session.duration_sec))
+        currentTime = clamped
+        isComplete  = clamped >= session.duration_sec
+        if isComplete { isPlaying = false }
     }
 
     /// Returns the interpolated state at the current playback time.

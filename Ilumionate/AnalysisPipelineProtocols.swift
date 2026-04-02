@@ -67,3 +67,15 @@ protocol SessionGeneratingService: AnyObject {
         config: SessionGenerator.GenerationConfig
     ) -> LightSession
 }
+
+/// Extracts prosodic features (speech rate, pitch, pauses, volume)
+/// from a raw audio file. Implementations are called from a
+/// `Task.detached` background thread, so the method is synchronous
+/// and throwing rather than async. Conforming types must be `Sendable`.
+protocol ProsodyAnalyzingService: Sendable {
+    func analyze(
+        url: URL,
+        segments: [AudioTranscriptionSegment],
+        config: ProsodyAnalyzer.Config
+    ) throws -> ProsodicProfile
+}

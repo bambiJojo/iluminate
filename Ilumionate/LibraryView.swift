@@ -33,6 +33,7 @@ struct LibraryView: View {
     @State private var showingSessionsManager = false
     @State private var showingSettings = false
     @State private var playerFile: AudioFile?
+    @State private var syncPlayerItem: SyncPlayerItem?
     @State private var fileForPlaylist: AudioFile?
 
     @Environment(FolderStore.self) private var folderStore
@@ -73,6 +74,9 @@ struct LibraryView: View {
             }
             .fullScreenCover(item: $playerFile) { file in
                 UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
+            }
+            .fullScreenCover(item: $syncPlayerItem) { item in
+                UnifiedPlayerView(mode: .session(session: item.lightSession, audioFile: item.audioFile), engine: engine)
             }
             .sheet(item: $fileForPlaylist) { file in
                 AddToPlaylistSheet(itemTitle: file.displayName) { playlist in
@@ -274,7 +278,22 @@ struct LibraryView: View {
 
     private func playWithLights(_ file: AudioFile) {
         TranceHaptics.shared.medium()
-        playerFile = file
+        Task {
+            let baseName = file.filename
+                .replacing(".mp3", with: "")
+                .replacing(".m4a", with: "")
+                .replacing(".wav", with: "")
+            let sessionURL = URL.documentsDirectory
+                .appending(path: "GeneratedSessions")
+                .appending(path: "\(baseName)_session.json")
+            if let session = try? LightScoreReader.loadSession(from: sessionURL) {
+                await MainActor.run {
+                    syncPlayerItem = SyncPlayerItem(audioFile: file, lightSession: session)
+                }
+            } else {
+                await MainActor.run { playerFile = file }
+            }
+        }
     }
 
     private func addFile(_ file: AudioFile, to playlist: Playlist) {
@@ -555,6 +574,7 @@ struct LibraryFavoritesView: View {
     let audioFiles: [AudioFile]
     @Bindable var engine: LightEngine
     @State private var syncPlayerItem: SyncPlayerItem?
+    @State private var audioPlayerFile: AudioFile?
     @State private var fileForPlaylist: AudioFile?
     @State private var favorites: [AudioFile] = []
 
@@ -597,7 +617,10 @@ struct LibraryFavoritesView: View {
             favorites = new.filter { $0.favorite }.sorted { $0.filename < $1.filename }
         }
         .fullScreenCover(item: $syncPlayerItem) { item in
-            UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
+            UnifiedPlayerView(mode: .session(session: item.lightSession, audioFile: item.audioFile), engine: engine)
+        }
+        .fullScreenCover(item: $audioPlayerFile) { file in
+            UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
         }
         .sheet(item: $fileForPlaylist) { file in
             AddToPlaylistSheet(itemTitle: file.displayName) { playlist in
@@ -607,11 +630,21 @@ struct LibraryFavoritesView: View {
     }
 
     private func playWithLights(_ file: AudioFile) {
+        TranceHaptics.shared.medium()
         Task {
-            let sessionsDir = URL.documentsDirectory.appending(path: "GeneratedSessions")
-            let sessionURL = sessionsDir.appending(path: "\(file.id).json")
+            let baseName = file.filename
+                .replacing(".mp3", with: "")
+                .replacing(".m4a", with: "")
+                .replacing(".wav", with: "")
+            let sessionURL = URL.documentsDirectory
+                .appending(path: "GeneratedSessions")
+                .appending(path: "\(baseName)_session.json")
             if let session = try? LightScoreReader.loadSession(from: sessionURL) {
-                await MainActor.run { syncPlayerItem = SyncPlayerItem(audioFile: file, lightSession: session) }
+                await MainActor.run {
+                    syncPlayerItem = SyncPlayerItem(audioFile: file, lightSession: session)
+                }
+            } else {
+                await MainActor.run { audioPlayerFile = file }
             }
         }
     }

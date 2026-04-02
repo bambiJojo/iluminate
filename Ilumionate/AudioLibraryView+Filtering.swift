@@ -40,7 +40,10 @@ extension AudioLibraryView {
                                 onAddToPlaylist: {
                                     print("🎵 Add \(file.filename) to playlist")
                                     TranceHaptics.shared.light()
-                                }
+                                },
+                                onGenerateSession: file.isAnalyzed ? {
+                                    sessionGenerationFile = file
+                                } : nil
                             )
 
                             if file.id != filteredAudioFiles.last?.id {

@@ -11,6 +11,7 @@ struct PulseOrb: View {
     let frequency: Double
     @State private var scale: CGFloat = 1.0
     @State private var opacity: Double = 0.6
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var animationDuration: Double {
         1.0 / frequency
@@ -33,10 +34,18 @@ struct PulseOrb: View {
             .scaleEffect(scale)
             .opacity(opacity)
             .onAppear {
-                startPulsing()
+                if !reduceMotion { startPulsing() }
             }
             .onChange(of: frequency) { _, _ in
-                startPulsing()
+                if !reduceMotion { startPulsing() }
+            }
+            .onChange(of: reduceMotion) { _, newValue in
+                if newValue {
+                    scale = 1.0
+                    opacity = 0.7
+                } else {
+                    startPulsing()
+                }
             }
     }
 
