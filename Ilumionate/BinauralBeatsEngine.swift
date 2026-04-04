@@ -71,6 +71,7 @@ final class BinauralBeatsEngine {
     private var sourceNode: AVAudioSourceNode?
     private let renderState = AudioRenderState()
     private var isSetUp = false
+    private var fadeOutTask: Task<Void, Never>?
 
     // MARK: Public Interface
 
@@ -78,6 +79,8 @@ final class BinauralBeatsEngine {
     func start() {
         guard !isPlaying else { return }
         if !isSetUp { setUp() }
+        // Restore amplitude — stop() zeros it, so every start must recalculate.
+        renderState.targetAmplitude = Float(max(0, min(1, volume))) * 0.35
         do {
             try AVAudioSession.sharedInstance().setActive(true)
             try audioEngine.start()
@@ -91,9 +94,10 @@ final class BinauralBeatsEngine {
     func pause() {
         guard isPlaying else { return }
         renderState.targetAmplitude = 0
-        // Stop engine after the amplitude has faded (≈ 150 ms)
-        Task { @MainActor in
+        fadeOutTask?.cancel()
+        fadeOutTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
             audioEngine.stop()
             isPlaying = false
         }
@@ -101,6 +105,7 @@ final class BinauralBeatsEngine {
 
     /// Resume playback after a pause.
     func resume() {
+        fadeOutTask?.cancel()
         guard !isPlaying else { return }
         renderState.targetAmplitude = Float(max(0, min(1, volume))) * 0.35
         do {
@@ -113,6 +118,7 @@ final class BinauralBeatsEngine {
 
     /// Stop playback and release resources.
     func stop() {
+        fadeOutTask?.cancel()
         audioEngine.stop()
         isPlaying = false
         renderState.smoothAmplitude = 0
@@ -127,6 +133,14 @@ final class BinauralBeatsEngine {
     // MARK: Engine Setup
 
     private func setUp() {
+        // Configure audio session BEFORE building the engine graph so the
+        // output-node format reflects the correct hardware configuration.
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
+        } catch {
+            print("[BinauralBeats] AVAudioSession setup error: \(error)")
+        }
+
         let sampleRate: Double = 44100
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else { return }
 
@@ -174,11 +188,5 @@ final class BinauralBeatsEngine {
 
         sourceNode = node
         isSetUp = true
-
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
-        } catch {
-            print("[BinauralBeats] AVAudioSession setup error: \(error)")
-        }
     }
 }

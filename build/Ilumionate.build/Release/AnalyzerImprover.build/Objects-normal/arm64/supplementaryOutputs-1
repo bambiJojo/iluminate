@@ -1,0 +1,12 @@
+{
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalyzerConfig/AnalyzerConfig.swift" : {
+    "abi-baseline-json" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover.abi.json",
+    "const-values" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary.swiftconstvalues",
+    "dependencies" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary.d",
+    "diagnostics" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary.dia",
+    "objc-header" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-Swift.h",
+    "swiftdoc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover.swiftdoc",
+    "swiftmodule" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover.swiftmodule",
+    "swiftsourceinfo" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover.swiftsourceinfo"
+  }
+}

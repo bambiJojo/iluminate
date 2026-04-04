@@ -131,6 +131,34 @@ struct AnalysisPipelineTests {
         #expect(fractions.last == 1.0)
     }
 
+    @Test func sessionGeneration_usesAnalysisPreferenceOverrides() async throws {
+        let preferences = AnalysisPreferences.shared
+        preferences.resetToDefaults()
+        defer { preferences.resetToDefaults() }
+
+        preferences.intensityMultiplier = 1.25
+        preferences.frequencyProfile = .deep
+        preferences.transitionStyle = .fluid
+        preferences.colorTempMode = .cool
+        preferences.bilateralMode = true
+
+        let generator = MockSessionGenerator()
+        let pipeline = AnalysisPipeline(
+            transcriber: MockAudioTranscriber(),
+            analyzer: MockContentAnalyzer(),
+            generator: generator
+        )
+
+        _ = try await pipeline.run(audioFile: AnalysisFixtures.audioFile())
+
+        #expect(generator.lastConfig?.intensityMultiplier == 1.25)
+        #expect(generator.lastConfig?.minFrequency == FrequencyProfile.deep.minFrequency)
+        #expect(generator.lastConfig?.maxFrequency == FrequencyProfile.deep.maxFrequency)
+        #expect(generator.lastConfig?.transitionSmoothness == TransitionStyle.fluid.smoothness)
+        #expect(generator.lastConfig?.colorTemperatureOverride == ColorTempMode.cool.kelvin)
+        #expect(generator.lastConfig?.bilateralMode == true)
+    }
+
     // MARK: - All Content Types
 
     @Test func hypnosisAnalysis_producesSession()      async throws { try await assertSessionGenerated(analysis: AnalysisFixtures.hypnosisAnalysis)     }

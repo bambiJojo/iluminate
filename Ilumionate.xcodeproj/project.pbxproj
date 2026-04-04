@@ -11,6 +11,7 @@
 		7988F3962F4FB70800E1DC5E /* PlaylistEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */; };
 		7988F3982F4FB79400E1DC5E /* PlaylistLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */; };
 		7988F39A2F4FB7F500E1DC5E /* PlaylistPlayerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3992F4FB7F500E1DC5E /* PlaylistPlayerController.swift */; };
+		79B4A6D02FF1000100B8A0A1 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 79D548382F4F723B00B3B07F /* WhisperKit */; };
 		79D548392F4F723B00B3B07F /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 79D548382F4F723B00B3B07F /* WhisperKit */; };
 		79D5483B2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */; };
 		79D5483D2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */; };
@@ -32,6 +33,20 @@
 			remoteGlobalIDString = 795944022F38010900907305;
 			remoteInfo = Ilumionate;
 		};
+		79999FD12F7B8A4900DC1F2D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 795943FB2F38010900907305 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 79999FC32F7B8A4700DC1F2D;
+			remoteInfo = LumeLabel;
+		};
+		79999FDB2F7B8A4900DC1F2D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 795943FB2F38010900907305 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 79999FC32F7B8A4700DC1F2D;
+			remoteInfo = LumeLabel;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -42,14 +57,75 @@
 		7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistEditorView.swift; sourceTree = "<group>"; };
 		7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistLibraryView.swift; sourceTree = "<group>"; };
 		7988F3992F4FB7F500E1DC5E /* PlaylistPlayerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistPlayerController.swift; sourceTree = "<group>"; };
+		79999FC42F7B8A4700DC1F2D /* LumeLabel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LumeLabel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		79999FD02F7B8A4900DC1F2D /* LumeLabelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LumeLabelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		79999FDA2F7B8A4900DC1F2D /* LumeLabelUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LumeLabelUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightScoreGenerator.swift; sourceTree = "<group>"; };
 		79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightSyncPlayer.swift; sourceTree = "<group>"; };
 		79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ENHANCED_LIGHT_SCORE_GUIDE.md; sourceTree = "<group>"; };
+		83640685C4B57F62AB496B2B /* AnalyzerImprover */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = AnalyzerImprover; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0A5757A1C8F9518170689AA7 /* Exceptions for "Ilumionate" folder in "AnalyzerImprover" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AIAnalysisModels.swift,
+				AnalyzerConfig/AnalyzerConfig.swift,
+				AnalyzerConfig/AnalyzerConfigLoader.swift,
+				AudioContentType.swift,
+				AudioEnergyAnalyzer.swift,
+				AudioFile.swift,
+				ChunkedPhaseAnalyzer.swift,
+				"ChunkedPhaseAnalyzer+Smoothing.swift",
+				HypnosisPhaseAnalyzer.swift,
+				HypnosisPhaseKeywords.swift,
+				TechniqueDetector.swift,
+				Training/AnalyzerOptimizer/AnalyzerEvaluationEngine.swift,
+				Training/AnalyzerOptimizer/AnalyzerMetrics.swift,
+				Training/AnalyzerOptimizer/AnalyzerMutationEngine.swift,
+				Training/AnalyzerOptimizer/AnalyzerOptimizationDataset.swift,
+				Training/AnalyzerOptimizer/AnalyzerOptimizationReport.swift,
+				Training/AnalyzerOptimizer/AnalyzerOptimizer.swift,
+				Training/AnalyzerOptimizer/AnalyzerTranscriptCache.swift,
+				Training/LabeledFile.swift,
+				TrancePhase.swift,
+			);
+			target = B3DBB0FD4D277A17D1ADB4CD /* AnalyzerImprover */;
+		};
+		79999FF72F7C46C700DC1F2D /* Exceptions for "Ilumionate" folder in "LumeLabel" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AnalyzerConfig/AnalyzerConfig.swift,
+				AnalyzerConfig/AnalyzerConfigLoader.swift,
+				AudioAnalyzer.swift,
+				AudioContentType.swift,
+				ChunkedPhaseAnalyzer.swift,
+				"ChunkedPhaseAnalyzer+Smoothing.swift",
+				HypnosisPhaseAnalyzer.swift,
+				HypnosisPhaseKeywords.swift,
+				Training/AnalyzerOptimizer/AnalyzerEvaluationEngine.swift,
+				Training/AnalyzerOptimizer/AnalyzerMetrics.swift,
+				Training/AnalyzerOptimizer/AnalyzerMutationEngine.swift,
+				Training/AnalyzerOptimizer/AnalyzerOptimizationDataset.swift,
+				Training/AnalyzerOptimizer/AnalyzerOptimizationReport.swift,
+				Training/AnalyzerOptimizer/AnalyzerOptimizer.swift,
+				Training/AnalyzerOptimizer/AnalyzerTranscriptCache.swift,
+				Training/LabeledFile.swift,
+				Training/TrainingCorpusManager.swift,
+				TrancePhase.swift,
+			);
+			target = 79999FC32F7B8A4700DC1F2D /* LumeLabel */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		795944052F38010900907305 /* Ilumionate */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				79999FF72F7C46C700DC1F2D /* Exceptions for "Ilumionate" folder in "LumeLabel" target */,
+				0A5757A1C8F9518170689AA7 /* Exceptions for "Ilumionate" folder in "AnalyzerImprover" target */,
+			);
 			path = Ilumionate;
 			sourceTree = "<group>";
 		};
@@ -63,9 +139,36 @@
 			path = IlumionateUITests;
 			sourceTree = "<group>";
 		};
+		79999FC52F7B8A4700DC1F2D /* LumeLabel */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LumeLabel;
+			sourceTree = "<group>";
+		};
+		79999FD32F7B8A4900DC1F2D /* LumeLabelTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LumeLabelTests;
+			sourceTree = "<group>";
+		};
+		79999FDD2F7B8A4900DC1F2D /* LumeLabelUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LumeLabelUITests;
+			sourceTree = "<group>";
+		};
+		F204B317B5BBD9934FA8ACDC /* AnalyzerImprover */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AnalyzerImprover;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		4881BC224739BBD42720F856 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		795944002F38010900907305 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -88,6 +191,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		79999FC12F7B8A4700DC1F2D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				79B4A6D02FF1000100B8A0A1 /* WhisperKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		79999FCD2F7B8A4900DC1F2D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		79999FD72F7B8A4900DC1F2D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -97,6 +222,10 @@
 				795944052F38010900907305 /* Ilumionate */,
 				795944132F38010B00907305 /* IlumionateTests */,
 				7959441D2F38010B00907305 /* IlumionateUITests */,
+				79999FC52F7B8A4700DC1F2D /* LumeLabel */,
+				F204B317B5BBD9934FA8ACDC /* AnalyzerImprover */,
+				79999FD32F7B8A4900DC1F2D /* LumeLabelTests */,
+				79999FDD2F7B8A4900DC1F2D /* LumeLabelUITests */,
 				79D548372F4F723B00B3B07F /* Frameworks */,
 				795944042F38010900907305 /* Products */,
 				79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */,
@@ -115,6 +244,10 @@
 				795944032F38010900907305 /* Ilumionate.app */,
 				795944102F38010B00907305 /* IlumionateTests.xctest */,
 				7959441A2F38010B00907305 /* IlumionateUITests.xctest */,
+				79999FC42F7B8A4700DC1F2D /* LumeLabel.app */,
+				83640685C4B57F62AB496B2B /* AnalyzerImprover */,
+				79999FD02F7B8A4900DC1F2D /* LumeLabelTests.xctest */,
+				79999FDA2F7B8A4900DC1F2D /* LumeLabelUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -198,6 +331,97 @@
 			productReference = 7959441A2F38010B00907305 /* IlumionateUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		79999FC32F7B8A4700DC1F2D /* LumeLabel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 79999FE82F7B8A4900DC1F2D /* Build configuration list for PBXNativeTarget "LumeLabel" */;
+			buildPhases = (
+				79999FC02F7B8A4700DC1F2D /* Sources */,
+				79999FC12F7B8A4700DC1F2D /* Frameworks */,
+				79999FC22F7B8A4700DC1F2D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				79999FC52F7B8A4700DC1F2D /* LumeLabel */,
+			);
+			name = LumeLabel;
+			packageProductDependencies = (
+				79D548382F4F723B00B3B07F /* WhisperKit */,
+			);
+			productName = LumeLabel;
+			productReference = 79999FC42F7B8A4700DC1F2D /* LumeLabel.app */;
+			productType = "com.apple.product-type.application";
+		};
+		79999FCF2F7B8A4900DC1F2D /* LumeLabelTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 79999FE92F7B8A4900DC1F2D /* Build configuration list for PBXNativeTarget "LumeLabelTests" */;
+			buildPhases = (
+				79999FCC2F7B8A4900DC1F2D /* Sources */,
+				79999FCD2F7B8A4900DC1F2D /* Frameworks */,
+				79999FCE2F7B8A4900DC1F2D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				79999FD22F7B8A4900DC1F2D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				79999FD32F7B8A4900DC1F2D /* LumeLabelTests */,
+			);
+			name = LumeLabelTests;
+			packageProductDependencies = (
+			);
+			productName = LumeLabelTests;
+			productReference = 79999FD02F7B8A4900DC1F2D /* LumeLabelTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		79999FD92F7B8A4900DC1F2D /* LumeLabelUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 79999FEA2F7B8A4900DC1F2D /* Build configuration list for PBXNativeTarget "LumeLabelUITests" */;
+			buildPhases = (
+				79999FD62F7B8A4900DC1F2D /* Sources */,
+				79999FD72F7B8A4900DC1F2D /* Frameworks */,
+				79999FD82F7B8A4900DC1F2D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				79999FDC2F7B8A4900DC1F2D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				79999FDD2F7B8A4900DC1F2D /* LumeLabelUITests */,
+			);
+			name = LumeLabelUITests;
+			packageProductDependencies = (
+			);
+			productName = LumeLabelUITests;
+			productReference = 79999FDA2F7B8A4900DC1F2D /* LumeLabelUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		B3DBB0FD4D277A17D1ADB4CD /* AnalyzerImprover */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 111414AAB852E4EE093DDB37 /* Build configuration list for PBXNativeTarget "AnalyzerImprover" */;
+			buildPhases = (
+				B683ABE6ED1890971022E075 /* Sources */,
+				4881BC224739BBD42720F856 /* Frameworks */,
+				E62435BF4064924A8E868C49 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F204B317B5BBD9934FA8ACDC /* AnalyzerImprover */,
+			);
+			name = AnalyzerImprover;
+			packageProductDependencies = (
+			);
+			productName = AnalyzerImprover;
+			productReference = 83640685C4B57F62AB496B2B /* AnalyzerImprover */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -205,7 +429,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2620;
+				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					795944022F38010900907305 = {
@@ -218,6 +442,20 @@
 					795944192F38010B00907305 = {
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = 795944022F38010900907305;
+					};
+					79999FC32F7B8A4700DC1F2D = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					79999FCF2F7B8A4900DC1F2D = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 79999FC32F7B8A4700DC1F2D;
+					};
+					79999FD92F7B8A4900DC1F2D = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 79999FC32F7B8A4700DC1F2D;
+					};
+					B3DBB0FD4D277A17D1ADB4CD = {
+						CreatedOnToolsVersion = 26.4;
 					};
 				};
 			};
@@ -241,6 +479,10 @@
 				795944022F38010900907305 /* Ilumionate */,
 				7959440F2F38010B00907305 /* IlumionateTests */,
 				795944192F38010B00907305 /* IlumionateUITests */,
+				79999FC32F7B8A4700DC1F2D /* LumeLabel */,
+				B3DBB0FD4D277A17D1ADB4CD /* AnalyzerImprover */,
+				79999FCF2F7B8A4900DC1F2D /* LumeLabelTests */,
+				79999FD92F7B8A4900DC1F2D /* LumeLabelUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -262,6 +504,34 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		795944182F38010B00907305 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		79999FC22F7B8A4700DC1F2D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		79999FCE2F7B8A4900DC1F2D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		79999FD82F7B8A4900DC1F2D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E62435BF4064924A8E868C49 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -298,6 +568,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		79999FC02F7B8A4700DC1F2D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		79999FCC2F7B8A4900DC1F2D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		79999FD62F7B8A4900DC1F2D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B683ABE6ED1890971022E075 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -310,6 +608,16 @@
 			isa = PBXTargetDependency;
 			target = 795944022F38010900907305 /* Ilumionate */;
 			targetProxy = 7959441B2F38010B00907305 /* PBXContainerItemProxy */;
+		};
+		79999FD22F7B8A4900DC1F2D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 79999FC32F7B8A4700DC1F2D /* LumeLabel */;
+			targetProxy = 79999FD12F7B8A4900DC1F2D /* PBXContainerItemProxy */;
+		};
+		79999FDC2F7B8A4900DC1F2D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 79999FC32F7B8A4700DC1F2D /* LumeLabel */;
+			targetProxy = 79999FDB2F7B8A4900DC1F2D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -441,7 +749,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1007;
+				CURRENT_PROJECT_VERSION = 10010;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -459,7 +767,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.5;
+				MARKETING_VERSION = 0.5.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -481,7 +789,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1007;
+				CURRENT_PROJECT_VERSION = 10010;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -499,7 +807,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.5;
+				MARKETING_VERSION = 0.5.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -599,9 +907,212 @@
 			};
 			name = Release;
 		};
+		79999FE22F7B8A4900DC1F2D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.LumeLabel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		79999FE32F7B8A4900DC1F2D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.LumeLabel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		79999FE42F7B8A4900DC1F2D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.LumeLabelTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LumeLabel.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LumeLabel";
+			};
+			name = Debug;
+		};
+		79999FE52F7B8A4900DC1F2D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.LumeLabelTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LumeLabel.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LumeLabel";
+			};
+			name = Release;
+		};
+		79999FE62F7B8A4900DC1F2D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.LumeLabelUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = LumeLabel;
+			};
+			name = Debug;
+		};
+		79999FE72F7B8A4900DC1F2D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.LumeLabelUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = LumeLabel;
+			};
+			name = Release;
+		};
+		DD06E2290124FEAE9288A797 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.AnalyzerImprover;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E31D245795FA6FDB7A43E76B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.AnalyzerImprover;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		111414AAB852E4EE093DDB37 /* Build configuration list for PBXNativeTarget "AnalyzerImprover" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E31D245795FA6FDB7A43E76B /* Debug */,
+				DD06E2290124FEAE9288A797 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		795943FE2F38010900907305 /* Build configuration list for PBXProject "Ilumionate" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -634,6 +1145,33 @@
 			buildConfigurations = (
 				7959442B2F38010B00907305 /* Debug */,
 				7959442C2F38010B00907305 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		79999FE82F7B8A4900DC1F2D /* Build configuration list for PBXNativeTarget "LumeLabel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				79999FE22F7B8A4900DC1F2D /* Debug */,
+				79999FE32F7B8A4900DC1F2D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		79999FE92F7B8A4900DC1F2D /* Build configuration list for PBXNativeTarget "LumeLabelTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				79999FE42F7B8A4900DC1F2D /* Debug */,
+				79999FE52F7B8A4900DC1F2D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		79999FEA2F7B8A4900DC1F2D /* Build configuration list for PBXNativeTarget "LumeLabelUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				79999FE62F7B8A4900DC1F2D /* Debug */,
+				79999FE72F7B8A4900DC1F2D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

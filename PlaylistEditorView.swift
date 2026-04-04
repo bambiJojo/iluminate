@@ -200,12 +200,16 @@ struct PlaylistEditorView: View {
 
     private func contentTypeColor(for type: AnalysisResult.ContentType) -> Color {
         switch type {
-        case .hypnosis:     return .bwDelta
-        case .meditation:   return .bwAlpha
-        case .music:        return .bwBeta
-        case .guidedImagery: return .bwTheta
-        case .affirmations: return .warmAccent
-        case .unknown:      return .roseGold
+        case .hypnosis:        return .bwDelta
+        case .meditation:      return .bwAlpha
+        case .music:           return .bwBeta
+        case .guidedImagery:   return .bwTheta
+        case .affirmations:    return .warmAccent
+        case .eroticHypnosis:  return .roseDeep
+        case .brainwave:       return .bwGamma
+        case .asmr:            return .warmAccent
+        case .sleepHypnosis:   return .bwDelta
+        case .unknown:         return .roseGold
         }
     }
 
@@ -219,12 +223,16 @@ struct PlaylistEditorView: View {
 
     private func contentTypeIcon(for type: AnalysisResult.ContentType) -> String {
         switch type {
-        case .hypnosis:     return "brain.head.profile"
-        case .meditation:   return "leaf"
-        case .music:        return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations: return "quote.bubble"
-        case .unknown:      return "waveform"
+        case .hypnosis:        return "brain.head.profile"
+        case .meditation:      return "leaf"
+        case .music:           return "music.note"
+        case .guidedImagery:   return "figure.mind.and.body"
+        case .affirmations:    return "quote.bubble"
+        case .eroticHypnosis:  return "flame"
+        case .brainwave:       return "waveform.path.ecg"
+        case .asmr:            return "ear"
+        case .sleepHypnosis:   return "moon.zzz"
+        case .unknown:         return "waveform"
         }
     }
 
@@ -387,23 +395,31 @@ private struct TrackRow: View {
 
     private var contentTypeColor: Color {
         switch contentType {
-        case .hypnosis:     return .bwDelta
-        case .meditation:   return .bwAlpha
-        case .music:        return .bwBeta
-        case .guidedImagery: return .bwTheta
-        case .affirmations: return .warmAccent
-        case .unknown:      return .roseGold
+        case .hypnosis:        return .bwDelta
+        case .meditation:      return .bwAlpha
+        case .music:           return .bwBeta
+        case .guidedImagery:   return .bwTheta
+        case .affirmations:    return .warmAccent
+        case .eroticHypnosis:  return .roseDeep
+        case .brainwave:       return .bwGamma
+        case .asmr:            return .warmAccent
+        case .sleepHypnosis:   return .bwDelta
+        case .unknown:         return .roseGold
         }
     }
 
     private var contentTypeIcon: String {
         switch contentType {
-        case .hypnosis:     return "brain.head.profile"
-        case .meditation:   return "leaf"
-        case .music:        return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations: return "quote.bubble"
-        case .unknown:      return "waveform"
+        case .hypnosis:        return "brain.head.profile"
+        case .meditation:      return "leaf"
+        case .music:           return "music.note"
+        case .guidedImagery:   return "figure.mind.and.body"
+        case .affirmations:    return "quote.bubble"
+        case .eroticHypnosis:  return "flame"
+        case .brainwave:       return "waveform.path.ecg"
+        case .asmr:            return "ear"
+        case .sleepHypnosis:   return "moon.zzz"
+        case .unknown:         return "waveform"
         }
     }
 

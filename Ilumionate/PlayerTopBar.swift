@@ -18,6 +18,7 @@ struct PlayerTopBar: View {
                 .labelStyle(.iconOnly)
                 .font(.title3)
                 .foregroundStyle(viewModel.labelColor)
+                .buttonStyle(PlayerButtonStyle())
 
             Spacer()
 
@@ -32,10 +33,11 @@ struct PlayerTopBar: View {
 
             Spacer()
 
-            Button("Minimize", systemImage: "minus", action: onMinimize)
+            Button("Minimize to mini player", systemImage: "chevron.down", action: onMinimize)
                 .labelStyle(.iconOnly)
                 .font(.title3)
                 .foregroundStyle(viewModel.secondaryLabelColor)
+                .buttonStyle(PlayerButtonStyle())
         }
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.statusBar)

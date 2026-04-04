@@ -1,9 +1,9 @@
- //
+//
 //  AnalyzerView.swift
 //  Ilumionate
 //
-//  The Analyzer tab — see, manage, and customize the AI analysis pipeline.
-//  Three sections: Live Status, Library Intelligence, and Customize.
+//  Queue management view for the AI analysis pipeline.
+//  Two sections: Live Status and Library Intelligence.
 //
 
 import SwiftUI
@@ -12,11 +12,9 @@ import SwiftUI
 
 struct AnalyzerView: View {
 
-    private var analysisManager: AnalysisStateManager { AnalysisStateManager.shared }
-    @State private var prefs = AnalysisPreferences.shared
+    @State private var analysisManager = AnalysisStateManager.shared
     @State private var audioFiles: [AudioFile] = []
     @State private var showingClearQueueConfirm = false
-    @State private var showingSettings = false
 
     /// Merges UserDefaults-persisted files with in-memory completed analyses so
     /// newly finished sessions appear immediately without requiring a tab switch.
@@ -39,24 +37,15 @@ struct AnalyzerView: View {
                 VStack(spacing: TranceSpacing.content) {
                     liveStatusSection
                     libraryIntelligenceSection
-                    AnalyzedSessionsSection(audioFiles: allAnalyzedFiles)
-                    customizeSection
                 }
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.card)
                 .padding(.bottom, TranceSpacing.tabBarClearance + 20)
             }
         }
-        .navigationTitle("Analyzer")
+        .navigationTitle("Analysis Queue")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Settings", systemImage: "gearshape") {
-                    TranceHaptics.shared.light()
-                    showingSettings = true
-                }
-                .foregroundStyle(Color.roseGold)
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 if analysisManager.currentAnalysis != nil || !analysisManager.analysisQueue.isEmpty {
                     Button(role: .destructive) { showingClearQueueConfirm = true } label: {
@@ -67,15 +56,15 @@ struct AnalyzerView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-        }
         .confirmationDialog("Clear all queued analyses?", isPresented: $showingClearQueueConfirm,
                             titleVisibility: .visible) {
             Button("Clear Queue", role: .destructive) { analysisManager.clearQueue() }
             Button("Cancel", role: .cancel) {}
         }
         .onAppear { loadAudioFiles() }
+        .onChange(of: analysisManager.completedAnalyses.count) {
+            loadAudioFiles()
+        }
     }
 
     // MARK: - Live Status
@@ -360,112 +349,6 @@ struct AnalyzerView: View {
         }
     }
 
-    // MARK: - Customize
-
-    private var customizeSection: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.list) {
-            sectionHeader("Customize", symbol: "slider.horizontal.3")
-            aiAnalysisGroup
-            sessionGenerationGroup
-            behaviorGroup
-        }
-    }
-
-    private var aiAnalysisGroup: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                groupHeader("AI Analysis", symbol: "sparkles")
-                Picker("Content Hint", selection: $prefs.contentHint) {
-                    ForEach(ContentHint.allCases, id: \.self) { hint in
-                        Label(hint.displayName, systemImage: hint.sfSymbol).tag(hint)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(Color.roseGold)
-                prefRow(
-                    label: "Content Hint",
-                    description: "Tells the AI what kind of content to expect, improving accuracy"
-                )
-            }
-        }
-    }
-
-    private var sessionGenerationGroup: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                groupHeader("Session Generation", symbol: "waveform.path.ecg")
-                VStack(spacing: 12) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Intensity")
-                                .font(TranceTypography.body)
-                                .foregroundStyle(Color.textPrimary)
-                            Text("Overall brightness and strength of the light patterns")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(Color.textSecondary)
-                        }
-                        Spacer()
-                        Text("\(Int(prefs.intensityMultiplier * 100))%")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(Color.roseGold)
-                            .frame(width: 40, alignment: .trailing)
-                    }
-                    Slider(value: $prefs.intensityMultiplier, in: 0.3...1.5)
-                        .tint(Color.roseGold)
-                    Divider()
-                    pickerRow(
-                        label: "Frequency Range",
-                        description: "Hz range used when generating light moments",
-                        selection: $prefs.frequencyProfile
-                    )
-                    Divider()
-                    pickerRow(
-                        label: "Transitions",
-                        description: "How smoothly the light patterns change",
-                        selection: $prefs.transitionStyle
-                    )
-                    Divider()
-                    pickerRow(
-                        label: "Color Temperature",
-                        description: "Warmth or coolness of the light patterns",
-                        selection: $prefs.colorTempMode
-                    )
-                    Divider()
-                    Toggle(isOn: $prefs.bilateralMode) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Bilateral Mode")
-                                .font(TranceTypography.body)
-                                .foregroundStyle(Color.textPrimary)
-                            Text("Alternates stimulation between left and right visual fields")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(Color.textSecondary)
-                        }
-                    }
-                    .tint(Color.roseGold)
-                }
-            }
-        }
-    }
-
-    private var behaviorGroup: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                groupHeader("Behavior", symbol: "gearshape")
-                Toggle(isOn: $prefs.autoAnalyzeOnImport) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Auto-Analyze on Import")
-                            .font(TranceTypography.body)
-                            .foregroundStyle(Color.textPrimary)
-                        Text("Automatically queue new audio files for AI analysis when added to your library")
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                    }
-                }
-                .tint(Color.roseGold)
-            }
-        }
-    }
-
     // MARK: - Shared Components
 
     private func sectionHeader(_ title: String, symbol: String) -> some View {
@@ -480,63 +363,17 @@ struct AnalyzerView: View {
         }
     }
 
-    private func groupHeader(_ title: String, symbol: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.subheadline)
-                .foregroundStyle(Color.roseGold)
-            Text(title)
-                .font(TranceTypography.sectionTitle)
-                .foregroundStyle(Color.textPrimary)
-        }
-    }
-
-    private func prefRow(label: String, description: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(TranceTypography.body)
-                .foregroundStyle(Color.textPrimary)
-            Text(description)
-                .font(TranceTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-        }
-    }
-
-    private func pickerRow<T: CaseIterable & Hashable & RawRepresentable>(
-        label: String, description: String, selection: Binding<T>
-    ) -> some View where T.AllCases: RandomAccessCollection, T.RawValue == String {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(TranceTypography.body)
-                    .foregroundStyle(Color.textPrimary)
-                Text(description)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-            }
-            Spacer()
-            Picker(label, selection: selection) {
-                ForEach(Array(T.allCases), id: \.self) { value in
-                    Text(value.rawValue.capitalized).tag(value)
-                }
-            }
-            .pickerStyle(.menu)
-            .tint(Color.roseGold)
-            .labelsHidden()
-        }
-    }
-
     // MARK: - Computed Library Stats
 
     private var analyzedCount: Int {
-        audioFiles.filter { $0.isAnalyzed }.count
+        audioFiles.count(where: \.isAnalyzed)
     }
 
     private var lightSyncReadyCount: Int {
-        let sessionsURL = URL.documentsDirectory.appendingPathComponent("GeneratedSessions", isDirectory: true)
+        let sessionsURL = URL.documentsDirectory.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
         return audioFiles.filter { file in
             let base = file.displayName
-            let url = sessionsURL.appendingPathComponent("\(base)_session.json")
+            let url = sessionsURL.appending(path: "\(base)_session.json")
             return FileManager.default.fileExists(atPath: url.path)
         }.count
     }

@@ -16,6 +16,24 @@ struct UnifiedPlayerView: View {
         _viewModel = State(initialValue: UnifiedPlayerViewModel(mode: mode, engine: engine))
     }
 
+    init(viewModel: UnifiedPlayerViewModel) {
+        _viewModel = State(initialValue: viewModel)
+    }
+
+    private var volumeBinding: Binding<Double> {
+        Binding(
+            get: { Double(viewModel.volume) },
+            set: { viewModel.setVolume(Float($0)) }
+        )
+    }
+
+    private var smartTransitionsBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.smartTransitions },
+            set: { viewModel.smartTransitions = $0 }
+        )
+    }
+
     var body: some View {
         ZStack {
             // Layer 1: Background visual surface
@@ -47,10 +65,13 @@ struct UnifiedPlayerView: View {
             }
 
             // Layer 5: Countdown overlay
-            if let count = viewModel.countdownValue {
-                PlayerCountdownOverlay(count: count)
-                    .transition(.opacity)
-                    .zIndex(10)
+            if viewModel.countdownValue != nil || viewModel.countdownMessage != nil {
+                PlayerCountdownOverlay(
+                    count: viewModel.countdownValue,
+                    message: viewModel.countdownMessage
+                )
+                .transition(.opacity)
+                .zIndex(10)
             }
 
             // Layer 6: Safety warning (blocks everything)
@@ -106,7 +127,7 @@ struct UnifiedPlayerView: View {
     private var backgroundLayer: some View {
         switch viewModel.mode {
         case .session:
-            SessionPlayerBackground(engine: viewModel.engine)
+            SessionView(engine: viewModel.engine)
 
         case .flashMode(_, _, let colorTemp, _, _, _, _):
             if let controller = viewModel.flashController {
@@ -136,15 +157,14 @@ struct UnifiedPlayerView: View {
     // MARK: - Minimal Overlay (controls hidden)
 
     private var minimalOverlay: some View {
-        VStack {
-            // Floating show-controls button
-            HStack {
-                Spacer()
-                Button {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        viewModel.showingControls = true
-                    }
-                } label: {
+        Button {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                viewModel.showingControls = true
+            }
+        } label: {
+            VStack {
+                HStack {
+                    Spacer()
                     Image(systemName: "slider.horizontal.3")
                         .font(.title3)
                         .foregroundStyle(viewModel.labelColor)
@@ -152,33 +172,34 @@ struct UnifiedPlayerView: View {
                         .background(.ultraThinMaterial)
                         .clipShape(.circle)
                         .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+                        .padding()
                 }
-                .padding()
-            }
 
-            Spacer()
-
-            // Mandala in session mode
-            if viewModel.mode.hasMandalaVisualizer {
-                MandalaVisualizer(size: 250, brightness: viewModel.engine.brightness)
                 Spacer()
-            }
 
-            // Timer display for infinite modes
-            if viewModel.mode.hasFrequencyDisplay {
-                timerDisplay
-            }
+                // Mandala in session mode
+                if viewModel.mode.hasMandalaVisualizer {
+                    MandalaVisualizer(
+                        size: 250,
+                        brightness: viewModel.engine.brightness,
+                        isPlaying: viewModel.isPlaying
+                    )
+                    Spacer()
+                }
 
-            Text("Tap to show controls")
-                .font(TranceTypography.caption)
-                .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
-                .padding(.bottom, TranceSpacing.statusBar)
-        }
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                viewModel.showingControls = true
+                // Timer display for infinite modes
+                if viewModel.mode.hasFrequencyDisplay {
+                    timerDisplay
+                }
+
+                Text("Tap to show controls")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
+                    .padding(.bottom, TranceSpacing.statusBar)
             }
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Show controls")
     }
 
     private var timerDisplay: some View {
@@ -201,9 +222,8 @@ struct UnifiedPlayerView: View {
                     dismiss()
                 },
                 onMinimize: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        viewModel.showingControls = false
-                    }
+                    viewModel.dismissToMiniPlayer = true
+                    dismiss()
                 }
             )
 
@@ -211,7 +231,7 @@ struct UnifiedPlayerView: View {
 
             // Center visualizer (session mode)
             if viewModel.mode.hasMandalaVisualizer {
-                MandalaVisualizer(size: 220, brightness: viewModel.engine.brightness)
+                MandalaVisualizer(size: 220, brightness: viewModel.engine.brightness, isPlaying: viewModel.isPlaying)
                     .padding(.vertical, TranceSpacing.content)
                 Spacer()
             }
@@ -301,13 +321,7 @@ struct UnifiedPlayerView: View {
                         .font(.caption)
                         .foregroundStyle(viewModel.secondaryLabelColor)
 
-                    Slider(
-                        value: Binding(
-                            get: { Double(viewModel.volume) },
-                            set: { viewModel.setVolume(Float($0)) }
-                        ),
-                        in: 0.0...1.0
-                    )
+                    Slider(value: volumeBinding, in: 0.0...1.0)
                     .tint(.roseGold)
 
                     Text("\(Int(viewModel.volume * 100))%")
@@ -324,10 +338,7 @@ struct UnifiedPlayerView: View {
 
     private var smartTransitionsToggle: some View {
         HStack {
-            Toggle("Smart Transitions", isOn: Binding(
-                get: { viewModel.smartTransitions },
-                set: { viewModel.smartTransitions = $0 }
-            ))
+            Toggle("Smart Transitions", isOn: smartTransitionsBinding)
             .font(.caption)
             .tint(.blue)
         }

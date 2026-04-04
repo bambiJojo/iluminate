@@ -57,6 +57,17 @@ protocol ContentAnalyzingService: AnyObject {
     ) async throws -> AnalysisResult
 }
 
+/// Extracts prosodic features (speech rate, volume, pitch, pauses)
+/// directly from the raw audio signal combined with transcript timing.
+/// Not MainActor-isolated — runs on a background thread for performance.
+protocol ProsodyAnalyzingService: Sendable {
+    func analyze(
+        url: URL,
+        segments: [AudioTranscriptionSegment],
+        config: ProsodyAnalyzer.Config
+    ) throws -> ProsodicProfile
+}
+
 /// Generates a synchronized light session from an analysis result.
 /// All conforming types must be MainActor-isolated.
 @MainActor

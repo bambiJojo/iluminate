@@ -1,6 +1,9 @@
 {
   "session_name": "Delta Restoration",
   "duration_sec": 1800,
+  "binaural_enabled": true,
+  "binaural_carrier": 150,
+  "binaural_volume": 0.4,
   "light_score": [
     {
       "time": 0,

@@ -12,6 +12,60 @@ import Foundation
 
 @MainActor
 struct EvolutionaryPipelineTests {
+    @Test
+    func pipelineRunnerPrefersAnalyzerDatasetExportOverLegacyCorpusJSON() throws {
+        let corpusDirectory = try makeTempDirectory()
+        let datasetDirectory = corpusDirectory.appending(path: "AnalyzerDataset", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: datasetDirectory, withIntermediateDirectories: true)
+
+        let datasetFile = makeLabeledFile(
+            originalFilename: "dataset.wav",
+            storedAudioFilename: "dataset-audio.wav",
+            phases: [
+                .init(phase: .preTalk, startTime: 0, endTime: 30),
+                .init(phase: .induction, startTime: 30, endTime: 60)
+            ]
+        )
+        let legacyFile = makeLabeledFile(
+            originalFilename: "legacy.wav",
+            storedAudioFilename: "legacy-audio.wav",
+            phases: [
+                .init(phase: .therapy, startTime: 0, endTime: 60)
+            ]
+        )
+
+        let example = datasetFile.analyzerTrainingExample(
+            exportedAt: Date(timeIntervalSince1970: 1_000),
+            datasetRelativeAudioPath: "audio/\(datasetFile.storedAudioFilename)",
+            datasetRelativeExamplePath: "examples/\(datasetFile.id.uuidString).json"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(example).write(
+            to: datasetDirectory.appending(path: "dataset.jsonl"),
+            options: .atomic
+        )
+
+        let prettyEncoder = JSONEncoder()
+        prettyEncoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        prettyEncoder.dateEncodingStrategy = .iso8601
+        try prettyEncoder.encode(legacyFile).write(
+            to: corpusDirectory.appending(path: "\(legacyFile.id.uuidString).json"),
+            options: .atomic
+        )
+
+        let runner = PipelineRunner(
+            corpusDirectory: corpusDirectory,
+            outputDirectory: corpusDirectory.appending(path: "Output")
+        )
+        let result = runner.loadCorpusResult()
+
+        #expect(result.sourceDescription.contains("AnalyzerDataset"))
+        #expect(result.labeledFiles.count == 1)
+        #expect(result.labeledFiles[0].id == datasetFile.id)
+        #expect(result.labeledFiles[0].originalFilename == "dataset.wav")
+    }
 
     /// Smoke test: runs 2 generations with population 4 to verify the pipeline works.
     @Test func pipelineSmokeTest() {
@@ -81,5 +135,31 @@ struct EvolutionaryPipelineTests {
             }
         }
         #expect(sawMix, "Crossover should eventually mix sections from different parents")
+    }
+
+    private func makeTempDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func makeLabeledFile(
+        originalFilename: String,
+        storedAudioFilename: String,
+        phases: [LabeledFile.LabeledPhase]
+    ) -> LabeledFile {
+        LabeledFile(
+            originalFilename: originalFilename,
+            storedAudioFilename: storedAudioFilename,
+            audioDuration: 60,
+            audioSHA256: UUID().uuidString,
+            expectedContentType: .hypnosis,
+            expectedFrequencyBand: .init(lower: 0.5, upper: 8),
+            phases: phases,
+            techniques: [],
+            labeledAt: Date(timeIntervalSince1970: 1_000),
+            labelerNotes: "test"
+        )
     }
 }

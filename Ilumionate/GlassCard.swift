@@ -23,7 +23,7 @@ struct GlassCard<Content: View>: View {
                     .font(TranceTypography.cardLabel)
                     .tracking(1.2)
                     .textCase(.uppercase)
-                    .foregroundColor(.textLight)
+                    .foregroundStyle(.textLight)
             }
             content()
         }
@@ -45,10 +45,10 @@ struct GlassCard<Content: View>: View {
                 VStack(alignment: .leading) {
                     Text("Deep Sleep Induction")
                         .font(TranceTypography.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                     Text("18:24 remaining")
                         .font(TranceTypography.caption)
-                        .foregroundColor(.textSecondary)
+                        .foregroundStyle(.textSecondary)
                 }
 
                 Spacer()
@@ -59,7 +59,7 @@ struct GlassCard<Content: View>: View {
                     .overlay(
                         Text("60%")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.roseGold)
+                            .foregroundStyle(.roseGold)
                     )
             }
         }
@@ -67,7 +67,7 @@ struct GlassCard<Content: View>: View {
         GlassCard {
             Text("Card without label")
                 .font(TranceTypography.body)
-                .foregroundColor(.textPrimary)
+                .foregroundStyle(.textPrimary)
         }
     }
     .padding(TranceSpacing.screen)

@@ -125,6 +125,7 @@ enum PlayerMode: Identifiable {
     var hasBinauralToggle: Bool {
         switch self {
         case .flashMode: return true
+        case .session(let session, _): return session.binaural_enabled
         default: return false
         }
     }
@@ -151,10 +152,7 @@ enum PlayerMode: Identifiable {
     }
 
     var hasMandalaVisualizer: Bool {
-        switch self {
-        case .session: return true
-        default: return false
-        }
+        return false
     }
 
     var requiresSafetyWarning: Bool {

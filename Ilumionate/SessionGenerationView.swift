@@ -56,7 +56,7 @@ struct SessionGenerationView: View {
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -78,11 +78,12 @@ struct SessionGenerationView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                 }
             }
             .onAppear {
+                config = AnalysisPreferences.shared.generationConfig
                 generateSession()
             }
             .fullScreenCover(isPresented: $showingPlayer) {
@@ -114,19 +115,19 @@ struct SessionGenerationView: View {
                 
                 Image(systemName: contentTypeIcon)
                     .font(.system(size: 40, weight: .light))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
             }
             
             VStack(spacing: TranceSpacing.micro) {
-                Text(audioFile.filename.replacingOccurrences(of: ".m4a", with: "").replacingOccurrences(of: ".mp3", with: ""))
+                Text(audioFile.filename.replacing(".m4a", with: "").replacing(".mp3", with: ""))
                     .font(TranceTypography.screenTitle)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
                     .multilineTextAlignment(.center)
                 
                 HStack(spacing: TranceSpacing.list) {
                     Label(audioFile.durationFormatted, systemImage: "clock")
                         .font(TranceTypography.caption)
-                        .foregroundColor(.textSecondary)
+                        .foregroundStyle(.textSecondary)
                     
                     PhasePill(phase: analysis.contentType.rawValue.capitalized)
                 }
@@ -150,10 +151,10 @@ struct SessionGenerationView: View {
                     VStack(alignment: .leading, spacing: TranceSpacing.micro) {
                         Label("AI Insights", systemImage: "sparkles")
                             .font(TranceTypography.body)
-                            .foregroundColor(.textPrimary)
+                            .foregroundStyle(.textPrimary)
                         Text(analysis.aiSummary)
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                 }
             }
@@ -165,7 +166,7 @@ struct SessionGenerationView: View {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 Text("Detected Phases (\(hypnosis.phases.count))")
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
                 
                 VStack(spacing: TranceSpacing.micro) {
                     ForEach(hypnosis.phases.prefix(5)) { phase in
@@ -175,11 +176,11 @@ struct SessionGenerationView: View {
                                 .frame(width: 8, height: 8)
                             Text(phase.phase.displayName)
                                 .font(TranceTypography.caption)
-                                .foregroundColor(.textPrimary)
+                                .foregroundStyle(.textPrimary)
                             Spacer()
                             Text("\(formatTime(phase.startTime)) - \(formatTime(phase.endTime))")
                                 .font(TranceTypography.caption)
-                                .foregroundColor(.textSecondary)
+                                .foregroundStyle(.textSecondary)
                         }
                     }
                 }
@@ -188,7 +189,7 @@ struct SessionGenerationView: View {
                     HStack {
                         Text("Induction")
                             .font(TranceTypography.body)
-                            .foregroundColor(.textPrimary)
+                            .foregroundStyle(.textPrimary)
                         Spacer()
                         PhasePill(phase: induction.rawValue.capitalized)
                     }
@@ -197,7 +198,7 @@ struct SessionGenerationView: View {
                 HStack {
                     Text("Depth")
                         .font(TranceTypography.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                     Spacer()
                     PhasePill(phase: hypnosis.estimatedTranceDeph.rawValue.capitalized)
                 }
@@ -213,11 +214,11 @@ struct SessionGenerationView: View {
                     HStack {
                         Text("Overall Intensity")
                             .font(TranceTypography.body)
-                            .foregroundColor(.textPrimary)
+                            .foregroundStyle(.textPrimary)
                         Spacer()
                         Text("\(Int(config.intensityMultiplier * 100))%")
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                     Slider(value: $config.intensityMultiplier, in: 0.5...1.5)
                         .tint(.roseGold)
@@ -231,11 +232,11 @@ struct SessionGenerationView: View {
                     HStack {
                         Text("Transition Smoothness")
                             .font(TranceTypography.body)
-                            .foregroundColor(.textPrimary)
+                            .foregroundStyle(.textPrimary)
                         Spacer()
                         Text(smoothnessLabel)
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                     Slider(value: $config.transitionSmoothness, in: 0.0...1.0)
                         .tint(.bwTheta)
@@ -247,7 +248,7 @@ struct SessionGenerationView: View {
                 // Bilateral Mode
                 Toggle("Bilateral Stimulation", isOn: $config.bilateralMode)
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
                     .tint(.roseDeep)
                     .onChange(of: config.bilateralMode) { _, _ in
                         regenerateSession()
@@ -276,13 +277,13 @@ struct SessionGenerationView: View {
     private func infoBox(icon: String, label: String, value: String, color: Color) -> some View {
         VStack(spacing: TranceSpacing.micro) {
             Image(systemName: icon)
-                .foregroundColor(color)
+                .foregroundStyle(color)
             Text(label)
                 .font(TranceTypography.caption)
-                .foregroundColor(.textSecondary)
+                .foregroundStyle(.textSecondary)
             Text(value)
                 .font(TranceTypography.body)
-                .foregroundColor(.textPrimary)
+                .foregroundStyle(.textPrimary)
                 .bold()
                 .lineLimit(1)
         }
@@ -300,23 +301,31 @@ struct SessionGenerationView: View {
 
     private var contentTypeIcon: String {
         switch analysis.contentType {
-        case .hypnosis: return "brain"
-        case .meditation: return "figure.mind.and.body"
-        case .music: return "music.note"
-        case .guidedImagery: return "eye"
-        case .affirmations: return "quote.bubble"
-        case .unknown: return "waveform"
+        case .hypnosis:        return "brain"
+        case .meditation:      return "figure.mind.and.body"
+        case .music:           return "music.note"
+        case .guidedImagery:   return "eye"
+        case .affirmations:    return "quote.bubble"
+        case .eroticHypnosis:  return "flame"
+        case .brainwave:       return "waveform.path.ecg"
+        case .asmr:            return "ear"
+        case .sleepHypnosis:   return "moon.zzz"
+        case .unknown:         return "waveform"
         }
     }
 
     private var contentTypeColor: Color {
         switch analysis.contentType {
-        case .hypnosis: return .bwTheta
-        case .meditation: return .bwAlpha
-        case .music: return .roseGold
-        case .guidedImagery: return .roseDeep
-        case .affirmations: return .bwBeta
-        case .unknown: return .textSecondary
+        case .hypnosis:        return .bwTheta
+        case .meditation:      return .bwAlpha
+        case .music:           return .roseGold
+        case .guidedImagery:   return .roseDeep
+        case .affirmations:    return .bwBeta
+        case .eroticHypnosis:  return .roseDeep
+        case .brainwave:       return .bwGamma
+        case .asmr:            return .warmAccent
+        case .sleepHypnosis:   return .bwDelta
+        case .unknown:         return .textSecondary
         }
     }
     
@@ -333,8 +342,6 @@ struct SessionGenerationView: View {
     }
     
     private func formatTime(_ seconds: TimeInterval) -> String {
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", mins, secs)
+        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
     }
 }

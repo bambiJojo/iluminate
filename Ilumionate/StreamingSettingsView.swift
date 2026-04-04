@@ -44,11 +44,11 @@ struct StreamingSettingsView: View {
             VStack(alignment: .leading, spacing: TranceSpacing.card) {
                 Text("Connect to SoundCloud to access thousands of full-length meditation, therapy, and ambient tracks perfect for light therapy sessions.")
                     .font(TranceTypography.body)
-                    .foregroundColor(.textSecondary)
+                    .foregroundStyle(.textSecondary)
 
                 Text("Register a developer application at SoundCloud to get API credentials.")
                     .font(TranceTypography.caption)
-                    .foregroundColor(.textLight)
+                    .foregroundStyle(.textLight)
             }
         }
     }
@@ -60,20 +60,20 @@ struct StreamingSettingsView: View {
             VStack(alignment: .leading, spacing: TranceSpacing.inner) {
                 HStack {
                     Image(systemName: "cloud.fill")
-                        .foregroundColor(StreamingServiceType.soundcloud.color)
+                        .foregroundStyle(StreamingServiceType.soundcloud.color)
                     Text("SoundCloud")
                         .font(TranceTypography.sectionTitle)
                         .fontWeight(.semibold)
                 }
 
-                Text("Register at: soundcloud.com/you/apps/new")
-                    .font(TranceTypography.caption)
-                    .foregroundColor(.blue)
-                    .onTapGesture {
-                        if let url = URL(string: "https://soundcloud.com/you/apps/new") {
-                            UIApplication.shared.open(url)
-                        }
+                Button("Register at: soundcloud.com/you/apps/new") {
+                    if let url = URL(string: "https://soundcloud.com/you/apps/new") {
+                        UIApplication.shared.open(url)
                     }
+                }
+                .font(TranceTypography.caption)
+                .foregroundStyle(.blue)
+                .buttonStyle(.plain)
 
                 TextField("Client ID", text: $soundCloudClientId)
                     .textFieldStyle(.roundedBorder)
@@ -85,7 +85,7 @@ struct StreamingSettingsView: View {
 
                 if manager.soundCloudService?.isAuthenticated == true {
                     Label("Connected", systemImage: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundStyle(.green)
                         .font(TranceTypography.caption)
                 }
             }
@@ -106,7 +106,7 @@ struct StreamingSettingsView: View {
                         .scaleEffect(0.8)
                     Text("Connecting...")
                         .font(TranceTypography.body)
-                        .foregroundColor(.textSecondary)
+                        .foregroundStyle(.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             } else {

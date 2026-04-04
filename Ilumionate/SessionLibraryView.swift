@@ -9,51 +9,31 @@ import SwiftUI
 
 struct SessionLibraryView: View {
     var engine: LightEngine
-    @Environment(\.dismiss) private var dismiss
 
     @State private var sessions: [LightSession] = []
     @State private var selectedSession: LightSession?
-    @State private var showingSessionPlayer = false
     @State private var searchText = ""
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.bgPrimary
-                    .ignoresSafeArea()
+        ZStack {
+            Color.bgPrimary
+                .ignoresSafeArea()
 
-                if sessions.isEmpty {
-                    emptyView
-                } else {
-                    sessionListView
-                }
+            if sessions.isEmpty {
+                emptyView
+            } else {
+                sessionListView
             }
-            .navigationTitle("Session Library")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.textSecondary)
-                    }
-                }
-            }
-            .onAppear {
-                loadSessions()
-            }
-            .fullScreenCover(item: $selectedSession) { session in
-                UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
-            }
-            .fullScreenCover(isPresented: $showingSessionPlayer) {
-                if let session = selectedSession {
-                    UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
-                }
-            }
-            .searchable(text: $searchText, prompt: "Search sessions...")
         }
+        .navigationTitle("Session Library")
+        .navigationBarTitleDisplayMode(.large)
+        .onAppear {
+            loadSessions()
+        }
+        .fullScreenCover(item: $selectedSession) { session in
+            UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
+        }
+        .searchable(text: $searchText, prompt: "Search sessions...")
     }
 
     // MARK: - Subviews
@@ -62,15 +42,15 @@ struct SessionLibraryView: View {
         VStack(spacing: TranceSpacing.cardMargin) {
             Image(systemName: "waveform.circle")
                 .font(.system(size: 64, weight: .light))
-                .foregroundColor(.lavender)
+                .foregroundStyle(.lavender)
 
             Text("No Sessions Found")
                 .font(TranceTypography.screenTitle)
-                .foregroundColor(.textPrimary)
+                .foregroundStyle(.textPrimary)
 
             Text("Try importing audio or using built-in sessions.")
                 .font(TranceTypography.body)
-                .foregroundColor(.textSecondary)
+                .foregroundStyle(.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding()
@@ -82,7 +62,6 @@ struct SessionLibraryView: View {
                 ForEach(filteredSessions) { session in
                     Button {
                         selectedSession = session
-                        showingSessionPlayer = true
                     } label: {
                         SessionListCard(session: session)
                     }
@@ -101,7 +80,7 @@ struct SessionLibraryView: View {
             return sessions
         }
         return sessions.filter {
-            $0.displayName.localizedCaseInsensitiveContains(searchText)
+            $0.displayName.localizedStandardContains(searchText)
         }
     }
 
@@ -142,7 +121,7 @@ struct SessionListCard: View {
                     .frame(width: 60, height: 60)
                     .overlay(
                         Image(systemName: sessionIcon)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .font(.system(size: 24))
                     )
 
@@ -150,17 +129,17 @@ struct SessionListCard: View {
                 VStack(alignment: .leading, spacing: TranceSpacing.micro) {
                     Text(session.displayName)
                         .font(TranceTypography.sectionTitle)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                         .lineLimit(1)
 
                     HStack(spacing: TranceSpacing.list) {
                         Label(session.durationFormatted, systemImage: "clock")
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
 
                         Label("\(session.light_score.count) frames", systemImage: "waveform")
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                 }
 
@@ -168,7 +147,7 @@ struct SessionListCard: View {
 
                 Image(systemName: "play.circle.fill")
                     .font(.system(size: 28))
-                    .foregroundColor(sessionColor)
+                    .foregroundStyle(sessionColor)
             }
             .padding(.vertical, TranceSpacing.inner)
         }

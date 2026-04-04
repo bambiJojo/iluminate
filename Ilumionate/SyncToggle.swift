@@ -11,34 +11,36 @@ struct SyncToggle: View {
     @Binding var isOn: Bool
 
     var body: some View {
-        HStack {
-            Text("Sync Mind Machine")
-                .font(.system(size: 14))
-                .foregroundColor(.textPrimary)
-            Spacer()
-            Toggle("", isOn: $isOn)
-                .toggleStyle(RoseToggleStyle())
-        }
+        Toggle("Sync Mind Machine", isOn: $isOn)
+            .toggleStyle(RoseToggleStyle())
     }
 }
 
 struct RoseToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
-        Capsule()
-            .fill(configuration.isOn ? Color.roseGold : Color.glassBorder)
-            .frame(width: 46, height: 26)
-            .overlay(alignment: configuration.isOn ? .trailing : .leading) {
-                Circle()
-                    .fill(.white)
-                    .frame(width: 20, height: 20)
-                    .shadow(color: .black.opacity(0.1), radius: 2, y: 2)
-                    .padding(3)
-            }
-            .animation(.easeInOut(duration: 0.2), value: configuration.isOn)
-            .onTapGesture {
+        HStack {
+            configuration.label
+                .font(.subheadline)
+                .foregroundStyle(.textPrimary)
+            Spacer()
+            Button {
                 TranceHaptics.shared.light()
                 configuration.isOn.toggle()
+            } label: {
+                Capsule()
+                    .fill(configuration.isOn ? Color.roseGold : Color.glassBorder)
+                    .frame(width: 46, height: 26)
+                    .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 20, height: 20)
+                            .shadow(color: .black.opacity(0.1), radius: 2, y: 2)
+                            .padding(3)
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: configuration.isOn)
             }
+            .buttonStyle(.plain)
+        }
     }
 }
 

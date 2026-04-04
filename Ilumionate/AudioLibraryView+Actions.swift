@@ -56,8 +56,7 @@ extension AudioLibraryView {
     // MARK: - File Management
 
     func loadAudioFiles() {
-        // Load audio files from UserDefaults or a data store
-        if let data = UserDefaults.standard.data(forKey: "audioFiles"),
+        if let data = UserDefaults.standard.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey),
            let files = try? JSONDecoder().decode([AudioFile].self, from: data) {
             audioFiles = files
             print("📦 Loaded \(files.count) audio files")
@@ -66,7 +65,7 @@ extension AudioLibraryView {
 
     func saveAudioFiles() {
         if let data = try? JSONEncoder().encode(audioFiles) {
-            UserDefaults.standard.set(data, forKey: "audioFiles")
+            UserDefaults.standard.set(data, forKey: AnalysisStateManager.audioFilesUserDefaultsKey)
             print("💾 Saved \(audioFiles.count) audio files")
         }
     }
@@ -83,12 +82,12 @@ extension AudioLibraryView {
 
         // Delete the generated session if it exists
         let documentsURL = URL.documentsDirectory
-        let sessionsURL = documentsURL.appendingPathComponent("GeneratedSessions", isDirectory: true)
+        let sessionsURL = documentsURL.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
         let baseName = file.filename
             .replacing(".mp3", with: "")
             .replacing(".m4a", with: "")
             .replacing(".wav", with: "")
-        let sessionFile = sessionsURL.appendingPathComponent("\(baseName)_session.json")
+        let sessionFile = sessionsURL.appending(path: "\(baseName)_session.json")
         try? FileManager.default.removeItem(at: sessionFile)
 
         // Remove from list

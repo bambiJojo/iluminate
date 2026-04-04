@@ -11,26 +11,23 @@ import SwiftUI
 // MARK: - Tab Enum
 
 enum TranceTab: String, CaseIterable {
-    case home     = "home"
-    case library  = "library"
-    case machine  = "machine"
-    case analyzer = "analyzer"
+    case home    = "home"
+    case library = "library"
+    case create  = "create"
 
     var title: String {
         switch self {
-        case .home:     "Home"
-        case .library:  "Library"
-        case .machine:  "Machine"
-        case .analyzer: "Analyzer"
+        case .home:    "Home"
+        case .library: "Library"
+        case .create:  "Create"
         }
     }
 
     var sfSymbol: String {
         switch self {
-        case .home:     "house.fill"
-        case .library:  "books.vertical.fill"
-        case .machine:  "lightbulb.fill"
-        case .analyzer: "sparkles"
+        case .home:    "house.fill"
+        case .library: "books.vertical.fill"
+        case .create:  "lightbulb.fill"
         }
     }
 }
@@ -74,23 +71,28 @@ struct TranceTabBar: View {
             }
             TranceHaptics.shared.light()
         } label: {
-            Image(systemName: tab.sfSymbol)
-                .font(.system(size: 20, weight: isSelected ? .semibold : .regular))
-                .symbolEffect(.bounce, value: selected)
-                .foregroundStyle(isSelected ? tabAccentColor : Color.textSecondary)
-                .scaleEffect(isSelected ? 1.1 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.65), value: selected)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background {
-                    if isSelected {
-                        Capsule()
-                            .fill(tabAccentColor.opacity(0.18))
-                            .matchedGeometryEffect(id: "TAB_INDICATOR", in: tabAnimation)
-                    }
+            VStack(spacing: 2) {
+                Image(systemName: tab.sfSymbol)
+                    .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
+                    .symbolEffect(.bounce, value: selected)
+
+                Text(tab.title)
+                    .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
+            }
+            .foregroundStyle(isSelected ? tabAccentColor : Color.textSecondary)
+            .scaleEffect(isSelected ? 1.05 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.65), value: selected)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background {
+                if isSelected {
+                    Capsule()
+                        .fill(tabAccentColor.opacity(0.18))
+                        .matchedGeometryEffect(id: "TAB_INDICATOR", in: tabAnimation)
                 }
+            }
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
     }
 
     // The tint for the active tab — uses the design system's rose-gold
@@ -112,7 +114,7 @@ struct TranceTabBar: View {
                     Spacer()
                     Text("Tab: \(selectedTab.title)")
                         .font(TranceTypography.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                     Spacer()
                 }
 

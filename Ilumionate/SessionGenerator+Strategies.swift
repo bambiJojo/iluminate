@@ -642,6 +642,245 @@ extension SessionGenerator {
         }
     }
 
+    // MARK: - Erotic Hypnosis
+
+    /// Deep theta with warm color and slow bilateral oscillation.
+    /// Similar arc to standard hypnosis but biased toward lower frequencies,
+    /// warmer color temperatures, and no emergence ramp (session typically
+    /// ends in trance or loops).
+    func generateEroticHypnosisSession(
+        analysis: AnalysisResult,
+        duration: TimeInterval,
+        config: GenerationConfig
+    ) -> [LightMoment] {
+        var moments: [LightMoment] = []
+        let mul = config.intensityMultiplier
+
+        // Gentle entrance — warm tones from the start
+        moments.append(moment(time: 0,               freq: 12.0, amp: 0.50 * mul, waveform: .sine,      colorTemp: 3500))
+        moments.append(moment(time: duration * 0.08, freq: 8.0,  amp: 0.42 * mul, waveform: .sine,      colorTemp: 3000))
+
+        // Rapid descent into deep theta
+        moments.append(moment(time: duration * 0.15, freq: 6.0,  amp: 0.36 * mul, waveform: .softPulse, colorTemp: 2600))
+
+        // Deep theta hold (15–85%) — slow bilateral, very warm
+        let holdStart = duration * 0.15
+        let holdEnd   = duration * 0.85
+        let numPoints = max(3, Int((holdEnd - holdStart) / 50.0))
+
+        for idx in 0..<numPoints {
+            let progress  = Double(idx) / Double(numPoints)
+            let pointTime = holdStart + progress * (holdEnd - holdStart)
+            // Oscillate between deep theta and low theta
+            let freqOsc   = 4.5 + sin(progress * .pi * 3.0) * 1.5
+            moments.append(moment(
+                time: pointTime,
+                freq: max(config.minFrequency, freqOsc),
+                amp: max(0.20, (0.34 - progress * 0.04) * mul),
+                waveform: .noiseModulatedSine,
+                colorTemp: 2400 - progress * 200,
+                bilateral: true,
+                bilateralTransition: idx == 0 ? 6.0 : nil
+            ))
+        }
+
+        // Soft ending — no sharp emergence, stay warm
+        moments.append(moment(time: duration * 0.90, freq: 5.0, amp: 0.28 * mul, waveform: .softPulse, colorTemp: 2200))
+        moments.append(moment(time: duration * 0.98, freq: 4.0, amp: 0.22 * mul, waveform: .softPulse, colorTemp: 2200))
+
+        applyProsodicModulation(moments: &moments, analysis: analysis, config: config)
+        moments.sort { $0.time < $1.time }
+        smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
+        if let prosody = analysis.prosodicProfile {
+            applyAdaptiveBreathOscillation(&moments, prosody: prosody)
+        } else {
+            applyBreathOscillation(&moments, duration: duration)
+        }
+        return moments
+    }
+
+    // MARK: - Brainwave Entrainment
+
+    /// Follows the audio's own frequency structure. Binaural/isochronal content
+    /// already has a target frequency embedded in it — the light should mirror
+    /// that frequency rather than imposing its own arc.
+    func generateBrainwaveSession(
+        analysis: AnalysisResult,
+        duration: TimeInterval,
+        config: GenerationConfig
+    ) -> [LightMoment] {
+        var moments: [LightMoment] = []
+        let mul = config.intensityMultiplier
+        let targetFreq = clamp(
+            analysis.suggestedFrequencyRange.lowerBound,
+            lower: config.minFrequency,
+            upper: config.maxFrequency
+        )
+        let baseAmp = analysis.suggestedIntensity * mul
+
+        // Brief entrance at target frequency
+        moments.append(moment(time: 0, freq: targetFreq, amp: baseAmp * 0.6, waveform: .sine, colorTemp: 4000))
+        moments.append(moment(time: duration * 0.05, freq: targetFreq, amp: baseAmp, waveform: .sine, colorTemp: 4000))
+
+        // Sustained hold at target frequency — the audio drives the experience
+        let numPoints = max(4, Int(duration / 45.0))
+        for idx in 1..<numPoints {
+            let progress  = Double(idx) / Double(numPoints)
+            let pointTime = progress * duration
+            // Minimal variation — stay locked to the target frequency
+            let freqJitter = sin(progress * .pi * 4.0) * 0.3
+            moments.append(moment(
+                time: pointTime,
+                freq: clamp(targetFreq + freqJitter, lower: config.minFrequency, upper: config.maxFrequency),
+                amp: baseAmp * (0.95 + sin(progress * .pi * 2.0) * 0.05),
+                waveform: .sine,
+                colorTemp: analysis.suggestedColorTemperature
+            ))
+        }
+
+        // Gentle ramp-down
+        moments.append(moment(time: duration * 0.95, freq: targetFreq, amp: baseAmp * 0.5, waveform: .sine, colorTemp: 4000))
+
+        smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
+        return moments.sorted { $0.time < $1.time }
+    }
+
+    // MARK: - ASMR
+
+    /// Light alpha range with gentle modulation. ASMR is sensory-trigger based,
+    /// so the light stays subtle and responsive rather than driving deep entrainment.
+    func generateASMRSession(
+        analysis: AnalysisResult,
+        duration: TimeInterval,
+        config: GenerationConfig
+    ) -> [LightMoment] {
+        var moments: [LightMoment] = []
+        let mul = config.intensityMultiplier
+
+        // Start very gentle — ASMR requires minimal visual intrusion
+        moments.append(moment(time: 0,               freq: 10.0, amp: 0.30 * mul, waveform: .sine,      colorTemp: 3800))
+        moments.append(moment(time: duration * 0.10, freq: 8.0,  amp: 0.28 * mul, waveform: .softPulse, colorTemp: 3500))
+
+        // Sustained light alpha (10–80%) — low intensity, warm
+        let holdStart = duration * 0.10
+        let holdEnd   = duration * 0.85
+        let numPoints = max(3, Int((holdEnd - holdStart) / 60.0))
+
+        for idx in 0..<numPoints {
+            let progress  = Double(idx) / Double(numPoints)
+            let pointTime = holdStart + progress * (holdEnd - holdStart)
+            // Gentle drift between 7–9 Hz (relaxed alpha-theta border)
+            let freqOsc   = 8.0 + sin(progress * .pi * 2.0) * 1.0
+            moments.append(moment(
+                time: pointTime,
+                freq: max(config.minFrequency, freqOsc),
+                amp: max(0.18, (0.28 - progress * 0.04) * mul),
+                waveform: .noiseModulatedSine,
+                colorTemp: 3200 - progress * 400
+            ))
+        }
+
+        // Honor key moments — ASMR triggers can cause intensity peaks
+        for keyMoment in analysis.keyMoments {
+            let adjustment = adjustmentForKeyMoment(keyMoment)
+            if keyMoment.time < holdEnd {
+                moments.append(moment(
+                    time: keyMoment.time,
+                    freq: clamp(adjustment.frequency * 0.8, lower: config.minFrequency, upper: 12.0),
+                    amp: adjustment.intensity * mul * 0.7,
+                    waveform: .softPulse,
+                    colorTemp: adjustment.colorTemperature
+                ))
+            }
+        }
+
+        // Soft fade out
+        moments.append(moment(time: duration * 0.90, freq: 9.0, amp: 0.22 * mul, waveform: .sine, colorTemp: 3500))
+        moments.append(moment(time: duration * 0.98, freq: 10.0, amp: 0.18 * mul, waveform: .sine, colorTemp: 3800))
+
+        applyProsodicModulation(moments: &moments, analysis: analysis, config: config)
+        moments.sort { $0.time < $1.time }
+        smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
+        return moments
+    }
+
+    // MARK: - Sleep Hypnosis
+
+    /// Deep descent with no emergence — designed for sessions that end in sleep.
+    /// Targets delta (0.5–4 Hz) in the hold phase with very warm colors and
+    /// progressively lower intensity to let the listener fall asleep.
+    func generateSleepHypnosisSession(
+        analysis: AnalysisResult,
+        duration: TimeInterval,
+        config: GenerationConfig
+    ) -> [LightMoment] {
+        var moments: [LightMoment]
+        if let phases = analysis.hypnosisMetadata?.phases, !phases.isEmpty {
+            moments = generateHypnosisFromPhases(phases: phases, duration: duration, config: config)
+        } else {
+            moments = generateSleepFromDuration(duration: duration, config: config)
+        }
+
+        applyProsodicModulation(moments: &moments, analysis: analysis, config: config)
+        moments.sort { $0.time < $1.time }
+        smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
+        if let prosody = analysis.prosodicProfile {
+            applyAdaptiveBreathOscillation(&moments, prosody: prosody)
+        } else {
+            applyBreathOscillation(&moments, duration: duration)
+        }
+
+        // Override any emergence — sleep sessions must NOT wake the listener
+        moments.removeAll { $0.frequency > 10.0 && $0.time > duration * 0.5 }
+
+        return moments
+    }
+
+    /// Duration-based sleep session: beta→alpha→theta→delta with progressive fade to zero.
+    private func generateSleepFromDuration(duration: TimeInterval, config: GenerationConfig) -> [LightMoment] {
+        var moments: [LightMoment] = []
+        let mul = config.intensityMultiplier
+
+        // Beta entrance — brief
+        moments.append(moment(time: 0,               freq: 14.0, amp: 0.45 * mul, waveform: .sine,      colorTemp: 4000))
+
+        // Alpha descent
+        moments.append(moment(time: duration * 0.08, freq: 10.0, amp: 0.38 * mul, waveform: .sine,      colorTemp: 3500))
+        moments.append(moment(time: duration * 0.15, freq: 7.0,  amp: 0.32 * mul, waveform: .softPulse, colorTemp: 3000))
+
+        // Theta descent
+        moments.append(moment(time: duration * 0.25, freq: 5.0,  amp: 0.28 * mul, waveform: .softPulse, colorTemp: 2600, bilateral: true, bilateralTransition: 5.0))
+        moments.append(moment(time: duration * 0.40, freq: 3.5,  amp: 0.24 * mul, waveform: .noiseModulatedSine, colorTemp: 2400, bilateral: true))
+
+        // Delta hold (40–90%) — progressive fade to darkness
+        let holdStart = duration * 0.40
+        let holdEnd   = duration * 0.90
+        let numPoints = max(3, Int((holdEnd - holdStart) / 60.0))
+
+        for idx in 0..<numPoints {
+            let progress  = Double(idx) / Double(numPoints)
+            let pointTime = holdStart + progress * (holdEnd - holdStart)
+            let freqOsc   = 2.0 + sin(progress * .pi) * 1.0
+            // Intensity fades toward zero as the listener sleeps
+            let fadeAmp   = max(0.05, (0.22 - progress * 0.16) * mul)
+            moments.append(moment(
+                time: pointTime,
+                freq: max(config.minFrequency, freqOsc),
+                amp: fadeAmp,
+                waveform: .noiseModulatedSine,
+                colorTemp: 2200,
+                bilateral: true
+            ))
+        }
+
+        // Final fade to near-zero
+        moments.append(moment(time: duration * 0.92, freq: 1.5, amp: 0.04 * mul, waveform: .softPulse, colorTemp: 2200))
+        moments.append(moment(time: duration * 0.98, freq: 1.0, amp: 0.02 * mul, waveform: .softPulse, colorTemp: 2200))
+
+        smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
+        return moments.sorted { $0.time < $1.time }
+    }
+
     // MARK: - Utility
 
     func clamp(_ value: Double, lower: Double, upper: Double) -> Double {

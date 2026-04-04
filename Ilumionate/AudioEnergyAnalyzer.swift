@@ -11,7 +11,7 @@ import AVFoundation
 // MARK: - Data Types
 
 /// Classification of a dead-time region
-enum DeadTimeType: String, Codable {
+enum DeadTimeType: String, Codable, Sendable {
     case silence   // Near-zero amplitude
     case binaural  // Low-amplitude, steady-state tone (e.g. binaural beat carrier)
     case mixed     // Combination of silence and binaural windows
@@ -19,7 +19,7 @@ enum DeadTimeType: String, Codable {
 }
 
 /// Result of dead-time analysis for one audio file
-struct DeadTimeProfile: Codable {
+struct DeadTimeProfile: Codable, Sendable {
     let headDeadTime: TimeInterval
     let tailDeadTime: TimeInterval
     let headClassification: DeadTimeType

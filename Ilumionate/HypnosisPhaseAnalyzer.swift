@@ -120,6 +120,7 @@ struct HypnosisPhaseAnalyzer {
 
     /// Scans all word timestamps against the keyword taxonomy and produces a
     /// bucket array where each element maps phase → accumulated score.
+    /// Config weights override the built-in taxonomy weights when present.
     func buildHitMap(
         wordTimestamps: [WordTimestamp],
         bucketCount: Int
@@ -128,6 +129,15 @@ struct HypnosisPhaseAnalyzer {
             repeating: [:],
             count: bucketCount
         )
+        // Apply config weight overrides on top of the built-in taxonomy.
+        // Build an override lookup: phrase → (phase, weight)
+        var configOverrides: [String: (HypnosisMetadata.Phase, Double)] = [:]
+        for phase in HypnosisMetadata.Phase.allCases {
+            for (phrase, weight) in config.weightsForPhase(phase) {
+                configOverrides[phrase] = (phase, weight)
+            }
+        }
+
         let sortedKeywords = HypnosisPhaseKeywords.all
             .sorted { $0.phrase.count > $1.phrase.count }  // longest phrase first
 
@@ -141,7 +151,11 @@ struct HypnosisPhaseAnalyzer {
                 let phrase = wordTimestamps[wordIndex..<(wordIndex + phraseLen)]
                     .map { $0.word.lowercased() }
                     .joined(separator: " ")
-                if let keyword = sortedKeywords.first(where: { $0.phrase == phrase }) {
+                if let (phase, weight) = configOverrides[phrase] {
+                    hitMap[bucket][phase, default: 0.0] += weight * Double(phraseLen)
+                    matched = true
+                    break
+                } else if let keyword = sortedKeywords.first(where: { $0.phrase == phrase }) {
                     hitMap[bucket][keyword.phase, default: 0.0] += keyword.weight * Double(phraseLen)
                     matched = true
                     break
@@ -151,7 +165,9 @@ struct HypnosisPhaseAnalyzer {
             // Single-word fallback
             if !matched {
                 let singleWord = wordTimestamps[wordIndex].word.lowercased()
-                if let keyword = sortedKeywords.first(where: { $0.phrase == singleWord }) {
+                if let (phase, weight) = configOverrides[singleWord] {
+                    hitMap[bucket][phase, default: 0.0] += weight
+                } else if let keyword = sortedKeywords.first(where: { $0.phrase == singleWord }) {
                     hitMap[bucket][keyword.phase, default: 0.0] += keyword.weight
                 }
             }

@@ -367,8 +367,26 @@ private extension AIAnalysisManager {
     /// Used as a last resort when the AI returns "unknown" due to sparse/empty transcripts.
     func inferContentType(from displayName: String) -> AnalysisResult.ContentType? {
         let name = displayName.lowercased()
+
+        // Check specific subtypes before generic hypnosis
+        if name.contains("erotic") || name.contains("sensual") || name.contains("pleasure") {
+            return .eroticHypnosis
+        }
+        if name.contains("sleep") && (name.contains("hypno") || name.contains("trance")) {
+            return .sleepHypnosis
+        }
+        if name.contains("sleep") || name.contains("insomnia") || name.contains("yoga nidra") || name.contains("nap") {
+            return .sleepHypnosis
+        }
+        if name.contains("binaural") || name.contains("isochronal") || name.contains("brainwave") ||
+           name.contains("solfeggio") || name.contains("hz") {
+            return .brainwave
+        }
+        if name.contains("asmr") || name.contains("whisper") || name.contains("tingles") {
+            return .asmr
+        }
         if name.contains("hypno") || name.contains("trance") || name.contains("induction") ||
-           name.contains("sleep") || name.contains("delta") || name.contains("deepening") ||
+           name.contains("delta") || name.contains("deepening") ||
            name.contains("brain") || name.contains("smooth") {
             return .hypnosis
         }
@@ -393,7 +411,8 @@ private extension AIAnalysisManager {
         aiPhases: [AIPhaseSegment],
         detectedPhases: [PhaseSegment]?
     ) -> HypnosisMetadata? {
-        if contentType == .hypnosis, let phases = detectedPhases, !phases.isEmpty {
+        let hypnosisTypes: Set<AnalysisResult.ContentType> = [.hypnosis, .eroticHypnosis, .sleepHypnosis]
+        if hypnosisTypes.contains(contentType), let phases = detectedPhases, !phases.isEmpty {
             return HypnosisMetadata(
                 phases: phases, inductionStyle: nil,
                 estimatedTranceDeph: estimateTranceDephFromPhases(phases),
@@ -417,15 +436,23 @@ private extension AIAnalysisManager {
         let mood: AnalysisResult.Mood
         switch contentType {
         case .hypnosis:
-            freqRange = 4.0...8.0;  intensity = 0.50; colorTemp = 2600; mood = .relaxing
+            freqRange = 4.0...8.0;   intensity = 0.50; colorTemp = 2600; mood = .relaxing
         case .meditation:
-            freqRange = 6.0...8.0;  intensity = 0.45; colorTemp = 3200; mood = .meditative
+            freqRange = 6.0...8.0;   intensity = 0.45; colorTemp = 3200; mood = .meditative
         case .affirmations:
-            freqRange = 9.0...11.0; intensity = 0.55; colorTemp = 3500; mood = .uplifting
+            freqRange = 9.0...11.0;  intensity = 0.55; colorTemp = 3500; mood = .uplifting
         case .guidedImagery:
-            freqRange = 7.0...10.0; intensity = 0.50; colorTemp = 3000; mood = .relaxing
+            freqRange = 7.0...10.0;  intensity = 0.50; colorTemp = 3000; mood = .relaxing
         case .music:
             freqRange = 12.0...18.0; intensity = 0.75; colorTemp = 5000; mood = .energizing
+        case .eroticHypnosis:
+            freqRange = 2.0...6.0;   intensity = 0.45; colorTemp = 2400; mood = .relaxing
+        case .brainwave:
+            freqRange = 1.0...40.0;  intensity = 0.50; colorTemp = 4000; mood = .meditative
+        case .asmr:
+            freqRange = 7.0...9.0;   intensity = 0.35; colorTemp = 3200; mood = .relaxing
+        case .sleepHypnosis:
+            freqRange = 0.5...4.0;   intensity = 0.35; colorTemp = 2200; mood = .relaxing
         case .unknown:
             freqRange = 8.0...12.0;  intensity = 0.50; colorTemp = 3500; mood = .neutral
         }

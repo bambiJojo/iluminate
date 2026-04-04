@@ -1,6 +1,9 @@
 {
   "session_name": "Peniston Alpha-Theta",
   "duration_sec": 1800,
+  "binaural_enabled": true,
+  "binaural_carrier": 150,
+  "binaural_volume": 0.5,
   "light_score": [
     {
       "time": 0,

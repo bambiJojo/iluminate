@@ -47,7 +47,7 @@ struct AudioAnalyzerView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                 }
                 
@@ -58,7 +58,7 @@ struct AudioAnalyzerView: View {
                             dismiss()
                         }
                         .font(TranceTypography.body)
-                        .foregroundColor(.roseGold)
+                        .foregroundStyle(.roseGold)
                     }
                 }
             }
@@ -87,18 +87,18 @@ struct AudioAnalyzerView: View {
                 
                 Image(systemName: "waveform.path.ecg")
                     .font(.system(size: 40))
-                    .foregroundColor(.roseGold)
+                    .foregroundStyle(.roseGold)
                     .opacity(0.8 + 0.2 * sin(analysisProgress * .pi * 4))
             }
             
             VStack(spacing: TranceSpacing.small) {
                 Text("Analyzing Audio...")
                     .font(TranceTypography.screenTitle)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
                 
                 Text("\(Int(analysisProgress * 100))% Complete")
                     .font(TranceTypography.body)
-                    .foregroundColor(.textSecondary)
+                    .foregroundStyle(.textSecondary)
             }
         }
     }
@@ -125,7 +125,7 @@ struct AudioAnalyzerView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
             }
             .buttonStyle(PlainButtonStyle())
@@ -180,11 +180,11 @@ struct AudioAnalyzerView: View {
                     HStack {
                         Text("Intensity Boost")
                             .font(TranceTypography.body)
-                            .foregroundColor(.textPrimary)
+                            .foregroundStyle(.textPrimary)
                         Spacer()
                         Text("\(Int(intensityBoost * 100))%")
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                     Slider(value: $intensityBoost, in: -0.5...0.5)
                         .tint(.roseGold)
@@ -194,11 +194,11 @@ struct AudioAnalyzerView: View {
                     HStack {
                         Text("Target Frequency")
                             .font(TranceTypography.body)
-                            .foregroundColor(.textPrimary)
+                            .foregroundStyle(.textPrimary)
                         Spacer()
                         Text("\(dominantFrequency, specifier: "%.1f") Hz")
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                     Slider(value: $dominantFrequency, in: 0.5...40.0)
                         .tint(.bwTheta)
@@ -206,7 +206,7 @@ struct AudioAnalyzerView: View {
                 
                 Toggle("Enable Bilateral Stimulation", isOn: $useBilateral)
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
                     .tint(.roseDeep)
             }
         }
@@ -218,16 +218,16 @@ struct AudioAnalyzerView: View {
             VStack(alignment: .leading, spacing: TranceSpacing.micro) {
                 Text(title)
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
                 Text(type)
                     .font(TranceTypography.caption)
-                    .foregroundColor(color)
+                    .foregroundStyle(color)
             }
             Spacer()
             Text(frequency)
                 .font(TranceTypography.body)
                 .bold()
-                .foregroundColor(.textSecondary)
+                .foregroundStyle(.textSecondary)
         }
     }
     

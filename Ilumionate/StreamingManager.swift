@@ -212,6 +212,10 @@ class StreamingManager {
         if title.contains("meditation") || title.contains("mindfulness") { return .meditation }
         if title.contains("guided") || title.contains("visualization") { return .guidedImagery }
         if title.contains("affirmation") || title.contains("positive") { return .affirmations }
+        if title.contains("erotic") || title.contains("sensual") { return .eroticHypnosis }
+        if title.contains("sleep") || title.contains("insomnia") || title.contains("yoga nidra") { return .sleepHypnosis }
+        if title.contains("binaural") || title.contains("brainwave") || title.contains("hz") { return .brainwave }
+        if title.contains("asmr") || title.contains("whisper") { return .asmr }
 
         return .music
     }

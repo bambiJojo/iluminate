@@ -12,6 +12,8 @@ import Foundation
 
 struct EvaluationReport: Codable {
     let generatedAt: Date
+    let corpusSource: String
+    let corpusFileCount: Int
     let totalGenerations: Int
     let bestFitness: Double
     let fitnessHistory: [GenerationSnapshot]
@@ -47,24 +49,13 @@ struct PipelineRunner {
         self.outputDirectory = outputDirectory
     }
 
-    /// Loads the labeled corpus from disk.
+    /// Loads the labeled corpus from disk, preferring the analyzer dataset export.
+    func loadCorpusResult() -> AnalyzerTrainingCorpusLoadResult {
+        AnalyzerTrainingCorpusLoader(corpusDirectory: corpusDirectory).load()
+    }
+
     func loadCorpus() -> [LabeledFile] {
-        let fileManager = FileManager.default
-        guard let files = try? fileManager.contentsOfDirectory(
-            at: corpusDirectory, includingPropertiesForKeys: nil
-        ) else {
-            return []
-        }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        return files
-            .filter { $0.pathExtension == "json" }
-            .compactMap { url in
-                guard let data = try? Data(contentsOf: url) else { return nil }
-                return try? decoder.decode(LabeledFile.self, from: data)
-            }
+        loadCorpusResult().labeledFiles
     }
 
     /// Runs the full improvement pipeline.
@@ -72,8 +63,9 @@ struct PipelineRunner {
     func run(
         params: EvolutionaryOptimizer.Parameters = .init()
     ) -> (config: AnalyzerConfig, report: EvaluationReport) {
-        let corpus = loadCorpus()
-        print("📂 Loaded \(corpus.count) labeled file(s)")
+        let corpusResult = loadCorpusResult()
+        let corpus = corpusResult.labeledFiles
+        print("📂 Loaded \(corpus.count) labeled file(s) from \(corpusResult.sourceDescription)")
 
         let seedConfig = AnalyzerConfigLoader.load()
         let optimizer = EvolutionaryOptimizer(params: params, labeledCorpus: corpus)
@@ -86,6 +78,8 @@ struct PipelineRunner {
 
         let report = EvaluationReport(
             generatedAt: Date(),
+            corpusSource: corpusResult.sourceDescription,
+            corpusFileCount: corpus.count,
             totalGenerations: history.count,
             bestFitness: bestConfig.fitness,
             fitnessHistory: history.map {

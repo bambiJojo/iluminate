@@ -21,24 +21,24 @@ extension AudioLibraryView {
                         Image(systemName: "folder.fill")
                             .font(.title2)
                             .frame(width: 28)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Import from File")
                                 .font(TranceTypography.body)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
 
                             Text("Choose MP3, M4A, or WAV files")
                                 .font(TranceTypography.caption)
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundStyle(.white.opacity(0.8))
                         }
 
                         Spacer()
 
                         Image(systemName: "arrow.right")
                             .font(.caption.weight(.semibold))
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundStyle(.white.opacity(0.8))
                     }
                     .padding(.horizontal, TranceSpacing.card)
                     .padding(.vertical, TranceSpacing.card)
@@ -69,24 +69,24 @@ extension AudioLibraryView {
                             }
                         }
                         .frame(width: 28)
-                        .foregroundColor(.roseGold)
+                        .foregroundStyle(.roseGold)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(isDownloadingURL ? "Downloading..." : "Import from Web")
                                 .font(TranceTypography.body)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.textPrimary)
+                                .foregroundStyle(.textPrimary)
 
                             Text(isDownloadingURL ? "Saving to your library..." : "Paste a link to an audio file")
                                 .font(TranceTypography.caption)
-                                .foregroundColor(.textSecondary)
+                                .foregroundStyle(.textSecondary)
                         }
 
                         Spacer()
 
                         Image(systemName: "arrow.right")
                             .font(.caption.weight(.semibold))
-                            .foregroundColor(.textLight)
+                            .foregroundStyle(.textLight)
                     }
                     .padding(.horizontal, TranceSpacing.card)
                     .padding(.vertical, TranceSpacing.card)
@@ -110,24 +110,24 @@ extension AudioLibraryView {
                         Image(systemName: "safari.fill")
                             .font(.title2)
                             .frame(width: 28)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Browse the Web")
                                 .font(TranceTypography.body)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.textPrimary)
+                                .foregroundStyle(.textPrimary)
 
                             Text("Find & download audio in-app")
                                 .font(TranceTypography.caption)
-                                .foregroundColor(.textSecondary)
+                                .foregroundStyle(.textSecondary)
                         }
 
                         Spacer()
 
                         Image(systemName: "arrow.right")
                             .font(.caption.weight(.semibold))
-                            .foregroundColor(.textLight)
+                            .foregroundStyle(.textLight)
                     }
                     .padding(.horizontal, TranceSpacing.card)
                     .padding(.vertical, TranceSpacing.card)

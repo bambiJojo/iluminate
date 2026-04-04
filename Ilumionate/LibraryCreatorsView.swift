@@ -91,10 +91,10 @@ struct LibraryCreatorsView: View {
                 )
             Text("No Creators Yet")
                 .font(TranceTypography.greeting)
-                .foregroundColor(.textPrimary)
+                .foregroundStyle(.textPrimary)
             Text("Edit a session and add a creator name\nto organize by voice or narrator")
                 .font(TranceTypography.body)
-                .foregroundColor(.textSecondary)
+                .foregroundStyle(.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(TranceSpacing.screen)
@@ -115,23 +115,23 @@ private struct CreatorRow: View {
                     .frame(width: 40, height: 40)
                 Image(systemName: name == "Unknown" ? "person.slash" : "person.fill")
                     .font(.system(size: 17))
-                    .foregroundColor(.bwTheta)
+                    .foregroundStyle(.bwTheta)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
                 Text("\(count) \(count == 1 ? "session" : "sessions")")
                     .font(TranceTypography.caption)
-                    .foregroundColor(.textLight)
+                    .foregroundStyle(.textLight)
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.textLight)
+                .foregroundStyle(.textLight)
         }
         .padding(.vertical, TranceSpacing.card)
     }

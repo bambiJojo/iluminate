@@ -1,6 +1,9 @@
 {
   "session_name": "Deep Hypnosis",
   "duration_sec": 1500,
+  "binaural_enabled": true,
+  "binaural_carrier": 150,
+  "binaural_volume": 0.4,
   "light_score": [
     {
       "time": 0,

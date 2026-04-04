@@ -13,64 +13,77 @@ extension MindMachineView {
 
     var binauralCard: some View {
         GlassCard(label: "Binaural Beats") {
-            VStack(spacing: TranceSpacing.list) {
-                // Toggle row
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Enable")
-                            .font(TranceTypography.body)
-                            .foregroundStyle(Color.textPrimary)
-                        Text("Requires headphones")
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                    }
-                    Spacer()
-                    Toggle(
-                        "Enable binaural beats",
-                        isOn: Binding(
-                            get: { model.binauralEnabled },
-                            set: { model.binauralEnabled = $0; TranceHaptics.shared.selection() }
-                        )
-                    )
-                    .labelsHidden()
-                    .tint(.roseGold)
-                }
+            if model.selectedVisualMode == .colorPulse {
+                VStack(alignment: .leading, spacing: TranceSpacing.list) {
+                    Label("Color Pulse is visual-only", systemImage: "info.circle")
+                        .font(TranceTypography.body)
+                        .foregroundStyle(Color.textPrimary)
 
-                if model.binauralEnabled {
-                    Divider()
-                        .background(Color.glassBorder)
-
-                    // Headphones reminder
-                    Label("Best experienced with headphones", systemImage: "headphones")
+                    Text("Switch to Flash or Bilateral mode to launch matched binaural audio.")
                         .font(TranceTypography.caption)
-                        .foregroundStyle(Color.roseGold.opacity(0.85))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(spacing: TranceSpacing.list) {
+                    // Toggle row
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Enable")
+                                .font(TranceTypography.body)
+                                .foregroundStyle(Color.textPrimary)
+                            Text("Requires headphones")
+                                .font(TranceTypography.caption)
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                        Spacer()
+                        Toggle(
+                            "Enable binaural beats",
+                            isOn: Binding(
+                                get: { model.binauralEnabled },
+                                set: { model.binauralEnabled = $0; TranceHaptics.shared.selection() }
+                            )
+                        )
+                        .labelsHidden()
+                        .tint(.roseGold)
+                    }
 
-                    // Carrier frequency
-                    BinauralSliderRow(
-                        label: "Carrier",
-                        value: Binding(
-                            get: { model.binauralCarrierFrequency },
-                            set: { model.binauralCarrierFrequency = $0 }
-                        ),
-                        range: 100...400,
-                        unit: "Hz"
-                    )
+                    if model.binauralEnabled {
+                        Divider()
+                            .background(Color.glassBorder)
 
-                    // Volume
-                    BinauralSliderRow(
-                        label: "Volume",
-                        value: Binding(
-                            get: { model.binauralVolume },
-                            set: { model.binauralVolume = $0 }
-                        ),
-                        range: 0...1,
-                        unit: "%",
-                        displayMultiplier: 100
-                    )
+                        // Headphones reminder
+                        Label("Best experienced with headphones", systemImage: "headphones")
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.roseGold.opacity(0.85))
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                    // Brainwave info
-                    binauralBrainwaveInfo
+                        // Carrier frequency
+                        BinauralSliderRow(
+                            label: "Carrier",
+                            value: Binding(
+                                get: { model.binauralCarrierFrequency },
+                                set: { model.binauralCarrierFrequency = $0 }
+                            ),
+                            range: 100...400,
+                            unit: "Hz"
+                        )
+
+                        // Volume
+                        BinauralSliderRow(
+                            label: "Volume",
+                            value: Binding(
+                                get: { model.binauralVolume },
+                                set: { model.binauralVolume = $0 }
+                            ),
+                            range: 0...1,
+                            unit: "%",
+                            displayMultiplier: 100
+                        )
+
+                        // Brainwave info
+                        binauralBrainwaveInfo
+                    }
                 }
             }
         }

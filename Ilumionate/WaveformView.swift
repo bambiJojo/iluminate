@@ -73,7 +73,7 @@ struct WaveformView: View {
 
                 Text("Deep Sleep Induction - Dr. Sarah Mitchell")
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
             }
         }
 

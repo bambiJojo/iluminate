@@ -51,10 +51,10 @@ struct IntensityDial: View {
                 VStack(spacing: 2) {
                     Text("\(Int(intensity * 100))")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                     Text("%")
                         .font(.system(size: 10, weight: .regular))
-                        .foregroundColor(.textSecondary)
+                        .foregroundStyle(.textSecondary)
                 }
             }
 
@@ -123,13 +123,13 @@ struct IntensityDial: View {
     VStack(spacing: 40) {
         Text("Intensity Control")
             .font(TranceTypography.sectionTitle)
-            .foregroundColor(.textPrimary)
+            .foregroundStyle(.textPrimary)
 
         IntensityDial(intensity: .constant(0.7))
 
         Text("Drag the handle around the dial")
             .font(TranceTypography.caption)
-            .foregroundColor(.textSecondary)
+            .foregroundStyle(.textSecondary)
     }
     .padding(TranceSpacing.screen)
     .background(Color.bgPrimary)

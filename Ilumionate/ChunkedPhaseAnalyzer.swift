@@ -16,47 +16,13 @@ import FoundationModels
 // MARK: - Analyzer
 
 /// Foundation Models-backed hypnosis phase classifier.
-/// All public entry points are `static`; no instances are required.
 struct ChunkedPhaseAnalyzer {
 
-    // MARK: - Constants
+    let config: AnalyzerConfig.ChunkedAnalyzer
 
-    /// Seconds per analysis chunk sent to the model.
-    private static let chunkDuration: Double = 15.0
-
-    /// Overlap seconds prepended to each chunk from the previous chunk for
-    /// context continuity at phase boundaries.
-    private static let chunkOverlap: Double = 5.0
-
-    /// System instructions explaining phase taxonomy to the model.
-    /// Raw values match `HypnosisMetadata.Phase`.
-    private static let systemInstructions = """
-        You are a hypnosis session analyst. Classify a short transcript segment \
-        into the correct phase of a hypnosis session.
-
-        Phases ALWAYS occur in this strict order — use the session position \
-        percentage to anchor your classification:
-        1. pre_talk         (0–8%):  greeting, welcome, comfort, explaining the process
-        2. induction        (5–22%): eye closure, breathing, "relax", counting down, body relaxation
-        3. deepening        (18–40%): "deeper", drift, float, sinking, body scan, staircase
-        4. therapy          (30–75%): deep passive trance — imagery, music, silence, minimal narration
-        5. suggestions      (40–85%): ACTIVE commands — "you will", "from now on", "whenever",
-                                      "your subconscious", direct therapeutic programming
-        6. post_hypnotic_conditioning (70–92%): reinforcing suggestions, anchors, future-pacing
-        7. emergence        (80–100%): counting up, "come back", alerting, re-orientation, waking
-
-        CRITICAL RULES:
-        - Session position is your strongest signal. Override ambiguous text with it.
-        - therapy = passive (floating, drifting, imagery). suggestions = active commands ("you will").
-        - If the text contains "you will", "from now on", "whenever", "your subconscious", or direct
-          therapeutic commands → suggestions, not therapy.
-        - Position >80% with ANY waking language → emergence.
-        - Position <10% with calm/welcoming language → pre_talk, not induction.
-        - Avoid labelling everything therapy. A 30-minute session has all 7 phases.
-
-        Respond with ONLY the single raw phase value (e.g. "suggestions").
-        No explanation, no punctuation, no other text.
-        """
+    init(config: AnalyzerConfig.ChunkedAnalyzer? = nil) {
+        self.config = config ?? AnalyzerConfigLoader.load().chunkedAnalyzer
+    }
 
     // MARK: - Availability
 
@@ -64,16 +30,15 @@ struct ChunkedPhaseAnalyzer {
         SystemLanguageModel.default.availability == .available
     }
 
-    /// Hard floor: never send fewer than this many chunks to the model.
-    private static let minChunks = 6
-
-    /// Hard ceiling: prevents runaway API time on very long recordings.
-    private static let maxChunks = 60
-
     /// Computes the target chunk count for a given recording duration.
-    static func chunkCount(for duration: Double) -> Int {
+    func chunkCount(for duration: Double) -> Int {
         let computed = Int(duration / 90.0)
-        return max(minChunks, min(maxChunks, computed))
+        return max(config.minChunks, min(config.maxChunks, computed))
+    }
+
+    /// Static convenience — loads config from defaults. Used by legacy callers.
+    static func chunkCount(for duration: Double) -> Int {
+        ChunkedPhaseAnalyzer().chunkCount(for: duration)
     }
 
     // MARK: - Public Entry Point
@@ -81,12 +46,12 @@ struct ChunkedPhaseAnalyzer {
     /// Analyzes word timestamps using the on-device language model.
     /// Returns `nil` when Apple Intelligence is unavailable or produces
     /// fewer than two distinct phases (triggering keyword-based fallback).
-    static func analyze(
+    func analyze(
         wordTimestamps: [WordTimestamp],
         duration: Double,
         onProgress: (@Sendable (Double) async -> Void)? = nil
     ) async -> [PhaseSegment]? {
-        guard isAvailable else { return nil }
+        guard Self.isAvailable else { return nil }
         guard !wordTimestamps.isEmpty else { return nil }
 
         do {
@@ -95,9 +60,9 @@ struct ChunkedPhaseAnalyzer {
                 duration: duration,
                 onProgress: onProgress
             )
-            timeline = enforcePhaseOrdering(timeline: timeline)
-            timeline = collapseShortRuns(timeline, minRun: max(20, Int(duration * 0.035)))
-            let segments = consolidatePhaseSegments(timeline: timeline, duration: duration)
+            timeline = Self.enforcePhaseOrdering(timeline: timeline)
+            timeline = Self.collapseShortRuns(timeline, minRun: max(20, Int(duration * 0.035)))
+            let segments = Self.consolidatePhaseSegments(timeline: timeline, duration: duration)
             let distinctCount = Set(segments.map(\.phase)).count
             guard distinctCount >= 2 else {
                 print("⚠️ ChunkedPhaseAnalyzer: \(distinctCount) phase(s) detected — keyword fallback")
@@ -107,6 +72,19 @@ struct ChunkedPhaseAnalyzer {
         } catch {
             return nil
         }
+    }
+
+    /// Static convenience that creates a default-config instance.
+    static func analyze(
+        wordTimestamps: [WordTimestamp],
+        duration: Double,
+        onProgress: (@Sendable (Double) async -> Void)? = nil
+    ) async -> [PhaseSegment]? {
+        await ChunkedPhaseAnalyzer().analyze(
+            wordTimestamps: wordTimestamps,
+            duration: duration,
+            onProgress: onProgress
+        )
     }
 
     // MARK: - Internal Helpers (visible for unit tests)
@@ -133,6 +111,7 @@ struct ChunkedPhaseAnalyzer {
         let endTime: Double
         let sessionPositionPct: Int
         let totalDuration: Double
+        let systemInstructions: String
     }
 }
 
@@ -140,43 +119,46 @@ struct ChunkedPhaseAnalyzer {
 
 private extension ChunkedPhaseAnalyzer {
 
-    static func classifyChunks(
+    func classifyChunks(
         wordTimestamps: [WordTimestamp],
         duration: Double,
         onProgress: (@Sendable (Double) async -> Void)?
     ) async throws -> [HypnosisMetadata.Phase?] {
         let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
         let jobs = buildJobs(from: wordTimestamps, duration: duration)
-        let (evenIdxs, oddIdxs) = evenOddIndices(count: jobs.count)
+        let (evenIdxs, oddIdxs) = Self.evenOddIndices(count: jobs.count)
         var results = [HypnosisMetadata.Phase?](repeating: nil, count: jobs.count)
 
-        let evenPairs = try await runPass(
+        let instructions = config.systemInstructions
+        let evenPairs = try await Self.runPass(
             jobs: evenIdxs.map { jobs[$0] }, previousResults: nil,
-            totalDuration: duration, model: model
+            totalDuration: duration, model: model, systemInstructions: instructions
         )
         for (idx, phase) in evenPairs { results[idx] = phase }
         await onProgress?(0.5)
 
-        let oddPairs = try await runPass(
+        let oddPairs = try await Self.runPass(
             jobs: oddIdxs.map { jobs[$0] }, previousResults: results,
-            totalDuration: duration, model: model
+            totalDuration: duration, model: model, systemInstructions: instructions
         )
         for (idx, phase) in oddPairs { results[idx] = phase }
         await onProgress?(1.0)
 
-        return assembleTimeline(bucketCount: max(1, Int(ceil(duration))), jobs: jobs, results: results)
+        return Self.assembleTimeline(bucketCount: max(1, Int(ceil(duration))), jobs: jobs, results: results)
     }
 
-    static func buildJobs(from wordTimestamps: [WordTimestamp], duration: Double) -> [ChunkJob] {
+    func buildJobs(from wordTimestamps: [WordTimestamp], duration: Double) -> [ChunkJob] {
         let cap = chunkCount(for: duration)
-        let allStarts = stride(from: 0.0, to: duration, by: chunkDuration).map { $0 }
+        let chunkDur = config.chunkDurationSeconds
+        let chunkOvlp = config.chunkOverlapSeconds
+        let allStarts = stride(from: 0.0, to: duration, by: chunkDur).map { $0 }
         let selectedStarts: [Double] = allStarts.count <= cap
             ? allStarts
             : (0..<cap).map { allStarts[Int(Double($0) * Double(allStarts.count) / Double(cap))] }
 
         return selectedStarts.enumerated().map { chunkIdx, chunkStart in
-            let chunkEnd = min(chunkStart + chunkDuration, duration)
-            let overlapStart = max(0, chunkStart - chunkOverlap)
+            let chunkEnd = min(chunkStart + chunkDur, duration)
+            let overlapStart = max(0, chunkStart - chunkOvlp)
             let words = wordTimestamps.filter { $0.startTime >= overlapStart && $0.startTime < chunkEnd }
             let positionPct = Int(((chunkStart + chunkEnd) / 2.0 / duration) * 100.0)
             return ChunkJob(index: chunkIdx, start: chunkStart, end: chunkEnd,
@@ -188,7 +170,8 @@ private extension ChunkedPhaseAnalyzer {
         jobs: [ChunkJob],
         previousResults: [HypnosisMetadata.Phase?]?,
         totalDuration: Double,
-        model: SystemLanguageModel
+        model: SystemLanguageModel,
+        systemInstructions: String
     ) async throws -> [(Int, HypnosisMetadata.Phase?)] {
         try await withThrowingTaskGroup(of: (Int, HypnosisMetadata.Phase?).self) { group in
             for job in jobs {
@@ -197,7 +180,8 @@ private extension ChunkedPhaseAnalyzer {
                     if job.text.trimmingCharacters(in: .whitespaces).isEmpty { return (job.index, prev) }
                     let request = ChunkRequest(
                         text: job.text, startTime: job.start, endTime: job.end,
-                        sessionPositionPct: job.positionPct, totalDuration: totalDuration
+                        sessionPositionPct: job.positionPct, totalDuration: totalDuration,
+                        systemInstructions: systemInstructions
                     )
                     let phase = try await classifySingleChunk(request: request, previousPhase: prev, model: model)
                     return (job.index, phase)
@@ -241,7 +225,7 @@ private extension ChunkedPhaseAnalyzer {
 
             Phase:
             """
-        let session = LanguageModelSession(model: model, instructions: systemInstructions)
+        let session = LanguageModelSession(model: model, instructions: request.systemInstructions)
         do {
             let response = try await session.respond(to: prompt)
             return phaseFromResponse(response.content)
@@ -266,12 +250,14 @@ private extension ChunkedPhaseAnalyzer {
         let first = ChunkRequest(
             text: words.prefix(midIdx).joined(separator: " "),
             startTime: request.startTime, endTime: midTime,
-            sessionPositionPct: request.sessionPositionPct, totalDuration: request.totalDuration
+            sessionPositionPct: request.sessionPositionPct, totalDuration: request.totalDuration,
+            systemInstructions: request.systemInstructions
         )
         let second = ChunkRequest(
             text: words.dropFirst(midIdx).joined(separator: " "),
             startTime: midTime, endTime: request.endTime,
-            sessionPositionPct: midPct, totalDuration: request.totalDuration
+            sessionPositionPct: midPct, totalDuration: request.totalDuration,
+            systemInstructions: request.systemInstructions
         )
         async let phase1 = classifySingleChunk(request: first, previousPhase: previousPhase, model: model)
         async let phase2 = classifySingleChunk(request: second, previousPhase: previousPhase, model: model)

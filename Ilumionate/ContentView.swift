@@ -17,7 +17,11 @@ struct ContentView: View {
     @State private var showingAudioLibrary = false
     @State private var showingSessionPlayer = false
     @State private var showingOnboarding = false
+    @State private var showingResumedPlayer = false
     @State private var isLoading = true
+    @State private var showingAnalysisQueue = false
+    @State private var nowPlaying = NowPlayingState.shared
+    @State private var analysisManager = AnalysisStateManager.shared
 
     // Appearance — mirrors SettingsView's AppStorage key
     @AppStorage("appearanceMode") private var appearanceModeRaw = "system"
@@ -60,21 +64,38 @@ struct ContentView: View {
                     LibraryView(engine: engine)
                         .environment(FolderStore.shared)
                         .transition(.opacity)
-                } else if selectedTab == .machine {
+                } else if selectedTab == .create {
                     NavigationStack {
                         MindMachineView(engine: engine, sessions: sessions)
-                    }
-                    .transition(.opacity)
-                } else if selectedTab == .analyzer {
-                    NavigationStack {
-                        AnalyzerView()
                     }
                     .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: selectedTab)
 
-            TranceTabBar(selected: $selectedTab)
+            // Analysis overlay + Mini-player + tab bar stack
+            VStack(spacing: TranceSpacing.inner) {
+                if let analysis = analysisManager.currentAnalysis {
+                    AnalysisStatusOverlay(
+                        analysis: analysis,
+                        queueCount: analysisManager.analysisQueue.count
+                    ) {
+                        showingAnalysisQueue = true
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                if nowPlaying.isActive {
+                    MiniPlayerBar(nowPlaying: nowPlaying) {
+                        showingResumedPlayer = true
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                TranceTabBar(selected: $selectedTab)
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: nowPlaying.isActive)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.currentAnalysis)
         }
         .onAppear {
             loadSessions()
@@ -91,8 +112,20 @@ struct ContentView: View {
         .sheet(isPresented: $showingAudioLibrary) {
             AudioLibraryView(engine: engine)
         }
+        .fullScreenCover(isPresented: $showingResumedPlayer) {
+            if let resumedViewModel = nowPlaying.viewModel {
+                UnifiedPlayerView(viewModel: resumedViewModel)
+            } else if let mode = nowPlaying.currentMode, let playerEngine = nowPlaying.engine {
+                UnifiedPlayerView(mode: mode, engine: playerEngine)
+            }
+        }
         .fullScreenCover(isPresented: $showingOnboarding) {
             OnboardingView()
+        }
+        .sheet(isPresented: $showingAnalysisQueue) {
+            NavigationStack {
+                AnalyzerView()
+            }
         }
         .preferredColorScheme(preferredScheme)
     }

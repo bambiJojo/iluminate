@@ -111,10 +111,38 @@ class StreamingAnalyzer: Sendable {
             return .affirmations
         }
 
+        // Erotic hypnosis patterns
+        if title.contains("erotic") || title.contains("sensual") ||
+           title.contains("pleasure") || title.contains("arousal") ||
+           artist.contains("erotic") {
+            return .eroticHypnosis
+        }
+
+        // Sleep hypnosis patterns
+        if title.contains("sleep") || title.contains("insomnia") ||
+           title.contains("bedtime") || title.contains("nap") ||
+           title.contains("yoga nidra") {
+            return .sleepHypnosis
+        }
+
+        // Brainwave / binaural patterns
+        if title.contains("binaural") || title.contains("isochronal") ||
+           title.contains("brainwave") || title.contains("hz") ||
+           title.contains("frequency") || title.contains("solfeggio") {
+            return .brainwave
+        }
+
+        // ASMR patterns
+        if title.contains("asmr") || title.contains("whisper") ||
+           title.contains("tingles") || title.contains("trigger") ||
+           artist.contains("asmr") {
+            return .asmr
+        }
+
         // Music patterns
         if title.contains("ambient") || title.contains("drone") ||
            title.contains("soundscape") || title.contains("nature") ||
-           title.contains("white noise") || title.contains("binaural") {
+           title.contains("white noise") {
             return .music
         }
 
@@ -190,34 +218,46 @@ class StreamingAnalyzer: Sendable {
     private func createMetadataAnalysis(for track: StreamingTrack, contentType: AnalysisResult.ContentType) -> AnalysisResult {
         let mood: AnalysisResult.Mood = {
             switch contentType {
-            case .meditation: return .meditative
-            case .hypnosis: return .relaxing
-            case .music: return .neutral
-            case .guidedImagery: return .uplifting
-            case .affirmations: return .energizing
-            case .unknown: return .neutral
+            case .meditation:      return .meditative
+            case .hypnosis:        return .relaxing
+            case .music:           return .neutral
+            case .guidedImagery:   return .uplifting
+            case .affirmations:    return .energizing
+            case .eroticHypnosis:  return .relaxing
+            case .brainwave:       return .meditative
+            case .asmr:            return .relaxing
+            case .sleepHypnosis:   return .relaxing
+            case .unknown:         return .neutral
             }
         }()
 
         let energyLevel: Double = {
             switch contentType {
-            case .hypnosis: return 0.2
-            case .meditation: return 0.3
-            case .guidedImagery: return 0.5
-            case .affirmations: return 0.7
-            case .music: return 0.4
-            case .unknown: return 0.5
+            case .hypnosis:        return 0.2
+            case .meditation:      return 0.3
+            case .guidedImagery:   return 0.5
+            case .affirmations:    return 0.7
+            case .music:           return 0.4
+            case .eroticHypnosis:  return 0.2
+            case .brainwave:       return 0.3
+            case .asmr:            return 0.2
+            case .sleepHypnosis:   return 0.15
+            case .unknown:         return 0.5
             }
         }()
 
         let frequencyRange: ClosedRange<Double> = {
             switch contentType {
-            case .hypnosis: return 0.5...8.0
-            case .meditation: return 4.0...12.0
-            case .guidedImagery: return 3.0...15.0
-            case .affirmations: return 8.0...25.0
-            case .music: return 6.0...20.0
-            case .unknown: return 4.0...14.0
+            case .hypnosis:        return 0.5...8.0
+            case .meditation:      return 4.0...12.0
+            case .guidedImagery:   return 3.0...15.0
+            case .affirmations:    return 8.0...25.0
+            case .music:           return 6.0...20.0
+            case .eroticHypnosis:  return 0.5...8.0
+            case .brainwave:       return 1.0...40.0
+            case .asmr:            return 6.0...10.0
+            case .sleepHypnosis:   return 0.5...4.0
+            case .unknown:         return 4.0...14.0
             }
         }()
 
@@ -262,41 +302,63 @@ class StreamingAnalyzer: Sendable {
         // Optimize based on content type
         switch analysis.contentType {
         case .hypnosis:
-            // Slower, deeper frequencies for hypnosis
             config.minFrequency = 0.5
             config.maxFrequency = 8.0
             config.transitionSmoothness = 0.9
             config.intensityMultiplier = 0.7
-            config.bilateralMode = true // Enhance with bilateral stimulation
+            config.bilateralMode = true
 
         case .meditation:
-            // Alpha/theta range for meditation
             config.minFrequency = 4.0
             config.maxFrequency = 12.0
             config.transitionSmoothness = 0.8
-            config.colorTemperatureOverride = 3000 // Warm light
+            config.colorTemperatureOverride = 3000
 
         case .music:
-            // Follow the tempo for music
             config.minFrequency = 6.0
             config.maxFrequency = 20.0
             config.transitionSmoothness = 0.6
             config.intensityMultiplier = 1.0
 
         case .guidedImagery:
-            // Support visualization with varied patterns
             config.minFrequency = 3.0
             config.maxFrequency = 15.0
             config.bilateralMode = true
 
         case .affirmations:
-            // Energizing frequencies for confidence
             config.minFrequency = 8.0
             config.maxFrequency = 25.0
             config.intensityMultiplier = 0.9
 
+        case .eroticHypnosis:
+            config.minFrequency = 0.5
+            config.maxFrequency = 8.0
+            config.transitionSmoothness = 0.9
+            config.intensityMultiplier = 0.6
+            config.bilateralMode = true
+            config.colorTemperatureOverride = 2400
+
+        case .brainwave:
+            config.minFrequency = 1.0
+            config.maxFrequency = 40.0
+            config.transitionSmoothness = 0.5
+
+        case .asmr:
+            config.minFrequency = 6.0
+            config.maxFrequency = 10.0
+            config.transitionSmoothness = 0.8
+            config.intensityMultiplier = 0.5
+            config.colorTemperatureOverride = 3200
+
+        case .sleepHypnosis:
+            config.minFrequency = 0.5
+            config.maxFrequency = 4.0
+            config.transitionSmoothness = 0.95
+            config.intensityMultiplier = 0.5
+            config.bilateralMode = true
+            config.colorTemperatureOverride = 2200
+
         case .unknown:
-            // Conservative defaults
             break
         }
 
@@ -306,7 +368,7 @@ class StreamingAnalyzer: Sendable {
             config.intensityMultiplier *= 0.8 // Gentler for long exposure
         }
 
-        return config
+        return AnalysisPreferences.shared.applyingUserOverrides(to: config)
     }
 
     // MARK: - Helper Functions

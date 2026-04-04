@@ -6,17 +6,16 @@
 import SwiftUI
 
 struct ContentView: View {
-
     @Environment(TrainingCorpusManager.self) private var corpus
-    @State private var selectedFile: LabeledFile?
+    @State private var selectedFileID: LabeledFile.ID?
 
     var body: some View {
         NavigationSplitView {
-            CorpusSidebarView(selectedFile: $selectedFile)
+            CorpusSidebarView(selectedFileID: $selectedFileID)
         } detail: {
-            if let file = selectedFile {
-                LabelingDetailView(file: file)
-                    .id(file.id)
+            if let selectedFileID, corpus.file(withID: selectedFileID) != nil {
+                LabelingDetailView(fileID: selectedFileID)
+                    .id(selectedFileID)
             } else {
                 ContentUnavailableView(
                     "No File Selected",

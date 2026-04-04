@@ -1,0 +1,726 @@
+{
+  "" : {
+    "const-values" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Ilumionate-primary.swiftconstvalues",
+    "dependencies" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Ilumionate-primary.d",
+    "diagnostics" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Ilumionate-primary.dia",
+    "emit-module-dependencies" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Ilumionate-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Ilumionate-primary-emit-module.dia",
+    "pch" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Ilumionate-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Ilumionate-primary.swiftdeps"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/AudioLightScoreGenerator.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLightScoreGenerator.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLightScoreGenerator.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLightScoreGenerator.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/AudioLightSyncPlayer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLightSyncPlayer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLightSyncPlayer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLightSyncPlayer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AIAnalysisManager+Parsing.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisManager+Parsing.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisManager+Parsing.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisManager+Parsing.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AIAnalysisManager+Prompts.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisManager+Prompts.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisManager+Prompts.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisManager+Prompts.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AIAnalysisManager.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisManager.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisManager.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisManager.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AIAnalysisModels.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisModels.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisModels.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIAnalysisModels.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AIContentAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIContentAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIContentAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AIContentAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalysisPipeline.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisPipeline.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisPipeline.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisPipeline.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalysisPipelineProtocols.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisPipelineProtocols.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisPipelineProtocols.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisPipelineProtocols.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalysisPreferences.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisPreferences.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisPreferences.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisPreferences.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalysisProgressStore.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisProgressStore.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisProgressStore.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisProgressStore.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalysisProgressView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisProgressView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisProgressView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisProgressView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalysisProgressViewModel.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisProgressViewModel.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisProgressViewModel.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisProgressViewModel.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalysisStateManager.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisStateManager.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisStateManager.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisStateManager.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalysisStatusBar.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisStatusBar.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisStatusBar.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisStatusBar.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalysisStatusOverlay.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisStatusOverlay.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisStatusOverlay.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalysisStatusOverlay.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalyzedSessionsSection.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzedSessionsSection.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzedSessionsSection.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzedSessionsSection.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalyzerConfig/AnalyzerConfig.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzerConfig.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzerConfig.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzerConfig.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalyzerConfig/AnalyzerConfigLoader.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzerConfigLoader.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzerConfigLoader.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzerConfigLoader.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalyzerView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzerView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzerView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AnalyzerView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioAnalyzerView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioAnalyzerView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioAnalyzerView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioAnalyzerView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioEnergyAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioEnergyAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioEnergyAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioEnergyAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioFile.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioFile.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioFile.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioFile.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioFileRow.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioFileRow.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioFileRow.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioFileRow.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioLibraryView+Actions.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+Actions.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+Actions.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+Actions.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioLibraryView+Filtering.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+Filtering.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+Filtering.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+Filtering.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioLibraryView+ImportOptions.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+ImportOptions.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+ImportOptions.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+ImportOptions.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioLibraryView+Sections.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+Sections.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+Sections.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView+Sections.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioLibraryView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioLibraryView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioManager.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioManager.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioManager.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioManager.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioScrubber.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioScrubber.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioScrubber.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioScrubber.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioSyncController.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioSyncController.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioSyncController.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/AudioSyncController.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/BinauralBeatsEngine.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/BinauralBeatsEngine.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/BinauralBeatsEngine.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/BinauralBeatsEngine.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/BrowseSessionsView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/BrowseSessionsView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/BrowseSessionsView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/BrowseSessionsView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/CTAButton.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/CTAButton.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/CTAButton.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/CTAButton.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/CategoryIcon.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/CategoryIcon.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/CategoryIcon.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/CategoryIcon.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ChunkedPhaseAnalyzer+Smoothing.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ChunkedPhaseAnalyzer+Smoothing.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ChunkedPhaseAnalyzer+Smoothing.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ChunkedPhaseAnalyzer+Smoothing.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ChunkedPhaseAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ChunkedPhaseAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ChunkedPhaseAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ChunkedPhaseAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ClosedRange+Codable.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ClosedRange+Codable.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ClosedRange+Codable.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ClosedRange+Codable.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Color+Extensions.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Color+Extensions.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Color+Extensions.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Color+Extensions.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ConcurrencyOptimizations.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ConcurrencyOptimizations.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ConcurrencyOptimizations.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ConcurrencyOptimizations.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ContentView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ContentView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/EngineLightEngine.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/EngineLightEngine.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/EngineLightEngine.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/EngineLightEngine.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/EngineWaveforms.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/EngineWaveforms.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/EngineWaveforms.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/EngineWaveforms.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/FailedAnalysis.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/FailedAnalysis.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/FailedAnalysis.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/FailedAnalysis.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/FlashController.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/FlashController.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/FlashController.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/FlashController.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Folder.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Folder.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Folder.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Folder.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/GlassCard.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/GlassCard.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/GlassCard.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/GlassCard.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/HomeView+FeaturedSessions.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HomeView+FeaturedSessions.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HomeView+FeaturedSessions.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HomeView+FeaturedSessions.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/HomeView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HomeView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HomeView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HomeView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/HypnosisPhaseAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HypnosisPhaseAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HypnosisPhaseAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HypnosisPhaseAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/HypnosisPhaseKeywords.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HypnosisPhaseKeywords.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HypnosisPhaseKeywords.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/HypnosisPhaseKeywords.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/IlumionateApp.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/IlumionateApp.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/IlumionateApp.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/IlumionateApp.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/InAppBrowserView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/InAppBrowserView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/InAppBrowserView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/InAppBrowserView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/IntensityDial.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/IntensityDial.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/IntensityDial.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/IntensityDial.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LibraryCreatorsView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LibraryCreatorsView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LibraryCreatorsView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LibraryCreatorsView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LibraryFoldersView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LibraryFoldersView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LibraryFoldersView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LibraryFoldersView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LibraryView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LibraryView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LibraryView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LibraryView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LightEngineTests.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightEngineTests.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightEngineTests.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightEngineTests.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LightScoreEditorView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightScoreEditorView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightScoreEditorView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightScoreEditorView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LightScorePlayer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightScorePlayer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightScorePlayer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightScorePlayer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LightScoreReader.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightScoreReader.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightScoreReader.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightScoreReader.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LightSession+Metadata.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightSession+Metadata.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightSession+Metadata.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightSession+Metadata.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LightSession.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightSession.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightSession.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LightSession.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LiveAudioTranscriber.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LiveAudioTranscriber.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LiveAudioTranscriber.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LiveAudioTranscriber.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LiveContentAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LiveContentAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LiveContentAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LiveContentAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/LiveSessionGenerator.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LiveSessionGenerator.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LiveSessionGenerator.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LiveSessionGenerator.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/MandalaVisualizer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MandalaVisualizer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MandalaVisualizer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MandalaVisualizer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/MindMachineView+Binaural.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MindMachineView+Binaural.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MindMachineView+Binaural.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MindMachineView+Binaural.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/MindMachineView+Sessions.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MindMachineView+Sessions.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MindMachineView+Sessions.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MindMachineView+Sessions.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/MindMachineView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MindMachineView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MindMachineView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MindMachineView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/MiniPlayerBar.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MiniPlayerBar.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MiniPlayerBar.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/MiniPlayerBar.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Models/OnboardingData.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/OnboardingData.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/OnboardingData.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/OnboardingData.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/NowPlayingState.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/NowPlayingState.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/NowPlayingState.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/NowPlayingState.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/OnboardingView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/OnboardingView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/OnboardingView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/OnboardingView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/OrbCrashLogger.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/OrbCrashLogger.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/OrbCrashLogger.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/OrbCrashLogger.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PerformanceOptimizer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PerformanceOptimizer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PerformanceOptimizer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PerformanceOptimizer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PhasePill.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PhasePill.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PhasePill.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PhasePill.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerBackgrounds.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBackgrounds.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBackgrounds.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBackgrounds.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerBilateralSection.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBilateralSection.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBilateralSection.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBilateralSection.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerBinauralSection.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBinauralSection.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBinauralSection.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBinauralSection.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerBrightnessSection.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBrightnessSection.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBrightnessSection.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerBrightnessSection.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerCountdownOverlay.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerCountdownOverlay.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerCountdownOverlay.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerCountdownOverlay.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerLightSyncButton.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerLightSyncButton.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerLightSyncButton.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerLightSyncButton.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerMode.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerMode.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerMode.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerMode.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerPauseOverlay.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerPauseOverlay.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerPauseOverlay.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerPauseOverlay.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerSafetyWarningView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerSafetyWarningView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerSafetyWarningView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerSafetyWarningView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerScrubberSection.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerScrubberSection.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerScrubberSection.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerScrubberSection.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerTopBar.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerTopBar.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerTopBar.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerTopBar.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerTrackListSheet.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerTrackListSheet.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerTrackListSheet.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerTrackListSheet.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerTransportSection.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerTransportSection.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerTransportSection.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerTransportSection.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PlayerVolumeSection.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerVolumeSection.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerVolumeSection.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlayerVolumeSection.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ProfileSettingsView+Helpers.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileSettingsView+Helpers.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileSettingsView+Helpers.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileSettingsView+Helpers.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ProfileSettingsView+Sections.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileSettingsView+Sections.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileSettingsView+Sections.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileSettingsView+Sections.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ProfileSettingsView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileSettingsView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileSettingsView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileSettingsView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ProfileView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProfileView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ProgressRingView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProgressRingView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProgressRingView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProgressRingView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ProsodyAnalyzer+PauseDetection.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProsodyAnalyzer+PauseDetection.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProsodyAnalyzer+PauseDetection.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProsodyAnalyzer+PauseDetection.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ProsodyAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProsodyAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProsodyAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/ProsodyAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/PulseOrb.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PulseOrb.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PulseOrb.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PulseOrb.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/QueueManagementView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/QueueManagementView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/QueueManagementView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/QueueManagementView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SafeAuraBackground.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SafeAuraBackground.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SafeAuraBackground.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SafeAuraBackground.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SafeColorCreation.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SafeColorCreation.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SafeColorCreation.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SafeColorCreation.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionCardViews.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionCardViews.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionCardViews.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionCardViews.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionDetailView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionDetailView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionDetailView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionDetailView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionDiagnostics.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionDiagnostics.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionDiagnostics.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionDiagnostics.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionGenerationView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerationView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerationView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerationView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionGenerator+ProsodicModulation.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerator+ProsodicModulation.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerator+ProsodicModulation.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerator+ProsodicModulation.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionGenerator+Strategies.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerator+Strategies.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerator+Strategies.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerator+Strategies.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionGenerator.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerator.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerator.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionGenerator.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionHistoryManager.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionHistoryManager.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionHistoryManager.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionHistoryManager.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionIntegrationTests.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionIntegrationTests.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionIntegrationTests.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionIntegrationTests.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionLibraryView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionLibraryView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionLibraryView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionLibraryView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionLockView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionLockView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionLockView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionLockView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SessionValidationExample.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionValidationExample.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionValidationExample.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SessionValidationExample.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SettingsView+ProfileSection.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SettingsView+ProfileSection.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SettingsView+ProfileSection.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SettingsView+ProfileSection.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SettingsView+Sections.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SettingsView+Sections.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SettingsView+Sections.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SettingsView+Sections.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SettingsView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SettingsView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SettingsView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SettingsView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SoundCloudService.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SoundCloudService.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SoundCloudService.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SoundCloudService.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/StreamingAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/StreamingBrowserView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingBrowserView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingBrowserView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingBrowserView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/StreamingManager.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingManager.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingManager.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingManager.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/StreamingService.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingService.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingService.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingService.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/StreamingSettingsView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingSettingsView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingSettingsView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/StreamingSettingsView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/SyncToggle.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SyncToggle.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SyncToggle.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/SyncToggle.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/TechniqueDetector.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TechniqueDetector.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TechniqueDetector.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TechniqueDetector.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/CorpusManagerView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/CorpusManagerView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/CorpusManagerView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/CorpusManagerView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/LabeledFile.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LabeledFile.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LabeledFile.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/LabeledFile.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/PhaseLabelingView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PhaseLabelingView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PhaseLabelingView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PhaseLabelingView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/TrainingCorpusManager.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TrainingCorpusManager.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TrainingCorpusManager.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TrainingCorpusManager.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/TranceDesignSystem.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TranceDesignSystem.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TranceDesignSystem.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TranceDesignSystem.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/TranceTabBar.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TranceTabBar.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TranceTabBar.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TranceTabBar.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/TranscriptView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TranscriptView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TranscriptView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/TranscriptView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/UISessionView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/UISessionView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/UISessionView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/UISessionView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/UnifiedPlayerView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/UnifiedPlayerView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/UnifiedPlayerView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/UnifiedPlayerView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/UnifiedPlayerViewModel.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/UnifiedPlayerViewModel.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/UnifiedPlayerViewModel.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/UnifiedPlayerViewModel.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/WaveformView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/WaveformView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/WaveformView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/WaveformView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Playlist.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Playlist.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Playlist.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/Playlist.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/PlaylistEditorView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlaylistEditorView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlaylistEditorView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlaylistEditorView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/PlaylistLibraryView.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlaylistLibraryView.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlaylistLibraryView.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlaylistLibraryView.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/PlaylistPlayerController.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlaylistPlayerController.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlaylistPlayerController.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/PlaylistPlayerController.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release-iphonesimulator/Ilumionate.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  }
+}

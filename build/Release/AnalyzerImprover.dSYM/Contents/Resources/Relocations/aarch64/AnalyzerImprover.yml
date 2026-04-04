@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Release/AnalyzerImprover'
+relocations:     []
+...

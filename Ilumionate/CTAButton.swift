@@ -29,7 +29,7 @@ struct CTAButton: View {
         }) {
             Text(title)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, TranceSpacing.card)
                 .background(

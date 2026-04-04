@@ -101,7 +101,7 @@ struct AudioFileRow: View {
                     Text(file.displayName)
                         .font(TranceTypography.body)
                         .fontWeight(.medium)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                         .lineLimit(2)
 
                     Spacer()
@@ -110,12 +110,14 @@ struct AudioFileRow: View {
                     if !isSelectionMode && file.isAnalyzed {
                         HStack(spacing: 2) {
                             ForEach(1...5, id: \.self) { star in
-                                Image(systemName: star <= file.userRating ? "star.fill" : "star")
-                                    .font(.caption2)
-                                    .foregroundColor(star <= file.userRating ? .roseGold : .textLight)
-                                    .onTapGesture {
-                                        onUpdateRating(star == file.userRating ? 0 : star)
-                                    }
+                                Button {
+                                    onUpdateRating(star == file.userRating ? 0 : star)
+                                } label: {
+                                    Image(systemName: star <= file.userRating ? "star.fill" : "star")
+                                        .font(.caption2)
+                                        .foregroundStyle(star <= file.userRating ? Color.roseGold : Color.textLight)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -128,7 +130,7 @@ struct AudioFileRow: View {
                         } label: {
                             Image(systemName: "plus.circle.fill")
                                 .font(.title2)
-                                .foregroundColor(.roseGold)
+                                .foregroundStyle(.roseGold)
                         }
                     }
                 }
@@ -139,25 +141,25 @@ struct AudioFileRow: View {
                     if !isSelectionMode {
                         Image(systemName: file.favorite ? "heart.fill" : "heart")
                             .font(.caption)
-                            .foregroundColor(file.favorite ? .roseGold : .textLight)
+                            .foregroundStyle(file.favorite ? .roseGold : .textLight)
                     }
 
                     Text(file.durationFormatted)
                         .font(TranceTypography.caption)
-                        .foregroundColor(.textSecondary)
+                        .foregroundStyle(.textSecondary)
 
                     // Analysis status badges
                     HStack(spacing: TranceSpacing.icon) {
                         if file.isAnalyzed {
                             Image(systemName: "sparkles")
                                 .font(.caption)
-                                .foregroundColor(.phaseInduction)
+                                .foregroundStyle(.phaseInduction)
                         }
 
                         if hasGeneratedSession {
                             Image(systemName: "lightbulb.fill")
                                 .font(.caption)
-                                .foregroundColor(.roseGold)
+                                .foregroundStyle(.roseGold)
                         }
 
                         if isAnalyzing {
@@ -181,7 +183,7 @@ struct AudioFileRow: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(contentTypeColor(result.contentType).opacity(0.15))
-                        .foregroundColor(contentTypeColor(result.contentType))
+                        .foregroundStyle(contentTypeColor(result.contentType))
                         .clipShape(Capsule())
 
                         // Trance Depth Badge (for hypnosis)
@@ -196,7 +198,7 @@ struct AudioFileRow: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(tranceDepthColor(depth).opacity(0.15))
-                            .foregroundColor(tranceDepthColor(depth))
+                            .foregroundStyle(tranceDepthColor(depth))
                             .clipShape(Capsule())
                         }
 
@@ -211,7 +213,7 @@ struct AudioFileRow: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(confidenceColor(confidence).opacity(0.15))
-                            .foregroundColor(confidenceColor(confidence))
+                            .foregroundStyle(confidenceColor(confidence))
                             .clipShape(Capsule())
                         }
 
@@ -269,14 +271,14 @@ struct AudioFileRow: View {
     private func checkForGeneratedSession() async {
         let fileManager = FileManager.default
         let documentsURL = URL.documentsDirectory
-        let sessionsURL = documentsURL.appendingPathComponent("GeneratedSessions", isDirectory: true)
+        let sessionsURL = documentsURL.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
 
         let baseName = file.filename
             .replacing(".mp3", with: "")
             .replacing(".m4a", with: "")
             .replacing(".wav", with: "")
         let filename = "\(baseName)_session.json"
-        let fileURL = sessionsURL.appendingPathComponent(filename)
+        let fileURL = sessionsURL.appending(path: filename)
 
         hasGeneratedSession = fileManager.fileExists(atPath: fileURL.path)
     }
@@ -285,23 +287,31 @@ struct AudioFileRow: View {
 
     private func contentTypeIcon(_ type: AnalysisResult.ContentType) -> String {
         switch type {
-        case .hypnosis: return "brain.head.profile"
-        case .meditation: return "leaf"
-        case .music: return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations: return "quote.bubble"
-        case .unknown: return "questionmark.circle"
+        case .hypnosis:        return "brain.head.profile"
+        case .meditation:      return "leaf"
+        case .music:           return "music.note"
+        case .guidedImagery:   return "figure.mind.and.body"
+        case .affirmations:    return "quote.bubble"
+        case .eroticHypnosis:  return "flame"
+        case .brainwave:       return "waveform.path.ecg"
+        case .asmr:            return "ear"
+        case .sleepHypnosis:   return "moon.zzz"
+        case .unknown:         return "questionmark.circle"
         }
     }
 
     private func contentTypeColor(_ type: AnalysisResult.ContentType) -> Color {
         switch type {
-        case .hypnosis:      return .phaseInduction   // teal
-        case .meditation:    return .bwTheta           // soft purple
-        case .music:         return .bwAlpha           // rose
-        case .guidedImagery: return .phaseDeepener     // deep purple
-        case .affirmations:  return .warmAccent        // warm amber
-        case .unknown:       return .roseGold
+        case .hypnosis:        return .phaseInduction
+        case .meditation:      return .bwTheta
+        case .music:           return .bwAlpha
+        case .guidedImagery:   return .phaseDeepener
+        case .affirmations:    return .warmAccent
+        case .eroticHypnosis:  return .roseDeep
+        case .brainwave:       return .bwGamma
+        case .asmr:            return .warmAccent
+        case .sleepHypnosis:   return .bwDelta
+        case .unknown:         return .roseGold
         }
     }
 
@@ -335,10 +345,10 @@ struct AudioFileRow: View {
         HStack(spacing: 1) {
             Image(systemName: icon)
                 .font(.system(size: 8))
-                .foregroundColor(color)
+                .foregroundStyle(color)
             Text("\(value)")
                 .font(.system(size: 8, weight: .medium))
-                .foregroundColor(color)
+                .foregroundStyle(color)
         }
     }
 }

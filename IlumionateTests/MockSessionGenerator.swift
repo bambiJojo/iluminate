@@ -12,6 +12,7 @@ import Foundation
 final class MockSessionGenerator: SessionGeneratingService {
     var sessionToReturn: LightSession = AnalysisFixtures.hypnosisSession
     private(set) var callCount = 0
+    private(set) var lastConfig: SessionGenerator.GenerationConfig?
 
     func generateSession(
         from audioFile: AudioFile,
@@ -19,6 +20,7 @@ final class MockSessionGenerator: SessionGeneratingService {
         config: SessionGenerator.GenerationConfig
     ) -> LightSession {
         callCount += 1
+        lastConfig = config
         return sessionToReturn
     }
 }

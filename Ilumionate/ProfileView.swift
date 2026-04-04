@@ -48,11 +48,7 @@ struct ProfileView: View {
             }
         }
         .sheet(isPresented: $showingSettings) {
-            NavigationStack {
-                SettingsView()
-                    .navigationTitle("Settings")
-                    .navigationBarTitleDisplayMode(.large)
-            }
+            ProfileSettingsView()
         }
         .onAppear {
             withAnimation(.easeOut(duration: 0.5).delay(0.15)) {

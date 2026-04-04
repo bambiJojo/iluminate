@@ -69,11 +69,11 @@ struct StreamingBrowserView: View {
 
             Text("Connect to SoundCloud")
                 .font(TranceTypography.screenTitle)
-                .foregroundColor(.textPrimary)
+                .foregroundStyle(.textPrimary)
 
             Text("Add your SoundCloud credentials to access thousands of full-length meditation, hypnosis, and therapy tracks.")
                 .font(TranceTypography.body)
-                .foregroundColor(.textSecondary)
+                .foregroundStyle(.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, TranceSpacing.content)
 
@@ -94,12 +94,12 @@ struct StreamingBrowserView: View {
 
             Text("Connecting to services...")
                 .font(TranceTypography.body)
-                .foregroundColor(.textSecondary)
+                .foregroundStyle(.textSecondary)
 
             if let error = streamingManager.errorMessage {
                 Text(error)
                     .font(TranceTypography.caption)
-                    .foregroundColor(.red)
+                    .foregroundStyle(.red)
                     .padding(.top)
             }
         }
@@ -135,22 +135,22 @@ struct StreamingBrowserView: View {
                     Text("\(Int(streamingManager.analysisProgress * 100))%")
                         .font(TranceTypography.caption)
                         .fontWeight(.semibold)
-                        .foregroundColor(.roseGold)
+                        .foregroundStyle(.roseGold)
                 }
 
                 VStack(spacing: TranceSpacing.inner) {
                     Text("Analyzing Content")
                         .font(TranceTypography.sectionTitle)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
 
                     Text(streamingManager.analysisStatus)
                         .font(TranceTypography.body)
-                        .foregroundColor(.textSecondary)
+                        .foregroundStyle(.textSecondary)
                         .multilineTextAlignment(.center)
 
                     Text("Creating personalized light therapy session...")
                         .font(TranceTypography.caption)
-                        .foregroundColor(.textLight)
+                        .foregroundStyle(.textLight)
                         .multilineTextAlignment(.center)
                 }
             }
@@ -271,7 +271,7 @@ struct StreamingBrowserView: View {
             Button("Done") { dismiss() }
         }
 
-        ToolbarItem(placement: .navigationBarTrailing) {
+        ToolbarItem(placement: .topBarTrailing) {
             Button {
                 showingSettings = true
             } label: {
@@ -375,7 +375,7 @@ struct StreamingBrowserView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(TranceTypography.sectionTitle)
-            .foregroundColor(.textPrimary)
+            .foregroundStyle(.textPrimary)
             .fontWeight(.bold)
             .padding(.leading, TranceSpacing.screen)
     }
@@ -445,13 +445,13 @@ struct CategoryCard: View {
 
                     Image(systemName: category.icon)
                         .font(.system(size: 28))
-                        .foregroundColor(category.color)
+                        .foregroundStyle(category.color)
                 }
 
                 Text(category.displayName)
                     .font(TranceTypography.caption)
                     .fontWeight(.medium)
-                    .foregroundColor(isSelected ? .textPrimary : .textSecondary)
+                    .foregroundStyle(isSelected ? .textPrimary : .textSecondary)
             }
         }
         .buttonStyle(.plain)
@@ -475,34 +475,34 @@ struct StreamingTrackRow: View {
 
                     Image(systemName: track.service.icon)
                         .font(.system(size: 16))
-                        .foregroundColor(track.service.color)
+                        .foregroundStyle(track.service.color)
                 }
 
                 // Track info
                 VStack(alignment: .leading, spacing: 3) {
                     Text(track.title)
                         .font(TranceTypography.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                         .lineLimit(1)
 
                     HStack(spacing: 6) {
                         Text(track.artist)
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
 
                         Text("•")
-                            .foregroundColor(.textLight)
+                            .foregroundStyle(.textLight)
 
                         Text(track.durationFormatted)
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textLight)
+                            .foregroundStyle(.textLight)
 
                         Text("•")
-                            .foregroundColor(.textLight)
+                            .foregroundStyle(.textLight)
 
                         Text(track.service.displayName)
                             .font(TranceTypography.caption)
-                            .foregroundColor(track.service.color)
+                            .foregroundStyle(track.service.color)
                     }
                 }
 
@@ -510,7 +510,7 @@ struct StreamingTrackRow: View {
 
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 24))
-                    .foregroundColor(.roseGold)
+                    .foregroundStyle(.roseGold)
             }
             .padding(.vertical, TranceSpacing.card)
         }
@@ -534,7 +534,7 @@ struct PlaylistRow: View {
                         .fill(playlist.service.color.opacity(0.3))
                         .overlay(
                             Image(systemName: "music.note.list")
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                         )
                 }
                 .frame(width: 60, height: 60)
@@ -543,20 +543,20 @@ struct PlaylistRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(playlist.name)
                         .font(TranceTypography.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                         .lineLimit(2)
 
                     HStack(spacing: 6) {
                         Text("\(playlist.trackCount) tracks")
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
 
                         Text("•")
-                            .foregroundColor(.textLight)
+                            .foregroundStyle(.textLight)
 
                         Text(playlist.service.displayName)
                             .font(TranceTypography.caption)
-                            .foregroundColor(playlist.service.color)
+                            .foregroundStyle(playlist.service.color)
                     }
                 }
 

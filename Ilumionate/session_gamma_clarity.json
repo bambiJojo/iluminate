@@ -1,6 +1,9 @@
 {
   "session_name": "Gamma Clarity",
   "duration_sec": 900,
+  "binaural_enabled": true,
+  "binaural_carrier": 300,
+  "binaural_volume": 0.6,
   "light_score": [
     {
       "time": 0,

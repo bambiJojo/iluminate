@@ -86,9 +86,9 @@ struct InAppBrowserView: View {
             .navigationTitle("Browse Audio")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { dismiss() }
-                        .foregroundColor(.roseGold)
+                        .foregroundStyle(.roseGold)
                 }
             }
             .alert("Download Error", isPresented: Binding(
@@ -134,17 +134,17 @@ struct InAppBrowserView: View {
         HStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.title2)
-                .foregroundColor(.green)
+                .foregroundStyle(.green)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Downloaded!")
                     .font(TranceTypography.body)
                     .fontWeight(.semibold)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
 
                 Text(file.displayName)
                     .font(TranceTypography.caption)
-                    .foregroundColor(.textSecondary)
+                    .foregroundStyle(.textSecondary)
                     .lineLimit(1)
             }
 
@@ -153,7 +153,7 @@ struct InAppBrowserView: View {
             Button { withAnimation { showingSuccessBanner = false } } label: {
                 Image(systemName: "xmark")
                     .font(.caption)
-                    .foregroundColor(.textLight)
+                    .foregroundStyle(.textLight)
             }
         }
         .padding(.horizontal, TranceSpacing.content)
@@ -196,7 +196,7 @@ struct FloatingAddressBar: View {
                 }) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(canGoBack ? .roseGold : .textLight.opacity(0.5))
+                        .foregroundStyle(canGoBack ? .roseGold : .textLight.opacity(0.5))
                         .frame(width: 32, height: 32)
                 }
                 .disabled(!canGoBack)
@@ -208,7 +208,7 @@ struct FloatingAddressBar: View {
                 }) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(canGoForward ? .roseGold : .textLight.opacity(0.5))
+                        .foregroundStyle(canGoForward ? .roseGold : .textLight.opacity(0.5))
                         .frame(width: 32, height: 32)
                 }
                 .disabled(!canGoForward)
@@ -217,11 +217,11 @@ struct FloatingAddressBar: View {
                 HStack {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 10))
-                        .foregroundColor(.textLight)
+                        .foregroundStyle(.textLight)
                     
                     TextField("Search or enter website", text: $urlText)
                         .font(TranceTypography.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                         .keyboardType(.URL)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
@@ -239,14 +239,14 @@ struct FloatingAddressBar: View {
                         }) {
                             Image(systemName: "xmark")
                                 .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.textLight)
+                                .foregroundStyle(.textLight)
                                 .padding(4)
                                 .background(Color.glassBorder.opacity(0.2), in: Circle())
                         }
                     } else if !urlText.isEmpty && isFocused {
                         Button(action: { urlText = "" }) {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.textLight)
+                                .foregroundStyle(.textLight)
                         }
                     } else {
                         Button(action: {
@@ -255,7 +255,7 @@ struct FloatingAddressBar: View {
                         }) {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.textLight)
+                                .foregroundStyle(.textLight)
                         }
                     }
                 }
@@ -503,7 +503,7 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, WKDownloa
         suggestedFilename: String,
         completionHandler: @escaping (URL?) -> Void
     ) {
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(suggestedFilename)
+        let tempURL = FileManager.default.temporaryDirectory.appending(path: suggestedFilename)
         Task { @MainActor in
             self.downloadDestinationURL = tempURL
         }

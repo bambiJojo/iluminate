@@ -9,7 +9,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import AVFoundation
-import CoreMedia
 
 struct CorpusManagerView: View {
 
@@ -105,7 +104,10 @@ struct CorpusManagerView: View {
             }
             .onDelete { offsets in
                 for index in offsets {
-                    corpusManager.delete(corpusManager.labeledFiles[index])
+                    let file = corpusManager.labeledFiles[index]
+                    Task {
+                        try? await corpusManager.delete(file)
+                    }
                 }
             }
         }
@@ -127,20 +129,19 @@ struct CorpusManagerView: View {
 
     private func handleImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result else { return }
-        for url in urls {
-            guard url.startAccessingSecurityScopedResource() else { continue }
-            defer { url.stopAccessingSecurityScopedResource() }
-            do {
-                var file = try corpusManager.importAudio(from: url)
-                Task {
-                    let asset = AVURLAsset(url: corpusManager.audioURL(for: file))
-                    if let duration = try? await asset.load(.duration) {
-                        file.audioDuration = CMTimeGetSeconds(duration)
-                        try? corpusManager.save(file)
+        Task {
+            for url in urls {
+                let didStartAccess = url.startAccessingSecurityScopedResource()
+                defer {
+                    if didStartAccess {
+                        url.stopAccessingSecurityScopedResource()
                     }
                 }
-            } catch {
-                print("❌ Failed to import \(url.lastPathComponent): \(error)")
+                do {
+                    _ = try await corpusManager.importAudio(from: url)
+                } catch {
+                    print("Failed to import \(url.lastPathComponent): \(error)")
+                }
             }
         }
     }

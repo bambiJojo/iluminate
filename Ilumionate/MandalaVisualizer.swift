@@ -15,10 +15,12 @@ struct MandalaVisualizer: View {
 
     let size: CGFloat
     let brightness: Double // 0.0-1.0 from light engine
+    var isPlaying: Bool
 
-    init(size: CGFloat = 200, brightness: Double = 0.5) {
+    init(size: CGFloat = 200, brightness: Double = 0.5, isPlaying: Bool = true) {
         self.size = size
         self.brightness = brightness
+        self.isPlaying = isPlaying
     }
 
     var body: some View {
@@ -110,17 +112,28 @@ struct MandalaVisualizer: View {
                     .opacity(brightness)
             }
         }
+        .opacity(isPlaying ? 1.0 : 0.5)
+        .animation(.easeInOut(duration: 0.6), value: isPlaying)
         .onAppear {
             isVisible = true
-            startAnimations(reduced: brightness < 0.1)
+            if isPlaying {
+                startAnimations(reduced: brightness < 0.1)
+            }
         }
         .onDisappear {
             isVisible = false
         }
         .onChange(of: brightness) { oldValue, newValue in
             // Restart animations only when performance tier changes
-            if (oldValue < 0.1) != (newValue < 0.1) {
+            if (oldValue < 0.1) != (newValue < 0.1), isPlaying {
                 startAnimations(reduced: newValue < 0.1)
+            }
+        }
+        .onChange(of: isPlaying) { _, newValue in
+            if newValue {
+                startAnimations(reduced: brightness < 0.1)
+            } else {
+                settleAnimations()
             }
         }
     }
@@ -142,7 +155,15 @@ struct MandalaVisualizer: View {
             .linear(duration: rotationDuration)
             .repeatForever(autoreverses: false)
         ) {
-            rotationAngle = 360
+            rotationAngle += 360
+        }
+    }
+
+    /// Smoothly settle animations to a resting state when playback pauses.
+    private func settleAnimations() {
+        withAnimation(.easeOut(duration: 0.8)) {
+            isAnimating = false
+            animationScale = 1.0
         }
     }
 }

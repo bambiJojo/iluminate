@@ -11,7 +11,7 @@ import Observation
 
 // MARK: - Frequency Profile
 
-enum FrequencyProfile: String, CaseIterable, Codable {
+enum FrequencyProfile: String, CaseIterable, Codable, Sendable {
     case conservative
     case standard
     case deep
@@ -45,7 +45,7 @@ enum FrequencyProfile: String, CaseIterable, Codable {
 
 // MARK: - Transition Style
 
-enum TransitionStyle: String, CaseIterable, Codable {
+enum TransitionStyle: String, CaseIterable, Codable, Sendable {
     case sharp
     case standard
     case fluid
@@ -77,7 +77,7 @@ enum TransitionStyle: String, CaseIterable, Codable {
 
 // MARK: - Color Temperature Mode
 
-enum ColorTempMode: String, CaseIterable, Codable {
+enum ColorTempMode: String, CaseIterable, Codable, Sendable {
     case auto
     case warm
     case neutral
@@ -113,7 +113,7 @@ enum ColorTempMode: String, CaseIterable, Codable {
 
 // MARK: - Content Hint
 
-enum ContentHint: String, CaseIterable, Codable {
+enum ContentHint: String, CaseIterable, Codable, Sendable {
     case none
     case hypnosis
     case meditation
@@ -171,6 +171,16 @@ enum ContentHint: String, CaseIterable, Codable {
 /// All changes are saved to UserDefaults immediately via `didSet` observers.
 @MainActor @Observable
 final class AnalysisPreferences {
+    struct Snapshot: Codable, Sendable {
+        let contentHint: ContentHint
+        let customInstructions: String
+        let intensityMultiplier: Double
+        let frequencyProfile: FrequencyProfile
+        let transitionStyle: TransitionStyle
+        let colorTempMode: ColorTempMode
+        let bilateralMode: Bool
+        let autoAnalyzeOnImport: Bool
+    }
 
     static let shared = AnalysisPreferences()
 
@@ -226,6 +236,34 @@ final class AnalysisPreferences {
         )
     }
 
+    var snapshot: Snapshot {
+        Snapshot(
+            contentHint: contentHint,
+            customInstructions: customInstructions,
+            intensityMultiplier: intensityMultiplier,
+            frequencyProfile: frequencyProfile,
+            transitionStyle: transitionStyle,
+            colorTempMode: colorTempMode,
+            bilateralMode: bilateralMode,
+            autoAnalyzeOnImport: autoAnalyzeOnImport
+        )
+    }
+
+    func applyingUserOverrides(
+        to baseConfig: SessionGenerator.GenerationConfig
+    ) -> SessionGenerator.GenerationConfig {
+        var config = baseConfig
+        config.intensityMultiplier = intensityMultiplier
+        config.minFrequency = frequencyProfile.minFrequency
+        config.maxFrequency = frequencyProfile.maxFrequency
+        config.transitionSmoothness = transitionStyle.smoothness
+        if colorTempMode != .auto {
+            config.colorTemperatureOverride = colorTempMode.kelvin
+        }
+        config.bilateralMode = bilateralMode
+        return config
+    }
+
     /// Additional context appended to the AI system prompt based on user preferences.
     var aiSystemAddendum: String {
         var parts: [String] = []
@@ -266,5 +304,16 @@ final class AnalysisPreferences {
         } else {
             autoAnalyzeOnImport = d.bool(forKey: Keys.autoAnalyze)
         }
+    }
+
+    func resetToDefaults() {
+        contentHint = .none
+        customInstructions = ""
+        intensityMultiplier = 1.0
+        frequencyProfile = .standard
+        transitionStyle = .standard
+        colorTempMode = .auto
+        bilateralMode = false
+        autoAnalyzeOnImport = true
     }
 }

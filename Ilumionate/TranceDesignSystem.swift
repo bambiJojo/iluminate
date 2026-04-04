@@ -107,6 +107,37 @@ extension Color {
     static let flashOff           = TranceColors.flashOff
 }
 
+// Expose Trance colors as ShapeStyle members so that `.foregroundStyle(.roseGold)`
+// resolves correctly without needing an explicit `Color.` prefix.
+extension ShapeStyle where Self == Color {
+    static var bgPrimary: Color          { .bgPrimary }
+    static var bgSecondary: Color        { .bgSecondary }
+    static var bgCard: Color             { .bgCard }
+    static var roseGold: Color           { .roseGold }
+    static var roseDeep: Color           { .roseDeep }
+    static var blush: Color              { .blush }
+    static var lavender: Color           { .lavender }
+    static var warmAccent: Color         { .warmAccent }
+    static var textPrimary: Color        { .textPrimary }
+    static var textSecondary: Color      { .textSecondary }
+    static var textLight: Color          { .textLight }
+    static var glassBorder: Color        { .glassBorder }
+    static var glassFill: Color          { .glassFill }
+    static var bwDelta: Color            { .bwDelta }
+    static var bwTheta: Color            { .bwTheta }
+    static var bwAlpha: Color            { .bwAlpha }
+    static var bwBeta: Color             { .bwBeta }
+    static var bwGamma: Color            { .bwGamma }
+    static var phaseIntro: Color         { .phaseIntro }
+    static var phaseInduction: Color     { .phaseInduction }
+    static var phaseDeepener: Color      { .phaseDeepener }
+    static var phaseFractionation: Color { .phaseFractionation }
+    static var phaseSuggestion: Color    { .phaseSuggestion }
+    static var phaseAwakening: Color     { .phaseAwakening }
+    static var flashOn: Color            { .flashOn }
+    static var flashOff: Color           { .flashOff }
+}
+
 // MARK: - Spacing Scale
 
 struct TranceSpacing {
@@ -120,8 +151,16 @@ struct TranceSpacing {
     static let content: CGFloat = 20   // content horizontal inset
     static let screen: CGFloat = 22    // screen horizontal padding
     static let statusBar: CGFloat = 28 // status bar horizontal padding
-    /// Bottom clearance needed so content/toolbars don't hide under the floating tab bar.
-    static let tabBarClearance: CGFloat = 100
+    /// Height of the mini-player bar
+    static let miniPlayerHeight: CGFloat = 56
+    /// Base clearance for the floating tab bar alone.
+    static let tabBarBase: CGFloat = 100
+    /// Bottom clearance needed so content/toolbars don't hide under the floating tab bar
+    /// (and optionally the mini-player).
+    @MainActor static var tabBarClearance: CGFloat {
+        let extra = NowPlayingState.shared.isActive ? miniPlayerHeight + inner : 0
+        return tabBarBase + extra
+    }
 }
 
 // MARK: - Corner Radius Scale
@@ -279,21 +318,25 @@ final class TranceHaptics {
 
     // Tab switch
     func light() {
+        guard AppSettingsManager.isHapticFeedbackEnabled() else { return }
         lightImpact.impactOccurred()
     }
 
     // Play/Pause, Start Session
     func medium() {
+        guard AppSettingsManager.isHapticFeedbackEnabled() else { return }
         mediumImpact.impactOccurred()
     }
 
     // Enter Flash
     func heavy() {
+        guard AppSettingsManager.isHapticFeedbackEnabled() else { return }
         heavyImpact.impactOccurred()
     }
 
     // Color dot select
     func selection() {
+        guard AppSettingsManager.isHapticFeedbackEnabled() else { return }
         selectionFeedback.selectionChanged()
     }
 }

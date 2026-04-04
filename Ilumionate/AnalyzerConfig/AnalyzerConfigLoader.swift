@@ -9,7 +9,7 @@ import Foundation
 
 enum AnalyzerConfigLoader {
 
-    private static let documentsConfigURL: URL =
+    static let documentsConfigURL: URL =
         URL.documentsDirectory.appending(path: "AnalyzerConfig.json")
 
     /// Loads the best available config: trained version from Documents,
@@ -36,10 +36,15 @@ enum AnalyzerConfigLoader {
 
     /// Saves a trained config to Documents for the app to pick up.
     static func save(_ config: AnalyzerConfig) throws {
+        try save(config, to: documentsConfigURL)
+    }
+
+    /// Saves a trained config to an explicit location for tooling/export workflows.
+    static func save(_ config: AnalyzerConfig, to url: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(config)
-        try data.write(to: documentsConfigURL, options: .atomic)
-        print("💾 Saved AnalyzerConfig (gen \(config.generation)) to Documents")
+        try data.write(to: url, options: .atomic)
+        print("💾 Saved AnalyzerConfig (gen \(config.generation)) to \(url.path())")
     }
 }

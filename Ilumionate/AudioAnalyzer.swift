@@ -141,17 +141,28 @@ actor WhisperManager {
             // Use base model for significantly better word-error-rate vs tiny
             whisperKit = try await WhisperKit(model: "base")
         } catch {
-            print("⚠️ WhisperKit initialization failed. Attempting to clear corrupted cache...")
-
-            // Clear potentially corrupted cache
-            let fileManager = FileManager.default
-            let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let cacheURL = documentsURL.appendingPathComponent("huggingface/models", isDirectory: true)
-            try? fileManager.removeItem(at: cacheURL)
-
-            print("🔄 Retrying WhisperKit initialization after cache clear...")
-            whisperKit = try await WhisperKit(model: "base")
+            print("⚠️ WhisperKit initialization failed: \(error)")
+            try await clearCacheAndReinitialize()
         }
+    }
+
+    /// Removes the cached WhisperKit model files and re-downloads fresh copies.
+    /// Called when initialization or transcription fails due to corrupt CoreML models.
+    private func clearCacheAndReinitialize() async throws {
+        print("🗑 Clearing WhisperKit model cache...")
+        whisperKit = nil
+        modelState = .loading
+
+        let fileManager = FileManager.default
+        let documentsURL = URL.documentsDirectory
+        // WhisperKit stores models under Documents/huggingface/models/
+        let cacheURL = documentsURL.appending(path: "huggingface/models")
+        try? fileManager.removeItem(at: cacheURL)
+
+        print("🔄 Retrying WhisperKit initialization after cache clear...")
+        whisperKit = try await WhisperKit(model: "base")
+        modelState = .loaded
+        print("✅ WhisperKit re-initialized successfully after cache clear")
     }
 
     func getStatus() async -> String {
@@ -204,6 +215,7 @@ actor WhisperManager {
         await onProgress(ProgressInfo(progress: 0.1, message: "Starting transcription..."))
 
         // Create transcription task with optimizations
+        let transcribePath = transcribeURL.path(percentEncoded: false)
         currentTask = Task(priority: .userInitiated) {
             let decodeOptions = DecodingOptions(
                 verbose: false,  // Reduce overhead
@@ -212,7 +224,7 @@ actor WhisperManager {
             )
 
             return try await whisper.transcribe(
-                audioPath: transcribeURL.path(percentEncoded: false),
+                audioPath: transcribePath,
                 decodeOptions: decodeOptions
             ) { transcriptionProgress in
                 Task {
@@ -230,7 +242,34 @@ actor WhisperManager {
             }
         }
 
-        let results = try await currentTask!.value
+        let task = currentTask!
+        let results: [TranscriptionResult]
+        do {
+            results = try await task.value
+        } catch {
+            // If transcription fails with a CoreML/MIL parsing error, the cached
+            // model is likely corrupted. Clear cache and retry once.
+            let errorString = String(describing: error)
+            if errorString.localizedStandardContains("MIL") ||
+               errorString.localizedStandardContains("mlmodelc") ||
+               errorString.localizedStandardContains("parsing") {
+                print("⚠️ CoreML model corruption detected during transcription. Recovering...")
+                await onProgress(ProgressInfo(progress: 0.05, message: "Repairing ML model..."))
+                try await clearCacheAndReinitialize()
+
+                guard let freshWhisper = whisperKit else {
+                    throw AnalyzerError.whisperKitNotInitialized
+                }
+
+                let retryResults = try await freshWhisper.transcribe(
+                    audioPath: transcribePath,
+                    decodeOptions: DecodingOptions(verbose: false, language: nil, temperature: 0.0)
+                )
+                results = retryResults
+            } else {
+                throw error
+            }
+        }
         currentTask = nil
 
         // Process results

@@ -10,7 +10,7 @@ import FoundationModels
 
 /// Uses Apple's on-device AI to analyze audio content with modern Swift concurrency
 @MainActor @Observable
-class AIContentAnalyzer: Sendable {
+final class AIContentAnalyzer {
 
     // MARK: - Published State
 
@@ -64,12 +64,10 @@ class AIContentAnalyzer: Sendable {
         progress = 0.0
         statusMessage = "Analyzing content with AI..."
 
-        currentTask = Task {
+        let task = Task {
             defer {
-                Task { @MainActor in
-                    self.isAnalyzing = false
-                    self.statusMessage = "Analysis complete"
-                }
+                self.isAnalyzing = false
+                self.statusMessage = "Analysis complete"
             }
 
             let progressHandler: @Sendable (AIAnalysisManager.ProgressInfo) async -> Void = { info in
@@ -85,8 +83,9 @@ class AIContentAnalyzer: Sendable {
                 onProgress: progressHandler
             )
         }
+        currentTask = task
 
-        return try await currentTask!.value
+        return try await task.value
     }
 
     /// Analyze audio without transcription using modern patterns
@@ -104,12 +103,10 @@ class AIContentAnalyzer: Sendable {
         progress = 0.0
         statusMessage = "Analyzing audio characteristics..."
 
-        currentTask = Task {
+        let task = Task {
             defer {
-                Task { @MainActor in
-                    self.isAnalyzing = false
-                    self.statusMessage = "Analysis complete"
-                }
+                self.isAnalyzing = false
+                self.statusMessage = "Analysis complete"
             }
 
             let progressHandler: @Sendable (AIAnalysisManager.ProgressInfo) async -> Void = { info in
@@ -125,8 +122,9 @@ class AIContentAnalyzer: Sendable {
                 onProgress: progressHandler
             )
         }
+        currentTask = task
 
-        return try await currentTask!.value
+        return try await task.value
     }
 }
 

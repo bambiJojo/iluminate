@@ -14,34 +14,14 @@ extension AudioLibraryView {
                 GlassCard(label: resultsHeaderText) {
                     LazyVStack(spacing: TranceSpacing.card) {
                         ForEach(filteredAudioFiles) { file in
-                            AudioFileRow(
-                                file: file,
-                                audioManager: audioManager,
-                                analysisManager: analysisManager,
-                                isSelectionMode: isSelectionMode,
-                                isSelected: selectedFiles.contains(file.id),
-                                onPlay: { openPlayer(for: file) },
-                                onRename: {
-                                    fileToRename = file
-                                    newFilename = file.displayName
-                                    showingRenameAlert = true
-                                },
-                                onDelete: { deleteFile(file) },
-                                onToggleSelection: { toggleSelection(for: file) },
-                                onToggleFavorite: {
-                                    toggleFavorite(for: file)
-                                },
-                                onUpdateRating: { newRating in
-                                    updateRating(for: file, rating: newRating)
-                                },
-                                onDetailedRating: {
-                                    showDetailedRatingSheet(for: file)
-                                },
-                                onAddToPlaylist: {
-                                    print("🎵 Add \(file.filename) to playlist")
-                                    TranceHaptics.shared.light()
+                            if file.isAnalyzed {
+                                NavigationLink(value: file) {
+                                    audioFileRow(for: file)
                                 }
-                            )
+                                .buttonStyle(.plain)
+                            } else {
+                                audioFileRow(for: file)
+                            }
 
                             if file.id != filteredAudioFiles.last?.id {
                                 Rectangle()
@@ -50,11 +30,41 @@ extension AudioLibraryView {
                             }
                         }
                     }
+                    .navigationDestination(for: AudioFile.self) { file in
+                        SessionDetailView(audioFile: file, engine: engine)
+                    }
                 }
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.cardMargin)
             }
         }
+    }
+
+    // MARK: - Row Builder
+
+    func audioFileRow(for file: AudioFile) -> AudioFileRow {
+        AudioFileRow(
+            file: file,
+            audioManager: audioManager,
+            analysisManager: analysisManager,
+            isSelectionMode: isSelectionMode,
+            isSelected: selectedFiles.contains(file.id),
+            onPlay: { openPlayer(for: file) },
+            onRename: {
+                fileToRename = file
+                newFilename = file.displayName
+                showingRenameAlert = true
+            },
+            onDelete: { deleteFile(file) },
+            onToggleSelection: { toggleSelection(for: file) },
+            onToggleFavorite: { toggleFavorite(for: file) },
+            onUpdateRating: { newRating in updateRating(for: file, rating: newRating) },
+            onDetailedRating: { showDetailedRatingSheet(for: file) },
+            onAddToPlaylist: {
+                print("🎵 Add \(file.filename) to playlist")
+                TranceHaptics.shared.light()
+            }
+        )
     }
 
     // MARK: - Filtered Audio Files

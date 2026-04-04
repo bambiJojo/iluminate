@@ -73,6 +73,14 @@ class SessionGenerator {
             moments = generateGuidedImagerySession(analysis: analysis, duration: audioFile.duration, config: config)
         case .affirmations:
             moments = generateAffirmationsSession(analysis: analysis, duration: audioFile.duration, config: config)
+        case .eroticHypnosis:
+            moments = generateEroticHypnosisSession(analysis: analysis, duration: audioFile.duration, config: config)
+        case .brainwave:
+            moments = generateBrainwaveSession(analysis: analysis, duration: audioFile.duration, config: config)
+        case .asmr:
+            moments = generateASMRSession(analysis: analysis, duration: audioFile.duration, config: config)
+        case .sleepHypnosis:
+            moments = generateSleepHypnosisSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .unknown:
             moments = generateGeneralSession(analysis: analysis, duration: audioFile.duration, config: config)
         }

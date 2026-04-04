@@ -53,7 +53,9 @@ struct PhaseLabelingView: View {
                     }
                     .foregroundStyle(Color.roseGold)
 
-                    Button("Save") { saveFile() }
+                    Button("Save") {
+                        Task { await saveFile() }
+                    }
                         .bold()
                         .foregroundStyle(Color.roseGold)
                 }
@@ -352,9 +354,9 @@ struct PhaseLabelingView: View {
         file.phases.append(newPhase)
     }
 
-    private func saveFile() {
+    private func saveFile() async {
         file.labeledAt = Date()
-        try? TrainingCorpusManager.shared.save(file)
+        _ = try? await TrainingCorpusManager.shared.save(file)
         TranceHaptics.shared.medium()
     }
 

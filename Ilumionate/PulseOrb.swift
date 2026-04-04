@@ -9,6 +9,7 @@ import SwiftUI
 
 struct PulseOrb: View {
     let frequency: Double
+    var isPlaying: Bool = true
     @State private var scale: CGFloat = 1.0
     @State private var opacity: Double = 0.6
 
@@ -33,10 +34,17 @@ struct PulseOrb: View {
             .scaleEffect(scale)
             .opacity(opacity)
             .onAppear {
-                startPulsing()
+                if isPlaying { startPulsing() }
             }
             .onChange(of: frequency) { _, _ in
-                startPulsing()
+                if isPlaying { startPulsing() }
+            }
+            .onChange(of: isPlaying) { _, newValue in
+                if newValue {
+                    startPulsing()
+                } else {
+                    settlePulsing()
+                }
             }
     }
 
@@ -47,6 +55,13 @@ struct PulseOrb: View {
         ) {
             scale = 1.2
             opacity = 0.9
+        }
+    }
+
+    private func settlePulsing() {
+        withAnimation(.easeOut(duration: 0.6)) {
+            scale = 1.0
+            opacity = 0.4
         }
     }
 }
@@ -61,14 +76,14 @@ struct PulseOrb: View {
         VStack(spacing: 40) {
             Text("Alpha (10 Hz)")
                 .font(TranceTypography.sectionTitle)
-                .foregroundColor(.textPrimary)
+                .foregroundStyle(.textPrimary)
 
             PulseOrb(frequency: 10.0)
                 .frame(width: 200, height: 200)
 
             Text("Theta (6 Hz)")
                 .font(TranceTypography.sectionTitle)
-                .foregroundColor(.textPrimary)
+                .foregroundStyle(.textPrimary)
 
             PulseOrb(frequency: 6.0)
                 .frame(width: 200, height: 200)

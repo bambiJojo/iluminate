@@ -83,40 +83,25 @@ struct MindMachineView: View {
 
     @State var model = MindMachineModel()
     @State private var showingFlashMode = false
-    @State private var showingSettings = false
     @State var selectedSession: LightSession?
+    @State private var showAdvanced = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: TranceSpacing.cardMargin) {
-                // Light Visualization
+                // Light Visualization + frequency — always visible
                 lightVisualizationSection
+                frequencyCard
 
-                // Controls grid
-                HStack(spacing: TranceSpacing.cardMargin) {
-                    VStack(spacing: TranceSpacing.cardMargin) {
-                        frequencyCard
-                        colorTemperatureCard
-                    }
+                // Primary action
+                startSessionCard
 
-                    VStack(spacing: TranceSpacing.cardMargin) {
-                        intensityCard
-                        startSessionCard
-                    }
-                }
+                // Advanced controls — hidden by default
+                advancedControlsSection
 
-                // Visual mode selector
-                visualModeCard
-
-                // Binaural beats
-                binauralCard
-
-                // Pattern selection
-                patternSelectionSection
-
-                // Research sessions browser
+                // Browse research sessions
                 if !sessions.isEmpty {
-                    sessionsBrowserSection
+                    browseSessionsLink
                 }
             }
             .padding(.horizontal, TranceSpacing.screen)
@@ -124,28 +109,30 @@ struct MindMachineView: View {
             .padding(.bottom, TranceSpacing.tabBarClearance)
         }
         .background(Color.bgPrimary)
-        .navigationTitle("Mind Machine")
+        .navigationTitle("Create")
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Settings", systemImage: "gearshape") {
-                    TranceHaptics.shared.light()
-                    showingSettings = true
-                }
-                .foregroundStyle(Color.roseGold)
+        .navigationDestination(for: String.self) { destination in
+            if destination == "browseSessions" {
+                BrowseSessionsView(
+                    sessions: sessions,
+                    engine: engine
+                )
             }
         }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-        }
         .fullScreenCover(item: $selectedSession) { session in
-            UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
+            UnifiedPlayerView(
+                mode: .session(session: session, audioFile: nil),
+                engine: engine
+            )
         }
         .fullScreenCover(isPresented: $showingFlashMode) {
             switch model.selectedVisualMode {
             case .colorPulse:
                 UnifiedPlayerView(
-                    mode: .colorPulse(frequency: model.frequency, intensity: model.intensity),
+                    mode: .colorPulse(
+                        frequency: model.frequency,
+                        intensity: model.intensity
+                    ),
                     engine: engine
                 )
             default:
@@ -165,6 +152,65 @@ struct MindMachineView: View {
         }
     }
 
+    // MARK: - Advanced Controls (Progressive Disclosure)
+
+    private var advancedControlsSection: some View {
+        GlassCard {
+            DisclosureGroup(isExpanded: $showAdvanced) {
+                VStack(spacing: TranceSpacing.cardMargin) {
+                    Divider().background(Color.glassBorder)
+
+                    HStack(spacing: TranceSpacing.cardMargin) {
+                        intensityCard
+                        colorTemperatureCard
+                    }
+
+                    visualModeCard
+                    patternSelectionSection
+                    binauralCard
+                }
+                .padding(.top, TranceSpacing.list)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.roseGold)
+                    Text("Advanced Controls")
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(Color.textPrimary)
+                }
+            }
+            .tint(Color.roseGold)
+        }
+    }
+
+    // MARK: - Browse Sessions Link
+
+    private var browseSessionsLink: some View {
+        NavigationLink(value: "browseSessions") {
+            GlassCard {
+                HStack {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.title3)
+                        .foregroundStyle(Color.roseGold)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Browse Sessions")
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("\(sessions.count) research sessions")
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Light Visualization Section
 
     private var lightVisualizationSection: some View {
@@ -180,12 +226,12 @@ struct MindMachineView: View {
 
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(model.frequency, specifier: "%.1f") Hz")
+                        Text("\(model.frequency.formatted(.number.precision(.fractionLength(1)))) Hz")
                             .font(TranceTypography.frequency)
-                            .foregroundColor(.textPrimary)
+                            .foregroundStyle(.textPrimary)
                         Text(brainwaveZone)
                             .font(TranceTypography.caption)
-                            .foregroundColor(brainwaveColor)
+                            .foregroundStyle(brainwaveColor)
                     }
 
                     Spacer()
@@ -193,10 +239,10 @@ struct MindMachineView: View {
                     VStack(alignment: .trailing, spacing: 4) {
                         Text("\(Int(model.intensity * 100))%")
                             .font(TranceTypography.frequency)
-                            .foregroundColor(.textPrimary)
+                            .foregroundStyle(.textPrimary)
                         Text("Intensity")
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                 }
             }
@@ -208,13 +254,13 @@ struct MindMachineView: View {
     private var frequencyCard: some View {
         GlassCard(label: "Frequency") {
             VStack(spacing: TranceSpacing.list) {
-                Text("\(model.frequency, specifier: "%.1f") Hz")
+                Text("\(model.frequency.formatted(.number.precision(.fractionLength(1)))) Hz")
                     .font(TranceTypography.frequency)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
 
                 Text(brainwaveZone)
                     .font(TranceTypography.caption)
-                    .foregroundColor(brainwaveColor)
+                    .foregroundStyle(brainwaveColor)
                     .padding(.horizontal, TranceSpacing.inner)
                     .padding(.vertical, TranceSpacing.micro)
                     .background(brainwaveColor.opacity(0.1))
@@ -241,26 +287,28 @@ struct MindMachineView: View {
             VStack(spacing: TranceSpacing.list) {
                 Text("\(model.colorTemperature)K")
                     .font(TranceTypography.frequency)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: TranceSpacing.inner) {
                     ForEach(model.temperatureOptions, id: \.self) { temp in
-                        Circle()
-                            .fill(colorForTemperature(temp))
-                            .frame(width: 32, height: 32)
-                            .overlay(
-                                Circle()
-                                    .stroke(
-                                        model.colorTemperature == temp ? Color.textPrimary : Color.clear,
-                                        lineWidth: 2
-                                    )
-                            )
-                            .scaleEffect(model.colorTemperature == temp ? 1.2 : 1.0)
-                            .onTapGesture {
-                                model.colorTemperature = temp
-                                TranceHaptics.shared.selection()
-                            }
-                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: model.colorTemperature)
+                        Button {
+                            model.colorTemperature = temp
+                            TranceHaptics.shared.selection()
+                        } label: {
+                            Circle()
+                                .fill(colorForTemperature(temp))
+                                .frame(width: 32, height: 32)
+                                .overlay {
+                                    Circle()
+                                        .stroke(
+                                            model.colorTemperature == temp ? Color.textPrimary : Color.clear,
+                                            lineWidth: 2
+                                        )
+                                }
+                                .scaleEffect(model.colorTemperature == temp ? 1.2 : 1.0)
+                        }
+                        .buttonStyle(.plain)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: model.colorTemperature)
                     }
                 }
             }
@@ -285,12 +333,12 @@ struct MindMachineView: View {
                     TranceHaptics.shared.heavy()
                 }) {
                     HStack {
-                        Image(systemName: "play.fill")
-                        Text("Start Session")
+                        Image(systemName: startSessionIcon)
+                        Text(startSessionButtonTitle)
                             .font(TranceTypography.body)
                             .fontWeight(.semibold)
                     }
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
                     .padding(.vertical, TranceSpacing.list)
                     .padding(.horizontal, TranceSpacing.card)
                     .background(
@@ -308,11 +356,11 @@ struct MindMachineView: View {
                         y: TranceShadow.button.y
                     )
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(.plain)
 
-                Text("Enter full-screen flash mode")
+                Text(startSessionDescription)
                     .font(TranceTypography.caption)
-                    .foregroundColor(.textSecondary)
+                    .foregroundStyle(.textSecondary)
                     .multilineTextAlignment(.center)
             }
         }
@@ -407,6 +455,41 @@ struct MindMachineView: View {
             return .roseGold
         }
     }
+
+    private var startSessionButtonTitle: String {
+        switch model.selectedVisualMode {
+        case .colorPulse:
+            return "Start Color Pulse"
+        case .bilateralFlash:
+            return model.binauralEnabled ? "Start Bilateral + Binaural" : "Start Bilateral Flash"
+        case .fullScreenFlash:
+            return model.binauralEnabled ? "Start Flash + Binaural" : "Start Flash Session"
+        }
+    }
+
+    private var startSessionDescription: String {
+        switch model.selectedVisualMode {
+        case .colorPulse:
+            return "Starts full-screen color pulse only"
+        case .bilateralFlash:
+            return model.binauralEnabled
+                ? "Starts bilateral flashes with matched binaural audio"
+                : "Starts bilateral flashes without audio"
+        case .fullScreenFlash:
+            return model.binauralEnabled
+                ? "Starts full-screen flashes with matched binaural audio"
+                : "Starts full-screen flashes without audio"
+        }
+    }
+
+    private var startSessionIcon: String {
+        switch model.selectedVisualMode {
+        case .colorPulse:
+            return "paintpalette.fill"
+        default:
+            return model.binauralEnabled ? "headphones" : "play.fill"
+        }
+    }
 }
 
 // MARK: - Visual Mode Button Component
@@ -444,32 +527,34 @@ struct PatternCard: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(spacing: TranceSpacing.inner) {
-            RoundedRectangle(cornerRadius: TranceRadius.pattern)
-                .fill(pattern.gradient)
-                .frame(width: 80, height: 50)
-                .overlay(
-                    RoundedRectangle(cornerRadius: TranceRadius.pattern)
-                        .stroke(
-                            isSelected ? Color.textPrimary : Color.clear,
-                            lineWidth: 2
-                        )
-                )
+        Button(action: action) {
+            VStack(spacing: TranceSpacing.inner) {
+                RoundedRectangle(cornerRadius: TranceRadius.pattern)
+                    .fill(pattern.gradient)
+                    .frame(width: 80, height: 50)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: TranceRadius.pattern)
+                            .stroke(
+                                isSelected ? Color.textPrimary : Color.clear,
+                                lineWidth: 2
+                            )
+                    }
 
-            VStack(spacing: 2) {
-                Text(pattern.rawValue)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.textPrimary)
+                VStack(spacing: 2) {
+                    Text(pattern.rawValue)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.textPrimary)
 
-                Text(pattern.description)
-                    .font(.system(size: 9, weight: .regular))
-                    .foregroundColor(.textSecondary)
-                    .multilineTextAlignment(.center)
+                    Text(pattern.description)
+                        .font(.system(size: 9, weight: .regular))
+                        .foregroundStyle(.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
             }
+            .scaleEffect(isSelected ? 1.05 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
         }
-        .scaleEffect(isSelected ? 1.05 : 1.0)
-        .onTapGesture(perform: action)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+        .buttonStyle(.plain)
     }
 }
 

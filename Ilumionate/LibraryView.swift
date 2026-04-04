@@ -14,6 +14,7 @@ enum LibraryDestination: Hashable {
     case creators
     case folders
     case favorites
+    case builtInSessions
 }
 
 // MARK: - LibraryView
@@ -31,7 +32,7 @@ struct LibraryView: View {
     @State private var cachedFavoritesCount: Int = 0
     @State private var showingPlaylists = false
     @State private var showingSessionsManager = false
-    @State private var showingSettings = false
+    @State private var showingAnalysisQueue = false
     @State private var playerFile: AudioFile?
     @State private var fileForPlaylist: AudioFile?
 
@@ -63,6 +64,8 @@ struct LibraryView: View {
                     LibraryFoldersView(audioFiles: audioFiles, engine: engine)
                 case .favorites:
                     LibraryFavoritesView(audioFiles: audioFiles, engine: engine)
+                case .builtInSessions:
+                    SessionLibraryView(engine: engine)
                 }
             }
             .sheet(isPresented: $showingPlaylists) {
@@ -71,6 +74,11 @@ struct LibraryView: View {
             .sheet(isPresented: $showingSessionsManager) {
                 AudioLibraryView(engine: engine)
             }
+            .sheet(isPresented: $showingAnalysisQueue) {
+                NavigationStack {
+                    AnalyzerView()
+                }
+            }
             .fullScreenCover(item: $playerFile) { file in
                 UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
             }
@@ -78,9 +86,6 @@ struct LibraryView: View {
                 AddToPlaylistSheet(itemTitle: file.displayName) { playlist in
                     addFile(file, to: playlist)
                 }
-            }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
             }
             .onAppear {
                 loadAudioFiles()
@@ -113,7 +118,27 @@ struct LibraryView: View {
             NavigationLink(value: LibraryDestination.favorites) {
                 LibraryCategoryRowLabel(icon: "heart.fill", iconColor: Color(hex: "E85D75"), title: "Favorites", count: favoritesCount)
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(.plain)
+            rowDivider
+            NavigationLink(value: LibraryDestination.builtInSessions) {
+                LibraryCategoryRowLabel(
+                    icon: "sparkles",
+                    iconColor: .bwGamma,
+                    title: "Built-in Sessions",
+                    count: nil
+                )
+            }
+            .buttonStyle(.plain)
+            rowDivider
+            LibraryCategoryRow(
+                icon: "waveform",
+                iconColor: .roseGold,
+                title: "Analysis Queue",
+                count: analysisQueueCount
+            ) {
+                TranceHaptics.shared.light()
+                showingAnalysisQueue = true
+            }
         }
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.card)
@@ -156,7 +181,7 @@ struct LibraryView: View {
     private var sessionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                sectionHeader("Sessions")
+                sectionHeader("Audio Files")
                 Spacer()
                 Menu {
                     Picker("Sort By", selection: $sortOption) {
@@ -172,7 +197,7 @@ struct LibraryView: View {
                     }
                     .font(TranceTypography.caption)
                     .fontWeight(.medium)
-                    .foregroundColor(.textSecondary)
+                    .foregroundStyle(.textSecondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Color.glassBorder.opacity(0.1))
@@ -189,7 +214,43 @@ struct LibraryView: View {
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(sortedAudioFiles) { file in
-                        LibrarySessionRow(file: file, onPlay: { playWithLights(file) }, onAddToPlaylist: { fileForPlaylist = file })
+                        NavigationLink {
+                            SessionDetailView(audioFile: file, engine: engine)
+                        } label: {
+                            LibrarySessionRowLabel(file: file)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Play with Light Sync", systemImage: "play.fill") {
+                                playWithLights(file)
+                            }
+                            Button("View Details", systemImage: "info.circle") {
+                                // NavigationLink handles this — no-op as context menu
+                            }
+                            Button("Analyze", systemImage: "waveform") {
+                                Task {
+                                    await AnalysisStateManager.shared.queueForAnalysis(file)
+                                }
+                            }
+                            Button("Add to Playlist", systemImage: "plus") {
+                                fileForPlaylist = file
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button {
+                                playWithLights(file)
+                            } label: {
+                                Label("Play", systemImage: "play.fill")
+                            }
+                            .tint(.roseGold)
+
+                            Button {
+                                fileForPlaylist = file
+                            } label: {
+                                Label("Add to Playlist", systemImage: "plus")
+                            }
+                            .tint(.bwTheta)
+                        }
                         if file.id != sortedAudioFiles.last?.id {
                             rowDivider
                                 .padding(.leading, 56)
@@ -215,14 +276,7 @@ struct LibraryView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button("Settings", systemImage: "gearshape") {
-                TranceHaptics.shared.light()
-                showingSettings = true
-            }
-            .foregroundStyle(Color.roseGold)
-        }
-        ToolbarItem(placement: .navigationBarTrailing) {
+        ToolbarItem(placement: .topBarTrailing) {
             Button {
                 TranceHaptics.shared.light()
                 showingSessionsManager = true
@@ -243,6 +297,11 @@ struct LibraryView: View {
     private var creatorCount: Int { cachedCreatorCount }
     private var folderCount: Int { folderStore.folders.count }
     private var favoritesCount: Int { cachedFavoritesCount }
+    private var analysisQueueCount: Int {
+        let manager = AnalysisStateManager.shared
+        let active = manager.currentAnalysis != nil ? 1 : 0
+        return active + manager.analysisQueue.count
+    }
     private var recentFiles: [AudioFile] { cachedRecentFiles }
     private var sortedAudioFiles: [AudioFile] { cachedSortedFiles }
 
@@ -250,7 +309,7 @@ struct LibraryView: View {
         cachedCreatorCount = Set(audioFiles.compactMap {
             $0.creator?.isEmpty == false ? $0.creator : nil
         }).count
-        cachedFavoritesCount = audioFiles.filter { $0.favorite }.count
+        cachedFavoritesCount = audioFiles.count(where: \.favorite)
         cachedRecentFiles = audioFiles
             .filter { $0.lastPlayedDate != nil }
             .sorted { ($0.lastPlayedDate ?? .distantPast) > ($1.lastPlayedDate ?? .distantPast) }
@@ -290,7 +349,7 @@ struct LibraryView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(TranceTypography.sectionTitle)
-            .foregroundColor(.textPrimary)
+            .foregroundStyle(.textPrimary)
             .fontWeight(.bold)
     }
 
@@ -316,7 +375,7 @@ struct LibraryView: View {
                 .foregroundStyle(Color.roseGold)
             Text("Tap  +  to add your first session")
                 .font(TranceTypography.body)
-                .foregroundColor(.textSecondary)
+                .foregroundStyle(.textSecondary)
         }
         .padding(TranceSpacing.content)
     }
@@ -373,24 +432,24 @@ struct LibraryCategoryRowLabel: View {
                     .frame(width: 36, height: 36)
                 Image(systemName: icon)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(iconColor)
+                    .foregroundStyle(iconColor)
             }
 
             Text(title)
                 .font(TranceTypography.body)
-                .foregroundColor(.textPrimary)
+                .foregroundStyle(.textPrimary)
 
             Spacer()
 
             if let count, count > 0 {
                 Text("\(count)")
                     .font(TranceTypography.caption)
-                    .foregroundColor(.textLight)
+                    .foregroundStyle(.textLight)
             }
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.textLight)
+                .foregroundStyle(.textLight)
         }
         .padding(.vertical, TranceSpacing.card)
     }
@@ -411,20 +470,20 @@ private struct SessionMiniCard: View {
                         .frame(width: 110, height: 110)
                     Image(systemName: contentTypeIcon)
                         .font(.system(size: 36, weight: .ultraLight))
-                        .foregroundColor(.white.opacity(0.85))
+                        .foregroundStyle(.white.opacity(0.85))
                 }
                 .shadow(color: contentTypeColor.opacity(0.3), radius: 8, x: 0, y: 4)
 
                 Text(file.displayName)
                     .font(TranceTypography.caption)
                     .fontWeight(.medium)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
                     .lineLimit(2)
                     .frame(width: 110, alignment: .leading)
 
                 Text(file.durationFormatted)
                     .font(.caption2)
-                    .foregroundColor(.textLight)
+                    .foregroundStyle(.textLight)
             }
         }
         .buttonStyle(PlainButtonStyle())
@@ -481,24 +540,24 @@ struct LibrarySessionRow: View {
                         .frame(width: 40, height: 40)
                     Image(systemName: contentTypeIcon)
                         .font(.system(size: 17))
-                        .foregroundColor(contentTypeColor)
+                        .foregroundStyle(contentTypeColor)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(file.displayName)
                         .font(TranceTypography.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                         .lineLimit(1)
 
                     HStack(spacing: 6) {
                         if let creator = file.creator, !creator.isEmpty {
                             Text(creator)
                                 .font(TranceTypography.caption)
-                                .foregroundColor(.roseGold)
+                                .foregroundStyle(.roseGold)
                         }
                         Text(file.durationFormatted)
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textLight)
+                            .foregroundStyle(.textLight)
                     }
                 }
 
@@ -507,7 +566,7 @@ struct LibrarySessionRow: View {
                 if file.favorite {
                     Image(systemName: "heart.fill")
                         .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "E85D75"))
+                        .foregroundStyle(Color(hex: "E85D75"))
                 }
 
                 if let onAddToPlaylist {
@@ -516,7 +575,7 @@ struct LibrarySessionRow: View {
                     } label: {
                         Image(systemName: "plus.circle")
                             .font(.system(size: 22))
-                            .foregroundColor(.roseGold)
+                            .foregroundStyle(.roseGold)
                     }
                     .buttonStyle(.plain)
                 }
@@ -524,6 +583,83 @@ struct LibrarySessionRow: View {
             .padding(.vertical, TranceSpacing.card)
         }
         .buttonStyle(PlainButtonStyle())
+    }
+
+    private var contentTypeColor: Color {
+        switch file.analysisResult?.contentType {
+        case .hypnosis:      return .bwDelta
+        case .meditation:    return .bwAlpha
+        case .music:         return .bwBeta
+        case .guidedImagery: return .bwTheta
+        case .affirmations:  return .warmAccent
+        default:             return .roseGold
+        }
+    }
+
+    private var contentTypeIcon: String {
+        switch file.analysisResult?.contentType {
+        case .hypnosis:      return "brain.head.profile"
+        case .meditation:    return "leaf"
+        case .music:         return "music.note"
+        case .guidedImagery: return "figure.mind.and.body"
+        case .affirmations:  return "quote.bubble"
+        default:             return "waveform"
+        }
+    }
+}
+
+// MARK: - LibrarySessionRowLabel (for NavigationLink usage)
+
+struct LibrarySessionRowLabel: View {
+    let file: AudioFile
+
+    var body: some View {
+        HStack(spacing: TranceSpacing.list) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(contentTypeColor.opacity(0.18))
+                    .frame(width: 40, height: 40)
+                Image(systemName: contentTypeIcon)
+                    .font(.system(size: 17))
+                    .foregroundStyle(contentTypeColor)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(file.displayName)
+                    .font(TranceTypography.body)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    if let creator = file.creator, !creator.isEmpty {
+                        Text(creator)
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.roseGold)
+                    }
+                    Text(file.durationFormatted)
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textLight)
+                    if file.isAnalyzed {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.roseGold)
+                    }
+                }
+            }
+
+            Spacer()
+
+            if file.favorite {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: "E85D75"))
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.textLight)
+        }
+        .padding(.vertical, TranceSpacing.card)
     }
 
     private var contentTypeColor: Color {
@@ -568,10 +704,10 @@ struct LibraryFavoritesView: View {
                         .foregroundStyle(LinearGradient(colors: [.roseGold, .roseDeep], startPoint: .top, endPoint: .bottom))
                     Text("No Favorites Yet")
                         .font(TranceTypography.greeting)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                     Text("Heart a session to find it here")
                         .font(TranceTypography.body)
-                        .foregroundColor(.textSecondary)
+                        .foregroundStyle(.textSecondary)
                 }
             } else {
                 ScrollView {

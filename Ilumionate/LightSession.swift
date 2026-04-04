@@ -16,14 +16,21 @@ struct LightSession: Codable, Identifiable, Sendable {
     let duration_sec: Double
     let light_score: [LightMoment]
 
+    /// Whether the session includes binaural beats (headphones required).
+    let binaural_enabled: Bool
+
+    /// Carrier tone frequency for the left ear (Hz). Right ear = carrier + beat frequency.
+    let binaural_carrier: Double
+
+    /// Default binaural volume (0.0–1.0).
+    let binaural_volume: Double
+
     /// Computed property for SwiftUI display
     var displayName: String { session_name }
 
     /// Computed property for duration formatting
     var durationFormatted: String {
-        let minutes = Int(duration_sec) / 60
-        let seconds = Int(duration_sec) % 60
-        return String(format: "%d:%02d", minutes, seconds)
+        Duration.seconds(duration_sec).formatted(.time(pattern: .minuteSecond))
     }
 
     enum CodingKeys: String, CodingKey {
@@ -31,6 +38,9 @@ struct LightSession: Codable, Identifiable, Sendable {
         case session_name
         case duration_sec
         case light_score
+        case binaural_enabled
+        case binaural_carrier
+        case binaural_volume
     }
 
     init(from decoder: Decoder) throws {
@@ -41,13 +51,20 @@ struct LightSession: Codable, Identifiable, Sendable {
         self.session_name = try container.decode(String.self, forKey: .session_name)
         self.duration_sec = try container.decode(Double.self, forKey: .duration_sec)
         self.light_score = try container.decode([LightMoment].self, forKey: .light_score)
+        self.binaural_enabled = (try? container.decode(Bool.self, forKey: .binaural_enabled)) ?? false
+        self.binaural_carrier = (try? container.decode(Double.self, forKey: .binaural_carrier)) ?? 200.0
+        self.binaural_volume = (try? container.decode(Double.self, forKey: .binaural_volume)) ?? 0.5
     }
 
-    init(id: UUID = UUID(), session_name: String, duration_sec: Double, light_score: [LightMoment]) {
+    init(id: UUID = UUID(), session_name: String, duration_sec: Double, light_score: [LightMoment],
+         binaural_enabled: Bool = false, binaural_carrier: Double = 200.0, binaural_volume: Double = 0.5) {
         self.id = id
         self.session_name = session_name
         self.duration_sec = duration_sec
         self.light_score = light_score
+        self.binaural_enabled = binaural_enabled
+        self.binaural_carrier = binaural_carrier
+        self.binaural_volume = binaural_volume
     }
 }
 

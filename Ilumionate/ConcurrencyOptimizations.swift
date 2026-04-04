@@ -376,13 +376,5 @@ class AudioLevelMonitor: Sendable {
     }
 }
 
-// MARK: - Extensions for Better Sendable Support
-
-extension AudioFile: @unchecked Sendable {
-    // AudioFile is effectively immutable after creation
-    // and all its properties are thread-safe value types
-}
-
-extension URL: @unchecked Sendable {
-    // URL is a value type and thread-safe
-}
+// AudioFile already conforms to Sendable in AudioFile.swift (value type).
+// URL is a stdlib value type and already implicitly Sendable.

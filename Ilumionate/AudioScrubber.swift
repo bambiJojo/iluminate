@@ -55,7 +55,7 @@ struct AudioScrubber: View {
             VStack(spacing: TranceSpacing.content) {
                 Text("Progress: \(Int(progress * 100))%")
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
 
                 AudioScrubber(progress: $progress) { newProgress in
                     print("Progress changed to: \(newProgress)")
@@ -64,11 +64,11 @@ struct AudioScrubber: View {
                 HStack {
                     Text("18:24")
                         .font(.system(size: 11))
-                        .foregroundColor(.textLight)
+                        .foregroundStyle(.textLight)
                     Spacer()
                     Text("-42:16")
                         .font(.system(size: 11))
-                        .foregroundColor(.textLight)
+                        .foregroundStyle(.textLight)
                 }
             }
             .padding(TranceSpacing.screen)

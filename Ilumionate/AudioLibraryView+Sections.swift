@@ -89,11 +89,11 @@ extension AudioLibraryView {
             HStack(spacing: TranceSpacing.list) {
                 Image(systemName: "magnifyingglass")
                     .font(TranceTypography.body)
-                    .foregroundColor(.textLight)
+                    .foregroundStyle(.textLight)
 
                 TextField(searchTranscription ? "Search content & transcriptions..." : "Search audio files...", text: $searchText)
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
 
                 if !searchText.isEmpty {
                     Button {
@@ -101,7 +101,7 @@ extension AudioLibraryView {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(TranceTypography.body)
-                            .foregroundColor(.textLight)
+                            .foregroundStyle(.textLight)
                     }
                 }
             }
@@ -125,7 +125,7 @@ extension AudioLibraryView {
                                     Text(filter.rawValue)
                                     if filter != .all {
                                         Text("(\(filteredCount(for: filter)))")
-                                            .foregroundColor(.secondary)
+                                            .foregroundStyle(.secondary)
                                     }
                                 }.tag(filter)
                             }
@@ -209,7 +209,7 @@ extension AudioLibraryView {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                         .background(Color.glassBorder.opacity(0.1))
-                        .foregroundColor(.textSecondary)
+                        .foregroundStyle(.textSecondary)
                         .clipShape(Capsule())
                         .overlay(
                             Capsule().strokeBorder(Color.glassBorder.opacity(0.3), lineWidth: 1)
@@ -252,7 +252,7 @@ extension AudioLibraryView {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(Color.red.opacity(0.15))
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                             .clipShape(Capsule())
                         }
                     }
@@ -268,7 +268,7 @@ extension AudioLibraryView {
     func filterChipView(icon: String, title: String, isActive: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .foregroundColor(isActive ? .roseGold : .textSecondary)
+                .foregroundStyle(isActive ? .roseGold : .textSecondary)
             Text(title)
         }
         .font(TranceTypography.caption)
@@ -276,7 +276,7 @@ extension AudioLibraryView {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(isActive ? Color.roseGold.opacity(0.15) : Color.glassBorder.opacity(0.1))
-        .foregroundColor(isActive ? .roseGold : .textSecondary)
+        .foregroundStyle(isActive ? .roseGold : .textSecondary)
         .clipShape(Capsule())
         .overlay(
             Capsule().strokeBorder(isActive ? Color.roseGold.opacity(0.5) : Color.glassBorder.opacity(0.3), lineWidth: 1)

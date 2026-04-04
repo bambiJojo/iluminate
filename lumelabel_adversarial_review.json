@@ -1,0 +1,384 @@
+{
+  "review_metadata": {
+    "target": "LumeLabel",
+    "workspace": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate",
+    "review_date": "2026-04-01",
+    "review_type": "adversarial_codebase_review",
+    "reviewer_model": "Codex",
+    "scope": [
+      "LumeLabel/*.swift",
+      "Ilumionate/Training/*.swift",
+      "Ilumionate/AudioContentType.swift",
+      "Ilumionate/TrancePhase.swift",
+      "LumeLabelTests/*",
+      "LumeLabelUITests/*"
+    ],
+    "methodology": [
+      "Static review of architecture, data flow, persistence, and concurrency boundaries",
+      "Targeted inspection of shared training corpus model code used by the LumeLabel target",
+      "Build verification with /usr/bin/xcodebuild -project Ilumionate.xcodeproj -scheme LumeLabel -destination 'platform=macOS' build"
+    ],
+    "build_verification": {
+      "command": "/usr/bin/xcodebuild -project Ilumionate.xcodeproj -scheme LumeLabel -destination 'platform=macOS' build",
+      "status": "failed",
+      "exit_code": 65,
+      "primary_failure": "Access control prevents split view extensions from compiling"
+    },
+    "summary": {
+      "total_findings": 10,
+      "severity_counts": {
+        "critical": 1,
+        "high": 4,
+        "medium": 5
+      }
+    }
+  },
+  "findings": [
+    {
+      "id": "LL-001",
+      "title": "Target does not compile because split-file extensions reference private state and fileprivate helpers",
+      "severity": "critical",
+      "category": [
+        "build",
+        "architecture",
+        "swift_access_control"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/LabelingDetailView.swift",
+      "related_files": [
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/LabelingDetailView+Subviews.swift"
+      ],
+      "line_range": {
+        "start": 21,
+        "end": 31
+      },
+      "symptom": "The main target fails to build because `LabelingDetailView+Subviews.swift` reaches into `private` state and methods declared in a different file.",
+      "impact": "This is a release-blocking defect. Nothing else in the target matters until the app can compile.",
+      "evidence": [
+        "xcodebuild reports `'seek' is inaccessible due to 'fileprivate' protection level` and repeated `private protection level` errors for `currentTime`, `viewStart`, `viewEnd`, `lastMagnification`, `isPlaying`, and related helpers.",
+        "Because the view was intentionally split across files, `private` and `fileprivate` are the wrong encapsulation boundary."
+      ],
+      "codesnippet": "LumeLabel/LabelingDetailView.swift: `@State private var currentTime: TimeInterval = 0`, `@State private var viewStart: Double = 0`, `func seek(to time: TimeInterval)`, `func togglePlayback()`\nLumeLabel/LabelingDetailView+Subviews.swift: uses `currentTime`, `viewStart`, `viewEnd`, `lastMagnification`, `seek(...)`, `togglePlayback()`, `zoomIn()`, `zoomOut()`, `zoomFit()`",
+      "recommended_fix": {
+        "approach": "Use `private` only for members consumed inside the same file. Promote cross-file view state/helpers to internal or move them into a private nested view model/type owned by `LabelingDetailView`.",
+        "steps": [
+          "Decide whether the split-file pattern is staying.",
+          "If yes, remove `private`/file-scoped restrictions from members needed by sibling extensions.",
+          "Prefer moving timeline/playback state into a dedicated observable model so extension files consume a single coherent API instead of many raw fields."
+        ]
+      },
+      "priority": 1
+    },
+    {
+      "id": "LL-002",
+      "title": "Detail screen edits a value snapshot instead of shared corpus state, creating stale and divergent data flow",
+      "severity": "high",
+      "category": [
+        "data_flow",
+        "state_management",
+        "architecture"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/ContentView.swift",
+      "related_files": [
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/LabelingDetailView.swift",
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/TrainingCorpusManager.swift"
+      ],
+      "line_range": {
+        "start": 10,
+        "end": 19
+      },
+      "symptom": "Selection and editing are driven by copied `LabeledFile` values rather than a stable identity or binding into the source of truth.",
+      "impact": "Background updates, re-saves, or external mutations can leave the sidebar, detail view, and persisted JSON out of sync. This is especially risky because the app is supposed to produce trusted ground-truth labels.",
+      "evidence": [
+        "ContentView stores `@State private var selectedFile: LabeledFile?` and passes that value into `LabelingDetailView(file: file)`.",
+        "LabelingDetailView then copies it again into `@State var file: LabeledFile`.",
+        "TrainingCorpusManager.save(_:)` replaces entries inside `labeledFiles`, but neither `selectedFile` nor the detail view is rebound to that updated source."
+      ],
+      "codesnippet": "ContentView.swift: `@State private var selectedFile: LabeledFile?`\nLabelingDetailView.swift: `@State var file: LabeledFile`",
+      "recommended_fix": {
+        "approach": "Select by stable identity, not by value snapshot.",
+        "steps": [
+          "Store `selectedFileID: LabeledFile.ID?` in `ContentView`.",
+          "Resolve the current file from `corpus.labeledFiles` on demand.",
+          "Pass a binding or an editor model that saves against the canonical ID.",
+          "Avoid duplicating file state in both the parent and the detail view unless there is explicit draft-management logic."
+        ]
+      },
+      "priority": 2
+    },
+    {
+      "id": "LL-003",
+      "title": "Import pipeline launches an unstructured task that can overwrite newer edits with stale file snapshots",
+      "severity": "high",
+      "category": [
+        "concurrency",
+        "data_flow",
+        "persistence"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/CorpusSidebarView.swift",
+      "line_range": {
+        "start": 76,
+        "end": 85
+      },
+      "symptom": "Duration loading happens in a fire-and-forget `Task` that captures a mutable copy of the imported file, then later saves that stale copy back to disk.",
+      "impact": "If the user starts labeling immediately after import, the later duration write can clobber newer phases, notes, or metadata with the old imported snapshot.",
+      "evidence": [
+        "The code does `var file = try corpus.importAudio(from: url)` and later `file.audioDuration = ...; try? corpus.save(file)` inside `Task { ... }`.",
+        "There is no cancellation, version check, or reload-by-ID before the delayed save."
+      ],
+      "codesnippet": "CorpusSidebarView.swift: `var file = try corpus.importAudio(from: url)` followed by `Task { ... file.audioDuration = CMTimeGetSeconds(duration); try? corpus.save(file) }`",
+      "recommended_fix": {
+        "approach": "Keep import enrichment structured and identity-based.",
+        "steps": [
+          "Move metadata extraction into `TrainingCorpusManager.importAudio` or into a dedicated import service.",
+          "If async enrichment must remain separate, reload the latest file by ID before saving.",
+          "Track import tasks and cancel them when the view disappears or a duplicate import supersedes them."
+        ]
+      },
+      "priority": 3
+    },
+    {
+      "id": "LL-004",
+      "title": "Corpus persistence runs synchronous file I/O on the MainActor",
+      "severity": "high",
+      "category": [
+        "performance",
+        "concurrency",
+        "architecture"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/TrainingCorpusManager.swift",
+      "line_range": {
+        "start": 12,
+        "end": 119
+      },
+      "symptom": "The entire corpus manager is `@MainActor`, but it performs blocking directory scans, JSON decoding, encoding, copies, writes, and deletes synchronously.",
+      "impact": "Large corpora or big audio imports will stall the UI thread and make labeling interactions feel unreliable or frozen.",
+      "evidence": [
+        "`loadAll()` uses `contentsOfDirectory`, `Data(contentsOf:)`, and decode loops on the main actor.",
+        "`save(_:)`, `importAudio(from:)`, and `delete(_:)` all perform blocking filesystem work directly.",
+        "This manager is injected as the app-wide observable source of truth, so UI code calls these paths frequently."
+      ],
+      "codesnippet": "TrainingCorpusManager.swift: `@MainActor @Observable final class TrainingCorpusManager { ... }` with synchronous `Data(contentsOf:)`, `data.write(to:, options: .atomic)`, `copyItem`, and `removeItem` calls",
+      "recommended_fix": {
+        "approach": "Separate UI state from persistence execution.",
+        "steps": [
+          "Move disk work into a non-main actor repository or isolated storage actor.",
+          "Keep only published state mutations on the main actor.",
+          "Expose async save/load/import APIs and await them from the UI."
+        ]
+      },
+      "priority": 4
+    },
+    {
+      "id": "LL-005",
+      "title": "Import identity is based on filename, which causes collisions, accidental data reuse, and unsafe deletes",
+      "severity": "high",
+      "category": [
+        "data_integrity",
+        "persistence",
+        "architecture"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/TrainingCorpusManager.swift",
+      "line_range": {
+        "start": 76,
+        "end": 112
+      },
+      "symptom": "Imported audio is stored under `audioDirectory/<original filename>` and delete removes by filename as well.",
+      "impact": "Two different source files with the same basename can collide. Later imports may silently reuse the wrong audio, and deleting one label can remove audio still referenced by another label.",
+      "evidence": [
+        "`let filename = sourceURL.lastPathComponent` and `let destURL = audioDirectory.appending(path: filename)`",
+        "Copy is skipped if the destination already exists, regardless of file contents.",
+        "Delete removes `audioDirectory.appending(path: file.audioFilename)` with no reference counting or ownership model."
+      ],
+      "codesnippet": "TrainingCorpusManager.swift: `if !FileManager.default.fileExists(atPath: destURL.path()) { try FileManager.default.copyItem(at: sourceURL, to: destURL) }` and later `try? FileManager.default.removeItem(at: audioURL)`",
+      "recommended_fix": {
+        "approach": "Persist audio with collision-safe storage identities.",
+        "steps": [
+          "Use a generated storage filename such as `<uuid>.<ext>` or content-addressed filenames.",
+          "Store the original display name separately from the storage path.",
+          "Before delete, verify whether other corpus records still reference the same stored asset."
+        ]
+      },
+      "priority": 5
+    },
+    {
+      "id": "LL-006",
+      "title": "Phase editing permits invalid training annotations with overlaps, gaps, and out-of-order boundaries",
+      "severity": "medium",
+      "category": [
+        "data_integrity",
+        "domain_model",
+        "ux"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/LabelingDetailView.swift",
+      "related_files": [
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/LabelingDetailView+Subviews.swift",
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/LabeledFile.swift"
+      ],
+      "line_range": {
+        "start": 134,
+        "end": 142
+      },
+      "symptom": "The label editor mutates raw arrays directly but never validates phase invariants before saving.",
+      "impact": "Ground-truth data can become logically inconsistent, which undermines any downstream analyzer training or evaluation built on this corpus.",
+      "evidence": [
+        "`markPhaseStart` only sets the previous end time to `currentTime` and appends a new phase ending at full duration.",
+        "Removing a middle phase in `phaseRow` simply removes the element and leaves surrounding ranges untouched.",
+        "There is no normalization pass to enforce sorted, contiguous, non-overlapping, bounded segments."
+      ],
+      "codesnippet": "LabelingDetailView.swift: `file.phases[file.phases.count - 1].endTime = currentTime` then append a new phase\nLabelingDetailView+Subviews.swift: `file.phases.remove(at: index)`",
+      "recommended_fix": {
+        "approach": "Treat phase ranges as a validated domain model, not an unguarded array.",
+        "steps": [
+          "Introduce a phase-editing reducer/service that centralizes insert, remove, split, merge, and normalize rules.",
+          "Validate before every save: sorted by start time, start < end, within duration, no overlaps, no negative lengths.",
+          "Surface validation failures in the UI instead of persisting corrupted labels."
+        ]
+      },
+      "priority": 6
+    },
+    {
+      "id": "LL-007",
+      "title": "Errors are broadly suppressed with `try?`, causing silent corruption and impossible-to-diagnose failures",
+      "severity": "medium",
+      "category": [
+        "error_handling",
+        "observability",
+        "reliability"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/LabelingDetailView.swift",
+      "related_files": [
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/CorpusSidebarView.swift",
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/TrainingCorpusManager.swift",
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/LabeledFile.swift"
+      ],
+      "line_range": {
+        "start": 92,
+        "end": 147
+      },
+      "symptom": "The app routinely discards important failures instead of surfacing them or logging enough context to recover.",
+      "impact": "Persistence, decoding, audio loading, and hashing failures can look like 'nothing happened' to the user while the corpus drifts into an incomplete state.",
+      "evidence": [
+        "`player = try? AVAudioPlayer(contentsOf: url)` hides playback setup failures.",
+        "`try? corpus.save(file)` is used in both label save and async import enrichment paths.",
+        "`loadAll()` silently drops unreadable or undecodable JSON files via `compactMap` plus `try?`.",
+        "`ensureDirectories()` and delete operations also swallow failures."
+      ],
+      "codesnippet": "Examples: `player = try? AVAudioPlayer(contentsOf: url)`, `try? corpus.save(file)`, `guard let data = try? Data(contentsOf: url) else { return nil }`, `return try? decoder.decode(LabeledFile.self, from: data)`",
+      "recommended_fix": {
+        "approach": "Make storage and playback failures explicit.",
+        "steps": [
+          "Return typed errors from persistence APIs.",
+          "Show actionable alerts for user-facing failures and log detailed diagnostics for developer-facing failures.",
+          "Preserve failed JSON filenames and decode errors during corpus load instead of dropping them silently."
+        ]
+      },
+      "priority": 7
+    },
+    {
+      "id": "LL-008",
+      "title": "Automated tests are placeholder scaffolds and do not protect the corpus editor’s critical behaviors",
+      "severity": "medium",
+      "category": [
+        "testing",
+        "quality",
+        "architecture"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabelTests/LumeLabelTests.swift",
+      "related_files": [
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabelUITests/LumeLabelUITests.swift",
+        "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabelUITests/LumeLabelUITestsLaunchTests.swift"
+      ],
+      "line_range": {
+        "start": 10,
+        "end": 15
+      },
+      "symptom": "The target has generated template tests only; none of the corpus invariants, import flows, or editor behaviors are verified.",
+      "impact": "Regressions in label integrity, import correctness, file deletion, and playback/editor interaction can ship undetected.",
+      "evidence": [
+        "Unit tests contain only the default example placeholder.",
+        "UI tests only launch the app and collect a screenshot.",
+        "This is especially risky because the app’s output is supposed to become training truth data."
+      ],
+      "codesnippet": "LumeLabelTests.swift: `@Test func example() async throws { }`\nLumeLabelUITests.swift: launches the app without assertions",
+      "recommended_fix": {
+        "approach": "Add tests around the data model and repository before broadening UI coverage.",
+        "steps": [
+          "Unit-test phase normalization and validation rules.",
+          "Unit-test import collision handling, delete semantics, and failed decode recovery.",
+          "Add at least one UI test for importing, marking phases, saving, reopening, and verifying persisted state."
+        ]
+      },
+      "priority": 8
+    },
+    {
+      "id": "LL-009",
+      "title": "Drag-and-drop import bypasses security-scoped resource access on macOS",
+      "severity": "medium",
+      "category": [
+        "macos",
+        "file_access",
+        "reliability"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/LumeLabel/CorpusSidebarView.swift",
+      "line_range": {
+        "start": 47,
+        "end": 49
+      },
+      "symptom": "Dropped file URLs are imported directly, but only file-importer URLs receive `startAccessingSecurityScopedResource()`.",
+      "impact": "Sandboxed builds can fail unpredictably when importing dropped files outside the app container, even though the same files succeed through the file importer sheet.",
+      "evidence": [
+        "The `.fileImporter` flow explicitly starts and stops security-scoped access.",
+        "The `.dropDestination(for: URL.self)` flow loops over URLs and calls `importURL(url)` without acquiring access first."
+      ],
+      "codesnippet": "CorpusSidebarView.swift: `.dropDestination(for: URL.self) { urls, _ in for url in urls { importURL(url) } return !urls.isEmpty }`",
+      "recommended_fix": {
+        "approach": "Normalize all inbound file URLs through a single access wrapper.",
+        "steps": [
+          "Create one helper that conditionally starts/stops security-scoped access before import.",
+          "Use that helper from both the file importer callback and drag-and-drop handler.",
+          "Surface a clear import error when access cannot be acquired."
+        ]
+      },
+      "priority": 9
+    },
+    {
+      "id": "LL-010",
+      "title": "Audio identity hash reads only the first 64 KB, which is too weak for reliable corpus deduplication",
+      "severity": "medium",
+      "category": [
+        "data_integrity",
+        "persistence",
+        "domain_model"
+      ],
+      "filepath": "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/LabeledFile.swift",
+      "line_range": {
+        "start": 55,
+        "end": 61
+      },
+      "symptom": "The stored SHA-256 is computed from only the first 64 KB of the audio file.",
+      "impact": "Different files with identical headers or common intros can hash the same, making any future deduplication or audit tooling unreliable.",
+      "evidence": [
+        "The implementation comment explicitly states it hashes only the first 64 KB.",
+        "The code reads `handle.read(upToCount: 64 * 1024)` and hashes only that partial chunk."
+      ],
+      "codesnippet": "LabeledFile.swift: `let chunk = (try? handle.read(upToCount: 64 * 1024)) ?? Data()`",
+      "recommended_fix": {
+        "approach": "Use a full-file digest if the hash is intended to be identity-bearing.",
+        "steps": [
+          "Either stream the entire file through SHA-256 or rename the field to make it explicit that it is a prefix hash.",
+          "If full-file hashing is too expensive during import, compute it asynchronously and persist both a fast provisional fingerprint and a final stable digest."
+        ]
+      },
+      "priority": 10
+    }
+  ],
+  "recommended_remediation_order": [
+    "Fix the access-control build blocker in LabelingDetailView split files so the target compiles.",
+    "Refactor selection and editing around stable file identity instead of copied `LabeledFile` values.",
+    "Move corpus persistence and import work off the main actor and make async saves structured.",
+    "Redesign stored-audio identity to avoid filename collisions and unsafe deletes.",
+    "Add validation around phase boundaries before allowing save.",
+    "Replace silent `try?` paths with surfaced errors and diagnostics.",
+    "Backstop the corpus editor with unit tests and one end-to-end UI flow."
+  ]
+}

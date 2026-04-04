@@ -86,10 +86,11 @@ final class AnalysisPipeline {
 
         // Stage 3 — Session generation
         onProgress(.init(stage: .generatingSession, fraction: 0.8, message: "Generating light session…"))
+        let generationConfig = AnalysisPreferences.shared.generationConfig
         let session = generator.generateSession(
             from: audioFile,
             analysis: enrichedAnalysis,
-            config: .default
+            config: generationConfig
         )
 
         onProgress(.init(stage: .complete, fraction: 1.0, message: "Complete"))

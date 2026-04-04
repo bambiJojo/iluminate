@@ -88,16 +88,16 @@ struct MemoryLeakTest: View {
 
             VStack {
                 Text("Memory Leak Test")
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
                     .font(.title)
 
                 Text("Stage: \(testStage)")
-                    .foregroundColor(.green)
+                    .foregroundStyle(.green)
 
                 Button("Next Stage") {
                     testStage += 1
                 }
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
                 .padding()
                 .background(Color.blue)
                 .cornerRadius(8)

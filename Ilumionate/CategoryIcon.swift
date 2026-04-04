@@ -33,7 +33,7 @@ struct CategoryIcon: View {
 
                 Text(label)
                     .font(.system(size: 11))
-                    .foregroundColor(.textSecondary)
+                    .foregroundStyle(.textSecondary)
             }
         }
         .buttonStyle(PlainButtonStyle())

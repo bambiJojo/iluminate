@@ -10,7 +10,7 @@ import Observation
 
 // MARK: - Session History Entry
 
-struct SessionHistoryEntry: Codable, Identifiable {
+struct SessionHistoryEntry: Codable, Identifiable, Sendable {
     let id: UUID
     let sessionName: String
     let category: String

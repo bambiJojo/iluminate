@@ -33,6 +33,7 @@ final class UnifiedPlayerViewModel {
 
     private(set) var playbackState: PlaybackState = .idle
     private(set) var countdownValue: Int? = nil
+    private(set) var countdownMessage: String? = nil
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
     var showingControls = true
@@ -42,7 +43,7 @@ final class UnifiedPlayerViewModel {
 
     @ObservationIgnored
     private var countdownDuration: Int {
-        UserDefaults.standard.integer(forKey: "countdownDuration").clamped(options: [1, 3, 10])
+        UserDefaults.standard.integer(forKey: "countdownDuration").clamped(options: [3, 7, 10])
     }
 
     // MARK: - Session Mode State
@@ -114,9 +115,13 @@ final class UnifiedPlayerViewModel {
 
     // MARK: - Private
 
-    private var uiUpdateTimer: Timer?
+    private var uiUpdateTask: Task<Void, Never>?
+    private var countdownTask: Task<Void, Never>?
     private var savedBrightness: CGFloat = 1.0
     private var hasStarted = false
+
+    /// When true, `onDisappear` will not stop playback — used for mini-player dismiss.
+    var dismissToMiniPlayer = false
 
     // MARK: - Init
 
@@ -135,13 +140,31 @@ final class UnifiedPlayerViewModel {
     // MARK: - Lifecycle
 
     func onAppear() {
-        setupMode()
+        let isFreshPresentation = playbackState == .idle && currentTime == 0
+        dismissToMiniPlayer = false
+        UIApplication.shared.isIdleTimerDisabled = AppSettingsManager.keepsScreenAwakeDuringSessions()
+        if !hasStarted {
+            setupMode()
+        }
         startUIUpdateTimer()
+        NowPlayingState.shared.activate(
+            mode: mode,
+            title: mode.title,
+            engine: engine,
+            viewModel: self,
+            resetProgress: isFreshPresentation
+        )
     }
 
     func onDisappear() {
-        stopAll()
         stopUIUpdateTimer()
+        UIApplication.shared.isIdleTimerDisabled = false
+        if dismissToMiniPlayer {
+            // Keep this exact player alive so the mini-player can resume it.
+            NowPlayingState.shared.updatePlaybackState(playbackState)
+        } else {
+            stopAll()
+        }
     }
 
     // MARK: - Playback Controls
@@ -317,6 +340,11 @@ final class UnifiedPlayerViewModel {
 
     // MARK: - Computed
 
+    var volumeDouble: Double {
+        get { Double(volume) }
+        set { setVolume(Float(newValue)) }
+    }
+
     var progress: Double {
         guard duration > 0 else { return 0 }
         return currentTime / duration
@@ -331,12 +359,10 @@ final class UnifiedPlayerViewModel {
     /// Whether the chrome should use light or dark text
     var useDarkChrome: Bool {
         switch mode {
-        case .flashMode, .colorPulse, .playlist:
+        case .flashMode, .colorPulse, .playlist, .session:
             return true
         case .audioLight:
             return lightSyncEnabled
-        case .session:
-            return false
         }
     }
 
@@ -347,6 +373,7 @@ final class UnifiedPlayerViewModel {
     // MARK: - Private: Setup
 
     private func setupMode() {
+        guard !hasStarted else { return }
         switch mode {
         case .session(let session, let audioFile):
             setupSessionMode(session: session, audioFile: audioFile)
@@ -365,6 +392,7 @@ final class UnifiedPlayerViewModel {
         case .playlist(let playlist):
             setupPlaylistMode(playlist: playlist)
         }
+        hasStarted = true
     }
 
     private func setupSessionMode(session: LightSession, audioFile: AudioFile?) {
@@ -376,6 +404,17 @@ final class UnifiedPlayerViewModel {
         if !engine.isRunning { engine.start() }
         engine.pause()
         player.seek(to: 0.0)
+
+        // Set up binaural beats if the session defines them
+        if session.binaural_enabled {
+            let binaural = BinauralBeatsEngine()
+            binaural.carrierFrequency = session.binaural_carrier
+            binaural.volume = session.binaural_volume
+            // Initial beat frequency from the first light moment
+            binaural.beatFrequency = session.light_score.first?.frequency ?? 10.0
+            binauralEngine = binaural
+            binauralActive = true
+        }
 
         if let audioFile {
             let sync = AudioSyncController()
@@ -396,14 +435,12 @@ final class UnifiedPlayerViewModel {
         flashController = controller
         duration = 0 // infinite
 
-        if binauralEnabled {
-            let binaural = BinauralBeatsEngine()
-            binaural.carrierFrequency = binauralCarrier
-            binaural.volume = binauralVolume
-            binaural.beatFrequency = frequency
-            binauralEngine = binaural
-            binauralActive = true
-        }
+        let binaural = BinauralBeatsEngine()
+        binaural.carrierFrequency = binauralCarrier
+        binaural.volume = binauralVolume
+        binaural.beatFrequency = frequency
+        binauralEngine = binaural
+        binauralActive = binauralEnabled
     }
 
     private func setupAudioMode(audioFile: AudioFile) {
@@ -433,37 +470,40 @@ final class UnifiedPlayerViewModel {
         savedBrightness = UIScreen.main.brightness
         UIScreen.main.brightness = 1.0
 
-        hasStarted = true
         let count = countdownDuration
+        countdownMessage = "Close your eyes and relax in\u{2026}"
         countdownValue = count
         playbackState = .countdown
         TranceHaptics.shared.light()
 
-        Task {
+        countdownTask = Task {
             for tick in stride(from: count - 1, through: 1, by: -1) {
                 try? await Task.sleep(for: .seconds(1))
-                await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.35)) {
-                        countdownValue = tick
-                    }
-                    TranceHaptics.shared.light()
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    countdownValue = tick
                 }
+                TranceHaptics.shared.light()
             }
             try? await Task.sleep(for: .seconds(1))
-            await MainActor.run {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    countdownValue = nil
-                }
-                TranceHaptics.shared.medium()
-                beginPlayback()
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.35)) {
+                countdownValue = nil
+                countdownMessage = "Close your eyes"
             }
+            TranceHaptics.shared.medium()
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) {
+                countdownMessage = nil
+            }
+            beginPlayback()
             // Auto-hide controls
             try? await Task.sleep(for: .seconds(3))
-            await MainActor.run {
-                if playbackState == .playing {
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        showingControls = false
-                    }
+            guard !Task.isCancelled else { return }
+            if playbackState == .playing {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    showingControls = false
                 }
             }
         }
@@ -477,6 +517,7 @@ final class UnifiedPlayerViewModel {
             lightScorePlayer?.play()
             engine.resume()
             if audioSync?.hasAudioLoaded == true { audioSync?.play() }
+            if binauralActive { binauralEngine?.start() }
 
         case .flashMode:
             flashController?.start()
@@ -502,6 +543,7 @@ final class UnifiedPlayerViewModel {
             lightScorePlayer?.pause()
             engine.pause()
             audioSync?.pause()
+            binauralEngine?.pause()
             saveProgress()
 
         case .flashMode:
@@ -527,6 +569,7 @@ final class UnifiedPlayerViewModel {
             lightScorePlayer?.play()
             engine.resume()
             if audioSync?.hasAudioLoaded == true { audioSync?.play() }
+            if binauralActive { binauralEngine?.resume() }
 
         case .flashMode:
             flashController?.resume()
@@ -548,8 +591,11 @@ final class UnifiedPlayerViewModel {
     }
 
     func stopAll() {
+        countdownTask?.cancel()
+        countdownTask = nil
         UIScreen.main.brightness = savedBrightness
         countdownValue = nil
+        countdownMessage = nil
 
         switch mode {
         case .session:
@@ -558,6 +604,7 @@ final class UnifiedPlayerViewModel {
             engine.detachSession()
             engine.stop()
             audioSync?.stop()
+            binauralEngine?.stop()
 
         case .flashMode:
             flashController?.stop()
@@ -574,6 +621,7 @@ final class UnifiedPlayerViewModel {
         }
 
         playbackState = .idle
+        NowPlayingState.shared.deactivate()
     }
 
     // MARK: - Private: Timer
@@ -581,17 +629,17 @@ final class UnifiedPlayerViewModel {
     private func startUIUpdateTimer() {
         stopUIUpdateTimer()
 
-        uiUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+        uiUpdateTask = Task { [weak self] in
+            while !Task.isCancelled {
                 self?.updateUI()
+                try? await Task.sleep(for: .milliseconds(100))
             }
         }
-        RunLoop.main.add(uiUpdateTimer!, forMode: .common)
     }
 
     private func stopUIUpdateTimer() {
-        uiUpdateTimer?.invalidate()
-        uiUpdateTimer = nil
+        uiUpdateTask?.cancel()
+        uiUpdateTask = nil
     }
 
     private func updateUI() {
@@ -600,6 +648,10 @@ final class UnifiedPlayerViewModel {
             currentTime = lightScorePlayer?.currentTime ?? 0
             if showingControls || Int(currentTime) % 5 == 0 {
                 updatePhase()
+            }
+            // Sync binaural beat frequency to the current therapeutic frequency
+            if binauralActive, let state = lightScorePlayer?.currentState() {
+                binauralEngine?.syncBeatFrequency(to: state.frequency)
             }
             // Check completion
             if let session = lightScorePlayer?.session,
@@ -633,6 +685,10 @@ final class UnifiedPlayerViewModel {
             duration = playlistController?.currentItemDuration ?? 0
             volume = playlistController?.volume ?? 0.7
         }
+
+        // Keep mini-player in sync
+        NowPlayingState.shared.updateProgress(progress)
+        NowPlayingState.shared.updatePlaybackState(playbackState)
     }
 
     // MARK: - Private: Phase Detection (Session Mode)
@@ -711,9 +767,7 @@ final class UnifiedPlayerViewModel {
     // MARK: - Helpers
 
     func formatTime(_ seconds: TimeInterval) -> String {
-        let minutes = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", minutes, secs)
+        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
     }
 
     private func stageLabel(_ stage: AnalysisStage) -> String {

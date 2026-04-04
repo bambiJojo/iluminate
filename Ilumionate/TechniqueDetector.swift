@@ -86,6 +86,34 @@ struct TechniqueDetector: Sendable {
         techniques.append(contentsOf: fractionation.techniques)
         markers.append(contentsOf: fractionation.markers)
 
+        let confusion = detectConfusionTechnique(wordTimestamps: wordTimestamps)
+        techniques.append(contentsOf: confusion.techniques)
+        markers.append(contentsOf: confusion.markers)
+
+        let amnesia = detectAmnesiaSuggestions(wordTimestamps: wordTimestamps)
+        techniques.append(contentsOf: amnesia.techniques)
+        markers.append(contentsOf: amnesia.markers)
+
+        let dissociation = detectDissociation(wordTimestamps: wordTimestamps)
+        techniques.append(contentsOf: dissociation.techniques)
+        markers.append(contentsOf: dissociation.markers)
+
+        let ageRegression = detectAgeRegression(wordTimestamps: wordTimestamps)
+        techniques.append(contentsOf: ageRegression.techniques)
+        markers.append(contentsOf: ageRegression.markers)
+
+        let hallucinationSugg = detectHallucination(wordTimestamps: wordTimestamps)
+        techniques.append(contentsOf: hallucinationSugg.techniques)
+        markers.append(contentsOf: hallucinationSugg.markers)
+
+        let doubleBinds = detectDoubleBinds(wordTimestamps: wordTimestamps)
+        techniques.append(contentsOf: doubleBinds.techniques)
+        markers.append(contentsOf: doubleBinds.markers)
+
+        let brainwashing = detectBrainwashing(wordTimestamps: wordTimestamps, duration: duration)
+        techniques.append(contentsOf: brainwashing.techniques)
+        markers.append(contentsOf: brainwashing.markers)
+
         let emergence = detectEmergenceCues(wordTimestamps: wordTimestamps, duration: duration)
         techniques.append(contentsOf: emergence.techniques)
         markers.append(contentsOf: emergence.markers)
@@ -643,4 +671,5 @@ private extension TechniqueDetector {
 
         return TechniqueDetectionResult(techniques: techniques, markers: markers)
     }
+
 }

@@ -74,6 +74,9 @@ struct HomeView: View {
     @State private var flashIntensity: Double = 0.75
     @State private var flashKelvin: Int = 4000
     @State private var flashPattern: MindMachineModel.LightPattern = .sine
+    @State private var flashBinauralEnabled = true
+    @State private var flashBinauralCarrier: Double = 200
+    @State private var flashBinauralVolume: Double = 0.5
 
     // Persist user name and last session progress
     @AppStorage("profileName") private var userName = ""
@@ -117,8 +120,6 @@ struct HomeView: View {
                     .cardEntrance(visible: cardsVisible, delay: 0.18, reduceMotion: reduceMotion)
                 recentAudioSection
                     .cardEntrance(visible: cardsVisible, delay: 0.22, reduceMotion: reduceMotion)
-                mindMachineSection
-                    .cardEntrance(visible: cardsVisible, delay: 0.30, reduceMotion: reduceMotion)
             }
             .padding(.horizontal, TranceSpacing.screen)
             .padding(.bottom, 100)
@@ -139,7 +140,7 @@ struct HomeView: View {
         .onDisappear { cardsVisible = false }
         .background(Color.bgPrimary.ignoresSafeArea())
         .sheet(isPresented: $showingProfile) {
-            ProfileView()
+            ProfileSettingsView()
         }
         .sheet(isPresented: $showingSessionLibrary) {
             SessionLibraryView(engine: engine)
@@ -151,9 +152,9 @@ struct HomeView: View {
                     intensity: flashIntensity,
                     colorTemperature: flashKelvin,
                     pattern: flashPattern,
-                    binauralEnabled: false,
-                    binauralCarrier: 200,
-                    binauralVolume: 0.5
+                    binauralEnabled: flashBinauralEnabled,
+                    binauralCarrier: flashBinauralCarrier,
+                    binauralVolume: flashBinauralVolume
                 ),
                 engine: engine
             )
@@ -166,10 +167,19 @@ struct HomeView: View {
     // MARK: - Greeting Section
 
     private var greetingSection: some View {
-        HStack {
+        HStack(alignment: .center) {
+            // Left: branding + time-based greeting
+            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                WordmarkView()
+
+                Text("\(currentGreeting) \(displayName)")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+
             Spacer()
 
-            // Profile circle — taps to open settings
+            // Right: profile avatar
             Button {
                 TranceHaptics.shared.light()
                 showingProfile = true
@@ -180,11 +190,11 @@ struct HomeView: View {
                                        startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
                     .frame(width: 48, height: 48)
-                    .overlay(
+                    .overlay {
                         Text(profileInitial)
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                    )
+                            .foregroundStyle(.white)
+                    }
                     .shadow(
                         color: TranceShadow.elevated.color,
                         radius: TranceShadow.elevated.radius,
@@ -192,30 +202,10 @@ struct HomeView: View {
                         y: TranceShadow.elevated.y
                     )
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(.plain)
         }
         .padding(.top, TranceSpacing.statusBar)
     }
-
-    // MARK: - Category Icons Section
-
-//    private var categoryIconsSection: some View {
-//        HStack(spacing: TranceSpacing.content) {
-//            ForEach(BrainwaveCategory.allCases, id: \.rawValue) { category in
-//                Button {
-//                    TranceHaptics.shared.light()
-//                    activeCategoryFilter = category
-//                    showingCategorySheet = true
-//                } label: {
-//                    CategoryIcon(emoji: category.emoji, label: category.rawValue, haloColor: category.haloColor)
-//                }
-//                .buttonStyle(PlainButtonStyle())
-//            }
-//        }
-//        .opacity(animateCards ? 1 : 0)
-//        .offset(y: animateCards ? 0 : 20)
-//        .animation(.easeOut(duration: 0.6).delay(0.1), value: animateCards)
-//    }
 
     // MARK: - Continue Session Card
 
@@ -241,12 +231,12 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: TranceSpacing.micro) {
                         Text(session.displayName)
                             .font(TranceTypography.body)
-                            .foregroundColor(.textPrimary)
+                            .foregroundStyle(.textPrimary)
                             .lineLimit(1)
 
                         Text(remainingText)
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
 
                     Spacer()
@@ -254,23 +244,29 @@ struct HomeView: View {
                     ProgressRingView(progress: progress)
                 }
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(.plain)
         }
     }
 
     // MARK: - Quick Start Section
 
     private var quickStartSection: some View {
-        GlassCard(label: "Quick Start") {
-            HStack(spacing: TranceSpacing.list) {
-                quickStartMiniCard(title: "Alpha", subtitle: "10 Hz · Focus", color: .bwAlpha) {
-                    launchQuickSession(name: "Alpha Focus", frequency: 10.0, durationMinutes: 10, color: .bwAlpha)
-                }
-                quickStartMiniCard(title: "Theta", subtitle: "6 Hz · Relax", color: .bwTheta) {
-                    launchQuickSession(name: "Theta Relax", frequency: 6.0, durationMinutes: 15, color: .bwTheta)
-                }
-                quickStartMiniCard(title: "Delta", subtitle: "2 Hz · Sleep", color: .bwDelta) {
-                    launchQuickSession(name: "Delta Sleep", frequency: 2.0, durationMinutes: 20, color: .bwDelta)
+        GlassCard(label: "Quick Presets") {
+            VStack(alignment: .leading, spacing: TranceSpacing.list) {
+                Label("Starts flash + binaural audio", systemImage: "headphones")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(.textSecondary)
+
+                HStack(spacing: TranceSpacing.list) {
+                    quickStartMiniCard(title: "Alpha", subtitle: "10 Hz · Focus", color: .bwAlpha) {
+                        launchQuickSession(name: "Alpha Focus", frequency: 10.0, durationMinutes: 10, color: .bwAlpha)
+                    }
+                    quickStartMiniCard(title: "Theta", subtitle: "6 Hz · Relax", color: .bwTheta) {
+                        launchQuickSession(name: "Theta Relax", frequency: 6.0, durationMinutes: 15, color: .bwTheta)
+                    }
+                    quickStartMiniCard(title: "Delta", subtitle: "2 Hz · Sleep", color: .bwDelta) {
+                        launchQuickSession(name: "Delta Sleep", frequency: 2.0, durationMinutes: 20, color: .bwDelta)
+                    }
                 }
             }
         }
@@ -281,23 +277,27 @@ struct HomeView: View {
             VStack(spacing: TranceSpacing.micro) {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
 
                 Text(subtitle)
                     .font(.system(size: 11))
-                    .foregroundColor(.textSecondary)
+                    .foregroundStyle(.textSecondary)
                     .multilineTextAlignment(.center)
+
+                Label("Flash + Audio", systemImage: "headphones")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(color)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, TranceSpacing.inner)
             .background(color.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: TranceRadius.thumbnail))
-            .overlay(
+            .overlay {
                 RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
                     .stroke(color.opacity(0.3), lineWidth: 1)
-            )
+            }
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
     }
 
     // MARK: - Recent Audio Section
@@ -314,29 +314,29 @@ struct HomeView: View {
                             Circle()
                                 .fill(Color.phaseInduction)
                                 .frame(width: 44, height: 44)
-                                .overlay(
+                                .overlay {
                                     Image(systemName: "plus")
                                         .font(.system(size: 18, weight: .medium))
-                                        .foregroundColor(.white)
-                                )
+                                        .foregroundStyle(.white)
+                                }
 
                             VStack(alignment: .leading, spacing: TranceSpacing.micro) {
                                 Text("Import Audio")
                                     .font(TranceTypography.body)
-                                    .foregroundColor(.textPrimary)
+                                    .foregroundStyle(.textPrimary)
                                 Text("Add your own hypnosis files")
                                     .font(TranceTypography.caption)
-                                    .foregroundColor(.textSecondary)
+                                    .foregroundStyle(.textSecondary)
                             }
 
                             Spacer()
 
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.textLight)
+                                .foregroundStyle(.textLight)
                         }
                     }
-                    .buttonStyle(PlainButtonStyle())
+                    .buttonStyle(.plain)
                 } else {
                     ForEach(Array(recentAudioFiles.enumerated()), id: \.element.id) { index, file in
                         if index > 0 {
@@ -355,13 +355,13 @@ struct HomeView: View {
                             Spacer()
                             Text("See all \(audioFiles.count) files")
                                 .font(TranceTypography.caption)
-                                .foregroundColor(.roseGold)
+                                .foregroundStyle(.roseGold)
                             Image(systemName: "chevron.right")
                                 .font(.caption.weight(.semibold))
-                                .foregroundColor(.roseGold)
+                                .foregroundStyle(.roseGold)
                         }
                     }
-                    .buttonStyle(PlainButtonStyle())
+                    .buttonStyle(.plain)
                     .opacity(audioFiles.count > 3 ? 1 : 0)
                 }
             }
@@ -380,23 +380,23 @@ struct HomeView: View {
                         .frame(width: 44, height: 44)
                     Image(systemName: file.isAnalyzed ? "waveform.circle.fill" : "waveform.circle")
                         .font(.system(size: 20))
-                        .foregroundColor(sessionColors[index % sessionColors.count])
+                        .foregroundStyle(sessionColors[index % sessionColors.count])
                 }
 
                 VStack(alignment: .leading, spacing: TranceSpacing.micro) {
                     Text(file.displayName)
                         .font(TranceTypography.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                         .lineLimit(1)
 
                     HStack(spacing: TranceSpacing.small) {
                         Text(file.durationFormatted)
                             .font(TranceTypography.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                         if file.isAnalyzed {
                             Text("· Light Sync Ready")
                                 .font(TranceTypography.caption)
-                                .foregroundColor(.roseGold)
+                                .foregroundStyle(.roseGold)
                         }
                     }
                 }
@@ -405,126 +405,14 @@ struct HomeView: View {
 
                 Image(systemName: "play.circle.fill")
                     .font(.system(size: 22))
-                    .foregroundColor(.roseGold)
+                    .foregroundStyle(.roseGold)
             }
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
     }
 
     private var recentAudioFiles: [AudioFile] {
         Array(audioFiles.sorted { $0.createdDate > $1.createdDate }.prefix(3))
-    }
-
-    // MARK: - Mind Machine Section
-
-    private var mindMachineSection: some View {
-        GlassCard(label: "Mind Machine") {
-            VStack(spacing: TranceSpacing.list) {
-                Text("Brainwave Presets")
-                    .font(TranceTypography.caption)
-                    .foregroundColor(.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                HStack(spacing: TranceSpacing.list) {
-                    mindMachinePresetCard(
-                        emoji: "🧘",
-                        title: "Theta",
-                        subtitle: "6 Hz · Deep Relax",
-                        color: .bwTheta
-                    ) {
-                        launchQuickSession(name: "Theta Relax", frequency: 6.0, durationMinutes: 15, color: .bwTheta)
-                    }
-
-                    mindMachinePresetCard(
-                        emoji: "🎯",
-                        title: "Alpha",
-                        subtitle: "10 Hz · Focus",
-                        color: .bwAlpha
-                    ) {
-                        launchQuickSession(name: "Alpha Focus", frequency: 10.0, durationMinutes: 10, color: .bwAlpha)
-                    }
-
-                    mindMachinePresetCard(
-                        emoji: "🌙",
-                        title: "Delta",
-                        subtitle: "2 Hz · Sleep",
-                        color: .bwDelta
-                    ) {
-                        launchQuickSession(name: "Delta Sleep", frequency: 2.0, durationMinutes: 20, color: .bwDelta)
-                    }
-                }
-
-                // Built-in sessions row (up to 3)
-                if !sessions.isEmpty {
-                    Rectangle()
-                        .fill(Color.glassBorder.opacity(0.3))
-                        .frame(height: 1)
-
-                    ForEach(Array(sessions.prefix(3).enumerated()), id: \.element.id) { index, session in
-                        Button {
-                            TranceHaptics.shared.heavy()
-                            // Open the full light-score session in UnifiedPlayerView
-                            selectedSession = session
-                        } label: {
-                            HStack(spacing: TranceSpacing.list) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                                        .fill(sessionColors[index % sessionColors.count].opacity(0.15))
-                                        .frame(width: 44, height: 44)
-                                    Image(systemName: "sparkles")
-                                        .font(.system(size: 18))
-                                        .foregroundColor(sessionColors[index % sessionColors.count])
-                                }
-
-                                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                                    Text(session.displayName)
-                                        .font(TranceTypography.body)
-                                        .foregroundColor(.textPrimary)
-                                        .lineLimit(1)
-                                    Text(session.durationFormatted)
-                                        .font(TranceTypography.caption)
-                                        .foregroundColor(.textSecondary)
-                                }
-
-                                Spacer()
-
-                                Image(systemName: "play.circle")
-                                    .font(.system(size: 22))
-                                    .foregroundColor(.textLight)
-                            }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-            }
-        }
-    }
-
-    private func mindMachinePresetCard(emoji: String, title: String, subtitle: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: TranceSpacing.micro) {
-                Text(emoji)
-                    .font(.system(size: 24))
-
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-
-                Text(subtitle)
-                    .font(.system(size: 10))
-                    .foregroundColor(.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, TranceSpacing.inner)
-            .background(color.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: TranceRadius.thumbnail))
-            .overlay(
-                RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                    .stroke(color.opacity(0.3), lineWidth: 1)
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
     }
 
     // MARK: - Helper Properties
@@ -538,7 +426,7 @@ struct HomeView: View {
     }
 
     private var currentGreeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
+        let hour = Calendar.current.component(.hour, from: .now)
         switch hour {
         case 5..<12: return "Good morning,"
         case 12..<17: return "Good afternoon,"
@@ -552,9 +440,7 @@ struct HomeView: View {
     }
 
     private func formatTime(_ seconds: Double) -> String {
-        let minutes = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", minutes, secs)
+        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
     }
 
     private let sessionColors: [Color] = [
@@ -582,6 +468,9 @@ struct HomeView: View {
         default:     flashKelvin = 5500  // cool daylight — beta/energy
         }
         flashPattern = bilateral ? .sine : .sine
+        flashBinauralEnabled = true
+        flashBinauralCarrier = 200
+        flashBinauralVolume = 0.5
         showingFlashMode = true
     }
 
@@ -631,31 +520,30 @@ struct WordmarkView: View {
                 )
                 .opacity(0.9)
             )
-            .overlay(
-                // Shimmer highlight that glides across
+            .overlay {
                 GeometryReader { geo in
                     LinearGradient(
                         stops: [
-                            .init(color: .clear,            location: 0.0),
-                            .init(color: .white.opacity(0.45), location: 0.45),
-                            .init(color: .white.opacity(0.70), location: 0.5),
-                            .init(color: .white.opacity(0.45), location: 0.55),
-                            .init(color: .clear,            location: 1.0),
+                            .init(color: .clear,               location: 0.0),
+                            .init(color: .white.opacity(0.12), location: 0.4),
+                            .init(color: .white.opacity(0.18), location: 0.5),
+                            .init(color: .white.opacity(0.12), location: 0.6),
+                            .init(color: .clear,               location: 1.0),
                         ],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
-                    .frame(width: geo.size.width * 0.5)
+                    .frame(width: geo.size.width * 0.6)
                     .offset(x: shimmerOffset * geo.size.width * 1.5)
                     .blendMode(.plusLighter)
                 }
                 .clipped()
-            )
+            }
             .onAppear {
                 withAnimation(
-                    .linear(duration: 3.5)
+                    .easeInOut(duration: 6.0)
                     .repeatForever(autoreverses: false)
-                    .delay(0.8)
+                    .delay(2.0)
                 ) {
                     shimmerOffset = 1.5
                 }
@@ -665,7 +553,7 @@ struct WordmarkView: View {
     // MARK: Waveform Bar
 
     private var waveformBar: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { timeline in
+        TimelineView(.animation(minimumInterval: 1 / 12)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
                 let count = bars.count
@@ -674,22 +562,20 @@ struct WordmarkView: View {
                 let maxH = size.height
 
                 for (i, base) in bars.enumerated() {
-                    // Gentle breathing per bar using sine with individual phase offset
-                    let phase = t * 1.4 + Double(i) * 0.42
-                    let breathe = 0.15 * sin(phase)
+                    let phase = t * 0.4 + Double(i) * 0.3
+                    let breathe = 0.05 * sin(phase)
                     let h = CGFloat(clamp(Double(base) + breathe, 0.12, 1.0)) * maxH
 
                     let x = CGFloat(i) * (barW + spacing)
                     let rect = CGRect(x: x, y: maxH - h, width: barW, height: h)
                     let path = Path(roundedRect: rect, cornerRadius: barW / 2)
 
-                    // Color shifts subtly across the bar row
                     let t01 = Double(i) / Double(count - 1)
                     let color = Color(
                         red:   lerp(0.831, 0.690, t01),
                         green: lerp(0.471, 0.490, t01),
                         blue:  lerp(0.604, 0.784, t01)
-                    ).opacity(lerp(0.5, 0.25, t01))
+                    ).opacity(lerp(0.35, 0.18, t01))
 
                     ctx.fill(path, with: .color(color))
                 }
@@ -731,10 +617,10 @@ struct CategorySessionSheet: View {
                     VStack(spacing: TranceSpacing.card) {
                         Image(systemName: "waveform.circle")
                             .font(.system(size: 52, weight: .ultraLight))
-                            .foregroundColor(category.haloColor)
+                            .foregroundStyle(category.haloColor)
                         Text("No \(category.rawValue) sessions yet")
                             .font(TranceTypography.body)
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                 } else {
                     ScrollView {
@@ -745,7 +631,7 @@ struct CategorySessionSheet: View {
                                 } label: {
                                     SessionListCard(session: session)
                                 }
-                                .buttonStyle(PlainButtonStyle())
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, TranceSpacing.screen)
@@ -762,7 +648,7 @@ struct CategorySessionSheet: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundColor(.textSecondary)
+                            .foregroundStyle(.textSecondary)
                     }
                 }
             }

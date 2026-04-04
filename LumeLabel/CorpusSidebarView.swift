@@ -7,30 +7,47 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
-import AVFoundation
-import CoreMedia
 
 struct CorpusSidebarView: View {
-
     @Environment(TrainingCorpusManager.self) private var corpus
-    @Binding var selectedFile: LabeledFile?
+    @Binding var selectedFileID: LabeledFile.ID?
     @State private var isImporting = false
-    @State private var importError: String?
+    @State private var alertMessage: String?
+    @State private var workflow = TrainingWorkflowController()
 
     var body: some View {
-        List(corpus.labeledFiles, selection: $selectedFile) { file in
-            CorpusFileRow(file: file)
-                .tag(file)
-                .contextMenu {
-                    Button("Delete", role: .destructive) {
-                        if selectedFile?.id == file.id { selectedFile = nil }
-                        corpus.delete(file)
+        VStack(spacing: 0) {
+            CorpusTrainingWorkflowPanel(
+                totalFileCount: corpus.labeledFiles.count,
+                labeledFileCount: corpus.labeledFiles.filter { $0.status != .unlabeled }.count,
+                workflow: workflow
+            )
+
+            List(corpus.labeledFiles, selection: $selectedFileID) { file in
+                CorpusFileRow(file: file)
+                    .tag(file.id)
+                    .contextMenu {
+                        Button("Delete", role: .destructive) {
+                            Task { await delete(file) }
+                        }
                     }
-                }
+            }
         }
         .navigationTitle("Corpus")
         .navigationSubtitle(subtitleText)
         .toolbar {
+            ToolbarItemGroup(placement: .secondaryAction) {
+                Button("Measure", systemImage: TrainingWorkflowAction.measure.systemImage) {
+                    workflow.startMeasure()
+                }
+                .disabled(workflow.isRunning || workflow.datasetSnapshot.validExampleCount == 0)
+
+                Button("Optimize", systemImage: TrainingWorkflowAction.optimize.systemImage) {
+                    workflow.startOptimize()
+                }
+                .disabled(workflow.isRunning || workflow.datasetSnapshot.validExampleCount == 0)
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 Button("Import Audio", systemImage: "plus") {
                     isImporting = true
@@ -45,16 +62,26 @@ struct CorpusSidebarView: View {
             handleImport(result)
         }
         .dropDestination(for: URL.self) { urls, _ in
-            for url in urls { importURL(url) }
-            return !urls.isEmpty
+            guard !urls.isEmpty else { return false }
+            Task { await importURLs(urls) }
+            return true
         }
-        .alert("Import Error", isPresented: Binding(
-            get: { importError != nil },
-            set: { if !$0 { importError = nil } }
+        .alert("Corpus Error", isPresented: Binding(
+            get: { alertMessage != nil },
+            set: { if !$0 { alertMessage = nil } }
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(importError ?? "")
+            Text(alertMessage ?? "")
+        }
+        .sheet(isPresented: Binding(
+            get: { workflow.isSheetPresented },
+            set: { workflow.isSheetPresented = $0 }
+        )) {
+            TrainingWorkflowSheet(workflow: workflow)
+        }
+        .task(id: workflowRefreshKey) {
+            await workflow.refreshSnapshot()
         }
     }
 
@@ -64,35 +91,63 @@ struct CorpusSidebarView: View {
         return "\(labeled)/\(total) labeled"
     }
 
+    private var workflowRefreshKey: String {
+        corpus.labeledFiles
+            .map { "\($0.id.uuidString)-\($0.labeledAt.timeIntervalSince1970)" }
+            .joined(separator: "|")
+    }
+
     private func handleImport(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result else { return }
-        for url in urls {
-            guard url.startAccessingSecurityScopedResource() else { continue }
-            defer { url.stopAccessingSecurityScopedResource() }
-            importURL(url)
+        switch result {
+        case .success(let urls):
+            Task { await importURLs(urls) }
+        case .failure(let error):
+            alertMessage = error.localizedDescription
         }
     }
 
-    private func importURL(_ url: URL) {
-        do {
-            var file = try corpus.importAudio(from: url)
-            Task {
-                let asset = AVURLAsset(url: corpus.audioURL(for: file))
-                if let duration = try? await asset.load(.duration) {
-                    file.audioDuration = CMTimeGetSeconds(duration)
-                    try? corpus.save(file)
+    private func importURLs(_ urls: [URL]) async {
+        for url in urls {
+            do {
+                let imported = try await withSecurityScopedAccess(to: url) {
+                    try await corpus.importAudio(from: url)
                 }
+                selectedFileID = imported.id
+            } catch {
+                alertMessage = error.localizedDescription
+                return
             }
-        } catch {
-            importError = error.localizedDescription
         }
+    }
+
+    private func delete(_ file: LabeledFile) async {
+        do {
+            if selectedFileID == file.id {
+                selectedFileID = nil
+            }
+            try await corpus.delete(file)
+        } catch {
+            alertMessage = error.localizedDescription
+        }
+    }
+
+    private func withSecurityScopedAccess<T>(
+        to url: URL,
+        operation: () async throws -> T
+    ) async throws -> T {
+        let didStartAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        return try await operation()
     }
 }
 
 // MARK: - File Row
 
 struct CorpusFileRow: View {
-
     let file: LabeledFile
 
     var body: some View {

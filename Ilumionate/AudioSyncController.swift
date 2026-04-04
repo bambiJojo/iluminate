@@ -48,7 +48,7 @@ class AudioSyncController {
         #if !os(macOS)
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .default)
+            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try audioSession.setActive(true)
             print("✅ Audio session configured for playback")
         } catch {

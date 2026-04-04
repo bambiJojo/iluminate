@@ -121,7 +121,7 @@ struct OnboardingView: View {
                 Button(action: previousPhase) {
                     Image(systemName: "arrow.left")
                         .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 50, height: 50)
                         .background(Color.white.opacity(0.1))
                         .clipShape(Circle())
@@ -141,7 +141,7 @@ struct OnboardingView: View {
                         Image(systemName: "arrow.right")
                     }
                 }
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
                 .padding(.horizontal, (currentPhase == .questionnaire && selectedGoal == nil) ? 0 : 20)
                 .frame(width: (currentPhase == .questionnaire && selectedGoal == nil) ? 50 : nil, height: 50)
                 .background(Color.bwTheta)
@@ -173,7 +173,7 @@ struct OnboardingView: View {
                 
                 Image(systemName: "sparkles")
                     .font(.system(size: 80, weight: .light))
-                    .foregroundColor(Color.warmAccent)
+                    .foregroundStyle(Color.warmAccent)
                     .offset(y: characterOffset)
                     .animation(.spring(response: 0.6, dampingFraction: 0.5).repeatForever(autoreverses: true), value: characterOffset)
                     .onAppear {
@@ -185,11 +185,11 @@ struct OnboardingView: View {
             VStack(spacing: 16) {
                 Text("Welcome to LumeSync")
                     .font(TranceTypography.screenTitle)
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
                 
                 Text("Your personal hypnosis audio player and mind machine for deep relaxation and transformation.")
                     .font(TranceTypography.body)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
             }
@@ -205,7 +205,7 @@ struct OnboardingView: View {
                 
                 Text("Help us tailor your mind machine experience.")
                     .font(TranceTypography.body)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
             .padding(.bottom, 20)
             
@@ -219,18 +219,18 @@ struct OnboardingView: View {
                         HStack(spacing: 16) {
                             Image(systemName: goal.icon)
                                 .font(.title2)
-                                .foregroundColor(selectedGoal == goal ? .white : .bwTheta)
+                                .foregroundStyle(selectedGoal == goal ? .white : .bwTheta)
                                 .frame(width: 30)
                             
                             Text(goal.rawValue)
                                 .font(TranceTypography.body)
-                                .foregroundColor(selectedGoal == goal ? .white : .primary)
+                                .foregroundStyle(selectedGoal == goal ? .white : .primary)
                             
                             Spacer()
                             
                             if selectedGoal == goal {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.white)
+                                    .foregroundStyle(.white)
                                     .matchedGeometryEffect(id: "check", in: animation)
                             }
                         }
@@ -263,7 +263,7 @@ struct OnboardingView: View {
                     
                     Image(systemName: goal.icon)
                         .font(.system(size: 60))
-                        .foregroundColor(.bwTheta)
+                        .foregroundStyle(.bwTheta)
                         .scaleEffect(isAnimating ? 1.1 : 0.9)
                         .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
                 }
@@ -276,7 +276,7 @@ struct OnboardingView: View {
                     
                     Text(goal.personalizedResponseDescription)
                         .font(TranceTypography.body)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
@@ -290,14 +290,14 @@ struct OnboardingView: View {
         VStack(spacing: 30) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 80))
-                .foregroundColor(.roseDeep)
+                .foregroundStyle(.roseDeep)
                 .shadow(color: .roseDeep.opacity(0.5), radius: 10, x: 0, y: 5)
                 .padding(.top, 20)
             
             VStack(spacing: 16) {
                 Text("Important Warning")
                     .font(TranceTypography.screenTitle)
-                    .foregroundColor(.roseDeep)
+                    .foregroundStyle(.roseDeep)
                 
                 Text("This app uses flashing lights and visual patterns as part of the brainwave entrainment process.")
                     .font(TranceTypography.body.bold())
@@ -329,7 +329,7 @@ struct OnboardingView: View {
                 
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 80, weight: .light))
-                    .foregroundColor(.green)
+                    .foregroundStyle(.green)
             }
             
             VStack(spacing: 16) {
@@ -338,7 +338,7 @@ struct OnboardingView: View {
                 
                 Text("Your LumeSync journey begins now. Find a quiet space, upload an audio file, and let the mind machine guide you.")
                     .font(TranceTypography.body)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
         }
@@ -396,12 +396,12 @@ struct OnboardingView: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "circle.fill")
                 .font(.system(size: 6))
-                .foregroundColor(.roseDeep)
+                .foregroundStyle(.roseDeep)
                 .padding(.top, 6)
             
             Text(text)
                 .font(TranceTypography.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
             
             Spacer(minLength: 0)
         }

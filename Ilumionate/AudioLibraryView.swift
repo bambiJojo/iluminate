@@ -65,9 +65,7 @@ struct AudioLibraryView: View {
     @State var selectedFiles = Set<AudioFile.ID>()
     @State var showingAnalysis = false
     @State var audioManager = AudioManager()
-    var analysisManager: AnalysisStateManager {
-        AnalysisStateManager.shared
-    }
+    @State var analysisManager = AnalysisStateManager.shared
     @State var showingExpandedProgress = false
     @State var playerFile: AudioFile?
     @State var isSelectionMode = false
@@ -86,11 +84,12 @@ struct AudioLibraryView: View {
     @State var audioURLInput = ""
     @State var isDownloadingURL = false
     @State var downloadError: String?
+    @State var showingDownloadError = false
     @State var showingBrowser = false
     @State var showingAddSheet = false
- // TODO: Replace with actual playlist model
+    // TODO: Replace with actual playlist model
     @State var showingDeleteSelectedAlert = false
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -116,7 +115,7 @@ struct AudioLibraryView: View {
                             HStack(spacing: TranceSpacing.card) {
                                 Text("\(selectedFiles.count) selected")
                                     .font(TranceTypography.caption)
-                                    .foregroundColor(.textSecondary)
+                                    .foregroundStyle(.textSecondary)
 
                                 Spacer()
 
@@ -145,7 +144,7 @@ struct AudioLibraryView: View {
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .font(TranceTypography.body)
                                 .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
                                 .disabled(selectedFiles.isEmpty)
@@ -159,9 +158,9 @@ struct AudioLibraryView: View {
                 }
 
             }
-            .navigationTitle("Sessions")
+            .navigationTitle("Import Audio")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .topBarLeading) {
                     if !audioFiles.isEmpty {
                         Button(isSelectionMode ? "Done" : "Select") {
                             TranceHaptics.shared.light()
@@ -171,11 +170,11 @@ struct AudioLibraryView: View {
                             isSelectionMode.toggle()
                         }
                         .font(TranceTypography.body)
-                        .foregroundColor(.roseGold)
+                        .foregroundStyle(.roseGold)
                     }
                 }
 
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: TranceSpacing.small) {
                         // Queue badge
                         if analysisManager.currentAnalysis != nil || !analysisManager.analysisQueue.isEmpty {
@@ -188,13 +187,13 @@ struct AudioLibraryView: View {
                                     if !analysisManager.analysisQueue.isEmpty {
                                         Text("\(analysisManager.analysisQueue.count)")
                                             .font(.caption2)
-                                            .foregroundColor(.white)
+                                            .foregroundStyle(.white)
                                             .padding(.horizontal, 4)
                                             .padding(.vertical, 2)
                                             .background(Color.roseGold, in: Capsule())
                                     }
                                 }
-                                .foregroundColor(.roseGold)
+                                .foregroundStyle(.roseGold)
                             }
                         }
 
@@ -272,13 +271,13 @@ struct AudioLibraryView: View {
                     Text("Enter a stable URL pointing directly to an MP3, M4A, or WAV file.")
                 }
             }
-            .alert("Download Failed", isPresented: Binding(
-                get: { downloadError != nil },
-                set: { if !$0 { downloadError = nil } }
-            )) {
+            .alert("Download Failed", isPresented: $showingDownloadError) {
                 Button("OK", role: .cancel) { downloadError = nil }
             } message: {
                 if let err = downloadError { Text(err) }
+            }
+            .onChange(of: downloadError) { _, newValue in
+                showingDownloadError = newValue != nil
             }
             .onAppear {
                 loadAudioFiles()
@@ -311,7 +310,9 @@ struct AudioLibraryView: View {
                     selectedFiles.removeAll()
                 }
             }
-            .onAppear {
+            .onChange(of: analysisManager.completedAnalyses.count) {
+                // Reload from UserDefaults when analysis completes —
+                // AnalysisStateManager persists results there directly.
                 loadAudioFiles()
             }
         }

@@ -30,12 +30,16 @@ struct LibraryFoldersView: View {
     }
 
     private let smartFolders: [SmartFolder] = [
-        SmartFolder(id: "hypnosis",     name: "Hypnosis",      icon: "brain.head.profile", color: .bwDelta,    contentType: .hypnosis),
-        SmartFolder(id: "meditation",   name: "Meditation",    icon: "leaf",               color: .bwAlpha,    contentType: .meditation),
-        SmartFolder(id: "music",        name: "Music",         icon: "music.note",         color: .bwBeta,     contentType: .music),
-        SmartFolder(id: "guided",       name: "Guided Imagery",icon: "figure.mind.and.body", color: .bwTheta,  contentType: .guidedImagery),
-        SmartFolder(id: "affirmations", name: "Affirmations",  icon: "quote.bubble",       color: .warmAccent, contentType: .affirmations),
-        SmartFolder(id: "unanalyzed",   name: "Not Yet Analyzed", icon: "questionmark.circle", color: .textLight, contentType: nil),
+        SmartFolder(id: "hypnosis",       name: "Hypnosis",         icon: "brain.head.profile",   color: .bwDelta,    contentType: .hypnosis),
+        SmartFolder(id: "meditation",     name: "Meditation",       icon: "leaf",                 color: .bwAlpha,    contentType: .meditation),
+        SmartFolder(id: "music",          name: "Music",            icon: "music.note",           color: .bwBeta,     contentType: .music),
+        SmartFolder(id: "guided",         name: "Guided Imagery",   icon: "figure.mind.and.body", color: .bwTheta,   contentType: .guidedImagery),
+        SmartFolder(id: "affirmations",   name: "Affirmations",     icon: "quote.bubble",         color: .warmAccent, contentType: .affirmations),
+        SmartFolder(id: "eroticHypnosis", name: "Erotic Hypnosis",  icon: "flame",                color: .roseDeep,   contentType: .eroticHypnosis),
+        SmartFolder(id: "brainwave",      name: "Brainwave",        icon: "waveform.path.ecg",    color: .bwGamma,    contentType: .brainwave),
+        SmartFolder(id: "asmr",           name: "ASMR",             icon: "ear",                  color: .warmAccent,  contentType: .asmr),
+        SmartFolder(id: "sleepHypnosis",  name: "Sleep Hypnosis",   icon: "moon.zzz",             color: .bwDelta,    contentType: .sleepHypnosis),
+        SmartFolder(id: "unanalyzed",     name: "Not Yet Analyzed", icon: "questionmark.circle",  color: .textLight,  contentType: nil),
     ]
 
     // MARK: Body
@@ -83,7 +87,7 @@ struct LibraryFoldersView: View {
                             Text("My Folders")
                                 .font(TranceTypography.sectionTitle)
                                 .fontWeight(.bold)
-                                .foregroundColor(.textPrimary)
+                                .foregroundStyle(.textPrimary)
                             Spacer()
                             Button {
                                 TranceHaptics.shared.light()
@@ -93,7 +97,7 @@ struct LibraryFoldersView: View {
                                 Image(systemName: "plus.circle.fill")
                                     .symbolRenderingMode(.hierarchical)
                                     .font(.system(size: 22))
-                                    .foregroundColor(.roseGold)
+                                    .foregroundStyle(.roseGold)
                             }
                         }
                         .padding(.horizontal, TranceSpacing.screen)
@@ -199,7 +203,7 @@ struct LibraryFoldersView: View {
             Text(title)
                 .font(TranceTypography.sectionTitle)
                 .fontWeight(.bold)
-                .foregroundColor(.textPrimary)
+                .foregroundStyle(.textPrimary)
                 .padding(.horizontal, TranceSpacing.screen)
 
             VStack(spacing: 0) {
@@ -217,10 +221,10 @@ struct LibraryFoldersView: View {
         HStack(spacing: TranceSpacing.list) {
             Image(systemName: "folder.badge.plus")
                 .font(.title2)
-                .foregroundColor(.textLight)
+                .foregroundStyle(.textLight)
             Text("Tap  +  to create a folder")
                 .font(TranceTypography.body)
-                .foregroundColor(.textSecondary)
+                .foregroundStyle(.textSecondary)
         }
         .padding(TranceSpacing.content)
         .padding(.horizontal, TranceSpacing.screen)
@@ -250,23 +254,23 @@ private struct FolderRow: View {
                     .frame(width: 40, height: 40)
                 Image(systemName: icon)
                     .font(.system(size: 17))
-                    .foregroundColor(iconColor)
+                    .foregroundStyle(iconColor)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(TranceTypography.body)
-                    .foregroundColor(.textPrimary)
+                    .foregroundStyle(.textPrimary)
                 Text("\(count) \(count == 1 ? "session" : "sessions")")
                     .font(TranceTypography.caption)
-                    .foregroundColor(.textLight)
+                    .foregroundStyle(.textLight)
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.textLight)
+                .foregroundStyle(.textLight)
         }
         .padding(.vertical, TranceSpacing.card)
     }
@@ -291,13 +295,13 @@ struct FolderDetailView: View {
                 VStack(spacing: TranceSpacing.card) {
                     Image(systemName: icon)
                         .font(.system(size: 56, weight: .ultraLight))
-                        .foregroundColor(iconColor)
+                        .foregroundStyle(iconColor)
                     Text("No Sessions")
                         .font(TranceTypography.greeting)
-                        .foregroundColor(.textPrimary)
+                        .foregroundStyle(.textPrimary)
                     Text("Sessions you add to this folder will appear here")
                         .font(TranceTypography.body)
-                        .foregroundColor(.textSecondary)
+                        .foregroundStyle(.textSecondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding(TranceSpacing.screen)

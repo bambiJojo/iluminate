@@ -20,7 +20,7 @@ struct ProgressRingView: View {
                 .rotationEffect(.degrees(-90))
             Text("\(Int(progress * 100))%")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.roseGold)
+                .foregroundStyle(.roseGold)
         }
         .frame(width: 44, height: 44)
     }

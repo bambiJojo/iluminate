@@ -53,7 +53,7 @@ struct AudioFile: Identifiable, Codable, Sendable {
     // Computed from filename so the URL is always valid after app updates.
     // iOS sandbox container paths include a dynamic UUID that changes on update;
     // storing only the filename and reconstructing the URL at runtime avoids stale paths.
-    nonisolated var url: URL { URL.documentsDirectory.appendingPathComponent(filename) }
+    nonisolated var url: URL { URL.documentsDirectory.appending(path: filename) }
 
     // Exclude `url` from serialization — it is always derived from `filename`.
     // Old stored data may contain a `url` field; Codable ignores unknown keys.
@@ -145,14 +145,7 @@ struct AnalysisResult: Codable, Sendable {
         case melancholic
     }
 
-    enum ContentType: String, Codable, Sendable, CaseIterable {
-        case hypnosis
-        case meditation
-        case music
-        case guidedImagery
-        case affirmations
-        case unknown
-    }
+    typealias ContentType = AudioContentType
 
     let mood: Mood
     let energyLevel: Double // 0.0 (very calm) to 1.0 (very energetic)
@@ -219,29 +212,7 @@ struct KeyMoment: Codable, Identifiable, Sendable {
 
 /// Detailed hypnosis session analysis
 struct HypnosisMetadata: Codable, Sendable {
-    enum Phase: String, Codable, Sendable {
-        case preTalk = "pre_talk"
-        case induction
-        case deepening
-        case therapy
-        case suggestions
-        case conditioning = "post_hypnotic_conditioning"
-        case emergence
-        case transitional // Used when phases blend
-
-        var displayName: String {
-            switch self {
-            case .preTalk: return "Pre-Talk"
-            case .induction: return "Induction"
-            case .deepening: return "Deepening"
-            case .therapy: return "Therapeutic Work"
-            case .suggestions: return "Suggestions"
-            case .conditioning: return "Post-Hypnotic Conditioning"
-            case .emergence: return "Emergence"
-            case .transitional: return "Transitional"
-            }
-        }
-    }
+    typealias Phase = TrancePhase
 
     enum ConfidenceLevel: String, Codable, Sendable {
         case high
@@ -363,6 +334,15 @@ struct LinguisticMarker: Codable, Identifiable, Sendable {
         case ambiguousLanguage
         case conversationalTrance
         case utilizationOfResponse
+
+        // Advanced technique markers
+        case confusionTechnique
+        case amnesiaSuggestion
+        case doubleBinding
+        case dissociation
+        case ageRegression
+        case hallucination
+        case brainwashing
     }
 
     let id: UUID

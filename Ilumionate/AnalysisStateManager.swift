@@ -309,10 +309,51 @@ class AnalysisStateManager: Sendable {
         cachedResults[Self.cacheKey(for: audioFile)] = result.analysis
         saveCachedResults()
 
+        // Write results back to the persisted AudioFile list in UserDefaults
+        // so all views see the file as analyzed on next load.
+        persistAnalysisToAudioFiles(
+            audioFileID: audioFile.id,
+            analysis: result.analysis,
+            transcription: result.transcription.fullText
+        )
+
         // Remove from queue
         analysisQueue.removeAll { $0.id == audioFile.id }
 
         print("✅ Analysis completed: \(audioFile.filename)")
+    }
+
+    // MARK: - AudioFile Persistence Bridge
+
+    /// Key used by AudioLibraryView to store/load the audio file list.
+    nonisolated static let audioFilesUserDefaultsKey = "audioFiles"
+
+    /// Updates the persisted AudioFile in UserDefaults with analysis results.
+    /// This bridges AnalysisStateManager (which owns results) with the AudioFile
+    /// persistence layer (UserDefaults) so every view sees the file as analyzed.
+    private func persistAnalysisToAudioFiles(
+        audioFileID: UUID,
+        analysis: AnalysisResult,
+        transcription: String
+    ) {
+        guard let data = UserDefaults.standard.data(forKey: Self.audioFilesUserDefaultsKey),
+              var files = try? JSONDecoder().decode([AudioFile].self, from: data) else {
+            print("⚠️ Could not load audio files from UserDefaults to persist analysis")
+            return
+        }
+
+        guard let index = files.firstIndex(where: { $0.id == audioFileID }) else {
+            print("⚠️ AudioFile \(audioFileID) not found in persisted list")
+            return
+        }
+
+        files[index].analysisResult = analysis
+        files[index].transcription = transcription
+
+        if let encoded = try? JSONEncoder().encode(files) {
+            UserDefaults.standard.set(encoded, forKey: Self.audioFilesUserDefaultsKey)
+            print("💾 Persisted analysis result to AudioFile in UserDefaults")
+        }
     }
 
     /// Get completed analysis for a file
@@ -328,8 +369,8 @@ class AnalysisStateManager: Sendable {
     /// Save generated light session to documents directory
     private func saveGeneratedSession(_ session: LightSession, for audioFile: AudioFile) async throws {
         let fileManager = FileManager.default
-        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let sessionsURL = documentsURL.appendingPathComponent("GeneratedSessions", isDirectory: true)
+        let documentsURL = URL.documentsDirectory
+        let sessionsURL = documentsURL.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
 
         // Create directory if it doesn't exist
         if !fileManager.fileExists(atPath: sessionsURL.path) {
@@ -338,11 +379,11 @@ class AnalysisStateManager: Sendable {
 
         // Create filename from audio file
         let baseName = audioFile.filename
-            .replacingOccurrences(of: ".mp3", with: "")
-            .replacingOccurrences(of: ".m4a", with: "")
-            .replacingOccurrences(of: ".wav", with: "")
+            .replacing(".mp3", with: "")
+            .replacing(".m4a", with: "")
+            .replacing(".wav", with: "")
         let filename = "\(baseName)_session.json"
-        let fileURL = sessionsURL.appendingPathComponent(filename)
+        let fileURL = sessionsURL.appending(path: filename)
 
         // Encode and save
         let encoder = JSONEncoder()
@@ -499,8 +540,8 @@ actor AnalysisCoordinator {
         // File I/O with proper concurrency handling
         try await Task(priority: .utility) {
             let fileManager = FileManager.default
-            let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let sessionsURL = documentsURL.appendingPathComponent("GeneratedSessions", isDirectory: true)
+            let documentsURL = URL.documentsDirectory
+            let sessionsURL = documentsURL.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
 
             // Create directory if needed
             if !fileManager.fileExists(atPath: sessionsURL.path) {
@@ -509,11 +550,11 @@ actor AnalysisCoordinator {
 
             // Create filename
             let baseName = audioFile.filename
-                .replacingOccurrences(of: ".mp3", with: "")
-                .replacingOccurrences(of: ".m4a", with: "")
-                .replacingOccurrences(of: ".wav", with: "")
+                .replacing(".mp3", with: "")
+                .replacing(".m4a", with: "")
+                .replacing(".wav", with: "")
             let filename = "\(baseName)_session.json"
-            let fileURL = sessionsURL.appendingPathComponent(filename)
+            let fileURL = sessionsURL.appending(path: filename)
 
             // Encode and save using a safe encoding context
             let data = try await MainActor.run {

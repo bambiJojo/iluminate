@@ -1,0 +1,121 @@
+{
+  "" : {
+    "const-values" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary.swiftconstvalues",
+    "dependencies" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary.d",
+    "diagnostics" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary.dia",
+    "emit-module-dependencies" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary-emit-module.dia",
+    "pch" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerImprover-primary.swiftdeps"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/AnalyzerImprover/TranscriptionTypes.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/TranscriptionTypes.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/TranscriptionTypes.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/TranscriptionTypes.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/AnalyzerImprover/main.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/main.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/main.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/main.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AIAnalysisModels.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AIAnalysisModels.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AIAnalysisModels.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AIAnalysisModels.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalyzerConfig/AnalyzerConfig.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerConfig.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerConfig.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerConfig.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AnalyzerConfig/AnalyzerConfigLoader.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerConfigLoader.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerConfigLoader.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerConfigLoader.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioContentType.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AudioContentType.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AudioContentType.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AudioContentType.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioEnergyAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AudioEnergyAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AudioEnergyAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AudioEnergyAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/AudioFile.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AudioFile.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AudioFile.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AudioFile.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ChunkedPhaseAnalyzer+Smoothing.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/ChunkedPhaseAnalyzer+Smoothing.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/ChunkedPhaseAnalyzer+Smoothing.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/ChunkedPhaseAnalyzer+Smoothing.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/ChunkedPhaseAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/ChunkedPhaseAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/ChunkedPhaseAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/ChunkedPhaseAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/HypnosisPhaseAnalyzer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/HypnosisPhaseAnalyzer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/HypnosisPhaseAnalyzer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/HypnosisPhaseAnalyzer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/HypnosisPhaseKeywords.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/HypnosisPhaseKeywords.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/HypnosisPhaseKeywords.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/HypnosisPhaseKeywords.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/TechniqueDetector.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/TechniqueDetector.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/TechniqueDetector.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/TechniqueDetector.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/AnalyzerOptimizer/AnalyzerEvaluationEngine.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerEvaluationEngine.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerEvaluationEngine.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerEvaluationEngine.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/AnalyzerOptimizer/AnalyzerMetrics.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerMetrics.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerMetrics.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerMetrics.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/AnalyzerOptimizer/AnalyzerMutationEngine.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerMutationEngine.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerMutationEngine.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerMutationEngine.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/AnalyzerOptimizer/AnalyzerOptimizationDataset.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerOptimizationDataset.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerOptimizationDataset.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerOptimizationDataset.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/AnalyzerOptimizer/AnalyzerOptimizationReport.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerOptimizationReport.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerOptimizationReport.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerOptimizationReport.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/AnalyzerOptimizer/AnalyzerOptimizer.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerOptimizer.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerOptimizer.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerOptimizer.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/AnalyzerOptimizer/AnalyzerTranscriptCache.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerTranscriptCache.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerTranscriptCache.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/AnalyzerTranscriptCache.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/Training/LabeledFile.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/LabeledFile.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/LabeledFile.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/LabeledFile.o"
+  },
+  "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/Ilumionate/TrancePhase.swift" : {
+    "index-unit-output-path" : "/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/TrancePhase.o",
+    "llvm-bc" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/TrancePhase.bc",
+    "object" : "/Users/byronquine/Documents/Programing/Swift/Practice/Ilumionate/build/Ilumionate.build/Release/AnalyzerImprover.build/Objects-normal/arm64/TrancePhase.o"
+  }
+}
