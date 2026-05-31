@@ -21,6 +21,50 @@ struct KeywordPipelineEvaluationTests {
     private let analyzer  = HypnosisPhaseAnalyzer()
     private let generator = SessionGenerator()
     private let evaluator = AnalysisEvaluator()
+    private let timelineEvaluator = PhaseTimelineEvaluator()
+
+    // MARK: - Timeline metrics over the file corpus
+
+    /// Maps analyzer output to truth-span shape for the timeline evaluator.
+    private func predictedSpans(_ phases: [PhaseSegment]) -> [PhaseTruthSpan] {
+        phases.map { PhaseTruthSpan(phase: $0.phase, start: $0.startTime, end: $0.endTime) }
+    }
+
+    @Test("Timeline metrics run over the file corpus and meet thresholds")
+    func timelineMetricsOverCorpus() async throws {
+        let eval = timelineEvaluator
+
+        // Only cases that carry ground-truth spans participate in timeline scoring.
+        let cases = try (CorpusLoader.load(subdirectory: "fixtures")
+                       + CorpusLoader.load(subdirectory: "synthetic")
+                       + CorpusLoader.load(subdirectory: "real"))
+            .filter { !$0.truth.isEmpty }
+
+        try #require(!cases.isEmpty, "no truth-bearing corpus cases found")
+
+        var scores: [PhaseTimelineScore] = []
+        for kase in cases {
+            let segments = kase.transcriptionSegments
+            let transcription = AudioTranscriptionResult(
+                fullText: kase.transcriptText,
+                segments: segments.isEmpty
+                    ? [AudioTranscriptionSegment(text: kase.transcriptText, timestamp: 0, duration: kase.duration, confidence: 1.0)]
+                    : segments,
+                duration: kase.duration,
+                detectedLanguage: "en"
+            )
+            let phases = analyzer.analyzeTranscription(transcription)
+            scores.append(eval.score(case: kase, predicted: predictedSpans(phases)))
+        }
+
+        let report = eval.report(scores: scores)
+        // Observed baseline 2026-05-31 (iPhone 17 Pro sim): overallAgreement 0.40,
+        // meanBoundaryError 12.0s, over 2 truth-bearing low-ambiguity fixtures.
+        // This is the number Phase-1 tuning must raise; floor set at the observed
+        // value to catch regressions without overstating current quality.
+        #expect(report.overallAgreement >= 0.40,
+                "overall agreement \(report.overallAgreement); by-ambiguity \(report.agreementByAmbiguity); mean boundary err \(report.meanBoundaryError); cases \(scores.count)")
+    }
 
     // MARK: - Structural validity
 
@@ -88,6 +132,18 @@ struct KeywordPipelineEvaluationTests {
         )
         #expect(score.frequencyRangeScore == 1.0,
                 "Frequency range \(analysis.suggestedFrequencyRange) doesn't overlap theta band 0.5–10 Hz")
+    }
+
+    @Test func allHypnosisCorpusCases_lightScoreAlignmentMeetsProductionTarget() {
+        for evalCase in EvaluationCorpus.all where evalCase.expectedContentType == .hypnosis {
+            let phases = analyzer.analyzeTranscription(evalCase.transcript)
+            let analysis = buildAnalysisResult(evalCase: evalCase, phases: phases)
+            let session = generator.generateSession(from: evalCase.audioFile, analysis: analysis)
+            let report = LightScoreAlignmentScorer().score(session: session, analysis: analysis)
+
+            #expect(report.overallScore >= LightScoreAlignmentReport.productionTarget,
+                    "'\(evalCase.name)' light-score alignment \(report.overallScore) — expected >=0.90")
+        }
     }
 }
 
