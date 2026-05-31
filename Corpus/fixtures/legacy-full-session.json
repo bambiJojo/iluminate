@@ -1,0 +1,14 @@
+{
+  "id": "full-session",
+  "source": "real",
+  "boundaryMode": "anchored",
+  "ambiguityLevel": "unspecified",
+  "duration": 60.0,
+  "segments": [
+    { "text": "Welcome and make yourself comfortable as we begin today. Close your eyes, take a deep breath, and let go. Going deeper now, deeper and deeper with each breath. In this deep state, see yourself achieving your goals. When I count to five you'll wake feeling refreshed. One, two, three, four, five, eyes open, wide awake.", "timestamp": 0.0, "duration": 60.0, "confidence": 1.0 }
+  ],
+  "truth": [],
+  "expectedContentType": "hypnosis",
+  "expectedPhaseOrder": ["pre_talk", "induction", "deepening", "therapeutic_work", "emergence"],
+  "minimumPhaseCount": 3
+}

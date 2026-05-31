@@ -1,0 +1,19 @@
+{
+  "id": "timeline-induction-deepening",
+  "source": "synthetic",
+  "boundaryMode": "exact",
+  "ambiguityLevel": "low",
+  "duration": 120.0,
+  "segments": [
+    { "text": "close your eyes and take a deep breath", "timestamp": 0.0,  "duration": 20.0, "confidence": 1.0 },
+    { "text": "let your eyelids grow heavy and close them down", "timestamp": 20.0, "duration": 20.0, "confidence": 1.0 },
+    { "text": "just relax and let go completely now", "timestamp": 40.0, "duration": 20.0, "confidence": 1.0 },
+    { "text": "going deeper and deeper with every breath", "timestamp": 60.0, "duration": 20.0, "confidence": 1.0 },
+    { "text": "down down deeper into relaxation", "timestamp": 80.0, "duration": 20.0, "confidence": 1.0 },
+    { "text": "ten times more relaxed deeper and deeper", "timestamp": 100.0, "duration": 20.0, "confidence": 1.0 }
+  ],
+  "truth": [
+    { "phase": "induction", "start": 0.0,  "end": 60.0 },
+    { "phase": "deepening", "start": 60.0, "end": 120.0 }
+  ]
+}

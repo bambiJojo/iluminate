@@ -1,0 +1,14 @@
+{
+  "id": "deepening-therapy",
+  "source": "real",
+  "boundaryMode": "anchored",
+  "ambiguityLevel": "unspecified",
+  "duration": 60.0,
+  "segments": [
+    { "text": "Going deeper now, ten times more relaxed with every breath. Down, down, deeper and deeper. And now in this deep state, imagine your goal clearly, feeling confident and capable.", "timestamp": 0.0, "duration": 60.0, "confidence": 1.0 }
+  ],
+  "truth": [],
+  "expectedContentType": "hypnosis",
+  "expectedPhaseOrder": ["deepening", "therapeutic_work"],
+  "minimumPhaseCount": 1
+}

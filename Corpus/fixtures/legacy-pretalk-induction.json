@@ -1,0 +1,14 @@
+{
+  "id": "pretalk-induction",
+  "source": "real",
+  "boundaryMode": "anchored",
+  "ambiguityLevel": "unspecified",
+  "duration": 60.0,
+  "segments": [
+    { "text": "Welcome, make yourself comfortable. Today we'll explore hypnosis and how your subconscious mind works. Just relax and listen to my voice as we begin. Close your eyes and take a deep breath in.", "timestamp": 0.0, "duration": 60.0, "confidence": 1.0 }
+  ],
+  "truth": [],
+  "expectedContentType": "hypnosis",
+  "expectedPhaseOrder": ["pre_talk", "induction"],
+  "minimumPhaseCount": 1
+}
