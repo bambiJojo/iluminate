@@ -104,6 +104,10 @@ struct CorpusCaseTests {
         #expect(kase.expectedContentType == .hypnosis)
     }
 
+    // NOTE: `expectedContentType` decodes to `AnalysisResult.ContentType`
+    // (verified in IlumionateTests/AnalysisEvaluationMetrics.swift:46). Its
+    // rawValue string (e.g. "hypnosis") must match a case of that enum.
+
     @Test("Converts to AudioTranscriptionSegment array")
     func convertsSegments() throws {
         let kase = CorpusCase(
@@ -123,10 +127,10 @@ struct CorpusCaseTests {
 
 - [ ] **Step 2: Verify the Phase rawValue assumption**
 
-Run: `grep -nE "enum Phase" Ilumionate/AIAnalysisModels.swift Ilumionate/*.swift`
-Then inspect the `Phase` declaration. Confirm it is `String`-backed and `Codable` (e.g. `enum Phase: String, Codable, CaseIterable`). The keyword taxonomy and `AnalyzerConfig_default.json` reference phases by name, so this is expected.
+Run: `grep -nE "enum Phase|enum ContentType" Ilumionate/AIAnalysisModels.swift Ilumionate/*.swift`
+Then inspect the `Phase` and `AnalysisResult.ContentType` declarations. Confirm both are `String`-backed (`RawRepresentable where RawValue == String`). The keyword taxonomy and `AnalyzerConfig_default.json` reference phases by name, and the legacy corpus uses `"hypnosis"` for content type, so this is expected.
 
-Expected: `Phase` is `String`-RawRepresentable. If it is **not** `Codable`, do not edit the app enum; instead in `CorpusCase.swift` decode/encode phases through `phase.rawValue` / `HypnosisMetadata.Phase(rawValue:)` (the code below already does this), which only requires `RawRepresentable<String>`.
+Expected: both are `String`-RawRepresentable. The code below deliberately decodes/encodes both through their `rawValue` / `init?(rawValue:)` (not `Codable`), so it only requires `RawRepresentable<String>` — no app-enum edits needed regardless of their `Codable` conformance. If either is **not** `String`-RawRepresentable, stop and reconcile before continuing (it would contradict `EvaluationCase` at AnalysisEvaluationMetrics.swift:46-48).
 
 - [ ] **Step 3: Run test to verify it fails**
 
@@ -207,7 +211,8 @@ struct CorpusCase: Codable, Sendable {
     let truth: [PhaseTruthSpan]
 
     // Optional legacy expectations (used by AnalysisEvaluator path).
-    let expectedContentType: ContentAnalysisType?
+    // `AnalysisResult.ContentType` is the real enum (AnalysisEvaluationMetrics.swift:46).
+    let expectedContentType: AnalysisResult.ContentType?
     let expectedPhaseOrder: [HypnosisMetadata.Phase]?
     let minimumPhaseCount: Int?
 
@@ -224,7 +229,7 @@ struct CorpusCase: Codable, Sendable {
         duration: TimeInterval,
         segments: [CorpusSegment],
         truth: [PhaseTruthSpan],
-        expectedContentType: ContentAnalysisType? = nil,
+        expectedContentType: AnalysisResult.ContentType? = nil,
         expectedPhaseOrder: [HypnosisMetadata.Phase]? = nil,
         minimumPhaseCount: Int? = nil
     ) {
@@ -249,7 +254,11 @@ struct CorpusCase: Codable, Sendable {
         duration = try c.decode(TimeInterval.self, forKey: .duration)
         segments = try c.decodeIfPresent([CorpusSegment].self, forKey: .segments) ?? []
         truth = try c.decodeIfPresent([PhaseTruthSpan].self, forKey: .truth) ?? []
-        expectedContentType = try c.decodeIfPresent(ContentAnalysisType.self, forKey: .expectedContentType)
+        if let rawType = try c.decodeIfPresent(String.self, forKey: .expectedContentType) {
+            expectedContentType = AnalysisResult.ContentType(rawValue: rawType)
+        } else {
+            expectedContentType = nil
+        }
         if let rawOrder = try c.decodeIfPresent([String].self, forKey: .expectedPhaseOrder) {
             expectedPhaseOrder = rawOrder.compactMap { HypnosisMetadata.Phase(rawValue: $0) }
         } else {
@@ -267,7 +276,7 @@ struct CorpusCase: Codable, Sendable {
         try c.encode(duration, forKey: .duration)
         try c.encode(segments, forKey: .segments)
         try c.encode(truth, forKey: .truth)
-        try c.encodeIfPresent(expectedContentType, forKey: .expectedContentType)
+        try c.encodeIfPresent(expectedContentType?.rawValue, forKey: .expectedContentType)
         try c.encodeIfPresent(expectedPhaseOrder?.map(\.rawValue), forKey: .expectedPhaseOrder)
         try c.encodeIfPresent(minimumPhaseCount, forKey: .minimumPhaseCount)
     }
@@ -1098,20 +1107,30 @@ git commit -m "feat(eval): case score + corpus report (accuracy-by-ambiguity/sou
 **Files:**
 - Modify: `IlumionateTests/EvaluationHarnessTests.swift`
 
+**Real harness shape (verified):** this file has no `EvaluationHarnessTests` struct. It contains
+`@MainActor struct KeywordPipelineEvaluationTests` (the deterministic, CI-safe suite) and
+`@MainActor struct AIAnalysisPipelineEvaluationTests`. Add the new test to
+**`KeywordPipelineEvaluationTests`** — it already holds `private let analyzer = HypnosisPhaseAnalyzer()`,
+so reuse that property rather than redeclaring it. The analyzer returns `[PhaseSegment]` (the unqualified
+type used throughout this file, e.g. the `buildAnalysisResult(evalCase:phases:)` helper signature), not
+`HypnosisPhaseAnalyzer.PhaseSegment`.
+
 - [ ] **Step 1: Add the failing test**
 
-Add this test to `EvaluationHarnessTests` (keep the existing `keywordAnalyzerQuality` test):
+Add these two members inside `struct KeywordPipelineEvaluationTests` (it already declares `analyzer`; do
+**not** redeclare it). Add a `PhaseTimelineEvaluator` property and the test:
 
 ```swift
+    private let timelineEvaluator = PhaseTimelineEvaluator()
+
     /// Maps analyzer output to truth-span shape for the timeline evaluator.
-    private func predictedSpans(_ phases: [HypnosisPhaseAnalyzer.PhaseSegment]) -> [PhaseTruthSpan] {
+    private func predictedSpans(_ phases: [PhaseSegment]) -> [PhaseTruthSpan] {
         phases.map { PhaseTruthSpan(phase: $0.phase, start: $0.startTime, end: $0.endTime) }
     }
 
     @Test("Timeline metrics run over the file corpus and meet thresholds")
     func timelineMetricsOverCorpus() async throws {
-        let analyzer = HypnosisPhaseAnalyzer()
-        let eval = PhaseTimelineEvaluator()
+        let eval = timelineEvaluator
 
         // Only cases that carry ground-truth spans participate in timeline scoring.
         let cases = try (CorpusLoader.load(subdirectory: "fixtures")
