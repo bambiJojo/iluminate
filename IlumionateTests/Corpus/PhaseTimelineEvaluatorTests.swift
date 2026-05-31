@@ -28,4 +28,27 @@ struct PhaseTimelineEvaluatorTests {
         #expect(timeline[5] == .deepening)
         #expect(timeline[7] == .deepening)
     }
+
+    @Test("Per-second agreement grades only truth-covered seconds")
+    func perSecondAgreement() {
+        let eval = PhaseTimelineEvaluator()
+        let truth = [span(.induction, 0, 4), span(.deepening, 6, 10)] // 4,5 = gray gap
+        let predicted = [span(.induction, 0, 5), span(.deepening, 5, 10)]
+        // Graded seconds: 0,1,2,3 (induction) + 6,7,8,9 (deepening) = 8 graded.
+        //   sec 0,1,2,3 -> induction == induction (4 correct)
+        //   sec 6,7,8,9 -> deepening == deepening (4 correct)
+        // gray seconds 4,5 ignored.
+        let agreement = eval.perSecondAgreement(
+            truth: truth, predicted: predicted, duration: 10
+        )
+        #expect(agreement == 1.0)
+    }
+
+    @Test("Agreement is zero when predictions miss every graded second")
+    func agreementZero() {
+        let eval = PhaseTimelineEvaluator()
+        let truth = [span(.induction, 0, 4)]
+        let predicted = [span(.emergence, 0, 4)]
+        #expect(eval.perSecondAgreement(truth: truth, predicted: predicted, duration: 4) == 0.0)
+    }
 }

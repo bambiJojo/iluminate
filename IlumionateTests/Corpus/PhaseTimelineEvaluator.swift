@@ -25,4 +25,23 @@ struct PhaseTimelineEvaluator: Sendable {
         }
         return timeline
     }
+
+    /// Fraction of truth-covered seconds where predicted phase == truth phase.
+    /// Returns 0 when there are no graded seconds.
+    func perSecondAgreement(
+        truth: [PhaseTruthSpan],
+        predicted: [PhaseTruthSpan],
+        duration: TimeInterval
+    ) -> Double {
+        let truthTimeline = perSecondTimeline(spans: truth, duration: duration)
+        let predTimeline = perSecondTimeline(spans: predicted, duration: duration)
+        var graded = 0
+        var correct = 0
+        for i in truthTimeline.indices {
+            guard let t = truthTimeline[i] else { continue } // skip gray/uncovered
+            graded += 1
+            if i < predTimeline.count, predTimeline[i] == t { correct += 1 }
+        }
+        return graded == 0 ? 0 : Double(correct) / Double(graded)
+    }
 }
