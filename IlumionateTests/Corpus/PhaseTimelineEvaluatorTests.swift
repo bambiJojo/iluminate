@@ -51,4 +51,39 @@ struct PhaseTimelineEvaluatorTests {
         let predicted = [span(.emergence, 0, 4)]
         #expect(eval.perSecondAgreement(truth: truth, predicted: predicted, duration: 4) == 0.0)
     }
+
+    @Test("Exact-mode boundary error is distance to nearest predicted boundary")
+    func boundaryErrorExact() {
+        let eval = PhaseTimelineEvaluator()
+        let truth = [span(.induction, 0, 60), span(.deepening, 60, 120)] // boundary at 60
+        let predicted = [span(.induction, 0, 68), span(.deepening, 68, 120)] // boundary at 68
+        let result = eval.boundaryError(
+            truth: truth, predicted: predicted, boundaryMode: .exact, duration: 120
+        )
+        #expect(result.mean == 8.0)
+        #expect(result.median == 8.0)
+    }
+
+    @Test("Anchored-mode boundary inside the gray gap scores zero error")
+    func boundaryErrorAnchoredInsideGap() {
+        let eval = PhaseTimelineEvaluator()
+        // anchors: induction ends at 50, deepening starts at 70 -> gray gap [50,70]
+        let truth = [span(.induction, 0, 50), span(.deepening, 70, 120)]
+        let predicted = [span(.induction, 0, 60), span(.deepening, 60, 120)] // boundary 60 in [50,70]
+        let result = eval.boundaryError(
+            truth: truth, predicted: predicted, boundaryMode: .anchored, duration: 120
+        )
+        #expect(result.mean == 0.0)
+    }
+
+    @Test("Anchored-mode boundary spilling past the gap is penalized by overshoot")
+    func boundaryErrorAnchoredSpill() {
+        let eval = PhaseTimelineEvaluator()
+        let truth = [span(.induction, 0, 50), span(.deepening, 70, 120)] // gap [50,70]
+        let predicted = [span(.induction, 0, 80), span(.deepening, 80, 120)] // boundary 80 > 70 by 10
+        let result = eval.boundaryError(
+            truth: truth, predicted: predicted, boundaryMode: .anchored, duration: 120
+        )
+        #expect(result.mean == 10.0)
+    }
 }
