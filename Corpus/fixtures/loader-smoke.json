@@ -1,0 +1,13 @@
+{
+  "id": "loader-smoke",
+  "source": "synthetic",
+  "boundaryMode": "exact",
+  "ambiguityLevel": "low",
+  "duration": 30.0,
+  "segments": [
+    { "text": "relax now", "timestamp": 0.0, "duration": 30.0, "confidence": 1.0 }
+  ],
+  "truth": [
+    { "phase": "induction", "start": 0.0, "end": 30.0 }
+  ]
+}
