@@ -7,6 +7,38 @@
 import Foundation
 @testable import Ilumionate
 
+struct ConfusionMatrix: Sendable {
+    /// counts[truth][predicted] = seconds.
+    private(set) var counts: [HypnosisMetadata.Phase: [HypnosisMetadata.Phase: Int]] = [:]
+
+    mutating func add(truth: HypnosisMetadata.Phase, predicted: HypnosisMetadata.Phase) {
+        counts[truth, default: [:]][predicted, default: 0] += 1
+    }
+
+    func count(truth: HypnosisMetadata.Phase, predicted: HypnosisMetadata.Phase) -> Int {
+        counts[truth]?[predicted] ?? 0
+    }
+
+    struct PhaseStats: Sendable, Equatable {
+        let precision: Double
+        let recall: Double
+        let f1: Double
+    }
+
+    func stats(for phase: HypnosisMetadata.Phase) -> PhaseStats {
+        let tp = count(truth: phase, predicted: phase)
+        let fn = (counts[phase]?.values.reduce(0, +) ?? 0) - tp
+        var fp = 0
+        for (truthPhase, row) in counts where truthPhase != phase {
+            fp += row[phase] ?? 0
+        }
+        let precision = (tp + fp) == 0 ? 0 : Double(tp) / Double(tp + fp)
+        let recall = (tp + fn) == 0 ? 0 : Double(tp) / Double(tp + fn)
+        let f1 = (precision + recall) == 0 ? 0 : 2 * precision * recall / (precision + recall)
+        return PhaseStats(precision: precision, recall: recall, f1: f1)
+    }
+}
+
 struct PhaseTimelineEvaluator: Sendable {
 
     /// One phase per second over [0, duration). `nil` = not covered by any span
@@ -105,4 +137,26 @@ struct PhaseTimelineEvaluator: Sendable {
         let mid = s.count / 2
         return s.count.isMultiple(of: 2) ? (s[mid - 1] + s[mid]) / 2 : s[mid]
     }
+
+    func confusionMatrix(
+        truth: [PhaseTruthSpan],
+        predicted: [PhaseTruthSpan],
+        duration: TimeInterval
+    ) -> ConfusionMatrix {
+        let truthTimeline = perSecondTimeline(spans: truth, duration: duration)
+        let predTimeline = perSecondTimeline(spans: predicted, duration: duration)
+        var cm = ConfusionMatrix()
+        for i in truthTimeline.indices {
+            guard let t = truthTimeline[i] else { continue }
+            let predictedPhase = (i < predTimeline.count ? predTimeline[i] : nil)
+                ?? Self.unpredictedSentinel
+            cm.add(truth: t, predicted: predictedPhase)
+        }
+        return cm
+    }
+
+    /// Records a graded second that had no prediction as a guaranteed mismatch
+    /// against any real truth phase, keeping recall honest. `.transitional` is
+    /// not used as a target label in corpus truth data.
+    private static let unpredictedSentinel: HypnosisMetadata.Phase = .transitional
 }

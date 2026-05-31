@@ -86,4 +86,27 @@ struct PhaseTimelineEvaluatorTests {
         )
         #expect(result.mean == 10.0)
     }
+
+    @Test("Confusion matrix counts truth->predicted over graded seconds")
+    func confusionMatrix() {
+        let eval = PhaseTimelineEvaluator()
+        let truth = [span(.induction, 0, 4)]                  // 4 graded secs, all induction
+        let predicted = [span(.induction, 0, 2), span(.deepening, 2, 4)] // 2 ind, 2 deep
+        let cm = eval.confusionMatrix(truth: truth, predicted: predicted, duration: 4)
+        #expect(cm.count(truth: .induction, predicted: .induction) == 2)
+        #expect(cm.count(truth: .induction, predicted: .deepening) == 2)
+    }
+
+    @Test("Precision/recall/F1 derive from the confusion matrix")
+    func precisionRecallF1() {
+        let eval = PhaseTimelineEvaluator()
+        let truth = [span(.induction, 0, 4), span(.deepening, 4, 6)]
+        let predicted = [span(.induction, 0, 3), span(.deepening, 3, 6)]
+        let cm = eval.confusionMatrix(truth: truth, predicted: predicted, duration: 6)
+        let stats = cm.stats(for: .induction)
+        // induction: TP=3 (secs0-2), FN=1 (sec3 predicted deepening), FP=0
+        #expect(stats.precision == 1.0)
+        #expect(abs(stats.recall - 0.75) < 0.0001)
+        #expect(abs(stats.f1 - (2 * 1.0 * 0.75 / 1.75)) < 0.0001)
+    }
 }
