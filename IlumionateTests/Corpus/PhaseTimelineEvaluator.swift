@@ -159,4 +159,46 @@ struct PhaseTimelineEvaluator: Sendable {
     /// against any real truth phase, keeping recall honest. `.transitional` is
     /// not used as a target label in corpus truth data.
     private static let unpredictedSentinel: HypnosisMetadata.Phase = .transitional
+
+    func score(case kase: CorpusCase, predicted: [PhaseTruthSpan]) -> PhaseTimelineScore {
+        PhaseTimelineScore(
+            caseID: kase.id,
+            source: kase.source,
+            ambiguityLevel: kase.ambiguityLevel,
+            agreement: perSecondAgreement(truth: kase.truth, predicted: predicted, duration: kase.duration),
+            boundaryError: boundaryError(truth: kase.truth, predicted: predicted, boundaryMode: kase.boundaryMode, duration: kase.duration),
+            confusion: confusionMatrix(truth: kase.truth, predicted: predicted, duration: kase.duration)
+        )
+    }
+
+    func report(scores: [PhaseTimelineScore]) -> CorpusTimelineReport {
+        func mean(_ xs: [Double]) -> Double { xs.isEmpty ? 0 : xs.reduce(0, +) / Double(xs.count) }
+        func group<K: Hashable>(_ key: (PhaseTimelineScore) -> K) -> [K: Double] {
+            Dictionary(grouping: scores, by: key).mapValues { mean($0.map(\.agreement)) }
+        }
+        return CorpusTimelineReport(
+            overallAgreement: mean(scores.map(\.agreement)),
+            meanBoundaryError: mean(scores.map(\.boundaryError.mean)),
+            agreementByAmbiguity: group(\.ambiguityLevel),
+            agreementBySource: group(\.source),
+            perCase: scores
+        )
+    }
+}
+
+struct PhaseTimelineScore: Sendable {
+    let caseID: String
+    let source: CorpusSource
+    let ambiguityLevel: CorpusAmbiguityLevel
+    let agreement: Double
+    let boundaryError: PhaseTimelineEvaluator.BoundaryError
+    let confusion: ConfusionMatrix
+}
+
+struct CorpusTimelineReport: Sendable {
+    let overallAgreement: Double
+    let meanBoundaryError: Double
+    let agreementByAmbiguity: [CorpusAmbiguityLevel: Double]
+    let agreementBySource: [CorpusSource: Double]
+    let perCase: [PhaseTimelineScore]
 }

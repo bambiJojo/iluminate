@@ -109,4 +109,43 @@ struct PhaseTimelineEvaluatorTests {
         #expect(abs(stats.recall - 0.75) < 0.0001)
         #expect(abs(stats.f1 - (2 * 1.0 * 0.75 / 1.75)) < 0.0001)
     }
+
+    @Test("Scores one case end to end")
+    func scoresCase() {
+        let eval = PhaseTimelineEvaluator()
+        let kase = CorpusCase(
+            id: "c1", source: .synthetic, boundaryMode: .exact,
+            ambiguityLevel: .high, duration: 120,
+            segments: [],
+            truth: [span(.induction, 0, 60), span(.deepening, 60, 120)]
+        )
+        let predicted = [span(.induction, 0, 60), span(.deepening, 60, 120)]
+        let score = eval.score(case: kase, predicted: predicted)
+        #expect(score.caseID == "c1")
+        #expect(score.ambiguityLevel == .high)
+        #expect(score.agreement == 1.0)
+        #expect(score.boundaryError.mean == 0.0)
+    }
+
+    @Test("Aggregates a corpus report grouped by ambiguity")
+    func aggregatesReport() {
+        let eval = PhaseTimelineEvaluator()
+        let low = CorpusCase(
+            id: "lo", source: .synthetic, boundaryMode: .exact, ambiguityLevel: .low,
+            duration: 10, segments: [], truth: [span(.induction, 0, 10)]
+        )
+        let high = CorpusCase(
+            id: "hi", source: .synthetic, boundaryMode: .exact, ambiguityLevel: .high,
+            duration: 10, segments: [], truth: [span(.induction, 0, 10)]
+        )
+        let perfect = [span(.induction, 0, 10)]
+        let wrong = [span(.emergence, 0, 10)]
+        let report = eval.report(scores: [
+            eval.score(case: low, predicted: perfect),
+            eval.score(case: high, predicted: wrong)
+        ])
+        #expect(abs(report.overallAgreement - 0.5) < 0.0001)
+        #expect(report.agreementByAmbiguity[.low] == 1.0)
+        #expect(report.agreementByAmbiguity[.high] == 0.0)
+    }
 }
