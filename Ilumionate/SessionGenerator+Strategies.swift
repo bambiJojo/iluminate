@@ -17,85 +17,6 @@
 
 import Foundation
 
-// MARK: - SessionArc
-
-/// Converts a session duration into absolute-time phase boundaries with minimum-duration guards.
-///
-/// Pure percentage waypoints break at the extremes:
-/// - A 5-min session with `duration * 0.05` gives only 15 s of beta entrance.
-/// - A 2-hour session with `duration * 0.88` starts emergence too late.
-///
-/// `SessionArc` applies percentage targets *and* floors so every phase is long enough
-/// to produce its intended neurological effect. The hard guarantee is:
-///   **emergence ≥ `minEmergenceDuration` seconds** (60 s on any session length).
-struct SessionArc: Sendable {
-
-    // MARK: Boundaries (absolute seconds from start)
-
-    /// End of the beta-entrance ramp; beginning of alpha descent.
-    let betaEntranceEnd: TimeInterval
-    /// End of alpha descent; beginning of theta induction.
-    let alphaDescentEnd: TimeInterval
-    /// End of theta induction; beginning of deep-theta hold.
-    let thetaInductionEnd: TimeInterval
-    /// End of deep-theta hold; beginning of suggestions layer.
-    let deepHoldEnd: TimeInterval
-    /// Start of emergence ramp; end of suggestions layer.
-    let emergenceStart: TimeInterval
-    /// Total session duration.
-    let duration: TimeInterval
-
-    /// Guaranteed minimum for the emergence phase (seconds).
-    static let minEmergenceDuration: TimeInterval = 60.0
-
-    // MARK: Init
-
-    init(duration: TimeInterval) {
-        let d = max(duration, 120.0) // guard against very short edge cases
-        self.duration = d
-
-        // Emergence: percentage target, clamped so ≥60 s is always reserved at the end.
-        let pctEmergence  = d * 0.88
-        let maxEmergence  = d - SessionArc.minEmergenceDuration
-        let halfwayPoint  = d * 0.50 // never start emergence before the halfway mark
-        emergenceStart = max(halfwayPoint, min(maxEmergence, pctEmergence))
-
-        // Time available for beta + alpha + theta phases before emergence.
-        let available = emergenceStart
-
-        // Scale minimum phase durations down if the session is too short to fit
-        // all hard-minimum phases (30+45+45 = 120 s) before the emergence window.
-        // A scale of 1.0 means the minimums are not binding; <1.0 compresses them.
-        let rawMinTotal = 30.0 + 45.0 + 45.0 // 120 s combined
-        let scale = min(1.0, (available * 0.90) / rawMinTotal)
-        let minBeta  = 30.0 * scale
-        let minAlpha = 45.0 * scale
-        let minTheta = 45.0 * scale
-
-        // Beta entrance
-        betaEntranceEnd = max(minBeta, min(d * 0.05, available * 0.10))
-
-        // Alpha descent
-        alphaDescentEnd = max(betaEntranceEnd + minAlpha, min(d * 0.20, available * 0.25))
-
-        // Theta induction — clamped to stay strictly before emergence.
-        thetaInductionEnd = min(
-            max(alphaDescentEnd + minTheta, min(d * 0.35, available * 0.40)),
-            emergenceStart - 1.0
-        )
-
-        // Deep hold: fills up to the suggestions layer (last 15% before emergence),
-        // clamped to stay strictly before emergence.
-        deepHoldEnd = min(
-            max(thetaInductionEnd, emergenceStart * 0.85),
-            emergenceStart - 1.0
-        )
-    }
-
-    /// Duration of the guaranteed emergence window (always ≥ `minEmergenceDuration`).
-    var emergenceDuration: TimeInterval { duration - emergenceStart }
-}
-
 extension SessionGenerator {
 
     // MARK: - Hypnosis
@@ -134,46 +55,86 @@ extension SessionGenerator {
     func generateHypnosisFromPhases(
         phases: [PhaseSegment],
         duration: TimeInterval,
-        config: GenerationConfig
+        config: GenerationConfig,
+        includeEmergence: Bool = true
     ) -> [LightMoment] {
         var moments: [LightMoment] = []
         let mul = config.intensityMultiplier
+        let sortedPhases = phases
+            .filter { $0.endTime > 0 && $0.startTime < duration }
+            .sorted { $0.startTime < $1.startTime }
 
         // Beta entrance
         moments.append(moment(time: 0, freq: 18.0, amp: 0.60 * mul, waveform: .sine, colorTemp: 5500))
 
-        for seg in phases {
-            let baseFreq   = targetFrequencyForPhase(seg.phase, config: config)
-            let baseAmp    = intensityForPhase(seg.phase) * mul
+        for seg in sortedPhases {
+            let startTime = clamp(seg.startTime, lower: 0, upper: duration)
+            let endTime = clamp(seg.endTime, lower: startTime, upper: duration)
+            let segDuration = max(0, endTime - startTime)
+            guard segDuration > 0 else { continue }
+
+            let baseFreq = targetFrequencyForPhase(
+                seg.phase,
+                tranceDepth: seg.tranceDepthEstimate,
+                segmentProgress: 0.0,
+                config: config
+            )
+            let baseAmp    = phaseIntensity(
+                phase: seg.phase,
+                tranceDepth: seg.tranceDepthEstimate,
+                confidence: seg.confidenceLevel
+            ) * mul
             let colorTemp  = colorTemperatureForPhase(seg.phase)
             let waveform   = waveformTypeForPhase(seg.phase)
             let useBilat   = bilateralForPhase(seg.phase)
+            let rampDuration = min(max(segDuration * 0.12, 6.0), 30.0)
 
             moments.append(moment(
-                time: seg.startTime,
-                freq: baseFreq,
-                amp: baseAmp,
-                waveform: waveform,
-                colorTemp: colorTemp,
+                time: startTime, freq: baseFreq, amp: baseAmp,
+                waveform: waveform, ramp: rampDuration, colorTemp: colorTemp,
                 bilateral: useBilat ? true : nil,
                 bilateralTransition: useBilat ? 4.0 : nil
             ))
 
-            let segDuration = seg.endTime - seg.startTime
-            if segDuration > 30 {
-                let midTime = (seg.startTime + seg.endTime) / 2.0
+            for progress in contourProgressPoints(for: segDuration) {
+                let pointTime = startTime + segDuration * progress
+                let pointFreq = targetFrequencyForPhase(
+                    seg.phase,
+                    tranceDepth: seg.tranceDepthEstimate,
+                    segmentProgress: progress,
+                    config: config
+                )
                 moments.append(moment(
-                    time: midTime,
-                    freq: baseFreq,
-                    amp: baseAmp * 0.95,
+                    time: pointTime, freq: pointFreq,
+                    amp: baseAmp * intensityContour(for: seg.phase, progress: progress),
                     waveform: segDuration > 120 ? .noiseModulatedSine : waveform,
+                    ramp: rampDuration, colorTemp: colorTemp,
+                    bilateral: useBilat ? true : nil
+                ))
+            }
+
+            if segDuration > 20 {
+                let holdProgress = 0.92
+                moments.append(moment(
+                    time: startTime + segDuration * holdProgress,
+                    freq: targetFrequencyForPhase(
+                        seg.phase,
+                        tranceDepth: seg.tranceDepthEstimate,
+                        segmentProgress: holdProgress,
+                        config: config
+                    ),
+                    amp: baseAmp * intensityContour(for: seg.phase, progress: holdProgress),
+                    waveform: waveform,
+                    ramp: min(max(segDuration * 0.08, 4.0), 18.0),
                     colorTemp: colorTemp,
                     bilateral: useBilat ? true : nil
                 ))
             }
         }
 
-        ensureEmergence(moments: &moments, duration: duration, config: config)
+        if includeEmergence {
+            ensureEmergence(moments: &moments, duration: duration, config: config)
+        }
         smoothTransitions(moments: &moments, smoothness: config.transitionSmoothness)
         return moments.sorted { $0.time < $1.time }
     }
@@ -399,11 +360,10 @@ extension SessionGenerator {
     ) -> [LightMoment] {
         var moments: [LightMoment] = []
         let mul = config.intensityMultiplier
-        let targetFreq = clamp(
-            analysis.suggestedFrequencyRange.lowerBound,
-            lower: config.minFrequency,
-            upper: config.maxFrequency
-        )
+        let suggestedRange = analysis.suggestedFrequencyRange
+        let midpoint = (suggestedRange.lowerBound + suggestedRange.upperBound) / 2.0
+        let preferredCenter = suggestedRange.contains(7.83) ? 7.83 : midpoint
+        let targetFreq = clamp(preferredCenter, lower: config.minFrequency, upper: config.maxFrequency)
         let baseAmp = analysis.suggestedIntensity * mul
 
         // Music: follow energy without deep theta descent
@@ -505,9 +465,13 @@ extension SessionGenerator {
         switch phase {
         case .preTalk:      fraction = 1.00   // top of beta band
         case .induction:    fraction = 0.75   // upper alpha
-        case .deepening:    fraction = 0.40   // mid alpha-theta
+        case .fractionation:fraction = 0.55   // light re-alert + re-drop cycling
+        case .deepening:    fraction = 0.35   // mid alpha-theta
+        case .confusion:    fraction = 0.18   // low theta, destabilizing but not deepest
         case .therapy:      fraction = 0.10   // deep theta floor
         case .suggestions:  fraction = 0.25   // lower theta (active commands need slight uplift)
+        case .eroticSuggestions: fraction = 0.35 // slightly lifted low-theta for rhythmic drive
+        case .brainwashing: fraction = 0.15   // deep repetitive programming
         case .conditioning: fraction = 0.40   // mid theta
         case .emergence:    fraction = 0.60   // alpha-SMR
         case .transitional: fraction = 0.50   // midpoint
@@ -515,6 +479,100 @@ extension SessionGenerator {
 
         let target = lo + bandWidth * fraction
         return clamp(target, lower: config.minFrequency, upper: config.maxFrequency)
+    }
+
+    /// Phase target adjusted by the analyzer's estimated trance depth and
+    /// by the listener's position inside the segment. This lets the light map
+    /// follow the creator's arc inside a phase rather than holding one flat
+    /// value until the next boundary.
+    func targetFrequencyForPhase(
+        _ phase: HypnosisMetadata.Phase,
+        tranceDepth: Double,
+        segmentProgress: Double,
+        config: GenerationConfig
+    ) -> Double {
+        let range = frequencyRangeForPhase(phase)
+        let anchor = targetFrequencyForPhase(phase, config: config)
+        let expectedDepth = expectedDepthForPhase(phase)
+        let depthShift = (clamp(tranceDepth, lower: 0, upper: 1) - expectedDepth)
+            * (range.upperBound - range.lowerBound)
+            * 0.45
+        let contourShift: Double
+
+        switch phase {
+        case .induction:
+            contourShift = -0.65 * segmentProgress
+        case .deepening:
+            contourShift = -0.85 * segmentProgress
+        case .therapy, .suggestions, .conditioning:
+            contourShift = sin(segmentProgress * .pi * 2.0) * 0.22
+        case .fractionation:
+            contourShift = sin(segmentProgress * .pi * 3.0) * 0.75
+        case .confusion:
+            contourShift = sin(segmentProgress * .pi * 5.0) * 0.45
+        case .emergence:
+            contourShift = 1.25 * segmentProgress
+        case .eroticSuggestions, .brainwashing:
+            contourShift = -0.35 * segmentProgress
+        case .preTalk, .transitional:
+            contourShift = 0
+        }
+
+        return clamp(
+            anchor - depthShift + contourShift,
+            lower: max(config.minFrequency, range.lowerBound),
+            upper: min(config.maxFrequency, range.upperBound)
+        )
+    }
+
+    func phaseIntensity(
+        phase: HypnosisMetadata.Phase,
+        tranceDepth: Double,
+        confidence: HypnosisMetadata.ConfidenceLevel
+    ) -> Double {
+        let base = intensityForPhase(phase)
+        let confidenceScale = 0.82 + confidence.numericValue * 0.18
+        let depthDimming = max(0, clamp(tranceDepth, lower: 0, upper: 1) - 0.55) * 0.12
+        let emergenceLift = phase == .emergence ? 0.04 : 0
+        return clamp(base * confidenceScale - depthDimming + emergenceLift, lower: 0.05, upper: 1.0)
+    }
+
+    func contourProgressPoints(for duration: TimeInterval) -> [Double] {
+        if duration >= 120 { return [0.25, 0.50, 0.75] }
+        if duration >= 45 { return [0.33, 0.66] }
+        if duration >= 20 { return [0.50] }
+        return []
+    }
+
+    func intensityContour(for phase: HypnosisMetadata.Phase, progress: Double) -> Double {
+        switch phase {
+        case .induction, .deepening:
+            return 1.0 - progress * 0.08
+        case .therapy, .suggestions, .conditioning, .brainwashing:
+            return 0.96 + sin(progress * .pi * 2.0) * 0.04
+        case .fractionation, .confusion:
+            return 0.95 + sin(progress * .pi * 3.0) * 0.08
+        case .emergence:
+            return 0.95 + progress * 0.10
+        default:
+            return 1.0
+        }
+    }
+
+    func expectedDepthForPhase(_ phase: HypnosisMetadata.Phase) -> Double {
+        switch phase {
+        case .preTalk: return 0.10
+        case .induction: return 0.30
+        case .fractionation: return 0.45
+        case .deepening: return 0.58
+        case .confusion: return 0.62
+        case .therapy, .suggestions: return 0.72
+        case .eroticSuggestions: return 0.78
+        case .brainwashing: return 0.82
+        case .conditioning: return 0.66
+        case .emergence: return 0.20
+        case .transitional: return 0.45
+        }
     }
 
     /// Returns the breath oscillation rate for a given session duration.
@@ -566,9 +624,13 @@ extension SessionGenerator {
         switch phase {
         case .preTalk:      return 12.0...18.0
         case .induction:    return 8.0...12.0
+        case .fractionation:return 6.5...9.5
         case .deepening:    return 5.0...8.0
+        case .confusion:    return 4.5...6.5
         case .therapy:      return 4.5...6.5
         case .suggestions:  return 5.0...7.0
+        case .eroticSuggestions: return 3.5...5.5
+        case .brainwashing: return 4.0...5.8
         case .conditioning: return 5.5...7.5
         case .emergence:    return 8.0...14.0
         case .transitional: return 6.0...10.0
@@ -579,9 +641,13 @@ extension SessionGenerator {
         switch phase {
         case .preTalk:     return 0.55
         case .induction:   return 0.45
+        case .fractionation: return 0.41
         case .deepening:   return 0.38
+        case .confusion:   return 0.35
         case .therapy:     return 0.32
         case .suggestions: return 0.34
+        case .eroticSuggestions: return 0.33
+        case .brainwashing: return 0.31
         case .conditioning: return 0.36
         case .emergence:   return 0.44
         case .transitional: return 0.40
@@ -592,9 +658,13 @@ extension SessionGenerator {
         switch phase {
         case .preTalk:     return 5000
         case .induction:   return 4000
+        case .fractionation: return 3400
         case .deepening:   return 3000
+        case .confusion:   return 2550
         case .therapy:     return 2400
         case .suggestions: return 2600
+        case .eroticSuggestions: return 2250
+        case .brainwashing: return 2100
         case .conditioning: return 2800
         case .emergence:   return 4500
         case .transitional: return 3500
@@ -605,9 +675,13 @@ extension SessionGenerator {
         switch phase {
         case .preTalk:      return .sine
         case .induction:    return .sine
+        case .fractionation:return .softPulse
         case .deepening:    return .softPulse
+        case .confusion:    return .noiseModulatedSine
         case .therapy:      return .noiseModulatedSine
         case .suggestions:  return .softPulse
+        case .eroticSuggestions: return .softPulse
+        case .brainwashing: return .noiseModulatedSine
         case .conditioning: return .softPulse
         case .emergence:    return .sine
         case .transitional: return .sine
@@ -616,7 +690,9 @@ extension SessionGenerator {
 
     func bilateralForPhase(_ phase: HypnosisMetadata.Phase) -> Bool {
         switch phase {
-        case .deepening, .therapy, .suggestions, .conditioning: return true
+        case .fractionation, .deepening, .confusion, .therapy, .suggestions,
+             .eroticSuggestions, .brainwashing, .conditioning:
+            return true
         default: return false
         }
     }
@@ -711,8 +787,14 @@ extension SessionGenerator {
     ) -> [LightMoment] {
         var moments: [LightMoment] = []
         let mul = config.intensityMultiplier
+        // Lock to the audio's preferred center, not the range floor. A broad
+        // band (e.g. 1–40 Hz) should entrain near the Schumann resonance (7.83 Hz)
+        // when in range, otherwise the band midpoint — mirroring generateMusicSession.
+        let suggestedRange = analysis.suggestedFrequencyRange
+        let midpoint = (suggestedRange.lowerBound + suggestedRange.upperBound) / 2.0
+        let preferredCenter = suggestedRange.contains(7.83) ? 7.83 : midpoint
         let targetFreq = clamp(
-            analysis.suggestedFrequencyRange.lowerBound,
+            preferredCenter,
             lower: config.minFrequency,
             upper: config.maxFrequency
         )
@@ -816,7 +898,13 @@ extension SessionGenerator {
     ) -> [LightMoment] {
         var moments: [LightMoment]
         if let phases = analysis.hypnosisMetadata?.phases, !phases.isEmpty {
-            moments = generateHypnosisFromPhases(phases: phases, duration: duration, config: config)
+            let nonEmergencePhases = phases.filter { $0.phase != .emergence }
+            moments = generateHypnosisFromPhases(
+                phases: nonEmergencePhases,
+                duration: duration,
+                config: config,
+                includeEmergence: false
+            )
         } else {
             moments = generateSleepFromDuration(duration: duration, config: config)
         }
@@ -829,9 +917,6 @@ extension SessionGenerator {
         } else {
             applyBreathOscillation(&moments, duration: duration)
         }
-
-        // Override any emergence — sleep sessions must NOT wake the listener
-        moments.removeAll { $0.frequency > 10.0 && $0.time > duration * 0.5 }
 
         return moments
     }
