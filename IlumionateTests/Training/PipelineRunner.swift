@@ -40,13 +40,20 @@ struct PipelineRunner {
 
     let corpusDirectory: URL
     let outputDirectory: URL
+    /// When `false` (the default, used by automated tests), the best config is
+    /// written only to `outputDirectory`. Manual training runs pass `true` to
+    /// publish the result into the app's Documents config so the app picks it up.
+    /// Tests must NOT publish, or they poison `AnalyzerConfigLoader.load()`.
+    let publishBestConfigToDocuments: Bool
 
     init(
         corpusDirectory: URL = URL.documentsDirectory.appending(path: "TrainingCorpus"),
-        outputDirectory: URL = URL.documentsDirectory.appending(path: "TrainingOutput")
+        outputDirectory: URL = URL.documentsDirectory.appending(path: "TrainingOutput"),
+        publishBestConfigToDocuments: Bool = false
     ) {
         self.corpusDirectory = corpusDirectory
         self.outputDirectory = outputDirectory
+        self.publishBestConfigToDocuments = publishBestConfigToDocuments
     }
 
     /// Loads the labeled corpus from disk, preferring the analyzer dataset export.
@@ -99,7 +106,7 @@ struct PipelineRunner {
         bestConfig: AnalyzerConfig
     ) -> [EvaluationReport.FileScore] {
         let fitnessEvaluator = FitnessEvaluator()
-        let keywordAnalyzer = HypnosisPhaseAnalyzer(config: bestConfig.keywordPipeline)
+        let keywordAnalyzer = HypnosisPhaseAnalyzer(config: bestConfig)
         let sessionGenerator = SessionGenerator(config: bestConfig.sessionGeneration)
 
         return corpus.map { labeledFile in
@@ -158,7 +165,9 @@ struct PipelineRunner {
             print("📊 Wrote report: \(url.lastPathComponent)")
         }
 
-        try? AnalyzerConfigLoader.save(config)
+        if publishBestConfigToDocuments {
+            try? AnalyzerConfigLoader.save(config)
+        }
         print("✅ Pipeline complete. Best fitness: \(config.fitness)")
     }
 }
