@@ -828,6 +828,7 @@ struct WhisperKitUpgradeTests {
         // Build one instance of each current case and verify descriptions are non-empty.
         let errors: [AnalyzerError] = [
             .whisperKitNotInitialized,
+            .whisperKitInitializationFailed("offline"),
             .transcriptionFailed(NSError(domain: "test", code: 0)),
             .audioFileInvalid,
             .noAudioData
@@ -838,7 +839,7 @@ struct WhisperKitUpgradeTests {
         }
         // If audioFileTooLarge were re-added, this array would be missing a case
         // and a switch exhaustiveness check would fail at compile time.
-        #expect(errors.count == 4)
+        #expect(errors.count == 5)
     }
 
     /// Boundary: a file exactly at the old 50 MB limit should be representable
@@ -852,6 +853,63 @@ struct WhisperKitUpgradeTests {
         #expect(boundaryFile.fileSize == 52_428_800)
         // fileSizeFormatted should not be empty
         #expect(!boundaryFile.fileSizeFormatted.isEmpty)
+    }
+}
+
+struct WhisperModelBootstrapTests {
+    @Test func sharedRepositoryURLUsesSharedApplicationSupportPath() {
+        let homeDirectory = URL(filePath: "/Users/tester", directoryHint: .isDirectory)
+        let downloadBase = WhisperModelBootstrap.sharedDownloadBaseURL(homeDirectory: homeDirectory)
+        let repositoryURL = WhisperModelBootstrap.sharedRepositoryURL(downloadBase: downloadBase)
+
+        // Use the unencoded path: `path()` percent-encodes the space in
+        // "Application Support". Directory URLs carry a trailing slash.
+        #expect(downloadBase.path(percentEncoded: false)
+            == "/Users/tester/Library/Application Support/Ilumionate/WhisperKit/")
+        #expect(repositoryURL.path(percentEncoded: false)
+            == "/Users/tester/Library/Application Support/Ilumionate/WhisperKit/models/argmaxinc/whisperkit-coreml/")
+    }
+
+    @Test func preferredInstallationFallsBackToBaseModelWhenPresent() throws {
+        let repositoryURL = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: repositoryURL, withIntermediateDirectories: true, attributes: nil)
+        try FileManager.default.createDirectory(
+            at: repositoryURL.appending(path: "openai_whisper-small", directoryHint: .isDirectory),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        try FileManager.default.createDirectory(
+            at: repositoryURL.appending(path: "openai_whisper-base", directoryHint: .isDirectory),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        let installation = WhisperModelBootstrap.preferredInstallation(
+            preferredVariant: "base",
+            repositoryURL: repositoryURL
+        )
+
+        #expect(installation?.modelName == "openai_whisper-base")
+    }
+
+    @Test func actionableFailureMessageMentionsConnectivityAndSharedCache() {
+        let repositoryURL = URL(filePath: "/tmp/whisper-cache", directoryHint: .isDirectory)
+        let error = NSError(
+            domain: NSURLErrorDomain,
+            code: NSURLErrorCannotFindHost,
+            userInfo: [NSLocalizedDescriptionKey: "A server with the specified hostname could not be found."]
+        )
+
+        let message = WhisperModelBootstrap.actionableFailureMessage(
+            underlyingError: error,
+            preferredVariant: "base",
+            repositoryURL: repositoryURL
+        )
+
+        #expect(message.contains("/tmp/whisper-cache"))
+        #expect(message.contains("Connect to the internet once and retry"))
+        #expect(message.contains("argmaxinc/whisperkit-coreml"))
     }
 }
 

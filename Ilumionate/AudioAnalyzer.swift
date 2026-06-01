@@ -6,9 +6,11 @@
 //
 
 import Foundation
+import os
 import AVFoundation
 import Observation
 import WhisperKit
+import Darwin
 
 // MARK: - Model State
 
@@ -17,6 +19,143 @@ enum ModelState {
     case loading
     case loaded
     case failed(Error)
+}
+
+struct WhisperModelInstallation: Sendable, Equatable {
+    let modelName: String
+    let folderURL: URL
+}
+
+enum WhisperModelBootstrap {
+    nonisolated static let modelRepositoryOwner = "argmaxinc"
+    nonisolated static let modelRepositoryName = "whisperkit-coreml"
+    nonisolated static let modelRepositoryID = "\(modelRepositoryOwner)/\(modelRepositoryName)"
+    nonisolated static let preferredModelVariant = "base"
+
+    nonisolated static func actualUserHomeDirectory() -> URL {
+        guard let homeCString = getpwuid(getuid())?.pointee.pw_dir else {
+            return URL(filePath: NSHomeDirectory(), directoryHint: .isDirectory)
+        }
+        return URL(filePath: String(cString: homeCString), directoryHint: .isDirectory)
+    }
+
+    nonisolated static func sharedDownloadBaseURL(homeDirectory: URL? = nil) -> URL {
+        // An explicit home directory always wins (deterministic for tests and for
+        // callers that compute a shared location), regardless of platform.
+        if let homeDirectory {
+            return homeDirectory
+                .appending(path: "Library", directoryHint: .isDirectory)
+                .appending(path: "Application Support", directoryHint: .isDirectory)
+                .appending(path: "Ilumionate", directoryHint: .isDirectory)
+                .appending(path: "WhisperKit", directoryHint: .isDirectory)
+        }
+
+        #if os(macOS)
+        let root = actualUserHomeDirectory()
+        return root
+            .appending(path: "Library", directoryHint: .isDirectory)
+            .appending(path: "Application Support", directoryHint: .isDirectory)
+            .appending(path: "Ilumionate", directoryHint: .isDirectory)
+            .appending(path: "WhisperKit", directoryHint: .isDirectory)
+        #else
+        let appSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first!
+        return appSupport
+            .appending(path: "Ilumionate", directoryHint: .isDirectory)
+            .appending(path: "WhisperKit", directoryHint: .isDirectory)
+        #endif
+    }
+
+    nonisolated static func sharedRepositoryURL(downloadBase: URL = sharedDownloadBaseURL()) -> URL {
+        downloadBase
+            .appending(path: "models", directoryHint: .isDirectory)
+            .appending(path: modelRepositoryOwner, directoryHint: .isDirectory)
+            .appending(path: modelRepositoryName, directoryHint: .isDirectory)
+    }
+
+    nonisolated static func installedModels(
+        in repositoryURL: URL = sharedRepositoryURL(),
+        fileManager: FileManager = .default
+    ) -> [WhisperModelInstallation] {
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: repositoryURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return contents.compactMap { url in
+            guard let isDirectory = try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory,
+                  isDirectory == true else {
+                return nil
+            }
+            return WhisperModelInstallation(modelName: url.lastPathComponent, folderURL: url)
+        }
+        .sorted { $0.modelName < $1.modelName }
+    }
+
+    nonisolated static func preferredInstallation(
+        preferredVariant: String = preferredModelVariant,
+        repositoryURL: URL = sharedRepositoryURL(),
+        fileManager: FileManager = .default
+    ) -> WhisperModelInstallation? {
+        let installations = installedModels(in: repositoryURL, fileManager: fileManager)
+        guard !installations.isEmpty else { return nil }
+
+        let exactNames = [
+            "openai_whisper-\(preferredVariant)",
+            preferredVariant
+        ]
+
+        if let exactMatch = installations.first(where: { exactNames.contains($0.modelName) }) {
+            return exactMatch
+        }
+
+        if let partialMatch = installations.first(where: {
+            $0.modelName.localizedCaseInsensitiveContains("openai_whisper-\(preferredVariant)")
+        }) {
+            return partialMatch
+        }
+
+        return installations.first
+    }
+
+    nonisolated static func isConnectivityFailure(_ description: String) -> Bool {
+        let normalized = description.lowercased()
+        return normalized.contains("hostname could not be found")
+            || normalized.contains("offline")
+            || normalized.contains("internet connection")
+            || normalized.contains("network connection was lost")
+            || normalized.contains("could not connect to the server")
+            || normalized.contains("not connected to internet")
+    }
+
+    nonisolated static func actionableFailureMessage(
+        underlyingError: Error,
+        preferredVariant: String = preferredModelVariant,
+        repositoryURL: URL = sharedRepositoryURL()
+    ) -> String {
+        let detail = underlyingError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let localMessage = "No local WhisperKit model is installed at \(repositoryURL.path)."
+
+        if isConnectivityFailure(detail) {
+            return """
+            \(localMessage)
+            Automatic download of the \"\(preferredVariant)\" model from \(modelRepositoryID) failed because the app could not reach Hugging Face.
+            Connect to the internet once and retry, or place a compatible WhisperKit model in that shared cache directory.
+            Underlying error: \(detail)
+            """
+        }
+
+        return """
+        \(localMessage)
+        Automatic download of the \"\(preferredVariant)\" model from \(modelRepositoryID) failed.
+        Underlying error: \(detail)
+        """
+    }
 }
 
 // MARK: - Audio Analyzer
@@ -48,6 +187,14 @@ class AudioAnalyzer: Sendable {
 
     // MARK: - Transcription
 
+    /// Preloads the WhisperKit model so callers can fail fast with a real
+    /// initialization error before beginning a long workflow.
+    func prepareModel() async throws {
+        statusMessage = "Loading ML Models (may download)..."
+        try await whisperManager.ensureReady()
+        statusMessage = await whisperManager.getStatus()
+    }
+
     /// Transcribe an audio file using modern async/await patterns
     func transcribe(audioFile: AudioFile) async throws -> AudioTranscriptionResult {
         // Cancel any existing transcription
@@ -58,7 +205,7 @@ class AudioAnalyzer: Sendable {
         statusMessage = "Loading ML Models (may download)..."
 
         // Initialize WhisperKit with priority for better UX
-        await whisperManager.initializeWithPriority()
+        try await whisperManager.initializeWithPriority()
 
         statusMessage = "Preparing audio..."
 
@@ -89,7 +236,11 @@ class AudioAnalyzer: Sendable {
         isAnalyzing = false
         progress = 0.0
         statusMessage = "Cancelled"
-        print("🛑 Transcription cancelled")
+        Log.audio.info("🛑 Transcription cancelled")
+    }
+
+    nonisolated static func whisperModelRepositoryURL() -> URL {
+        WhisperModelBootstrap.sharedRepositoryURL()
     }
 }
 
@@ -114,55 +265,120 @@ actor WhisperManager {
     // MARK: - Initialization
 
     func initialize() async {
-        guard whisperKit == nil else { return }
-        modelState = .loading
-
         do {
-            print("🔄 Initializing WhisperKit...")
-            try await initializeWhisperKit()
-            modelState = .loaded
-            print("✅ WhisperKit initialized successfully")
+            try await ensureReady()
         } catch {
-            print("❌ Failed to initialize WhisperKit: \(error)")
-            modelState = .failed(error)
+            Log.audio.info("❌ Failed to initialize WhisperKit: \(error)")
         }
     }
 
-    func initializeWithPriority() async {
-        guard whisperKit == nil else { return }
-
-        await Task(priority: .userInitiated) {
-            await initialize()
+    func initializeWithPriority() async throws {
+        try await Task(priority: .userInitiated) {
+            try await ensureReady()
         }.value
     }
 
-    private func initializeWhisperKit() async throws {
-        do {
-            // Use base model for significantly better word-error-rate vs tiny
-            whisperKit = try await WhisperKit(model: "base")
-        } catch {
-            print("⚠️ WhisperKit initialization failed: \(error)")
-            try await clearCacheAndReinitialize()
+    func ensureReady() async throws {
+        if whisperKit != nil { return }
+
+        if case .loading = modelState {
+            try await waitForInitialization()
+            if whisperKit != nil { return }
         }
+
+        modelState = .loading
+
+        do {
+            Log.audio.info("🔄 Initializing WhisperKit...")
+            try await initializeWhisperKit()
+            modelState = .loaded
+            Log.audio.info("✅ WhisperKit initialized successfully")
+        } catch let analyzerError as AnalyzerError {
+            Log.audio.info("❌ Failed to initialize WhisperKit: \(analyzerError)")
+            modelState = .failed(analyzerError)
+            throw analyzerError
+        } catch {
+            Log.audio.info("❌ Failed to initialize WhisperKit: \(error)")
+            modelState = .failed(error)
+            throw AnalyzerError.whisperKitInitializationFailed(error.localizedDescription)
+        }
+    }
+
+    private func waitForInitialization() async throws {
+        while case .loading = modelState {
+            try Task.checkCancellation()
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+    }
+
+    private func initializeWhisperKit() async throws {
+        whisperKit = try await bootstrapWhisperKit()
     }
 
     /// Removes the cached WhisperKit model files and re-downloads fresh copies.
     /// Called when initialization or transcription fails due to corrupt CoreML models.
     private func clearCacheAndReinitialize() async throws {
-        print("🗑 Clearing WhisperKit model cache...")
+        Log.audio.info("🗑 Clearing WhisperKit model cache...")
         whisperKit = nil
         modelState = .loading
 
         let fileManager = FileManager.default
-        let documentsURL = URL.documentsDirectory
-        // WhisperKit stores models under Documents/huggingface/models/
-        let cacheURL = documentsURL.appending(path: "huggingface/models")
+        let cacheURL = WhisperModelBootstrap.sharedRepositoryURL()
         try? fileManager.removeItem(at: cacheURL)
 
-        print("🔄 Retrying WhisperKit initialization after cache clear...")
-        whisperKit = try await WhisperKit(model: "base")
+        Log.audio.info("🔄 Retrying WhisperKit initialization after cache clear...")
+        whisperKit = try await bootstrapWhisperKit(forceDownload: true)
         modelState = .loaded
-        print("✅ WhisperKit re-initialized successfully after cache clear")
+        Log.audio.info("✅ WhisperKit re-initialized successfully after cache clear")
+    }
+
+    private func bootstrapWhisperKit(forceDownload: Bool = false) async throws -> WhisperKit {
+        let fileManager = FileManager.default
+        let downloadBase = WhisperModelBootstrap.sharedDownloadBaseURL()
+        let repositoryURL = WhisperModelBootstrap.sharedRepositoryURL(downloadBase: downloadBase)
+
+        try fileManager.createDirectory(at: downloadBase, withIntermediateDirectories: true, attributes: nil)
+
+        let whisper = try await WhisperKit(WhisperKitConfig(
+            model: WhisperModelBootstrap.preferredModelVariant,
+            downloadBase: downloadBase,
+            modelRepo: WhisperModelBootstrap.modelRepositoryID,
+            verbose: false,
+            logLevel: .error,
+            prewarm: false,
+            load: false,
+            download: false
+        ))
+
+        if !forceDownload,
+           let installed = WhisperModelBootstrap.preferredInstallation(
+               preferredVariant: WhisperModelBootstrap.preferredModelVariant,
+               repositoryURL: repositoryURL,
+               fileManager: fileManager
+           ) {
+            whisper.modelFolder = installed.folderURL
+            try await whisper.loadModels()
+            return whisper
+        }
+
+        do {
+            let downloadedFolder = try await WhisperKit.download(
+                variant: WhisperModelBootstrap.preferredModelVariant,
+                downloadBase: downloadBase,
+                from: WhisperModelBootstrap.modelRepositoryID
+            )
+            whisper.modelFolder = downloadedFolder
+            try await whisper.loadModels()
+            return whisper
+        } catch {
+            throw AnalyzerError.whisperKitInitializationFailed(
+                WhisperModelBootstrap.actionableFailureMessage(
+                    underlyingError: error,
+                    preferredVariant: WhisperModelBootstrap.preferredModelVariant,
+                    repositoryURL: repositoryURL
+                )
+            )
+        }
     }
 
     func getStatus() async -> String {
@@ -185,13 +401,8 @@ actor WhisperManager {
         onProgress: @Sendable @escaping (ProgressInfo) async -> Void
     ) async throws -> AudioTranscriptionResult {
         // Ensure WhisperKit is initialized before proceeding
-        if whisperKit == nil {
-            await initialize()
-        }
-
-        guard let whisper = whisperKit else {
-            throw AnalyzerError.whisperKitNotInitialized
-        }
+        try await ensureReady()
+        guard let whisper = whisperKit else { throw AnalyzerError.whisperKitNotInitialized }
 
         // MP3 files can fail inside WhisperKit's internal AVFoundation pipeline.
         // Pre-convert to M4A in a temp directory so WhisperKit always receives
@@ -253,7 +464,7 @@ actor WhisperManager {
             if errorString.localizedStandardContains("MIL") ||
                errorString.localizedStandardContains("mlmodelc") ||
                errorString.localizedStandardContains("parsing") {
-                print("⚠️ CoreML model corruption detected during transcription. Recovering...")
+                Log.audio.info("⚠️ CoreML model corruption detected during transcription. Recovering...")
                 await onProgress(ProgressInfo(progress: 0.05, message: "Repairing ML model..."))
                 try await clearCacheAndReinitialize()
 
@@ -302,8 +513,8 @@ actor WhisperManager {
             detectedLanguage: detectedLanguage
         )
 
-        print("✅ Transcription completed: \(result.fullText.prefix(100))...")
-        print("📊 Segments: \(segments.count), Words: \(result.wordCount)")
+        Log.audio.info("✅ Transcription completed: \(result.fullText.prefix(100))...")
+        Log.audio.info("📊 Segments: \(segments.count), Words: \(result.wordCount)")
 
         return result
     }
@@ -379,6 +590,7 @@ struct AudioTranscriptionSegment: Codable, Identifiable, Sendable {
 
 enum AnalyzerError: LocalizedError {
     case whisperKitNotInitialized
+    case whisperKitInitializationFailed(String)
     case transcriptionFailed(Error)
     case audioFileInvalid
     case noAudioData
@@ -387,6 +599,8 @@ enum AnalyzerError: LocalizedError {
         switch self {
         case .whisperKitNotInitialized:
             return "WhisperKit is not initialized. Please wait for the model to load."
+        case .whisperKitInitializationFailed(let reason):
+            return "WhisperKit failed to initialize: \(reason)"
         case .transcriptionFailed(let error):
             return "Transcription failed: \(error.localizedDescription)"
         case .audioFileInvalid:
