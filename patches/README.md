@@ -49,18 +49,87 @@ unchanged at 11 windows.
 
 ## Still failing (NOT fixed — deep evidence-scoring, deferred)
 
-- `earlyBrainwashingVocabularyDoesNotOverridePretalkAnchoring` — early spurious
-  brainwashing spike gets locked in by `enforcePhaseOrdering`'s forward-only
-  clamp, then short pre_talk is collapsed away. A position-curve attempt
-  regressed `affirmationsHasNoDeepening` and was reverted.
-- `suggestPhaseTimelineBuildsOrderedPhraseDrivenProposal`,
-  `adaptPredictedPhasesCanAdoptPhraseDrivenProposalWhenSeedTimelineIsWeak`,
-  `hybridSelectionCanFuseBestSectionsFromKeywordAndChunkedOutputs` — the
-  phrase-proposal DP (`decodePhaseEvidenceWindows`) scores window emissions from
-  transcript *trait* features, not the keyword hitMap, so strong cues like
-  "wide awake"/"count to five" don't pull windows to emergence/conditioning.
-  Needs the DP emission model wired to keyword evidence — an architectural change
-  best done against the synthetic eval corpus as a safety net.
+### Issue 1 — `earlyBrainwashingVocabularyDoesNotOverridePretalkAnchoring` (C1)
+
+**Symptom:** a 90s clip that opens with "welcome / comfortable" then a dense
+"brainwashing / indoctrination / brainwash" block (8–12s) decodes as
+`brainwashing[0-90]` instead of opening with `pre_talk`.
+
+**Full stage trace (instrumented):**
+- `RESOLVED`: `pre_talk 0-5 | brainwashing 6-17 | …` — position weighting *works*;
+  pre_talk correctly wins the first ~5s. The dense brainwashing block then wins
+  6–17s (5 keywords × ~3.2 weight beat pre_talk's "welcome" 1.2 + "comfortable"
+  0.8 even after the 0.22× position penalty).
+- `ORDERED` (`enforcePhaseOrdering`): **this is the actual culprit.** The
+  forward-only clamp locks the floor to the highest phase seen so far. Once the
+  spurious `brainwashing` (ordered index 8) appears at 6s, every later second is
+  forced `≥ brainwashing`, so the genuine downstream `induction` and `deepening`
+  are *rewritten to brainwashing*.
+- `SMOOTHED` → `pre_talk 0-5 | brainwashing 5-90`; `COLLAPSED` → the 5s pre_talk
+  is below `minRun` (20s) and is absorbed → `brainwashing 0-90`.
+
+**Root cause:** not position weighting — it's that `enforcePhaseOrdering` lets a
+brief, early, out-of-position spike permanently raise the ordering floor, and then
+`collapseShortRuns` removes the short correct pre_talk.
+
+**FAILED ATTEMPT (reverted):** steepening `phasePositionWeight` (square the
+normalised distance, floor 0.22→0.06, divisor 35→30). It did NOT fix C1 *and*
+regressed `affirmationsHasNoDeepening`. Lesson: the position curve is shared by
+all phases; deepening the penalty mislabels legitimate mid-phase content.
+
+**What it actually needs:** make `enforcePhaseOrdering` (or the resolve step)
+resistant to a *short, low-support* early run raising the floor — e.g. don't let a
+run shorter than `minRun`, or below a confidence floor, advance the ordering
+high-water mark. This is the single most load-bearing invariant in the pipeline;
+change it only with the eval corpus measuring net effect across many files.
+
+### Issue 2 — phrase-proposal DP misses conditioning/emergence (3 tests)
+
+`suggestPhaseTimelineBuildsOrderedPhraseDrivenProposal`,
+`adaptPredictedPhasesCanAdoptPhraseDrivenProposalWhenSeedTimelineIsWeak`,
+`hybridSelectionCanFuseBestSectionsFromKeywordAndChunkedOutputs`.
+
+**Root cause (instrumented):** `baseEvidenceBreakdowns` (the per-window emission
+scorer feeding the Viterbi `decodePhaseEvidenceWindows`) scores each window from
+4 channels — `transcriptSupportScore` (prosody traits) ×0.48, `phraseLibraryAlignment`
+(corpus knowledge, **empty at runtime in tests**) ×0.24, `phaseWaymarkerAlignment`
+×0.18, `phasePositionWeight` ×0.10. **None read the keyword taxonomy.** So strong
+cues like "wide awake" / "count to five" / "trigger" in the window text contribute
+nothing, and windows mis-decode to `therapy`/`fractionation`.
+
+**FAILED ATTEMPT (reverted):** added a `phaseKeywordAlignment` channel to the
+emission score, rebalancing weights (tried transcript 0.48→0.38 then →0.46, keyword
+0.18–0.22, etc).
+- *Directionally correct*: `emergence` then **did** appear (was `therapy`) —
+  proof the keyword channel is the right idea.
+- *But* every rebalance regressed other tests: `affirmationsHasNoDeepening`,
+  `hybridSelection*` selection flips, and at one setting induction mis-labelled as
+  fractionation. Tuning 5 interacting emission weights against 3 fixtures trades
+  one pass for another failure.
+
+**Second, independent blocker — taxonomy gap:** even a perfect DP can't find
+`conditioning` in the `suggestPhaseTimeline` fixture, because its conditioning
+window text is "when i snap my fingers this response returns instantly" — which
+contains **no conditioning keyword** ("snap", "response returns", "instantly" are
+not in the taxonomy; only "trigger" phrases are, and that word isn't in this
+window's top terms). Window top-words instrumented:
+`win60-84 {count/fingers/instantly/response/returns}` — "count"/"fingers" actually
+pull toward *emergence*. Conditioning detection here needs taxonomy additions
+(e.g. "snap (my) fingers", "response returns", "this response") **validated
+against the corpus** so they don't pollute other phases.
+
+**What it actually needs:** (a) wire keyword evidence into the DP emission model,
+weight-tuned against the synthetic eval corpus (net accuracy over hundreds of
+cases, not 3 fixtures); (b) close the conditioning taxonomy gap, corpus-validated.
+
+### Meta-lesson for the next session
+
+Two naive hand-fixes were attempted on this deep logic; **both regressed other
+tests and were reverted.** These two issues are global tuning of interacting
+weights / the core ordering invariant — they are *not* safely fixable against a
+handful of fixtures. Build/finish the synthetic eval corpus first (spec §3–4),
+then tune with net-accuracy feedback. This is the through-line the whole
+phase-classifier-training spec was pointing at.
 
 ## To re-apply (if ever reverted)
 
