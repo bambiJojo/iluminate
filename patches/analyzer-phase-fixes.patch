@@ -1,0 +1,129 @@
+diff --git aa/Ilumionate/HypnosisPhaseAnalyzer.swift bb/Ilumionate/HypnosisPhaseAnalyzer.swift
+index 9dd8aaf..598d36c 100644
+--- aa/Ilumionate/HypnosisPhaseAnalyzer.swift
++++ bb/Ilumionate/HypnosisPhaseAnalyzer.swift
+@@ -1088,7 +1088,19 @@ struct HypnosisPhaseAnalyzer {
+             guard let section = transcriptAnalysis.section(at: midpoint) else { return segment }
+ 
+             let currentScore = transcriptSupportScore(for: segment.phase, section: section)
+-            let alternatives = candidatePhases(for: segment.phase)
++            // Don't allow a relabel that moves a segment backward in the canonical
++            // phase order: a backward relabel (e.g. induction → pre_talk) doesn't
++            // refine the phase, it erases it by merging into the earlier adjacent
++            // phase, dropping a structural stage the keyword pipeline detected.
++            // Forward refinement (induction → deepening) is still allowed.
++            let currentOrderIndex = Self.orderedPhases.firstIndex(of: segment.phase)
++            let alternatives = candidatePhases(for: segment.phase).filter { candidate in
++                guard
++                    let currentOrderIndex,
++                    let candidateIndex = Self.orderedPhases.firstIndex(of: candidate)
++                else { return true }
++                return candidateIndex >= currentOrderIndex
++            }
+             let bestCandidate = alternatives.max { lhs, rhs in
+                 transcriptSupportScore(for: lhs, section: section) < transcriptSupportScore(for: rhs, section: section)
+             } ?? segment.phase
+@@ -1711,7 +1723,12 @@ struct HypnosisPhaseAnalyzer {
+     ) -> [PhaseSegment] {
+         guard segments.count >= 2 else { return segments }
+         var adjusted = segments
+-        let minimumDuration = max(25.0, Double(config.minimumPhaseDurationSeconds) * 0.85)
++        // These are phrase-driven *evidence windows*, not final second-by-second
++        // playback phases, so they use a smaller minimum than the keyword
++        // pipeline's collapse pass. A 25s floor erased genuine ~16–24s proposal
++        // phases (e.g. a short conditioning or emergence block) on brief clips,
++        // collapsing multi-phase proposals down to one or two phases.
++        let minimumDuration = min(18.0, Double(config.minimumPhaseDurationSeconds) * 0.60)
+ 
+         var index = 0
+         while index < adjusted.count {
+@@ -2083,11 +2100,31 @@ struct HypnosisPhaseAnalyzer {
+             upper: 1.0
+         )
+ 
+-        return clamp(
+-            (wordAlignment * 0.45) + (phraseAlignment * 0.35) + (waymarkerAlignment * 0.20),
+-            lower: 0.0,
+-            upper: 1.0
+-        )
++        // Weight the three evidence channels, but redistribute the weight of any
++        // channel that has no signal onto the channels that do. Otherwise a
++        // section with strong, unambiguous vocabulary matches (e.g. repeated
++        // "obey"/"programmed") but no multi-word phrases or way-marker phrases is
++        // structurally capped at 0.45 and can never fully support its phase —
++        // even though the word evidence alone is decisive.
++        let channels: [(value: Double, baseWeight: Double, hasSignal: Bool)] = [
++            (wordAlignment, 0.45, distinctiveMatches > 0 || commonMatches > 0),
++            (phraseAlignment, 0.35, distinctivePhraseMatches > 0 || commonPhraseMatches > 0),
++            (waymarkerAlignment, 0.20, waymarkerAlignment > 0)
++        ]
++        let activeWeight = channels.filter(\.hasSignal).reduce(0.0) { $0 + $1.baseWeight }
++        guard activeWeight > 0 else {
++            // No channel has any signal: fall back to the plain weighted sum.
++            return clamp(
++                (wordAlignment * 0.45) + (phraseAlignment * 0.35) + (waymarkerAlignment * 0.20),
++                lower: 0.0,
++                upper: 1.0
++            )
++        }
++        let combined = channels.reduce(0.0) { partial, channel in
++            guard channel.hasSignal else { return partial }
++            return partial + channel.value * (channel.baseWeight / activeWeight)
++        }
++        return clamp(combined, lower: 0.0, upper: 1.0)
+     }
+ 
+     private func confidenceRationale(
+@@ -2100,24 +2137,9 @@ struct HypnosisPhaseAnalyzer {
+     ) -> String {
+         var reasons: [String] = []
+ 
+-        if section.normalizedWordsPerMinute < 0.92 {
+-            reasons.append("pace is below the file average")
+-        } else if section.normalizedWordsPerMinute > 1.08 {
+-            reasons.append("pace is above the file average")
+-        }
+-
+-        if section.normalizedRepetitionDensity > 1.15 {
+-            reasons.append("repetition is elevated")
+-        } else if section.normalizedRepetitionDensity < 0.90 {
+-            reasons.append("repetition is lighter than average")
+-        }
+-
+-        if section.normalizedLexicalDiversity > 1.08 {
+-            reasons.append("lexical variety is elevated")
+-        } else if section.normalizedLexicalDiversity < 0.92 {
+-            reasons.append("language is tighter than average")
+-        }
+-
++        // Evidence-match reasons first: direct vocabulary / phrase / way-marker
++        // hits are the strongest justification and must survive the prefix cap
++        // below, ahead of the generic prosody prose.
+         let matchedWords = section.topDistinctiveWords
+             .map(\.word)
+             .filter { phaseKeywordTokens(for: phase).contains($0) }
+@@ -2139,6 +2161,24 @@ struct HypnosisPhaseAnalyzer {
+             reasons.append("explicit hypnosis marker phrases are present")
+         }
+ 
++        if section.normalizedWordsPerMinute < 0.92 {
++            reasons.append("pace is below the file average")
++        } else if section.normalizedWordsPerMinute > 1.08 {
++            reasons.append("pace is above the file average")
++        }
++
++        if section.normalizedRepetitionDensity > 1.15 {
++            reasons.append("repetition is elevated")
++        } else if section.normalizedRepetitionDensity < 0.90 {
++            reasons.append("repetition is lighter than average")
++        }
++
++        if section.normalizedLexicalDiversity > 1.08 {
++            reasons.append("lexical variety is elevated")
++        } else if section.normalizedLexicalDiversity < 0.92 {
++            reasons.append("language is tighter than average")
++        }
++
+         if section.duration < 25 {
+             reasons.append("the section is short")
+         } else if durationSupport > 0.9 {
