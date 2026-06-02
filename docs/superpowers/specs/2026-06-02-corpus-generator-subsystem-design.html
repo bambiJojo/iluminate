@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corpus Generator Subsystem — Design Spec</title>
+<style>
+  :root {
+    --bg: oklch(98% 0.01 260);
+    --surface: oklch(100% 0 0);
+    --surface-2: oklch(96% 0.012 260);
+    --ink: oklch(24% 0.03 260);
+    --ink-soft: oklch(45% 0.03 260);
+    --accent: oklch(58% 0.17 285);
+    --accent-soft: oklch(94% 0.04 285);
+    --line: oklch(90% 0.02 260);
+    --code-bg: oklch(22% 0.03 265);
+    --code-ink: oklch(92% 0.02 265);
+    --ok: oklch(62% 0.16 150);
+    --warn: oklch(70% 0.16 70);
+    --radius: 14px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: oklch(18% 0.02 265);
+      --surface: oklch(22% 0.02 265);
+      --surface-2: oklch(26% 0.02 265);
+      --ink: oklch(92% 0.02 265);
+      --ink-soft: oklch(72% 0.03 265);
+      --accent: oklch(74% 0.15 285);
+      --accent-soft: oklch(32% 0.06 285);
+      --line: oklch(34% 0.02 265);
+      --code-bg: oklch(15% 0.02 265);
+      --code-ink: oklch(90% 0.02 265);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.65;
+    font-size: clamp(15px, 0.9rem + 0.2vw, 17px);
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: clamp(1.5rem, 4vw, 4rem); display: grid; grid-template-columns: 260px 1fr; gap: clamp(1.5rem, 4vw, 3.5rem); }
+  @media (max-width: 880px) { .wrap { grid-template-columns: 1fr; } nav.toc { position: static !important; max-height: none !important; } }
+  header.hero {
+    grid-column: 1 / -1; background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surface);
+    border: 1px solid var(--line); border-radius: var(--radius); padding: clamp(1.5rem, 3vw, 2.5rem);
+  }
+  header.hero h1 { margin: 0 0 .4rem; font-size: clamp(1.6rem, 1rem + 2.4vw, 2.6rem); letter-spacing: -0.02em; }
+  .badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+  .badge { font-size: .8rem; font-family: var(--mono); padding: .28rem .6rem; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft); }
+  .badge.ok { background: oklch(62% 0.16 150 / .14); color: var(--ok); border-color: transparent; }
+  nav.toc { position: sticky; top: 1.5rem; align-self: start; max-height: calc(100vh - 3rem); overflow: auto; font-size: .9rem; }
+  nav.toc strong { display: block; text-transform: uppercase; letter-spacing: .08em; font-size: .72rem; color: var(--ink-soft); margin: 0 0 .6rem; }
+  nav.toc a { display: block; padding: .28rem .5rem; border-radius: 8px; color: var(--ink-soft); text-decoration: none; border-left: 2px solid transparent; }
+  nav.toc a:hover { background: var(--surface-2); color: var(--ink); }
+  main { min-width: 0; }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: clamp(1.2rem, 2.5vw, 2rem); margin-bottom: 1.2rem; }
+  h2 { margin: 0 0 .8rem; font-size: 1.35rem; letter-spacing: -0.01em; scroll-margin-top: 1.5rem; }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: .9rem; margin-right: .5rem; }
+  h3 { font-size: 1.05rem; color: var(--ink); margin: 1.4rem 0 .5rem; }
+  p, li { color: var(--ink); }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: .88em; background: var(--surface-2); padding: .1rem .35rem; border-radius: 6px; }
+  pre { background: var(--code-bg); color: var(--code-ink); padding: 1rem 1.1rem; border-radius: 10px; overflow: auto; font-family: var(--mono); font-size: .82rem; line-height: 1.55; border: 1px solid oklch(0% 0 0 / .2); }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: .6rem 0; font-size: .92rem; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  .callout { border-radius: 10px; padding: .9rem 1.1rem; margin: 1rem 0; border: 1px solid var(--line); background: var(--surface-2); }
+  .callout.warn { background: oklch(70% 0.16 70 / .12); border-color: oklch(70% 0.16 70 / .4); }
+  .callout.warn strong { color: var(--warn); }
+  ol li, ul li { margin: .3rem 0; }
+  .meta { color: var(--ink-soft); font-size: .9rem; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: .76rem; padding: .12rem .45rem; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+  footer { grid-column: 1 / -1; text-align: center; color: var(--ink-soft); font-size: .82rem; padding-top: 1rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="pill">Design Spec · tracer bullet</div>
+    <h1>Corpus Generator Subsystem</h1>
+    <p class="meta">Dev-time CLI that emits synthetic <code>CorpusCase</code> JSON with exact, free boundary truth — parent spec §3.</p>
+    <div class="badges">
+      <span class="badge">2026-06-02</span>
+      <span class="badge ok">Approved · ready for planning</span>
+      <span class="badge">Swift 6.2 · macOS dev tool</span>
+      <span class="badge">Parent: phase-classifier-training §3</span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <strong>Contents</strong>
+    <a href="#problem">Problem</a>
+    <a href="#goals">Goals &amp; non-goals</a>
+    <a href="#decisions">Locked decisions</a>
+    <a href="#topology">Architecture &amp; topology</a>
+    <a href="#internals">Generator internals</a>
+    <a href="#sources">Data sources</a>
+    <a href="#flow">Data flow</a>
+    <a href="#dod">Definition of done</a>
+    <a href="#deferred">Deferred</a>
+    <a href="#guardrails">Guardrails</a>
+    <a href="#refs">References</a>
+  </nav>
+
+  <main>
+    <section id="problem">
+      <h2><span class="num">00</span>Problem</h2>
+      <p>The phase-classifier training plan put a ground-truth corpus schema and timeline metrics into the test harness, but there is <strong>no way to generate synthetic corpus data at scale</strong>. Today <code>Corpus/synthetic/</code> is empty; only hand-written fixtures exist. Without a generator, config-tuning and (later) a learned model have nothing to chase. This subsystem is parent-spec §3: a dev-time CLI that emits synthetic <code>CorpusCase</code> JSON with exact, free boundary truth.</p>
+    </section>
+
+    <section id="goals">
+      <h2><span class="num">01</span>Goals &amp; non-goals</h2>
+      <h3>Goals</h3>
+      <ol>
+        <li>Generate schema-valid synthetic cases the <strong>existing</strong> harness loads and scores with no harness changes.</li>
+        <li>Author each case <strong>one phase block at a time</strong> → boundary truth exact by construction (§3b).</li>
+        <li>Share the schema between CLI and harness via a <strong>single source of truth</strong> (no drift).</li>
+        <li>Seed realistic style from <strong>real labeled transcripts</strong> when available; degrade to zero-shot.</li>
+        <li>Keep it <strong>dev-time only</strong> — never shipped, never per-CI, no network in unit tests.</li>
+      </ol>
+      <h3>Non-goals</h3>
+      <ul>
+        <li>TTS / synthetic <em>audio</em> (classifier reads transcripts).</li>
+        <li>Full archetype library, full ambiguity distribution, bulk generation — <strong>follow-up plans</strong>.</li>
+        <li>Converting the two real labeled files into <code>Corpus/real/</code> cases — free later, off the critical path.</li>
+        <li>Editing <code>features.json</code> (project rule).</li>
+      </ul>
+    </section>
+
+    <section id="decisions">
+      <h2><span class="num">02</span>Locked decisions</h2>
+      <table>
+        <thead><tr><th>Decision</th><th>Choice</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr><td>Schema sharing</td><td>Extract shared <code>CorpusKit</code> module</td><td>Single source of truth for CLI + tests + app; eliminates drift (§2).</td></tr>
+          <tr><td>Few-shot seeding</td><td>Optional, built now</td><td>Real label files available; seed path active when present, zero-shot fallback when absent.</td></tr>
+          <tr><td>First scope</td><td>Tracer-bullet end-to-end</td><td>One archetype, one ambiguity default; prove the pipe before widening.</td></tr>
+          <tr><td>Package location</td><td>New package under <code>Tools/CorpusGenerator/</code></td><td>Isolates subsystem; leaves root <code>Package.swift</code> + tooling untouched.</td></tr>
+          <tr><td>Phase enum</td><td>Move <code>TrancePhase</code> into <code>CorpusKit</code></td><td>Already standalone; <code>HypnosisMetadata.Phase</code> is a typealias (<code>AudioFile.swift:222</code>) → clean lift.</td></tr>
+          <tr><td>API access</td><td><code>URLSession</code> over Anthropic Messages API</td><td>No official Swift SDK; thin client, key from <code>ANTHROPIC_API_KEY</code>.</td></tr>
+          <tr><td>Cost control</td><td>Seeds in prompt-cache prefix; manual runs</td><td>Identical prefix across calls → cheaper; never per-CI.</td></tr>
+          <tr><td>Offline tests</td><td><code>--dry-run</code> stub responder</td><td>Unit tests exercise plan/assembly with no network or key.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="topology">
+      <h2><span class="num">03</span>Architecture &amp; build topology</h2>
+      <pre><code>Tools/CorpusGenerator/
+  Package.swift                    # platforms: .macOS(.v14) ; no external deps (URLSession only)
+  Sources/
+    CorpusKit/                     # shared library, platform-agnostic (Foundation only)
+      TrancePhase.swift            #   MOVED from Ilumionate/ (single source of truth)
+      CorpusCase.swift             #   MOVED from IlumionateTests/Corpus/ (DTOs + conversions)
+      CorpusLoader.swift           #   MOVED from IlumionateTests/Corpus/ (source-relative loader)
+    CorpusGenerator/               # the CLI executable (macOS dev tool, never ships)
+      main.swift  CLIOptions.swift  ClaudeClient.swift
+      PhasePlan.swift  SeedLibrary.swift  SessionAssembler.swift
+  Tests/CorpusGeneratorTests/      # offline unit tests (no network)</code></pre>
+      <p><strong>Single source of truth.</strong> <code>TrancePhase</code> + corpus DTOs move into <code>CorpusKit</code>, added to <code>Ilumionate.xcodeproj</code> as a local package dependency and linked to the app (<code>Ilumionate</code>), <code>IlumionateTests</code>, and <code>LumeLabel</code>. Old <code>Ilumionate/TrancePhase.swift</code> and <code>IlumionateTests/Corpus/{CorpusCase,CorpusLoader}.swift</code> are deleted and replaced with <code>import CorpusKit</code>. The app keeps its <code>typealias Phase = TrancePhase</code> shim so the 8 referencing files do not churn.</p>
+      <div class="callout warn">
+        <strong>⚠ Risk — Xcode package linking.</strong> Linking a local SwiftPM package into Xcode targets is the one mechanical risk (synchronized groups / target membership). <em>Mitigation:</em> make the extraction + linking the <strong>first plan task</strong>, gated by a green <code>xcodebuild -scheme Ilumionate build</code> and a green <code>IlumionateTests</code> run <em>before</em> any generator logic. <em>Fallback (non-preferred):</em> keep <code>TrancePhase</code> in the app and bridge predicted-vs-truth by <code>rawValue</code> — reintroduces drift.
+      </div>
+    </section>
+
+    <section id="internals">
+      <h2><span class="num">04</span>Generator internals</h2>
+      <p>Assembles a session one phase block at a time, so boundary truth is exact and free.</p>
+      <ul>
+        <li><strong><code>PhasePlan</code> — template + variation.</strong> Ordered <code>[(phase: TrancePhase, durationSec: Double)]</code>. Tracer bullet ships <strong>one archetype</strong>: <code>preTalk → induction → deepening → therapy → emergence</code> with randomized per-phase durations.</li>
+        <li><strong><code>SeedLibrary</code> — few-shot, optional.</strong> Reads <code>~/Documents/TrainingCorpus/</code> label files + SHA-keyed cached transcripts, slices transcripts by labeled phase anchors → real per-phase excerpts in the prompt-cache prefix. Empty dir → zero-shot.</li>
+        <li><strong><code>ClaudeClient</code>.</strong> Thin <code>URLSession</code> wrapper over the Messages API. Key from <code>ANTHROPIC_API_KEY</code>. System prompt + seeds as a cached prefix; one request per phase block.</li>
+        <li><strong><code>SessionAssembler</code>.</strong> Places each block at <code>[start,end)</code>, splits text into <code>CorpusSegment</code>s, emits one <code>CorpusCase</code> (<code>source:.synthetic</code>, <code>boundaryMode:.exact</code>). Assembler owns placement → <code>truth</code> spans exact.</li>
+        <li><strong><code>main.swift</code> / <code>CLIOptions</code>.</strong> Flags: <code>--out</code> (default <code>Corpus/synthetic/</code>), <code>--ambiguity {low|medium|high}</code> (default <code>low</code>), <code>--count</code>, <code>--seeds &lt;dir&gt;</code>, <code>--model</code>, <code>--dry-run</code>. Each file stamps its generation params.</li>
+      </ul>
+    </section>
+
+    <section id="sources">
+      <h2><span class="num">05</span>Data sources (verified on disk)</h2>
+      <p>For each of the two labeled files in <code>~/Documents/TrainingCorpus/</code>:</p>
+      <ul>
+        <li>Label JSON: <code>phases[]</code> = <code>{ phase, startTime, endTime }</code> (ground-truth anchors) + <code>audioDuration</code>, <code>expectedContentType</code>, <code>expectedFrequencyBand</code>.</li>
+        <li>Cached transcript (<code>AnalyzerDataset/cache/transcripts/&lt;sha256&gt;.json</code>): <code>transcription</code> = <code>{ fullText, segments[], duration, locale }</code>; segment shape matches <code>AudioTranscriptionSegment</code>.</li>
+      </ul>
+      <p>Joined by <code>audioSHA256</code> → per-phase real text for seeding (and, later/free, the first <code>Corpus/real/</code> cases).</p>
+    </section>
+
+    <section id="flow">
+      <h2><span class="num">06</span>Data flow (tracer bullet)</h2>
+      <pre><code>SeedLibrary (2 real files, optional)
+        │  cached prefix
+        ▼
+PhasePlan(classic) ──block──▶ ClaudeClient ──text──▶ SessionAssembler
+                                                          │
+                                                          ▼
+                                  Corpus/synthetic/synth-*.json   (one valid CorpusCase)
+                                                          │
+                                                          ▼
+      EXISTING harness: CorpusLoader → analyzer → PhaseTimelineEvaluator → score</code></pre>
+    </section>
+
+    <section id="dod">
+      <h2><span class="num">07</span>Definition of done (tracer bullet)</h2>
+      <ol>
+        <li><code>CorpusKit</code> extracted; app + <code>IlumionateTests</code> + <code>LumeLabel</code> build green importing it; existing tests still pass.</li>
+        <li><code>swift run corpus-gen --dry-run</code> produces one schema-valid <code>Corpus/synthetic/*.json</code> offline (no key, no network).</li>
+        <li>With <code>ANTHROPIC_API_KEY</code> set, a real run produces a genuine synthetic case.</li>
+        <li>The existing <code>EvaluationHarnessTests</code> loads and scores the generated file with <strong>no harness code change</strong>.</li>
+      </ol>
+    </section>
+
+    <section id="deferred">
+      <h2><span class="num">08</span>Deferred to follow-up plans</h2>
+      <ul>
+        <li>Archetype template library (fractionation-heavy, erotic, brainwashing, …).</li>
+        <li>Full ambiguity distribution + bulk generation.</li>
+        <li>Converting the two real labeled files into <code>Corpus/real/</code> anchored honesty-judge cases.</li>
+        <li>Phase-1 AnalyzerImprover tuning against the synthetic score (parent step 5).</li>
+      </ul>
+    </section>
+
+    <section id="guardrails">
+      <h2><span class="num">09</span>Constraints / guardrails</h2>
+      <ul>
+        <li>Generator is <strong>dev-time only</strong> — never ships; no network in unit tests.</li>
+        <li><code>ANTHROPIC_API_KEY</code> from environment only — never hardcoded.</li>
+        <li>Watch the "teaching to the test" trap — held-out real corpus stays the safeguard.</li>
+        <li>Never edit <code>features.json</code> unless explicitly asked.</li>
+        <li>Swift 6.2 / modern concurrency; <code>async</code>/<code>await</code> over closures.</li>
+        <li>Build: <code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate build</code>; package: <code>swift build</code> / <code>swift test</code> in <code>Tools/CorpusGenerator/</code>.</li>
+      </ul>
+    </section>
+
+    <section id="refs">
+      <h2><span class="num">10</span>Key references</h2>
+      <ul>
+        <li><code>Ilumionate/TrancePhase.swift</code> — phase enum to move into <code>CorpusKit</code>.</li>
+        <li><code>Ilumionate/AudioFile.swift:222</code> — <code>typealias Phase = TrancePhase</code>.</li>
+        <li><code>IlumionateTests/Corpus/{CorpusCase,CorpusLoader,PhaseTimelineEvaluator}.swift</code> — landed schema/loader/metrics.</li>
+        <li><code>IlumionateTests/EvaluationHarnessTests.swift</code> — <code>KeywordPipelineEvaluationTests</code> (the consumer).</li>
+        <li><code>AnalyzerImprover/</code> — precedent dev-time CLI mirroring model types.</li>
+        <li><code>~/Documents/TrainingCorpus/</code> — two real label files + SHA-keyed transcript cache (seed source).</li>
+      </ul>
+    </section>
+
+    <footer>Markdown source of truth: <code>2026-06-02-corpus-generator-subsystem-design.md</code></footer>
+  </main>
+</div>
+</body>
+</html>
