@@ -1,0 +1,12 @@
+{
+  "audioSHA256": "abc123",
+  "transcription": {
+    "fullText": "close your eyes and relax. going deeper now.",
+    "duration": 120.0,
+    "locale": "en",
+    "segments": [
+      { "text": "close your eyes and relax", "timestamp": 10.0, "duration": 8.0, "confidence": 0.9 },
+      { "text": "going deeper and deeper now", "timestamp": 80.0, "duration": 8.0, "confidence": 0.9 }
+    ]
+  }
+}

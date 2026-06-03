@@ -1,0 +1,10 @@
+{
+  "id": "FIXTURE-0001",
+  "audioSHA256": "abc123",
+  "audioDuration": 120.0,
+  "expectedContentType": "hypnosis",
+  "phases": [
+    { "phase": "induction", "startTime": 0.0,  "endTime": 60.0 },
+    { "phase": "deepening", "startTime": 60.0, "endTime": 120.0 }
+  ]
+}
