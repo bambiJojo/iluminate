@@ -7,3 +7,6 @@ DerivedData/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
 .gm/
+
+# corpus-gen output (generated dev artifacts; not committed)
+Corpus/synthetic/*.json

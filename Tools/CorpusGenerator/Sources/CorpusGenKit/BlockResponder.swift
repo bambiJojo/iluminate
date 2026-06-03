@@ -73,3 +73,20 @@ public struct StubResponder: BlockResponder {
         }
     }
 }
+
+/// Wraps a base responder, injecting loaded few-shot seeds into each request.
+public struct SeededResponder: BlockResponder {
+    private let base: BlockResponder
+    private let seeds: [PhaseSeed]
+    public init(base: BlockResponder, seeds: [PhaseSeed]) {
+        self.base = base; self.seeds = seeds
+    }
+    public func text(for request: BlockRequest) async throws -> String {
+        let relevant = seeds.filter { $0.phase == request.phase }
+        let enriched = BlockRequest(
+            phase: request.phase, durationSec: request.durationSec,
+            ambiguity: request.ambiguity, seeds: relevant, priorPhases: request.priorPhases
+        )
+        return try await base.text(for: enriched)
+    }
+}
