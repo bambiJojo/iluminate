@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import AVFoundation
 import Observation
 import UIKit
@@ -54,12 +55,12 @@ class PerformanceOptimizer: Sendable {
 
         switch memoryPressure {
         case .critical:
-            print("🔥 CRITICAL memory usage: \(Int(memoryInfo.usage))MB")
+            Log.general.info("🔥 CRITICAL memory usage: \(Int(memoryInfo.usage))MB")
             Task {
                 await memoryMonitor.performAggressiveCleanup()
             }
         case .warning:
-            print("⚠️ High memory usage: \(Int(memoryInfo.usage))MB")
+            Log.general.info("⚠️ High memory usage: \(Int(memoryInfo.usage))MB")
             Task {
                 await memoryMonitor.performModerateCleanup()
             }
@@ -210,14 +211,14 @@ actor MemoryMonitor {
     // MARK: - Cleanup Operations
 
     func performModerateCleanup() async {
-        print("🧹 Performing moderate memory cleanup...")
+        Log.general.info("🧹 Performing moderate memory cleanup...")
         await MainActor.run {
             URLCache.shared.removeAllCachedResponses()
         }
     }
 
     func performAggressiveCleanup() async {
-        print("🔥 Performing aggressive memory cleanup...")
+        Log.general.info("🔥 Performing aggressive memory cleanup...")
         await performModerateCleanup()
 
         await MainActor.run {
@@ -236,7 +237,7 @@ actor MemoryMonitor {
     ) async throws -> T {
         let taskID = await MainActor.run {
             UIApplication.shared.beginBackgroundTask(withName: name) {
-                print("⏰ Background task '\(name)' expired")
+                Log.general.info("⏰ Background task '\(name)' expired")
             }
         }
 
@@ -269,7 +270,7 @@ actor MemoryMonitor {
             let chunkCMDuration = CMTime(seconds: chunkDuration, preferredTimescale: 44100)
             let timeRange = CMTimeRange(start: startTime, duration: chunkCMDuration)
 
-            print("📦 Processing chunk: \(Int(currentTime))s - \(Int(currentTime + chunkDuration))s")
+            Log.general.info("📦 Processing chunk: \(Int(currentTime))s - \(Int(currentTime + chunkDuration))s")
 
             let result = try await processor(asset, timeRange)
             results.append(result)
@@ -282,7 +283,7 @@ actor MemoryMonitor {
             // Check memory pressure and pause if needed
             let currentUsage = await getCurrentMemoryUsage()
             if currentUsage > 400 {
-                print("⏸ Pausing due to critical memory pressure")
+                Log.general.info("⏸ Pausing due to critical memory pressure")
                 try await Task.sleep(for: .seconds(1))
             }
         }

@@ -25,10 +25,7 @@ extension ChunkedPhaseAnalyzer {
     // MARK: - Ordered Phases
 
     /// Canonical hypnosis phase order used to enforce monotonic progression.
-    static let orderedPhases: [HypnosisMetadata.Phase] = [
-        .preTalk, .induction, .deepening, .therapy,
-        .suggestions, .conditioning, .emergence
-    ]
+    static let orderedPhases: [HypnosisMetadata.Phase] = HypnosisMetadata.Phase.orderedHypnosisPhases
 
     // MARK: - Phase Ordering Enforcement
 
@@ -162,21 +159,12 @@ extension ChunkedPhaseAnalyzer {
             startTime: start,
             endTime: end,
             characteristics: phase.displayName,
-            tranceDepthEstimate: tranceDepthForPhase(phase),
+            tranceDepthEstimate: phase.tranceDepthEstimate,
             confidenceLevel: .high   // AI-sourced segments get high confidence
         )
     }
 
     static func tranceDepthForPhase(_ phase: HypnosisMetadata.Phase) -> Double {
-        switch phase {
-        case .preTalk:      return 0.05
-        case .induction:    return 0.25
-        case .deepening:    return 0.55
-        case .therapy:      return 0.90
-        case .suggestions:  return 0.75
-        case .conditioning: return 0.65
-        case .emergence:    return 0.30
-        case .transitional: return 0.40
-        }
+        phase.tranceDepthEstimate
     }
 }

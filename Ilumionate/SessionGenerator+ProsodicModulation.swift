@@ -23,22 +23,27 @@ extension SessionGenerator {
         analysis: AnalysisResult,
         config: GenerationConfig
     ) {
-        guard let prosody = analysis.prosodicProfile else { return }
-
-        // 1. Modulate existing moments based on vocal delivery
-        modulateMomentsWithProsody(
-            &moments, prosody: prosody, config: config
-        )
-
-        // 2. Insert technique-responsive moments
-        if let techniques = analysis.techniqueDetection {
-            insertTechniqueMoments(
-                &moments,
-                techniques: techniques,
-                prosody: prosody,
-                config: config
+        if let prosody = analysis.prosodicProfile {
+            // 1. Modulate existing moments based on vocal delivery
+            modulateMomentsWithProsody(
+                &moments, prosody: prosody, config: config
             )
+
+            // 2. Insert technique-responsive moments
+            if let techniques = analysis.techniqueDetection {
+                insertTechniqueMoments(
+                    &moments,
+                    techniques: techniques,
+                    prosody: prosody,
+                    config: config
+                )
+            }
         }
+
+        // 3. Use transcript-relative pace and repetition shifts even when
+        // raw prosody is missing, so modulation follows the speaker's local
+        // rhythm instead of absolute thresholds.
+        applyTranscriptAdaptiveModulation(&moments, analysis: analysis, config: config)
     }
 
     // MARK: - Per-Moment Vocal Modulation
@@ -96,6 +101,57 @@ extension SessionGenerator {
                 bilateral: original.bilateral,
                 bilateral_transition_duration: original.bilateral_transition_duration,
                 color_temperature: original.color_temperature
+            )
+        }
+    }
+
+    func applyTranscriptAdaptiveModulation(
+        _ moments: inout [LightMoment],
+        analysis: AnalysisResult,
+        config: GenerationConfig
+    ) {
+        guard let transcriptAnalysis = analysis.transcriptAnalysis else { return }
+
+        for index in 0..<moments.count {
+            guard let section = transcriptAnalysis.section(at: moments[index].time) else { continue }
+
+            let paceDelta = clamp(section.normalizedWordsPerMinute - 1.0, lower: -0.45, upper: 0.45)
+            let repetitionLift = clamp(section.normalizedRepetitionDensity - 1.0, lower: -0.5, upper: 1.5)
+            let coverageDelta = clamp(section.normalizedSpeechCoverage - 1.0, lower: -0.5, upper: 0.5)
+            let lexicalTightness = clamp(section.normalizedLexicalTightness - 1.0, lower: -0.5, upper: 1.5)
+
+            let original = moments[index]
+            let frequencyShift = (paceDelta * 1.2) - max(0, repetitionLift) * 0.55 - max(0, lexicalTightness) * 0.35
+            let intensityShift = max(0, repetitionLift) * 0.05 + coverageDelta * 0.04 + max(0, lexicalTightness) * 0.03
+
+            let waveform: WaveformType
+            if max(repetitionLift, lexicalTightness) > 0.9, original.frequency < 12.0 {
+                waveform = .noiseModulatedSine
+            } else if max(repetitionLift, lexicalTightness) > 0.35, original.frequency < 12.0 {
+                waveform = .softPulse
+            } else {
+                waveform = original.waveform
+            }
+
+            let warmedColor: Double?
+            if let originalColor = original.color_temperature {
+                warmedColor = max(2000, originalColor - max(0, repetitionLift) * 220 - max(0, lexicalTightness) * 120)
+            } else {
+                warmedColor = nil
+            }
+
+            moments[index] = LightMoment(
+                time: original.time,
+                frequency: clamp(
+                    original.frequency + frequencyShift,
+                    lower: config.minFrequency,
+                    upper: config.maxFrequency
+                ),
+                intensity: clamp(original.intensity + intensityShift, lower: 0.10, upper: 1.0),
+                waveform: waveform,
+                bilateral: original.bilateral ?? (max(repetitionLift, lexicalTightness) > 0.8 ? true : nil),
+                bilateral_transition_duration: original.bilateral_transition_duration,
+                color_temperature: warmedColor
             )
         }
     }

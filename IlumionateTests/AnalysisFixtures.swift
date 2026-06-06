@@ -48,6 +48,24 @@ enum AnalysisFixtures {
         detectedLanguage: "en"
     )
 
+    static let prosodicProfile = ProsodicProfile(
+        windowDuration: 5,
+        speechRateCurve: [96, 72, 64, 88, 110],
+        volumeCurve: [0.48, 0.40, 0.32, 0.35, 0.45],
+        pitchCurve: [150, 142, 138, 145, 158],
+        speechSilenceRatio: [0.70, 0.55, 0.44, 0.60, 0.72],
+        pauses: [
+            DetectedPause(
+                startTime: 42,
+                duration: 4.5,
+                precedingText: "deeper and deeper",
+                followingText: "you will feel",
+                category: .deliberate
+            )
+        ],
+        totalDuration: 300
+    )
+
     // MARK: Analysis Results
 
     static let hypnosisAnalysis = AnalysisResult(

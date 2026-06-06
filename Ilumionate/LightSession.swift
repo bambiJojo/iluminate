@@ -25,6 +25,10 @@ struct LightSession: Codable, Identifiable, Sendable {
     /// Default binaural volume (0.0–1.0).
     let binaural_volume: Double
 
+    /// Quality report from the audio-to-light alignment pass, when generated
+    /// from an analyzed audio file.
+    let alignment_report: LightScoreAlignmentReport?
+
     /// Computed property for SwiftUI display
     var displayName: String { session_name }
 
@@ -41,6 +45,7 @@ struct LightSession: Codable, Identifiable, Sendable {
         case binaural_enabled
         case binaural_carrier
         case binaural_volume
+        case alignment_report
     }
 
     init(from decoder: Decoder) throws {
@@ -54,10 +59,12 @@ struct LightSession: Codable, Identifiable, Sendable {
         self.binaural_enabled = (try? container.decode(Bool.self, forKey: .binaural_enabled)) ?? false
         self.binaural_carrier = (try? container.decode(Double.self, forKey: .binaural_carrier)) ?? 200.0
         self.binaural_volume = (try? container.decode(Double.self, forKey: .binaural_volume)) ?? 0.5
+        self.alignment_report = try? container.decode(LightScoreAlignmentReport.self, forKey: .alignment_report)
     }
 
     init(id: UUID = UUID(), session_name: String, duration_sec: Double, light_score: [LightMoment],
-         binaural_enabled: Bool = false, binaural_carrier: Double = 200.0, binaural_volume: Double = 0.5) {
+         binaural_enabled: Bool = false, binaural_carrier: Double = 200.0, binaural_volume: Double = 0.5,
+         alignment_report: LightScoreAlignmentReport? = nil) {
         self.id = id
         self.session_name = session_name
         self.duration_sec = duration_sec
@@ -65,6 +72,7 @@ struct LightSession: Codable, Identifiable, Sendable {
         self.binaural_enabled = binaural_enabled
         self.binaural_carrier = binaural_carrier
         self.binaural_volume = binaural_volume
+        self.alignment_report = alignment_report
     }
 }
 

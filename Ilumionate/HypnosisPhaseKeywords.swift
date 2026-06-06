@@ -24,8 +24,9 @@ enum HypnosisPhaseKeywords {
     // MARK: - Full Taxonomy
 
     static let all: [Keyword] = multiWord + preTalkWords + inductionWords +
-                                deepeningWords + therapyWords + suggestionsWords +
-                                conditioningWords + emergenceWords
+                                fractionationWords + deepeningWords + confusionWords +
+                                therapyWords + suggestionsWords + eroticSuggestionsWords +
+                                brainwashingWords + conditioningWords + emergenceWords
 
     // MARK: - Multi-Word Phrases (checked first — longest match wins)
 
@@ -37,6 +38,16 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "make yourself",         phase: .preTalk,     weight: 2.0),
         Keyword(phrase: "find a comfortable",    phase: .preTalk,     weight: 2.5),
         Keyword(phrase: "get comfortable",       phase: .preTalk,     weight: 2.5),
+        Keyword(phrase: "what is hypnosis",      phase: .preTalk,     weight: 3.8),
+        Keyword(phrase: "suggestibility test",   phase: .preTalk,     weight: 3.8),
+        Keyword(phrase: "critical mind",         phase: .preTalk,     weight: 3.2),
+        Keyword(phrase: "critical factor",       phase: .preTalk,     weight: 3.2),
+        Keyword(phrase: "common occurrence",     phase: .preTalk,     weight: 2.8),
+        Keyword(phrase: "watching a movie",      phase: .preTalk,     weight: 2.8),
+        Keyword(phrase: "driving somewhere",     phase: .preTalk,     weight: 2.8),
+        Keyword(phrase: "bypass of the critical", phase: .preTalk,    weight: 4.0),
+        Keyword(phrase: "subconscious guided you", phase: .preTalk,   weight: 3.0),
+        Keyword(phrase: "analytical or non analytical", phase: .preTalk, weight: 3.8),
 
         // Induction
         Keyword(phrase: "close your eyes",       phase: .induction,   weight: 3.0),
@@ -48,6 +59,29 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "counting down",         phase: .induction,   weight: 3.0),
         Keyword(phrase: "eyelids heavy",         phase: .induction,   weight: 3.0),
         Keyword(phrase: "eyelids are heavy",     phase: .induction,   weight: 3.0),
+        Keyword(phrase: "circular breathing",    phase: .induction,   weight: 3.6),
+        Keyword(phrase: "eye closure",           phase: .induction,   weight: 3.6),
+        Keyword(phrase: "three deep breaths",    phase: .induction,   weight: 3.4),
+        Keyword(phrase: "body awareness",        phase: .induction,   weight: 3.2),
+        Keyword(phrase: "body relaxation",       phase: .induction,   weight: 3.2),
+        Keyword(phrase: "ultimate body relaxation", phase: .induction, weight: 3.8),
+        Keyword(phrase: "arm drop",              phase: .induction,   weight: 3.3),
+        Keyword(phrase: "hand focus",            phase: .induction,   weight: 3.1),
+        Keyword(phrase: "hand breathing",        phase: .induction,   weight: 3.1),
+        Keyword(phrase: "velvety breathing",     phase: .induction,   weight: 3.4),
+        Keyword(phrase: "focus on a spot",       phase: .induction,   weight: 3.2),
+        Keyword(phrase: "fix your eyes",         phase: .induction,   weight: 3.0),
+        Keyword(phrase: "spot on the ceiling",   phase: .induction,   weight: 3.0),
+
+        // Fractionation
+        Keyword(phrase: "open your eyes",        phase: .fractionation, weight: 2.8),
+        Keyword(phrase: "open and close",        phase: .fractionation, weight: 3.0),
+        Keyword(phrase: "close them again",      phase: .fractionation, weight: 3.0),
+        Keyword(phrase: "drop back down",        phase: .fractionation, weight: 3.4),
+        Keyword(phrase: "go back down",          phase: .fractionation, weight: 3.2),
+        Keyword(phrase: "deeper each time",      phase: .fractionation, weight: 3.6),
+        Keyword(phrase: "every time you open",   phase: .fractionation, weight: 3.2),
+        Keyword(phrase: "every time you close",  phase: .fractionation, weight: 3.2),
 
         // Deepening
         Keyword(phrase: "deeper and deeper",     phase: .deepening,   weight: 3.5),
@@ -67,6 +101,13 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "one hundred",           phase: .deepening,   weight: 1.8),
         Keyword(phrase: "staircase",             phase: .deepening,   weight: 2.5),
         Keyword(phrase: "going down",            phase: .deepening,   weight: 2.0),
+        Keyword(phrase: "beautiful staircase",   phase: .deepening,   weight: 3.4),
+        Keyword(phrase: "in your minds eye",     phase: .deepening,   weight: 3.0),
+        Keyword(phrase: "in your mind's eye",    phase: .deepening,   weight: 3.0),
+        Keyword(phrase: "step by step",          phase: .deepening,   weight: 2.8),
+        Keyword(phrase: "ten to one",            phase: .deepening,   weight: 2.8),
+        Keyword(phrase: "deeper asleep",         phase: .deepening,   weight: 3.2),
+        Keyword(phrase: "sound of my voice",     phase: .deepening,   weight: 2.6),
 
         // Therapy (deep trance)
         Keyword(phrase: "in trance",             phase: .therapy,     weight: 3.0),
@@ -74,6 +115,27 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "nothing matters",       phase: .therapy,     weight: 2.5),
         Keyword(phrase: "completely still",      phase: .therapy,     weight: 2.0),
         Keyword(phrase: "deeply relaxed",        phase: .therapy,     weight: 3.0),  // raised: most common therapy anchor
+        Keyword(phrase: "let me tell you a story", phase: .therapy,   weight: 3.6),
+        Keyword(phrase: "i want to tell you a story", phase: .therapy, weight: 3.6),
+        Keyword(phrase: "there was once",        phase: .therapy,     weight: 3.2),
+        Keyword(phrase: "once upon a time",      phase: .therapy,     weight: 3.0),
+        Keyword(phrase: "a metaphor for",        phase: .therapy,     weight: 3.4),
+        Keyword(phrase: "your unconscious mind", phase: .therapy,     weight: 3.2),
+        Keyword(phrase: "in your own way",       phase: .therapy,     weight: 2.8),
+        Keyword(phrase: "inner resources",       phase: .therapy,     weight: 3.0),
+        Keyword(phrase: "use that feeling",      phase: .therapy,     weight: 2.8),
+        Keyword(phrase: "whatever happens",      phase: .therapy,     weight: 2.4),
+        Keyword(phrase: "thats right",           phase: .therapy,     weight: 2.6),
+        Keyword(phrase: "that's right",          phase: .therapy,     weight: 2.6),
+
+        // Confusion
+        Keyword(phrase: "you may wonder",        phase: .confusion,   weight: 3.0),
+        Keyword(phrase: "while you are wondering", phase: .confusion, weight: 3.4),
+        Keyword(phrase: "the more you try",      phase: .confusion,   weight: 3.2),
+        Keyword(phrase: "the less you need",     phase: .confusion,   weight: 3.2),
+        Keyword(phrase: "and as you don't",      phase: .confusion,   weight: 3.0),
+        Keyword(phrase: "before you know",       phase: .confusion,   weight: 2.8),
+        Keyword(phrase: "whether you do or don't", phase: .confusion, weight: 3.4),
 
         // Suggestions
         Keyword(phrase: "you will",              phase: .suggestions, weight: 3.0),
@@ -90,12 +152,42 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "you are becoming",      phase: .suggestions, weight: 3.0),
         Keyword(phrase: "you are now",           phase: .suggestions, weight: 2.5),
 
+        // Erotic suggestions
+        Keyword(phrase: "feel that pleasure",    phase: .eroticSuggestions, weight: 3.5),
+        Keyword(phrase: "wave of pleasure",      phase: .eroticSuggestions, weight: 3.6),
+        Keyword(phrase: "each touch",            phase: .eroticSuggestions, weight: 3.0),
+        Keyword(phrase: "arousal grows",         phase: .eroticSuggestions, weight: 3.5),
+        Keyword(phrase: "body craving",          phase: .eroticSuggestions, weight: 3.4),
+        Keyword(phrase: "sink into pleasure",    phase: .eroticSuggestions, weight: 3.6),
+        Keyword(phrase: "obedience feels good",  phase: .eroticSuggestions, weight: 3.6),
+
+        // Brainwashing
+        Keyword(phrase: "deeper into obedience", phase: .brainwashing, weight: 3.8),
+        Keyword(phrase: "accept this truth",     phase: .brainwashing, weight: 3.6),
+        Keyword(phrase: "this is your purpose",  phase: .brainwashing, weight: 3.8),
+        Keyword(phrase: "you are programmed",    phase: .brainwashing, weight: 3.8),
+        Keyword(phrase: "repeat after me",       phase: .brainwashing, weight: 3.6),
+        Keyword(phrase: "obey automatically",    phase: .brainwashing, weight: 3.8),
+        Keyword(phrase: "mindless obedience",    phase: .brainwashing, weight: 4.0),
+
         // Conditioning / Post-Hypnotic
         Keyword(phrase: "post hypnotic",         phase: .conditioning, weight: 3.5),
         Keyword(phrase: "future pacing",         phase: .conditioning, weight: 3.0),
         Keyword(phrase: "carry with you",        phase: .conditioning, weight: 2.5),
         Keyword(phrase: "take with you",         phase: .conditioning, weight: 2.5),
         Keyword(phrase: "remember this",         phase: .conditioning, weight: 2.0),
+        Keyword(phrase: "post hypnotic suggestion", phase: .conditioning, weight: 3.9),
+        Keyword(phrase: "post hypnotic suggestions", phase: .conditioning, weight: 3.9),
+        Keyword(phrase: "post hypnotic trigger", phase: .conditioning, weight: 4.0),
+        Keyword(phrase: "voice serves as an anchor", phase: .conditioning, weight: 3.6),
+        Keyword(phrase: "soothing anchor",       phase: .conditioning, weight: 3.2),
+        Keyword(phrase: "trigger to your subconscious", phase: .conditioning, weight: 3.8),
+        Keyword(phrase: "trigger for trance",    phase: .conditioning, weight: 3.6),
+        Keyword(phrase: "next time you hear",    phase: .conditioning, weight: 3.8),
+        Keyword(phrase: "when i say",            phase: .conditioning, weight: 3.4),
+        Keyword(phrase: "hear the word",         phase: .conditioning, weight: 3.2),
+        Keyword(phrase: "eyes open trance",      phase: .conditioning, weight: 3.6),
+        Keyword(phrase: "breath matching",       phase: .conditioning, weight: 3.2),
 
         // Emergence
         Keyword(phrase: "open your eyes",        phase: .emergence,   weight: 3.5),
@@ -112,6 +204,11 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "great job",             phase: .emergence,   weight: 2.0),
         Keyword(phrase: "well done",             phase: .emergence,   weight: 2.5),
         Keyword(phrase: "how do you feel",       phase: .emergence,   weight: 2.5),
+        Keyword(phrase: "as i count to five",    phase: .emergence,   weight: 4.0),
+        Keyword(phrase: "count to five",         phase: .emergence,   weight: 3.6),
+        Keyword(phrase: "wide awake and aware",  phase: .emergence,   weight: 4.0),
+        Keyword(phrase: "clear headed",          phase: .emergence,   weight: 3.6),
+        Keyword(phrase: "wonderfully relaxed",   phase: .emergence,   weight: 3.2),
     ]
 
     // MARK: - Pre-Talk Single Words
@@ -129,6 +226,12 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "seated",      phase: .preTalk, weight: 0.6),
         Keyword(phrase: "lying",       phase: .preTalk, weight: 0.6),
         Keyword(phrase: "adjust",      phase: .preTalk, weight: 0.6),
+        Keyword(phrase: "suggestibility", phase: .preTalk, weight: 1.8),
+        Keyword(phrase: "critical",    phase: .preTalk, weight: 1.2),
+        Keyword(phrase: "subconscious", phase: .preTalk, weight: 1.0),
+        Keyword(phrase: "analytical",  phase: .preTalk, weight: 1.2),
+        Keyword(phrase: "movie",       phase: .preTalk, weight: 0.8),
+        Keyword(phrase: "driving",     phase: .preTalk, weight: 0.8),
     ]
 
     // MARK: - Induction Single Words
@@ -159,9 +262,23 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "unwind",      phase: .induction, weight: 1.2),
         Keyword(phrase: "unwinding",   phase: .induction, weight: 1.2),
         Keyword(phrase: "heavy",       phase: .induction, weight: 1.2),
+        Keyword(phrase: "closure",     phase: .induction, weight: 1.2),
+        Keyword(phrase: "fixation",    phase: .induction, weight: 1.5),
+        Keyword(phrase: "awareness",   phase: .induction, weight: 1.0),
     ]
 
     // MARK: - Deepening Single Words
+
+    private static let fractionationWords: [Keyword] = [
+        Keyword(phrase: "fractionation", phase: .fractionation, weight: 3.0),
+        Keyword(phrase: "fractionize",   phase: .fractionation, weight: 2.4),
+        Keyword(phrase: "fractionise",   phase: .fractionation, weight: 2.4),
+        Keyword(phrase: "reopen",        phase: .fractionation, weight: 2.0),
+        Keyword(phrase: "reclose",       phase: .fractionation, weight: 2.0),
+        Keyword(phrase: "reopenings",    phase: .fractionation, weight: 2.0),
+        Keyword(phrase: "blink",         phase: .fractionation, weight: 1.2),
+        Keyword(phrase: "reopen your",   phase: .fractionation, weight: 2.0),
+    ]
 
     private static let deepeningWords: [Keyword] = [
         Keyword(phrase: "deeper",      phase: .deepening, weight: 2.5),
@@ -189,6 +306,19 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "double",      phase: .deepening, weight: 1.5),
     ]
 
+    // MARK: - Confusion Single Words
+
+    private static let confusionWords: [Keyword] = [
+        Keyword(phrase: "confused",       phase: .confusion, weight: 2.4),
+        Keyword(phrase: "confusing",      phase: .confusion, weight: 2.2),
+        Keyword(phrase: "paradox",        phase: .confusion, weight: 2.0),
+        Keyword(phrase: "wondering",      phase: .confusion, weight: 1.8),
+        Keyword(phrase: "uncertain",      phase: .confusion, weight: 1.6),
+        Keyword(phrase: "maybe",          phase: .confusion, weight: 0.8),
+        Keyword(phrase: "perhaps",        phase: .confusion, weight: 0.8),
+        Keyword(phrase: "whether",        phase: .confusion, weight: 1.0),
+    ]
+
     // MARK: - Therapy / Deep Trance Single Words
 
     private static let therapyWords: [Keyword] = [
@@ -202,6 +332,14 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "naturally",   phase: .therapy, weight: 1.2),
         Keyword(phrase: "mind",        phase: .therapy, weight: 0.8),
         Keyword(phrase: "now",         phase: .therapy, weight: 0.8),
+        Keyword(phrase: "metaphor",    phase: .therapy, weight: 2.2),
+        Keyword(phrase: "parable",     phase: .therapy, weight: 2.2),
+        Keyword(phrase: "story",       phase: .therapy, weight: 1.6),
+        Keyword(phrase: "utilization", phase: .therapy, weight: 2.0),
+        Keyword(phrase: "utilize",     phase: .therapy, weight: 1.8),
+        Keyword(phrase: "unconscious", phase: .therapy, weight: 1.8),
+        Keyword(phrase: "reframe",     phase: .therapy, weight: 1.8),
+        Keyword(phrase: "resourceful", phase: .therapy, weight: 1.5),
     ]
 
     // MARK: - Suggestions Single Words
@@ -228,6 +366,38 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "trigger",        phase: .suggestions, weight: 1.5),
     ]
 
+    // MARK: - Erotic Suggestions Single Words
+
+    private static let eroticSuggestionsWords: [Keyword] = [
+        Keyword(phrase: "pleasure",     phase: .eroticSuggestions, weight: 2.6),
+        Keyword(phrase: "sensual",      phase: .eroticSuggestions, weight: 2.4),
+        Keyword(phrase: "arousal",      phase: .eroticSuggestions, weight: 2.8),
+        Keyword(phrase: "desire",       phase: .eroticSuggestions, weight: 2.2),
+        Keyword(phrase: "lust",         phase: .eroticSuggestions, weight: 2.2),
+        Keyword(phrase: "touch",        phase: .eroticSuggestions, weight: 1.8),
+        Keyword(phrase: "obedience",    phase: .eroticSuggestions, weight: 1.6),
+        Keyword(phrase: "submission",   phase: .eroticSuggestions, weight: 2.0),
+        Keyword(phrase: "tease",        phase: .eroticSuggestions, weight: 2.0),
+        Keyword(phrase: "orgasmic",     phase: .eroticSuggestions, weight: 2.8),
+    ]
+
+    // MARK: - Brainwashing Single Words
+
+    private static let brainwashingWords: [Keyword] = [
+        Keyword(phrase: "programmed",   phase: .brainwashing, weight: 2.8),
+        Keyword(phrase: "conditioning", phase: .brainwashing, weight: 1.6),
+        Keyword(phrase: "indoctrinate", phase: .brainwashing, weight: 3.0),
+        Keyword(phrase: "indoctrination", phase: .brainwashing, weight: 3.0),
+        Keyword(phrase: "brainwash",    phase: .brainwashing, weight: 3.2),
+        Keyword(phrase: "brainwashing", phase: .brainwashing, weight: 3.2),
+        Keyword(phrase: "obey",         phase: .brainwashing, weight: 2.4),
+        Keyword(phrase: "mantra",       phase: .brainwashing, weight: 2.2),
+        Keyword(phrase: "repeat",       phase: .brainwashing, weight: 1.8),
+        Keyword(phrase: "erase",        phase: .brainwashing, weight: 1.8),
+        Keyword(phrase: "rewrite",      phase: .brainwashing, weight: 2.2),
+        Keyword(phrase: "overwrite",    phase: .brainwashing, weight: 2.6),
+    ]
+
     // MARK: - Post-Hypnotic Conditioning Single Words
 
     private static let conditioningWords: [Keyword] = [
@@ -237,6 +407,10 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "install",     phase: .conditioning, weight: 1.5),
         Keyword(phrase: "pattern",     phase: .conditioning, weight: 1.2),
         Keyword(phrase: "automatic",   phase: .conditioning, weight: 1.5),
+        Keyword(phrase: "anchor",      phase: .conditioning, weight: 2.0),
+        Keyword(phrase: "trigger",     phase: .conditioning, weight: 2.0),
+        Keyword(phrase: "next",        phase: .conditioning, weight: 1.2),
+        Keyword(phrase: "matching",    phase: .conditioning, weight: 1.0),
     ]
 
     // MARK: - Emergence Single Words
@@ -259,6 +433,7 @@ enum HypnosisPhaseKeywords {
         Keyword(phrase: "waking",      phase: .emergence, weight: 2.0),
         Keyword(phrase: "reorient",    phase: .emergence, weight: 2.0),
         Keyword(phrase: "clarity",     phase: .emergence, weight: 1.2),
+        Keyword(phrase: "headed",      phase: .emergence, weight: 1.2),
         Keyword(phrase: "stretch",     phase: .emergence, weight: 1.2),
         Keyword(phrase: "fingers",     phase: .emergence, weight: 1.2),
         Keyword(phrase: "toes",        phase: .emergence, weight: 1.2),

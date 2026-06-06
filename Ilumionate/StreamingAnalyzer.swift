@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import AVFoundation
 
 @MainActor
@@ -26,7 +27,7 @@ class StreamingAnalyzer: Sendable {
 
     /// Analyze streaming content and generate optimized light session
     func analyzeAndGenerateSession(for track: StreamingTrack) async throws -> LightSession {
-        print("🎵 Starting enhanced analysis for: \(track.title)")
+        Log.analysis.info("🎵 Starting enhanced analysis for: \(track.title)")
 
         isAnalyzing = true
         progress = 0.0
@@ -41,7 +42,7 @@ class StreamingAnalyzer: Sendable {
         progress = 0.1
         statusMessage = "Analyzing metadata..."
         let predictedType = predictContentType(from: track)
-        print("📊 Predicted content type: \(predictedType)")
+        Log.analysis.info("📊 Predicted content type: \(String(describing: predictedType))")
 
         // Step 2: Download and analyze audio (if available)
         progress = 0.3
@@ -75,7 +76,7 @@ class StreamingAnalyzer: Sendable {
         progress = 1.0
         statusMessage = "Complete!"
 
-        print("✅ Generated session: \(session.light_score.count) light moments")
+        Log.analysis.info("✅ Generated session: \(session.light_score.count) light moments")
         return session
     }
 

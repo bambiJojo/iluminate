@@ -23,7 +23,7 @@ enum AVESystemPrompt {
     You classify audio content for a light therapy system.
     Content types: hypnosis, meditation, music, guidedImagery, affirmations, unknown.
     Frequency targets: hypnosis 4–8 Hz, meditation 6–8 Hz, music 8–18 Hz, affirmations 9–11 Hz.
-    Phases (hypnosis only): pre_talk, induction, deepening, therapy, suggestions, post_hypnotic_conditioning, emergence.
+    Phases (hypnosis only): pre_talk, induction, fractionation, deepening, confusion, therapy, suggestions, erotic_suggestions, brainwashing, post_hypnotic_conditioning, emergence.
     Color temperature: deep states 2200–2800 K, alpha 3000–4000 K, alert 4500–6500 K.
     """
 
@@ -46,11 +46,15 @@ enum AVESystemPrompt {
     HYPNOSIS PHASE DETECTION — identify these in order when present:
     1. pre_talk: Rapport building, expectation setting, normalizing hypnosis
     2. induction: Eye-closure cues, relaxation instructions, fixation exercises
-    3. deepening: Counting down, descending imagery ("going deeper"), fractionation
-    4. therapy: The main therapeutic content — suggestions, metaphors, re-framing
-    5. suggestions: Direct or indirect behavioral/belief suggestions
-    6. post_hypnotic_conditioning: Future pacing, trigger installation, anchoring
-    7. emergence: Counting up, re-alerting, "when you open your eyes" language
+    3. fractionation: Brief in-out cycles, opening/closing eyes, re-dropping deeper
+    4. deepening: Counting down, descending imagery ("going deeper"), staircase/levator cues
+    5. confusion: Pattern interrupts, overloaded choices, paradoxical or disorienting phrasing
+    6. therapy: The main therapeutic content — metaphors, re-framing, passive trance work
+    7. suggestions: Direct or indirect behavioral/belief suggestions
+    8. erotic_suggestions: Sensual, arousal, submission, pleasure-linked hypnotic suggestions
+    9. brainwashing: Repetitive indoctrination loops, identity overwrite, mantra-style programming
+    10. post_hypnotic_conditioning: Future pacing, trigger installation, anchoring
+    11. emergence: Counting up, re-alerting, "when you open your eyes" language
 
     CONTENT TYPE CLASSIFICATION:
     • hypnosis: Contains induction + deepening structure; listener is guided into trance
@@ -82,9 +86,9 @@ enum AVESystemPrompt {
     recommendedPreset: Deep Theta Hypnosis
     summary: A classic Ericksonian induction with permissive language, descending staircase deepener,
       passive trance section, and gentle awakening. Light targets mid-theta (4–6 Hz) at peak depth.
-    phases: [pre_talk 0–120s, induction 120–360s, deepening 360–600s, therapy 600–1320s,
-             suggestions 1320–1620s, post_hypnotic_conditioning 1620–1740s, emergence 1740–1800s]
-    tranceDepthCurve: [0.1, 0.35, 0.65, 0.85, 0.8, 0.6, 0.2]
+    phases: [pre_talk 0–120s, induction 120–300s, fractionation 300–420s, deepening 420–600s,
+             therapy 600–1260s, suggestions 1260–1560s, post_hypnotic_conditioning 1560–1740s, emergence 1740–1800s]
+    tranceDepthCurve: [0.1, 0.28, 0.5, 0.72, 0.84, 0.78, 0.58, 0.22]
 
     EXAMPLE 2 — 20-minute meditation:
     contentType: meditation
@@ -226,8 +230,9 @@ struct AIKeyMoment {
 struct AIPhaseSegment {
 
     @Guide(description: """
-        Phase name — one of: pre_talk, induction, deepening, therapy,
-        suggestions, post_hypnotic_conditioning, emergence
+        Phase name — one of: pre_talk, induction, fractionation, deepening,
+        confusion, therapy, suggestions, erotic_suggestions, brainwashing,
+        post_hypnotic_conditioning, emergence
         """)
     var phase: String
 

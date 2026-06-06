@@ -58,8 +58,17 @@ struct AnalyzerOptimizationAggregateMetrics: Codable, Sendable {
 
 enum AnalyzerMetrics {
     private static let scoredPhases: [TrancePhase] = [
-        .preTalk, .induction, .deepening, .therapy,
-        .suggestions, .conditioning, .emergence
+        .preTalk,
+        .induction,
+        .fractionation,
+        .deepening,
+        .confusion,
+        .therapy,
+        .suggestions,
+        .eroticSuggestions,
+        .brainwashing,
+        .conditioning,
+        .emergence
     ]
 
     private static let canonicalOrder: [TrancePhase] = scoredPhases
@@ -120,12 +129,23 @@ enum AnalyzerMetrics {
 
         let orderValidity = scorePhaseOrder(predictedSegments.map(\.phase))
         let contentTypeAccuracy = predictedContentType == example.labels.contentType ? 1.0 : 0.0
-        let overallScore =
-            (0.45 * macroPhaseF1) +
-            (0.25 * boundaryEvaluation.boundaryScore) +
-            (0.15 * boundaryEvaluation.transitionRecall) +
-            (0.10 * orderValidity) +
-            (0.05 * contentTypeAccuracy)
+
+        // Treat boundary/order quality as a multiplier on phase quality rather than a substitute
+        // for it. This keeps the optimizer focused on learning the right hypnosis phases.
+        let phaseAlignmentScore = clampUnitInterval(
+            (0.65 * macroPhaseF1) +
+            (0.35 * timelineAccuracy)
+        )
+        let structuralWeightScale = 0.25 + (0.75 * phaseAlignmentScore)
+        let overallScore = clampUnitInterval(
+            (0.65 * macroPhaseF1) +
+            (0.20 * timelineAccuracy) +
+            structuralWeightScale * (
+                (0.10 * boundaryEvaluation.boundaryScore) +
+                (0.03 * boundaryEvaluation.transitionRecall) +
+                (0.02 * orderValidity)
+            )
+        )
 
         return AnalyzerOptimizationMetrics(
             timelineAccuracy: timelineAccuracy,
@@ -209,21 +229,35 @@ enum AnalyzerMetrics {
             )
         }
 
+        let sortedTruth = truthBoundaries.sorted()
+        let sortedPredicted = predictedBoundaries.sorted()
+        var remainingPredicted = Set(sortedPredicted.indices)
         var totalError: Double = 0
         var matchedCount = 0
 
-        for truth in truthBoundaries {
-            let nearest = predictedBoundaries.min(by: { abs($0 - truth) < abs($1 - truth) })
-            let error = nearest.map { abs($0 - truth) } ?? tolerance
-            totalError += error
-            if error <= tolerance {
+        for truth in sortedTruth {
+            let candidate = remainingPredicted.min { lhs, rhs in
+                abs(sortedPredicted[lhs] - truth) < abs(sortedPredicted[rhs] - truth)
+            }
+            let error = candidate.map { abs(sortedPredicted[$0] - truth) } ?? tolerance
+            if let candidate, error <= tolerance {
+                remainingPredicted.remove(candidate)
                 matchedCount += 1
+                totalError += error
+            } else {
+                totalError += tolerance
             }
         }
 
-        let meanError = totalError / Double(truthBoundaries.count)
-        let boundaryScore = max(0, 1.0 - (meanError / tolerance))
-        let transitionRecall = Double(matchedCount) / Double(truthBoundaries.count)
+        let meanError = totalError / Double(sortedTruth.count)
+        let normalizedError = meanError / max(tolerance, 0.001)
+        let rawBoundaryScore = 1.0 / (1.0 + normalizedError)
+        let transitionRecall = Double(matchedCount) / Double(sortedTruth.count)
+        let transitionPrecision = sortedPredicted.isEmpty ? 0.0 : Double(matchedCount) / Double(sortedPredicted.count)
+        let countBalance = sortedPredicted.isEmpty
+            ? 0.0
+            : Double(min(sortedTruth.count, sortedPredicted.count)) / Double(max(sortedTruth.count, sortedPredicted.count))
+        let boundaryScore = rawBoundaryScore * ((0.60 * countBalance) + (0.40 * transitionPrecision))
         return (boundaryScore, meanError, transitionRecall, matchedCount)
     }
 
@@ -240,5 +274,9 @@ enum AnalyzerMetrics {
             lastIndex = index
         }
         return 1.0
+    }
+
+    private static func clampUnitInterval(_ value: Double) -> Double {
+        min(1.0, max(0.0, value))
     }
 }

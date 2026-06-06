@@ -95,6 +95,8 @@ enum AnalyzerOptimizerError: LocalizedError, Sendable {
     case emptyDataset
     case outputWriteFailed(URL, underlying: String)
     case evaluationFailed(String)
+    case paused(URL)
+    case invalidCheckpoint(String)
 
     var errorDescription: String? {
         switch self {
@@ -109,6 +111,10 @@ enum AnalyzerOptimizerError: LocalizedError, Sendable {
         case .outputWriteFailed(let url, let underlying):
             return "Could not write optimizer output at \(url.path()): \(underlying)"
         case .evaluationFailed(let message):
+            return message
+        case .paused(let url):
+            return "Optimizer paused and saved to \(url.path())."
+        case .invalidCheckpoint(let message):
             return message
         }
     }

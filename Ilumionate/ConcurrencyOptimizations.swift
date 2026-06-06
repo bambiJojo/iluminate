@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import AVFoundation
 
 // MARK: - Async Sequence for Real-time Audio Processing
@@ -341,7 +342,7 @@ class AudioLevelMonitor: Sendable {
                     self.updateLevels(levels)
                 }
             } catch {
-                print("❌ Audio monitoring error: \(error)")
+                Log.general.info("❌ Audio monitoring error: \(error)")
             }
 
             await self.stopMonitoring()

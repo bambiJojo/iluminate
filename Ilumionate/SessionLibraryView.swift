@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct SessionLibraryView: View {
     var engine: LightEngine
@@ -95,7 +96,7 @@ struct SessionLibraryView: View {
                 let session = try LightScoreReader.loadSession(named: name)
                 sessions.append(session)
             } catch {
-                print("Failed to load session '\(name)': \(error)")
+                Log.ui.info("Failed to load session '\(name)': \(error)")
             }
         }
     }

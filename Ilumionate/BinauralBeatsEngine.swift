@@ -14,6 +14,7 @@
 //
 
 import AVFoundation
+import os
 
 // MARK: - Audio Render State
 
@@ -86,7 +87,7 @@ final class BinauralBeatsEngine {
             try audioEngine.start()
             isPlaying = true
         } catch {
-            print("[BinauralBeats] Engine start failed: \(error)")
+            Log.audio.info("[BinauralBeats] Engine start failed: \(error)")
         }
     }
 
@@ -112,7 +113,7 @@ final class BinauralBeatsEngine {
             try audioEngine.start()
             isPlaying = true
         } catch {
-            print("[BinauralBeats] Resume failed: \(error)")
+            Log.audio.info("[BinauralBeats] Resume failed: \(error)")
         }
     }
 
@@ -138,7 +139,7 @@ final class BinauralBeatsEngine {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
         } catch {
-            print("[BinauralBeats] AVAudioSession setup error: \(error)")
+            Log.audio.info("[BinauralBeats] AVAudioSession setup error: \(error)")
         }
 
         let sampleRate: Double = 44100

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import CryptoKit
 
 nonisolated struct LabeledFile: Codable, Identifiable, Sendable {
@@ -329,7 +330,7 @@ nonisolated struct AnalyzerTrainingCorpusLoadResult: Sendable {
 nonisolated struct AnalyzerTrainingCorpusLoader: Sendable {
     let corpusDirectory: URL
 
-    init(corpusDirectory: URL = URL.documentsDirectory.appending(path: "TrainingCorpus")) {
+    init(corpusDirectory: URL = TrainingCorpusLocation.defaultURL()) {
         self.corpusDirectory = corpusDirectory
     }
 
@@ -350,7 +351,7 @@ nonisolated struct AnalyzerTrainingCorpusLoader: Sendable {
                     sourceDescription: "AnalyzerDataset (\(datasetIndexURL.path()))"
                 )
             } catch {
-                print("⚠️ Failed to load analyzer dataset index at \(datasetIndexURL.path()): \(error.localizedDescription)")
+                Log.general.info("⚠️ Failed to load analyzer dataset index at \(datasetIndexURL.path()): \(error.localizedDescription)")
             }
         }
 

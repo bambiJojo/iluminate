@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import AVFoundation
 import Observation
 
@@ -50,20 +51,20 @@ class AudioSyncController {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try audioSession.setActive(true)
-            print("✅ Audio session configured for playback")
+            Log.audio.info("✅ Audio session configured for playback")
         } catch {
-            print("❌ Failed to setup audio session: \(error)")
+            Log.audio.info("❌ Failed to setup audio session: \(error)")
         }
         #else
         // macOS doesn't use AVAudioSession
-        print("✅ Running on macOS - no audio session setup needed")
+        Log.audio.info("✅ Running on macOS - no audio session setup needed")
         #endif
     }
 
     // MARK: - Audio Loading
 
     func loadAudio(from url: URL) throws {
-        print("🎵 Loading audio from: \(url.lastPathComponent)")
+        Log.audio.info("🎵 Loading audio from: \(url.lastPathComponent)")
 
         // Stop any existing playback
         stop()
@@ -78,16 +79,16 @@ class AudioSyncController {
             duration = audioPlayer?.duration ?? 0.0
             currentTime = 0.0
 
-            print("✅ Audio loaded, duration: \(duration)s")
+            Log.audio.info("✅ Audio loaded, duration: \(self.duration)s")
         } catch {
-            print("❌ Failed to load audio: \(error)")
+            Log.audio.info("❌ Failed to load audio: \(error)")
             throw AudioSyncError.failedToLoadAudio(error)
         }
     }
 
     /// Asynchronous audio loading to prevent UI blocking
     func loadAudioAsync(from url: URL) async throws {
-        print("🎵 Loading audio asynchronously from: \(url.lastPathComponent)")
+        Log.audio.info("🎵 Loading audio asynchronously from: \(url.lastPathComponent)")
 
         // Stop any existing playback on main actor
         await MainActor.run {
@@ -115,11 +116,11 @@ class AudioSyncController {
                         self.duration = self.audioPlayer?.duration ?? 0.0
                         self.currentTime = 0.0
 
-                        print("✅ Audio loaded asynchronously, duration: \(self.duration)s")
+                        Log.audio.info("✅ Audio loaded asynchronously, duration: \(self.duration)s")
                         continuation.resume()
                     }
                 } catch {
-                    print("❌ Failed to load audio asynchronously: \(error)")
+                    Log.audio.info("❌ Failed to load audio asynchronously: \(error)")
                     continuation.resume(throwing: AudioSyncError.failedToLoadAudio(error))
                 }
             }
@@ -130,7 +131,7 @@ class AudioSyncController {
 
     func play() {
         guard let player = audioPlayer else {
-            print("⚠️ No audio loaded")
+            Log.audio.info("⚠️ No audio loaded")
             return
         }
 
@@ -138,7 +139,7 @@ class AudioSyncController {
         isPlaying = true
         startTimer()
 
-        print("▶️ Audio playback started")
+        Log.audio.info("▶️ Audio playback started")
     }
 
     func pause() {
@@ -146,7 +147,7 @@ class AudioSyncController {
         isPlaying = false
         stopTimer()
 
-        print("⏸️ Audio playback paused")
+        Log.audio.info("⏸️ Audio playback paused")
     }
 
     func stop() {
@@ -156,7 +157,7 @@ class AudioSyncController {
         isPlaying = false
         stopTimer()
 
-        print("⏹️ Audio playback stopped")
+        Log.audio.info("⏹️ Audio playback stopped")
     }
 
     func seek(to time: TimeInterval) {
@@ -168,7 +169,7 @@ class AudioSyncController {
 
         onTimeUpdate?(currentTime)
 
-        print("⏩ Seeked to \(clampedTime)s")
+        Log.audio.info("⏩ Seeked to \(clampedTime)s")
     }
 
     // MARK: - Time Tracking
@@ -208,7 +209,7 @@ class AudioSyncController {
         stopTimer()
         onPlaybackFinished?()
 
-        print("🏁 Audio playback finished")
+        Log.audio.info("🏁 Audio playback finished")
     }
 
     // MARK: - Utility

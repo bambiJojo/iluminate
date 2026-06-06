@@ -18,6 +18,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Checkpoint Model
 
@@ -64,7 +65,7 @@ actor AnalysisProgressStore {
         }
 
         if !checkpoints.isEmpty {
-            print("📂 Loaded \(checkpoints.count) analysis checkpoint(s) to resume")
+            Log.analysis.info("📂 Loaded \(self.checkpoints.count) analysis checkpoint(s) to resume")
         }
     }
 
@@ -90,7 +91,7 @@ actor AnalysisProgressStore {
         cp.lastUpdated = Date()
         checkpoints[audioFile.id] = cp
         persist()
-        print("💾 Checkpoint: saved transcription for \(audioFile.filename)")
+        Log.analysis.info("💾 Checkpoint: saved transcription for \(audioFile.filename)")
     }
 
     func saveAnalysis(_ analysis: AnalysisResult, for audioFile: AudioFile) {
@@ -99,13 +100,13 @@ actor AnalysisProgressStore {
         cp.lastUpdated = Date()
         checkpoints[audioFile.id] = cp
         persist()
-        print("💾 Checkpoint: saved analysis for \(audioFile.filename)")
+        Log.analysis.info("💾 Checkpoint: saved analysis for \(audioFile.filename)")
     }
 
     func clear(for audioFile: AudioFile) {
         guard checkpoints.removeValue(forKey: audioFile.id) != nil else { return }
         persist()
-        print("🧹 Checkpoint: cleared for \(audioFile.filename)")
+        Log.analysis.info("🧹 Checkpoint: cleared for \(audioFile.filename)")
     }
 
     func clearAll() {

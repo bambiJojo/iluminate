@@ -62,6 +62,10 @@ struct TechniqueDetector: Sendable {
         techniques.append(contentsOf: countdowns.techniques)
         markers.append(contentsOf: countdowns.markers)
 
+        let suggestibility = detectSuggestibilityTesting(wordTimestamps: wordTimestamps)
+        techniques.append(contentsOf: suggestibility.techniques)
+        markers.append(contentsOf: suggestibility.markers)
+
         let relaxation = detectProgressiveRelaxation(wordTimestamps: wordTimestamps)
         techniques.append(contentsOf: relaxation.techniques)
         markers.append(contentsOf: relaxation.markers)
@@ -69,6 +73,14 @@ struct TechniqueDetector: Sendable {
         let commands = detectEmbeddedCommands(wordTimestamps: wordTimestamps)
         techniques.append(contentsOf: commands.techniques)
         markers.append(contentsOf: commands.markers)
+
+        let metaphoricalStories = detectMetaphoricalStories(wordTimestamps: wordTimestamps)
+        techniques.append(contentsOf: metaphoricalStories.techniques)
+        markers.append(contentsOf: metaphoricalStories.markers)
+
+        let utilization = detectUtilizationLanguage(wordTimestamps: wordTimestamps)
+        techniques.append(contentsOf: utilization.techniques)
+        markers.append(contentsOf: utilization.markers)
 
         let deepening = detectDeepeningCommands(wordTimestamps: wordTimestamps, prosodic: prosodic)
         techniques.append(contentsOf: deepening.techniques)
@@ -124,7 +136,10 @@ struct TechniqueDetector: Sendable {
             markers.append(contentsOf: pauseTechniques.markers)
         }
 
-        return TechniqueDetectionResult(techniques: deduplicateTechniques(techniques), markers: markers)
+        return TechniqueDetectionResult(
+            techniques: deduplicateTechniques(techniques),
+            markers: deduplicateMarkers(markers)
+        )
     }
 
     /// Removes duplicate techniques of the same type within a 2-second window.
@@ -140,11 +155,70 @@ struct TechniqueDetector: Sendable {
         }
         return result
     }
+
+    /// Collapses near-identical markers so broad pattern sets do not flood the UI.
+    private func deduplicateMarkers(_ markers: [LinguisticMarker]) -> [LinguisticMarker] {
+        let sorted = markers.sorted { $0.timestamp < $1.timestamp }
+        var result: [LinguisticMarker] = []
+        for marker in sorted {
+            let isDuplicate = result.contains { existing in
+                existing.type == marker.type
+                    && existing.textSnippet == marker.textSnippet
+                    && abs(existing.timestamp - marker.timestamp) < 2.0
+            }
+            if !isDuplicate { result.append(marker) }
+        }
+        return result
+    }
 }
 
 // MARK: - Detection Methods
 
 private extension TechniqueDetector {
+
+    // MARK: - Suggestibility Testing Detection
+
+    func detectSuggestibilityTesting(wordTimestamps: [WordTimestamp]) -> TechniqueDetectionResult {
+        var techniques: [HypnoticTechnique] = []
+        var markers: [LinguisticMarker] = []
+
+        let patterns: [[String]] = [
+            ["suggestibility", "test"], ["critical", "mind"], ["critical", "factor"],
+            ["what", "is", "hypnosis"], ["watching", "a", "movie"], ["driving", "somewhere"],
+            ["analytical", "or", "non", "analytical"]
+        ]
+
+        for windowStart in 0..<wordTimestamps.count {
+            for pattern in patterns {
+                let windowEnd = windowStart + pattern.count
+                guard windowEnd <= wordTimestamps.count else { continue }
+
+                let windowWords = wordTimestamps[windowStart..<windowEnd]
+                let matches = zip(windowWords, pattern).allSatisfy { word, target in
+                    word.word.lowercased().trimmingCharacters(in: .punctuationCharacters) == target
+                }
+                guard matches else { continue }
+
+                let timestamp = wordTimestamps[windowStart].startTime
+                let phrase = pattern.joined(separator: " ")
+
+                techniques.append(HypnoticTechnique(
+                    technique: "suggestibility_testing",
+                    timestamp: timestamp,
+                    description: "Pre-talk suggestibility framing: \"\(phrase)\"",
+                    suggestedLightSync: "steady_preparation_hold"
+                ))
+                markers.append(LinguisticMarker(
+                    type: .suggestibilityTesting,
+                    timestamp: timestamp,
+                    textSnippet: phrase,
+                    strength: 0.85
+                ))
+            }
+        }
+
+        return TechniqueDetectionResult(techniques: techniques, markers: markers)
+    }
 
     // MARK: - Countdown Detection
 
@@ -414,38 +488,60 @@ private extension TechniqueDetector {
         var techniques: [HypnoticTechnique] = []
         var markers: [LinguisticMarker] = []
 
-        let anchorPatterns: [[String]] = [
-            ["whenever", "you"], ["every", "time"], ["from", "now", "on"],
-            ["each", "time", "you"], ["any", "time", "you"],
-            ["you", "will", "find"], ["you", "will", "notice"],
-            ["you", "will", "feel"], ["your", "subconscious"]
+        struct AnchorPattern {
+            let words: [String]
+            let markerType: LinguisticMarker.MarkerType
+            let technique: String
+            let strength: Double
+        }
+
+        let anchorPatterns: [AnchorPattern] = [
+            AnchorPattern(words: ["whenever", "you"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.8),
+            AnchorPattern(words: ["every", "time"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.8),
+            AnchorPattern(words: ["from", "now", "on"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.8),
+            AnchorPattern(words: ["each", "time", "you"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.8),
+            AnchorPattern(words: ["any", "time", "you"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.8),
+            AnchorPattern(words: ["you", "will", "find"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.7),
+            AnchorPattern(words: ["you", "will", "notice"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.7),
+            AnchorPattern(words: ["you", "will", "feel"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.7),
+            AnchorPattern(words: ["your", "subconscious"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.7),
+            AnchorPattern(words: ["when", "i", "say"], markerType: .triggerInstallation, technique: "trigger_installation", strength: 0.95),
+            AnchorPattern(words: ["next", "time", "you"], markerType: .triggerInstallation, technique: "trigger_installation", strength: 0.95),
+            AnchorPattern(words: ["next", "time", "you", "hear"], markerType: .triggerInstallation, technique: "trigger_installation", strength: 1.0),
+            AnchorPattern(words: ["hear", "the", "word"], markerType: .triggerInstallation, technique: "trigger_installation", strength: 0.9),
+            AnchorPattern(words: ["hear", "my", "voice"], markerType: .triggerInstallation, technique: "trigger_installation", strength: 0.85),
+            AnchorPattern(words: ["trigger", "for", "trance"], markerType: .triggerInstallation, technique: "trigger_installation", strength: 0.9),
+            AnchorPattern(words: ["eyes", "open", "trance"], markerType: .triggerInstallation, technique: "trigger_installation", strength: 0.9),
+            AnchorPattern(words: ["breath", "matching"], markerType: .triggerInstallation, technique: "trigger_installation", strength: 0.85),
+            AnchorPattern(words: ["voice", "serves", "as", "an", "anchor"], markerType: .anchoringResponse, technique: "anchoring", strength: 0.9)
         ]
 
         for windowStart in 0..<wordTimestamps.count {
             for pattern in anchorPatterns {
-                let windowEnd = windowStart + pattern.count
+                let windowEnd = windowStart + pattern.words.count
                 guard windowEnd <= wordTimestamps.count else { continue }
 
                 let windowWords = wordTimestamps[windowStart..<windowEnd]
-                let matches = zip(windowWords, pattern).allSatisfy { word, target in
+                let matches = zip(windowWords, pattern.words).allSatisfy { word, target in
                     word.word.lowercased().trimmingCharacters(in: .punctuationCharacters) == target
                 }
                 guard matches else { continue }
 
                 let timestamp = wordTimestamps[windowStart].startTime
-                let phrase = pattern.joined(separator: " ")
+                let phrase = pattern.words.joined(separator: " ")
+                let isTrigger = pattern.markerType == .triggerInstallation
 
                 techniques.append(HypnoticTechnique(
-                    technique: "anchoring",
+                    technique: pattern.technique,
                     timestamp: timestamp,
-                    description: "Anchoring/conditioning: \"\(phrase)...\"",
-                    suggestedLightSync: "bilateral_activation_warm_shift"
+                    description: "\(isTrigger ? "Trigger installation" : "Anchoring/conditioning"): \"\(phrase)...\"",
+                    suggestedLightSync: isTrigger ? "bilateral_activation_warm_shift" : "steady_anchor_reinforcement"
                 ))
                 markers.append(LinguisticMarker(
-                    type: .anchoringResponse,
+                    type: pattern.markerType,
                     timestamp: timestamp,
                     textSnippet: phrase,
-                    strength: 0.8
+                    strength: pattern.strength
                 ))
             }
         }
@@ -588,7 +684,7 @@ private extension TechniqueDetector {
         let emergenceKeywords = Set([
             "awake", "alert", "refreshed", "energized", "open",
             "returning", "awareness", "present", "bright", "clear",
-            "wonderful", "amazing", "ready", "fully"
+            "wonderful", "amazing", "ready", "fully", "headed", "reoriented"
         ])
         let scanStart = duration * 0.85
         let lateWords = wordTimestamps.filter { $0.startTime >= scanStart }

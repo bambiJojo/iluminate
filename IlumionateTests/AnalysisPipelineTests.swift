@@ -159,6 +159,22 @@ struct AnalysisPipelineTests {
         #expect(generator.lastConfig?.bilateralMode == true)
     }
 
+    @Test func sessionGeneration_receivesEnrichedTimingData() async throws {
+        let generator = MockSessionGenerator()
+        let pipeline = AnalysisPipeline(
+            transcriber: MockAudioTranscriber(),
+            analyzer: MockContentAnalyzer(),
+            prosodyAnalyzer: MockProsodyAnalyzer(profile: AnalysisFixtures.prosodicProfile),
+            generator: generator
+        )
+
+        _ = try await pipeline.run(audioFile: AnalysisFixtures.audioFile())
+
+        #expect(generator.lastAnalysis?.prosodicProfile != nil)
+        #expect(generator.lastAnalysis?.techniqueDetection != nil)
+        #expect(generator.lastAnalysis?.transcriptAnalysis != nil)
+    }
+
     // MARK: - All Content Types
 
     @Test func hypnosisAnalysis_producesSession()      async throws { try await assertSessionGenerated(analysis: AnalysisFixtures.hypnosisAnalysis)     }
@@ -188,5 +204,17 @@ struct AnalysisPipelineTests {
         let result = try await pipeline.run(audioFile: AnalysisFixtures.audioFile())
         #expect(result.session.duration_sec > 0)
         #expect(result.analysis.contentType == analysis.contentType)
+    }
+}
+
+private struct MockProsodyAnalyzer: ProsodyAnalyzingService {
+    let profile: ProsodicProfile
+
+    func analyze(
+        url: URL,
+        segments: [AudioTranscriptionSegment],
+        config: ProsodyAnalyzer.Config
+    ) throws -> ProsodicProfile {
+        profile
     }
 }

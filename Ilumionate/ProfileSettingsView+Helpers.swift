@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import os
 
 extension ProfileSettingsView {
 
@@ -404,7 +405,7 @@ extension ProfileSettingsView {
             let exportURL = try AppSettingsManager.exportSnapshot()
             presentShareSheet(items: [exportURL])
         } catch {
-            print("Failed to export settings snapshot: \(error)")
+            Log.ui.info("Failed to export settings snapshot: \(error)")
         }
     }
 
@@ -413,7 +414,7 @@ extension ProfileSettingsView {
             try AppSettingsManager.clearAllData()
             showClearDataDone = true
         } catch {
-            print("Failed to clear all app data: \(error)")
+            Log.ui.info("Failed to clear all app data: \(error)")
         }
     }
 

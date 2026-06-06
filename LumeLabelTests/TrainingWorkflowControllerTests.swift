@@ -160,6 +160,64 @@ struct TrainingWorkflowControllerTests {
             Issue.record("Expected a failed workflow state.")
         }
     }
+
+    @Test
+    func optimizePauseCreatesResumableStateAndResumeRestartsRun() async throws {
+        let fixture = try makeDatasetFixture()
+        let tempDirectory = fixture.corpusDirectory.deletingLastPathComponent()
+        let engine = FakeTrainingWorkflowEngine(
+            dataset: fixture.dataset,
+            initialCoverage: .init(
+                readyExampleCount: 1,
+                totalExampleCount: 1,
+                missingExamples: []
+            ),
+            postCoverage: .init(
+                readyExampleCount: 1,
+                totalExampleCount: 1,
+                missingExamples: []
+            ),
+            measurementResult: try makeMeasurementResult(
+                dataset: fixture.dataset,
+                outputDirectory: tempDirectory,
+                matchPercentage: 70.0
+            ),
+            optimizeResult: try makeOptimizeResult(
+                dataset: fixture.dataset,
+                outputDirectory: tempDirectory,
+                matchPercentage: 84.0
+            )
+        )
+        engine.checkpoint = makeCheckpoint(dataset: fixture.dataset, outputDirectory: tempDirectory)
+        engine.optimizeError = AnalyzerOptimizerError.paused(
+            tempDirectory.appending(path: "AnalyzerOptimizationCheckpoint.json")
+        )
+
+        let controller = TrainingWorkflowController(engine: engine)
+        controller.startOptimize()
+        await controller.waitForRunCompletion()
+
+        switch controller.state {
+        case .paused(let snapshot):
+            #expect(snapshot.generation == engine.checkpoint?.nextGeneration)
+            #expect(controller.resumableOptimization != nil)
+        default:
+            Issue.record("Expected a paused workflow state after a checkpointed pause.")
+        }
+
+        engine.optimizeError = nil
+        controller.resumeOptimize()
+        await controller.waitForRunCompletion()
+
+        #expect(engine.optimizeResumeFlags == [false, true])
+        switch controller.state {
+        case .completed(let summary):
+            #expect(summary.action == .optimize)
+            #expect(summary.matchPercentage == 84.0)
+        default:
+            Issue.record("Expected the resumed workflow to complete.")
+        }
+    }
 }
 
 @MainActor
@@ -172,9 +230,13 @@ private final class FakeTrainingWorkflowEngine: TrainingWorkflowEngine {
     let measureDelayNanoseconds: UInt64
 
     var loadError: Error?
+    var checkpoint: AnalyzerOptimizer.Checkpoint?
+    var optimizeError: Error?
     var prepareCalls = 0
     var measureCalls = 0
     var optimizeCalls = 0
+    var pauseRequests = 0
+    var optimizeResumeFlags: [Bool] = []
 
     init(
         dataset: AnalyzerOptimizationDataset,
@@ -203,6 +265,10 @@ private final class FakeTrainingWorkflowEngine: TrainingWorkflowEngine {
         prepareCalls > 0 ? postCoverage : initialCoverage
     }
 
+    func loadOptimizationCheckpoint() throws -> AnalyzerOptimizer.Checkpoint? {
+        checkpoint
+    }
+
     func prepareTranscripts(
         for dataset: AnalyzerOptimizationDataset,
         progress: @escaping @MainActor (Int, Int, String) -> Void
@@ -214,8 +280,20 @@ private final class FakeTrainingWorkflowEngine: TrainingWorkflowEngine {
         return postCoverage
     }
 
-    func measure() async throws -> AnalyzerOptimizer.MeasurementResult {
+    func measure(
+        onProgress: @escaping @Sendable (AnalyzerOptimizer.Progress) async -> Void
+    ) async throws -> AnalyzerOptimizer.MeasurementResult {
         measureCalls += 1
+        await onProgress(
+            .init(
+                title: "Measuring Analyzer",
+                message: "Evaluating train split · sample.m4a",
+                generation: nil,
+                completedUnitCount: 1,
+                totalUnitCount: 2,
+                isEstimatedTotal: false
+            )
+        )
         if measureDelayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: measureDelayNanoseconds)
         }
@@ -223,11 +301,29 @@ private final class FakeTrainingWorkflowEngine: TrainingWorkflowEngine {
     }
 
     func optimize(
+        resuming: Bool,
         onProgress: @escaping @Sendable (AnalyzerOptimizer.Progress) async -> Void
     ) async throws -> AnalyzerOptimizer.RunResult {
         optimizeCalls += 1
-        await onProgress(.init(message: "Generation 0 complete", generation: 0))
+        optimizeResumeFlags.append(resuming)
+        await onProgress(
+            .init(
+                title: "Optimizing Analyzer",
+                message: "Generation 0 complete",
+                generation: 0,
+                completedUnitCount: 4,
+                totalUnitCount: 10,
+                isEstimatedTotal: true
+            )
+        )
+        if let optimizeError {
+            throw optimizeError
+        }
         return optimizeResult
+    }
+
+    func requestPause() async {
+        pauseRequests += 1
     }
 
     func cancelCurrentWork() async {}
@@ -438,6 +534,40 @@ private func makeScorecard(
         matchPercentage: matchPercentage,
         splitSummaries: [],
         worstMatches: []
+    )
+}
+
+private func makeCheckpoint(
+    dataset: AnalyzerOptimizationDataset,
+    outputDirectory: URL
+) -> AnalyzerOptimizer.Checkpoint {
+    let metrics = makeAggregateMetrics(overallScore: 0.61, exampleCount: dataset.examples.count)
+    let config = makeAnalyzerConfig()
+    let entry = AnalyzerOptimizer.Checkpoint.PopulationEntrySnapshot(
+        config: config,
+        trainingMetrics: metrics,
+        validationMetrics: metrics
+    )
+
+    return AnalyzerOptimizer.Checkpoint(
+        schemaVersion: 1,
+        savedAt: Date(timeIntervalSince1970: 500),
+        datasetHash: dataset.datasetHash,
+        params: .init(evaluationMode: .hybridRuntime, publishBestConfigToDocuments: true),
+        baseConfig: config,
+        stage: .generationLoop,
+        nextGeneration: 3,
+        progressBase: 24,
+        childGenerationCount: 2,
+        stagnantGenerations: 1,
+        baselineTrainingMetrics: metrics,
+        baselineValidationMetrics: metrics,
+        baselineOverallMetrics: metrics,
+        population: [entry],
+        bestEntry: entry,
+        bestGeneration: 2,
+        bestSelectionScore: metrics.overallScore,
+        generationHistory: []
     )
 }
 

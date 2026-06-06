@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import SwiftUI
 
 @MainActor
@@ -43,7 +44,7 @@ class StreamingManager {
             soundCloudService = SoundCloudService(clientId: scId, clientSecret: scSecret)
         }
 
-        print("🎵 StreamingManager: Configured SoundCloud service")
+        Log.streaming.info("🎵 StreamingManager: Configured SoundCloud service")
     }
 
     // MARK: - Authentication
@@ -58,11 +59,11 @@ class StreamingManager {
                     do {
                         try await service.authenticate()
                         await MainActor.run {
-                            print("🎵 \(service.name): Authenticated successfully")
+                            Log.streaming.info("🎵 \(service.name): Authenticated successfully")
                         }
                     } catch {
                         await MainActor.run {
-                            print("🎵 \(service.name): Authentication failed - \(error)")
+                            Log.streaming.info("🎵 \(service.name): Authentication failed - \(error)")
                             self.errorMessage = "Failed to connect to \(service.name)"
                         }
                     }
@@ -92,7 +93,7 @@ class StreamingManager {
                         return try await service.search(query: query)
                     } catch {
                         await MainActor.run {
-                            print("🎵 \(service.name): Search failed - \(error)")
+                            Log.streaming.info("🎵 \(service.name): Search failed - \(error)")
                         }
                         return []
                     }
@@ -121,7 +122,7 @@ class StreamingManager {
                         return try await service.getPlaylists()
                     } catch {
                         await MainActor.run {
-                            print("🎵 \(service.name): Failed to load playlists - \(error)")
+                            Log.streaming.info("🎵 \(service.name): Failed to load playlists - \(error)")
                         }
                         return []
                     }
@@ -145,7 +146,7 @@ class StreamingManager {
 
     /// Analyze streaming track and generate optimized light session
     func analyzeAndCreateSession(for track: StreamingTrack) async throws -> (AudioFile, LightSession) {
-        print("🎵 Starting enhanced analysis for: \(track.displayName)")
+        Log.streaming.info("🎵 Starting enhanced analysis for: \(track.displayName)")
 
         // Generate optimized light session using streaming analyzer
         let session = try await streamingAnalyzer.analyzeAndGenerateSession(for: track)
@@ -191,7 +192,7 @@ class StreamingManager {
         do {
             return try await soundCloud.getMeditationTracks()
         } catch {
-            print("Failed to get meditation tracks: \(error)")
+            Log.streaming.info("Failed to get meditation tracks: \(error)")
             return []
         }
     }

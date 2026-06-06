@@ -34,7 +34,11 @@ struct AudioLibraryView: View {
     enum ContentFilter: String, CaseIterable {
         case all = "All"
         case hypnosis = "Hypnosis"
+        case eroticHypnosis = "Erotic Hypnosis"
+        case sleepHypnosis = "Sleep Hypnosis"
         case meditation = "Meditation"
+        case brainwave = "Brainwave"
+        case asmr = "ASMR"
         case music = "Music"
         case guided = "Guided"
         case affirmations = "Affirmations"

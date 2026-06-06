@@ -160,8 +160,6 @@ struct CorpusFileRow: View {
                     Text(Duration.seconds(file.audioDuration).formatted(.time(pattern: .minuteSecond)))
                     Text("·")
                     Text("\(file.phases.count) phase\(file.phases.count == 1 ? "" : "s")")
-                    Text("·")
-                    Text(file.expectedContentType.rawValue.capitalized)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)

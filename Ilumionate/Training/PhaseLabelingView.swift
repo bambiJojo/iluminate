@@ -21,10 +21,7 @@ struct PhaseLabelingView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    private let allPhases: [HypnosisMetadata.Phase] = [
-        .preTalk, .induction, .deepening, .therapy,
-        .suggestions, .conditioning, .emergence
-    ]
+    private let allPhases: [HypnosisMetadata.Phase] = HypnosisMetadata.Phase.orderedHypnosisPhases
 
     var body: some View {
         ScrollView {
@@ -226,10 +223,14 @@ struct PhaseLabelingView: View {
     private var metadataSection: some View {
         GlassCard(label: "Metadata") {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                Picker("Content Type", selection: $file.expectedContentType) {
-                    ForEach(AnalysisResult.ContentType.allCases, id: \.self) { type in
-                        Text(type.rawValue.capitalized).tag(type)
-                    }
+                HStack {
+                    Text("Corpus Type")
+                        .font(TranceTypography.body)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    Label("Hypnosis", systemImage: "brain.head.profile")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
                 }
 
                 HStack {
@@ -260,6 +261,10 @@ struct PhaseLabelingView: View {
                 TextField("Labeler notes...", text: $file.labelerNotes, axis: .vertical)
                     .font(TranceTypography.body)
                     .lineLimit(3...6)
+
+                Text("Use phases, techniques, and notes to capture style differences such as ASMR, conditioning, or other session patterns.")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
             }
         }
     }
@@ -355,6 +360,7 @@ struct PhaseLabelingView: View {
     }
 
     private func saveFile() async {
+        file.expectedContentType = .hypnosis
         file.labeledAt = Date()
         _ = try? await TrainingCorpusManager.shared.save(file)
         TranceHaptics.shared.medium()
@@ -372,9 +378,13 @@ struct PhaseLabelingView: View {
         switch phase {
         case .preTalk:      return .bwAlpha
         case .induction:    return .phaseInduction
+        case .fractionation:return .cyan
         case .deepening:    return .phaseDeepener
+        case .confusion:    return .mint
         case .therapy:      return .phaseSuggestion
         case .suggestions:  return .bwTheta
+        case .eroticSuggestions: return .roseDeep
+        case .brainwashing: return .orange
         case .conditioning: return .bwGamma
         case .emergence:    return .bwBeta
         case .transitional: return .textLight

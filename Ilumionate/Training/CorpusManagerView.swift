@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import os
 import UniformTypeIdentifiers
 import AVFoundation
 
@@ -93,8 +94,6 @@ struct CorpusManagerView: View {
                                 Text(Duration.seconds(file.audioDuration).formatted(.time(pattern: .minuteSecond)))
                                 Text("·")
                                 Text(file.phases.count.formatted() + " phases")
-                                Text("·")
-                                Text(file.expectedContentType.rawValue.capitalized)
                             }
                             .font(TranceTypography.caption)
                             .foregroundStyle(Color.textSecondary)
@@ -140,7 +139,7 @@ struct CorpusManagerView: View {
                 do {
                     _ = try await corpusManager.importAudio(from: url)
                 } catch {
-                    print("Failed to import \(url.lastPathComponent): \(error)")
+                    Log.ui.info("Failed to import \(url.lastPathComponent): \(error)")
                 }
             }
         }

@@ -10,6 +10,52 @@ import Observation
 import AVFoundation
 import CoreMedia
 
+nonisolated enum TrainingCorpusLocation {
+    static let visibleDirectoryName = "TrainingCorpus"
+    static let hiddenDirectoryName = ".TrainingCorpus"
+
+    static func defaultURL(
+        documentsDirectory: URL = .documentsDirectory,
+        fileManager: FileManager = .default
+    ) -> URL {
+        let hiddenURL = documentsDirectory.appending(path: hiddenDirectoryName, directoryHint: .isDirectory)
+        let visibleURL = documentsDirectory.appending(path: visibleDirectoryName, directoryHint: .isDirectory)
+        let hiddenHasData = hasCorpusData(at: hiddenURL, fileManager: fileManager)
+        let visibleHasData = hasCorpusData(at: visibleURL, fileManager: fileManager)
+
+        if hiddenHasData {
+            return hiddenURL
+        }
+        if visibleHasData {
+            return visibleURL
+        }
+        if fileManager.fileExists(atPath: hiddenURL.path()) {
+            return hiddenURL
+        }
+        return visibleURL
+    }
+
+    private static func hasCorpusData(at url: URL, fileManager: FileManager) -> Bool {
+        let datasetIndexURL = url
+            .appending(path: "AnalyzerDataset", directoryHint: .isDirectory)
+            .appending(path: "dataset.jsonl")
+        if fileManager.fileExists(atPath: datasetIndexURL.path()) {
+            return true
+        }
+
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: nil
+        ) else {
+            return false
+        }
+
+        return contents.contains { item in
+            item.pathExtension == "json" || item.lastPathComponent == "Audio"
+        }
+    }
+}
+
 struct TrainingCorpusLoadIssue: Identifiable, Hashable, Sendable {
     let id = UUID()
     let filename: String
@@ -83,7 +129,7 @@ actor TrainingCorpusStore {
     private let analyzerDatasetIndexURL: URL
     private let analyzerDatasetManifestURL: URL
 
-    init(baseDirectory: URL = URL.documentsDirectory.appending(path: "TrainingCorpus")) {
+    init(baseDirectory: URL = TrainingCorpusLocation.defaultURL()) {
         corpusDirectory = baseDirectory
         audioDirectory = baseDirectory.appending(path: "Audio")
         analyzerDatasetDirectory = baseDirectory.appending(path: "AnalyzerDataset")
@@ -91,6 +137,12 @@ actor TrainingCorpusStore {
         analyzerAudioDirectory = analyzerDatasetDirectory.appending(path: "audio")
         analyzerDatasetIndexURL = analyzerDatasetDirectory.appending(path: "dataset.jsonl")
         analyzerDatasetManifestURL = analyzerDatasetDirectory.appending(path: "dataset_manifest.json")
+    }
+
+    private func normalizedForHypnosisCorpus(_ file: LabeledFile) -> LabeledFile {
+        var normalized = file
+        normalized.expectedContentType = .hypnosis
+        return normalized
     }
 
     func loadAll() throws -> TrainingCorpusSnapshot {
@@ -115,7 +167,7 @@ actor TrainingCorpusStore {
         for url in files where url.pathExtension == "json" {
             do {
                 let data = try Data(contentsOf: url)
-                let file = try decoder.decode(LabeledFile.self, from: data)
+                let file = normalizedForHypnosisCorpus(try decoder.decode(LabeledFile.self, from: data))
                 labeledFiles.append(file)
             } catch {
                 issues.append(
@@ -136,7 +188,7 @@ actor TrainingCorpusStore {
 
         let validated: LabeledFile
         do {
-            validated = try file.validatedForPersistence()
+            validated = try normalizedForHypnosisCorpus(file).validatedForPersistence()
         } catch {
             throw TrainingCorpusError.invalidLabel(error.localizedDescription)
         }
@@ -224,12 +276,14 @@ actor TrainingCorpusStore {
         try ensureDirectories()
 
         let exportedAt = Date()
-        let sortedFiles = files.sorted { lhs, rhs in
-            if lhs.labeledAt == rhs.labeledAt {
-                return lhs.id.uuidString < rhs.id.uuidString
+        let sortedFiles = files
+            .map(normalizedForHypnosisCorpus)
+            .sorted { lhs, rhs in
+                if lhs.labeledAt == rhs.labeledAt {
+                    return lhs.id.uuidString < rhs.id.uuidString
+                }
+                return lhs.labeledAt > rhs.labeledAt
             }
-            return lhs.labeledAt > rhs.labeledAt
-        }
         let exportableFiles = sortedFiles.filter { !$0.phases.isEmpty }
 
         let expectedAudioFilenames = Set(exportableFiles.map(\.storedAudioFilename))
@@ -417,7 +471,7 @@ final class TrainingCorpusManager {
     let analyzerDatasetManifestURL: URL
 
     init(
-        baseDirectory: URL = URL.documentsDirectory.appending(path: "TrainingCorpus"),
+        baseDirectory: URL = TrainingCorpusLocation.defaultURL(),
         store: TrainingCorpusStore? = nil,
         autoLoad: Bool = true
     ) {

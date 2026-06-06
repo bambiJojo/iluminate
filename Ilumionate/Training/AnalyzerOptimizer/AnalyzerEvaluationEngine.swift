@@ -11,6 +11,17 @@ enum AnalyzerEvaluationMode: String, Codable, Sendable {
     case keywordOnly
     case chunkedOnly
     case hybridRuntime
+
+    var displayName: String {
+        switch self {
+        case .keywordOnly:
+            return "Keyword Only"
+        case .chunkedOnly:
+            return "Chunked Only"
+        case .hybridRuntime:
+            return "Hybrid Runtime"
+        }
+    }
 }
 
 struct AnalyzerEvaluationResult: Codable, Sendable {
@@ -24,7 +35,7 @@ struct AnalyzerEvaluationResult: Codable, Sendable {
     let metrics: AnalyzerOptimizationMetrics
 }
 
-struct AnalyzerEvaluationEngine {
+struct AnalyzerEvaluationEngine: Sendable {
     let mode: AnalyzerEvaluationMode
     let boundaryToleranceSeconds: Double
 
@@ -39,18 +50,18 @@ struct AnalyzerEvaluationEngine {
     func evaluate(
         config: AnalyzerConfig,
         example: AnalyzerOptimizationDataset.Example,
-        transcription: AudioTranscriptionResult
+        preparedTranscription: AnalyzerTranscriptCache.PreparedTranscription
     ) async -> AnalyzerEvaluationResult {
         let prediction = await predictPhases(
             config: config,
-            transcription: transcription,
+            transcription: preparedTranscription.transcription,
+            wordTimestamps: preparedTranscription.wordTimestamps,
             duration: example.duration
         )
-        let predictedContentType = heuristicContentType(for: transcription)
         let metrics = AnalyzerMetrics.score(
             example: example.example,
             predictedSegments: prediction.phases,
-            predictedContentType: predictedContentType,
+            predictedContentType: preparedTranscription.heuristicContentType,
             boundaryToleranceSeconds: boundaryToleranceSeconds
         )
 
@@ -58,9 +69,9 @@ struct AnalyzerEvaluationEngine {
             exampleID: example.id,
             originalFilename: example.originalFilename,
             evaluationMode: mode,
-            predictedContentType: predictedContentType,
+            predictedContentType: preparedTranscription.heuristicContentType,
             usedChunkedAnalyzer: prediction.usedChunkedAnalyzer,
-            transcriptionWordCount: transcription.wordCount,
+            transcriptionWordCount: preparedTranscription.wordCount,
             predictedPhases: prediction.phases,
             metrics: metrics
         )
@@ -69,38 +80,43 @@ struct AnalyzerEvaluationEngine {
     private func predictPhases(
         config: AnalyzerConfig,
         transcription: AudioTranscriptionResult,
+        wordTimestamps: [WordTimestamp],
         duration: TimeInterval
     ) async -> (phases: [PhaseSegment], usedChunkedAnalyzer: Bool) {
+        let keywordAnalyzer = HypnosisPhaseAnalyzer(config: config)
+
         switch mode {
         case .keywordOnly:
             return (
-                HypnosisPhaseAnalyzer(config: config.keywordPipeline)
-                    .analyze(segments: transcription.segments, duration: duration),
+                keywordAnalyzer.analyze(
+                    wordTimestamps: wordTimestamps,
+                    transcription: transcription
+                ),
                 false
             )
         case .chunkedOnly:
-            let wordTimestamps = HypnosisPhaseAnalyzer(config: config.keywordPipeline)
-                .approximateWordTimestamps(from: transcription.segments)
             let chunked = await ChunkedPhaseAnalyzer(config: config.chunkedAnalyzer)
                 .analyze(wordTimestamps: wordTimestamps, duration: duration) ?? []
-            return (chunked, !chunked.isEmpty)
+            let adaptedChunked = chunked.isEmpty
+                ? []
+                : keywordAnalyzer.adaptPredictedPhases(chunked, transcription: transcription)
+            return (adaptedChunked, !adaptedChunked.isEmpty)
         case .hybridRuntime:
-            let wordTimestamps = HypnosisPhaseAnalyzer(config: config.keywordPipeline)
-                .approximateWordTimestamps(from: transcription.segments)
             let chunked = await ChunkedPhaseAnalyzer(config: config.chunkedAnalyzer)
                 .analyze(wordTimestamps: wordTimestamps, duration: duration)
-            if let chunked, !chunked.isEmpty {
-                return (chunked, true)
-            }
-            return (
-                HypnosisPhaseAnalyzer(config: config.keywordPipeline)
-                    .analyze(segments: transcription.segments, duration: duration),
-                false
+            let keywordPhases = keywordAnalyzer.analyze(
+                wordTimestamps: wordTimestamps,
+                transcription: transcription
+            )
+            return keywordAnalyzer.selectPreferredPhases(
+                keywordPhases: keywordPhases,
+                chunkedPhases: chunked,
+                transcription: transcription
             )
         }
     }
 
-    private func heuristicContentType(for transcription: AudioTranscriptionResult) -> AudioContentType {
+    nonisolated static func heuristicContentType(for transcription: AudioTranscriptionResult) -> AudioContentType {
         let text = transcription.fullText.lowercased()
         let hypnosisSignals = [
             "relax", "deeper", "drift", "trance", "suggestion",

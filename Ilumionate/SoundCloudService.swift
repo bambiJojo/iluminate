@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 @MainActor
 @Observable
@@ -63,7 +64,7 @@ class SoundCloudService: StreamingService, Sendable {
         // Store token securely
         storeToken(tokenResponse.access_token)
 
-        print("🎵 SoundCloud: Authentication successful")
+        Log.audio.info("🎵 SoundCloud: Authentication successful")
     }
 
     // MARK: - Search

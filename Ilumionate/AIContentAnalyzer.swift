@@ -54,15 +54,13 @@ final class AIContentAnalyzer {
         transcription: AudioTranscriptionResult,
         audioFile: AudioFile
     ) async throws -> AnalysisResult {
-        guard isModelAvailable else {
-            throw AIAnalyzerError.modelUnavailable
-        }
-
         currentTask?.cancel()
 
         isAnalyzing = true
         progress = 0.0
-        statusMessage = "Analyzing content with AI..."
+        statusMessage = isModelAvailable
+            ? "Analyzing content with AI..."
+            : "Using built-in phase analysis..."
 
         let task = Task {
             defer {

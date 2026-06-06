@@ -10,6 +10,18 @@ import Foundation
 @testable import Ilumionate
 
 struct AnalyzerOptimizerTests {
+    private actor TranscriptionCallCounter {
+        private var count = 0
+
+        func increment() {
+            count += 1
+        }
+
+        func value() -> Int {
+            count
+        }
+    }
+
     @Test
     func datasetLoaderReadsAnalyzerDatasetAndKeepsValidExamples() throws {
         let corpusDirectory = try makeTempDirectory()
@@ -115,7 +127,143 @@ struct AnalyzerOptimizerTests {
         #expect(metrics.boundaryScore == 1.0)
         #expect(metrics.transitionRecall == 1.0)
         #expect(metrics.orderValidity == 1.0)
-        #expect(metrics.overallScore == 1.0)
+        #expect(abs(metrics.overallScore - 1.0) < 0.000_000_001)
+    }
+
+    @Test
+    func boundaryScoreRetainsSignalForLargeMisses() {
+        let labeled = makeLabeledFile(
+            originalFilename: "boundary.wav",
+            storedAudioFilename: "boundary.wav",
+            phases: [
+                .init(phase: .preTalk, startTime: 0, endTime: 10),
+                .init(phase: .induction, startTime: 10, endTime: 20),
+                .init(phase: .deepening, startTime: 20, endTime: 30)
+            ]
+        )
+        let example = labeled.analyzerTrainingExample(
+            exportedAt: Date(timeIntervalSince1970: 1_000),
+            datasetRelativeAudioPath: "AnalyzerDataset/audio/boundary.wav",
+            datasetRelativeExamplePath: "AnalyzerDataset/examples/\(labeled.id.uuidString).json"
+        )
+        let badlyShifted = [
+            PhaseSegment(phase: .preTalk, startTime: 0, endTime: 2, characteristics: "", tranceDepthEstimate: 0.1),
+            PhaseSegment(phase: .induction, startTime: 2, endTime: 4, characteristics: "", tranceDepthEstimate: 0.4),
+            PhaseSegment(phase: .deepening, startTime: 4, endTime: 30, characteristics: "", tranceDepthEstimate: 0.8)
+        ]
+
+        let metrics = AnalyzerMetrics.score(
+            example: example,
+            predictedSegments: badlyShifted,
+            predictedContentType: .hypnosis,
+            boundaryToleranceSeconds: 5
+        )
+
+        #expect(metrics.boundaryScore > 0)
+        #expect(metrics.boundaryScore < 1)
+    }
+
+    @Test
+    func overallScoreStaysLowWhenPhaseLabelsAreWrongDespiteGoodStructure() {
+        let labeled = makeLabeledFile(
+            originalFilename: "wrong-phases.wav",
+            storedAudioFilename: "wrong-phases.wav",
+            phases: [
+                .init(phase: .preTalk, startTime: 0, endTime: 10),
+                .init(phase: .induction, startTime: 10, endTime: 20),
+                .init(phase: .deepening, startTime: 20, endTime: 30)
+            ]
+        )
+        let example = labeled.analyzerTrainingExample(
+            exportedAt: Date(timeIntervalSince1970: 1_000),
+            datasetRelativeAudioPath: "AnalyzerDataset/audio/wrong-phases.wav",
+            datasetRelativeExamplePath: "AnalyzerDataset/examples/\(labeled.id.uuidString).json"
+        )
+        let wrongButWellTimed = [
+            PhaseSegment(phase: .suggestions, startTime: 0, endTime: 10, characteristics: "", tranceDepthEstimate: 0.2),
+            PhaseSegment(phase: .suggestions, startTime: 10, endTime: 20, characteristics: "", tranceDepthEstimate: 0.5),
+            PhaseSegment(phase: .suggestions, startTime: 20, endTime: 30, characteristics: "", tranceDepthEstimate: 0.8)
+        ]
+
+        let metrics = AnalyzerMetrics.score(
+            example: example,
+            predictedSegments: wrongButWellTimed,
+            predictedContentType: .hypnosis,
+            boundaryToleranceSeconds: 5
+        )
+
+        #expect(metrics.boundaryScore == 1.0)
+        #expect(metrics.transitionRecall == 1.0)
+        #expect(metrics.orderValidity == 1.0)
+        #expect(metrics.timelineAccuracy == 0.0)
+        #expect(metrics.macroPhaseF1 == 0.0)
+        #expect(metrics.overallScore < 0.10)
+    }
+
+    @Test
+    func singlePredictedBoundaryCannotMatchMultipleTruthBoundaries() {
+        let labeled = makeLabeledFile(
+            originalFilename: "boundary-reuse.wav",
+            storedAudioFilename: "boundary-reuse.wav",
+            phases: [
+                .init(phase: .preTalk, startTime: 0, endTime: 10),
+                .init(phase: .induction, startTime: 10, endTime: 14),
+                .init(phase: .deepening, startTime: 14, endTime: 30),
+                .init(phase: .emergence, startTime: 30, endTime: 40)
+            ]
+        )
+        let example = labeled.analyzerTrainingExample(
+            exportedAt: Date(timeIntervalSince1970: 1_000),
+            datasetRelativeAudioPath: "AnalyzerDataset/audio/boundary-reuse.wav",
+            datasetRelativeExamplePath: "AnalyzerDataset/examples/\(labeled.id.uuidString).json"
+        )
+        let sparsePrediction = [
+            PhaseSegment(phase: .preTalk, startTime: 0, endTime: 12, characteristics: "", tranceDepthEstimate: 0.2),
+            PhaseSegment(phase: .induction, startTime: 12, endTime: 40, characteristics: "", tranceDepthEstimate: 0.6)
+        ]
+
+        let metrics = AnalyzerMetrics.score(
+            example: example,
+            predictedSegments: sparsePrediction,
+            predictedContentType: .hypnosis,
+            boundaryToleranceSeconds: 5
+        )
+
+        #expect(metrics.matchedTruthBoundaryCount == 1)
+        #expect(abs(metrics.transitionRecall - (1.0 / 3.0)) < 0.000_000_001)
+    }
+
+    @Test
+    func splitUsesBroaderValidationAndTestCoverageForSmallDatasets() throws {
+        let optimizer = AnalyzerOptimizer(
+            corpusDirectory: try makeTempDirectory(),
+            outputDirectory: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        )
+
+        let examples = (0..<9).map { index in
+            let file = makeLabeledFile(
+                originalFilename: "example-\(index).wav",
+                storedAudioFilename: "example-\(index).wav",
+                phases: [
+                    .init(phase: .preTalk, startTime: 0, endTime: 5),
+                    .init(phase: .induction, startTime: 5, endTime: 10 + Double(index))
+                ]
+            )
+            return AnalyzerOptimizationDataset.Example(
+                example: file.analyzerTrainingExample(
+                    exportedAt: Date(timeIntervalSince1970: 1_000),
+                    datasetRelativeAudioPath: "AnalyzerDataset/audio/\(file.storedAudioFilename)",
+                    datasetRelativeExamplePath: "AnalyzerDataset/examples/\(file.id.uuidString).json"
+                ),
+                audioURL: URL(filePath: "/tmp/\(file.storedAudioFilename)")
+            )
+        }
+
+        let split = optimizer.split(examples, trainFraction: 0.7, validationFraction: 0.15)
+
+        #expect(split.train.count == 5)
+        #expect(split.validation.count == 2)
+        #expect(split.test.count == 2)
     }
 
     @Test
@@ -265,6 +413,153 @@ struct AnalyzerOptimizerTests {
     }
 
     @Test
+    func preparedTranscriptCachePersistsPreparedFieldsAcrossRuns() async throws {
+        let cacheDirectory = try makeTempDirectory()
+        let file = makeLabeledFile(
+            originalFilename: "cached.wav",
+            storedAudioFilename: "cached.wav",
+            phases: [
+                .init(phase: .preTalk, startTime: 0, endTime: 5),
+                .init(phase: .induction, startTime: 5, endTime: 12)
+            ]
+        )
+        let example = AnalyzerOptimizationDataset.Example(
+            example: file.analyzerTrainingExample(
+                exportedAt: Date(timeIntervalSince1970: 1_000),
+                datasetRelativeAudioPath: "AnalyzerDataset/audio/\(file.storedAudioFilename)",
+                datasetRelativeExamplePath: "AnalyzerDataset/examples/\(file.id.uuidString).json"
+            ),
+            audioURL: URL(filePath: "/tmp/\(file.storedAudioFilename)")
+        )
+
+        let firstCache = AnalyzerTranscriptCache(cacheDirectory: cacheDirectory)
+        let firstPrepared = try await firstCache.preparedTranscription(for: example) { sample in
+            syntheticTranscription(for: sample)
+        }
+
+        let secondCache = AnalyzerTranscriptCache(cacheDirectory: cacheDirectory)
+        let secondPrepared = try await secondCache.preparedTranscription(for: example)
+
+        #expect(firstPrepared.transcription.fullText == secondPrepared.transcription.fullText)
+        #expect(firstPrepared.wordCount == secondPrepared.wordCount)
+        #expect(firstPrepared.heuristicContentType == secondPrepared.heuristicContentType)
+        #expect(firstPrepared.wordTimestamps.count == secondPrepared.wordTimestamps.count)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: cacheDirectory.appending(path: "\(example.example.audio.sha256).json").path()
+            )
+        )
+    }
+
+    @Test
+    func preparedTranscriptCacheCoalescesConcurrentRequestsForSameFile() async throws {
+        let cacheDirectory = try makeTempDirectory()
+        let file = makeLabeledFile(
+            originalFilename: "parallel.wav",
+            storedAudioFilename: "parallel.wav",
+            phases: [
+                .init(phase: .preTalk, startTime: 0, endTime: 4),
+                .init(phase: .induction, startTime: 4, endTime: 10)
+            ]
+        )
+        let example = AnalyzerOptimizationDataset.Example(
+            example: file.analyzerTrainingExample(
+                exportedAt: Date(timeIntervalSince1970: 1_000),
+                datasetRelativeAudioPath: "AnalyzerDataset/audio/\(file.storedAudioFilename)",
+                datasetRelativeExamplePath: "AnalyzerDataset/examples/\(file.id.uuidString).json"
+            ),
+            audioURL: URL(filePath: "/tmp/\(file.storedAudioFilename)")
+        )
+        let cache = AnalyzerTranscriptCache(cacheDirectory: cacheDirectory)
+        let callCounter = TranscriptionCallCounter()
+
+        let preparedResults = try await withThrowingTaskGroup(
+            of: AnalyzerTranscriptCache.PreparedTranscription.self,
+            returning: [AnalyzerTranscriptCache.PreparedTranscription].self
+        ) { group in
+            for _ in 0..<4 {
+                group.addTask {
+                    try await cache.preparedTranscription(for: example) { sample in
+                        await callCounter.increment()
+                        try await Task.sleep(for: .milliseconds(50))
+                        return syntheticTranscription(for: sample)
+                    }
+                }
+            }
+
+            var results: [AnalyzerTranscriptCache.PreparedTranscription] = []
+            for try await prepared in group {
+                results.append(prepared)
+            }
+            return results
+        }
+
+        #expect(await callCounter.value() == 1)
+        #expect(preparedResults.count == 4)
+        #expect(preparedResults.allSatisfy { $0.wordCount == preparedResults[0].wordCount })
+        #expect(preparedResults.allSatisfy { $0.transcription.fullText == preparedResults[0].transcription.fullText })
+    }
+
+    @Test
+    func transcriptAnalysisBuildsTimelineWaymarkersFromHypnosisPhrases() {
+        let transcription = makeTranscription(
+            duration: 120,
+            segments: [
+                ("welcome settle in and get comfortable", 0, 20),
+                ("now begin to relax and close your eyes", 28, 20),
+                ("with every breath you go deeper and deeper now", 58, 22),
+                ("and when i snap my fingers you follow instantly", 88, 22)
+            ]
+        )
+
+        let analysis = TranscriptFeatureAnalyzer().analyze(transcription: transcription)
+
+        let inductionWindow = analysis.timelineWindow(at: 35)
+        #expect(inductionWindow != nil)
+        #expect(inductionWindow?.waymarkerMatches.contains(where: {
+            $0.phase == .induction && $0.phrase == "begin to relax"
+        }) == true)
+
+        let deepeningWindow = analysis.timelineWindow(at: 68)
+        #expect(deepeningWindow?.waymarkerMatches.contains(where: {
+            $0.phase == .deepening && $0.phrase == "go deeper"
+        }) == true)
+
+        let conditioningWindow = analysis.timelineWindow(at: 98)
+        #expect(conditioningWindow?.waymarkerMatches.contains(where: {
+            $0.phase == .conditioning && $0.phrase == "when i snap my fingers"
+        }) == true)
+    }
+
+    @Test
+    func transcriptAnalysisRetainsDistinctivePhrasesInSectionMetrics() {
+        let transcription = makeTranscription(
+            duration: 70,
+            segments: [
+                ("now begin to relax and begin to relax completely", 0, 22),
+                ("you can drift deeper and deeper and go deeper now", 25, 24),
+                ("every time you breathe you return to calm", 52, 16)
+            ]
+        )
+
+        let phases = [
+            PhaseSegment(phase: .induction, startTime: 0, endTime: 24, characteristics: "", tranceDepthEstimate: 0.3),
+            PhaseSegment(phase: .deepening, startTime: 24, endTime: 50, characteristics: "", tranceDepthEstimate: 0.6),
+            PhaseSegment(phase: .conditioning, startTime: 50, endTime: 70, characteristics: "", tranceDepthEstimate: 0.7)
+        ]
+
+        let analysis = TranscriptFeatureAnalyzer().analyze(transcription: transcription, phases: phases)
+
+        #expect(analysis.sections[0].topPhrases.contains(where: { $0.phrase == "begin to relax" }))
+        #expect(analysis.sections[1].waymarkerMatches.contains(where: {
+            $0.phase == .deepening && $0.phrase == "deeper and deeper"
+        }))
+        #expect(analysis.sections[2].waymarkerMatches.contains(where: {
+            $0.phase == .conditioning && $0.phrase == "every time you"
+        }))
+    }
+
+    @Test
     func measurementHistoryAppendsAcrossRuns() async throws {
         let corpusDirectory = try makeTempDirectory()
         let outputDirectory = corpusDirectory.appending(path: "Output", directoryHint: .isDirectory)
@@ -329,6 +624,181 @@ struct AnalyzerOptimizerTests {
         #expect(history.entries[0].generatedAt <= history.entries[1].generatedAt)
     }
 
+    @Test
+    func analyzerConfigDecodesLegacyPayloadWithExpandedRuntimeDefaults() throws {
+        let legacyJSON = """
+        {
+          "version": 1,
+          "generation": 0,
+          "fitness": 0,
+          "keywordPipeline": {
+            "weights": { "pre_talk": { "welcome": 1.0 } },
+            "contextWindowSeconds": 5,
+            "smoothingWindowSize": 5,
+            "minimumPhaseDurationSeconds": 20,
+            "collapseThresholdFraction": 0.035
+          },
+          "chunkedAnalyzer": {
+            "chunkDurationSeconds": 15.0,
+            "chunkOverlapSeconds": 5.0,
+            "minChunks": 6,
+            "maxChunks": 60,
+            "systemInstructions": "demo",
+            "fewShotExamples": []
+          },
+          "prosody": {
+            "speechRateWindowSeconds": 3.0,
+            "pauseThresholdSeconds": 1.0,
+            "deliberatePauseMinSeconds": 3.0,
+            "musicOnlyPauseMinSeconds": 5.0
+          },
+          "techniqueDetection": {
+            "sensitivityThreshold": 0.6,
+            "minConfidence": 0.3
+          },
+          "sessionGeneration": {
+            "frequencyBands": {
+              "hypnosis": { "lower": 0.5, "upper": 10.0 }
+            },
+            "phaseFrequencyBands": {},
+            "transitionSmoothingSeconds": 2.0,
+            "intensityCurve": "gentle"
+          }
+        }
+        """
+
+        let config = try JSONDecoder().decode(AnalyzerConfig.self, from: Data(legacyJSON.utf8))
+
+        #expect(config.hybridSelection.chunkedClearWinMargin == 0.05)
+        #expect(config.hybridSelection.transcriptSupportWeight == 0.55)
+        #expect(config.corpusLearning.learnedPhraseWeightMultiplier == 1.0)
+        #expect(config.boundaryRefinement.distancePenaltyWeight == 0.015)
+    }
+
+    @Test
+    func mutationEngineExploresExpandedRuntimeSearchSpaceWithinSafeBounds() {
+        let base = AnalyzerConfig(
+            keywordPipeline: .init(
+                weights: ["pre_talk": ["welcome": 1.0]],
+                contextWindowSeconds: 5,
+                smoothingWindowSize: 5,
+                minimumPhaseDurationSeconds: 20,
+                collapseThresholdFraction: 0.035
+            ),
+            chunkedAnalyzer: .init(
+                chunkDurationSeconds: 15.0,
+                chunkOverlapSeconds: 5.0,
+                minChunks: 6,
+                maxChunks: 60,
+                systemInstructions: "demo",
+                fewShotExamples: []
+            ),
+            prosody: .init(
+                speechRateWindowSeconds: 3.0,
+                pauseThresholdSeconds: 1.0,
+                deliberatePauseMinSeconds: 3.0,
+                musicOnlyPauseMinSeconds: 5.0
+            ),
+            techniqueDetection: .init(
+                sensitivityThreshold: 0.6,
+                minConfidence: 0.3
+            ),
+            hybridSelection: .init(),
+            corpusLearning: .init(),
+            boundaryRefinement: .init(),
+            sessionGeneration: .init(
+                frequencyBands: ["hypnosis": .init(lower: 0.5, upper: 10.0)],
+                phaseFrequencyBands: [:],
+                transitionSmoothingSeconds: 2.0,
+                intensityCurve: "gentle"
+            )
+        )
+
+        let engine = AnalyzerMutationEngine()
+
+        for _ in 0..<25 {
+            let mutated = engine.mutate(base)
+            #expect((8.0...45.0).contains(mutated.chunkedAnalyzer.chunkDurationSeconds))
+            #expect((1.0...min(mutated.chunkedAnalyzer.chunkDurationSeconds * 0.75, 18.0)).contains(mutated.chunkedAnalyzer.chunkOverlapSeconds))
+            #expect(mutated.chunkedAnalyzer.maxChunks >= mutated.chunkedAnalyzer.minChunks)
+            #expect((0.0...0.20).contains(mutated.hybridSelection.chunkedClearWinMargin))
+            #expect((0.10...1.20).contains(mutated.hybridSelection.transcriptSupportWeight))
+            #expect((0.20...3.0).contains(mutated.corpusLearning.learnedKeywordWeightMultiplier))
+            #expect((0.0...0.10).contains(mutated.boundaryRefinement.distancePenaltyWeight))
+        }
+    }
+
+    @Test
+    func mutationEngineOnlyMutatesRelevantAxesForKeywordOnlyRuns() {
+        let base = AnalyzerConfig(
+            keywordPipeline: .init(
+                weights: ["pre_talk": ["welcome": 1.0]],
+                contextWindowSeconds: 5,
+                smoothingWindowSize: 5,
+                minimumPhaseDurationSeconds: 20,
+                collapseThresholdFraction: 0.035
+            ),
+            chunkedAnalyzer: .init(
+                chunkDurationSeconds: 15.0,
+                chunkOverlapSeconds: 5.0,
+                minChunks: 6,
+                maxChunks: 60,
+                systemInstructions: "demo",
+                fewShotExamples: []
+            ),
+            prosody: .init(
+                speechRateWindowSeconds: 3.0,
+                pauseThresholdSeconds: 1.0,
+                deliberatePauseMinSeconds: 3.0,
+                musicOnlyPauseMinSeconds: 5.0
+            ),
+            techniqueDetection: .init(
+                sensitivityThreshold: 0.6,
+                minConfidence: 0.3
+            ),
+            hybridSelection: .init(),
+            corpusLearning: .init(),
+            boundaryRefinement: .init(),
+            sessionGeneration: .init(
+                frequencyBands: ["hypnosis": .init(lower: 0.5, upper: 10.0)],
+                phaseFrequencyBands: [:],
+                transitionSmoothingSeconds: 2.0,
+                intensityCurve: "gentle"
+            )
+        )
+
+        let engine = AnalyzerMutationEngine(
+            parameters: .init(
+                keywordWeightSigma: 0.50,
+                contextWindowDelta: 4,
+                smoothingWindowDelta: 3,
+                minimumPhaseDurationDelta: 8,
+                collapseThresholdSigma: 0.40,
+                chunkDurationSigma: 0.40,
+                chunkOverlapSigma: 0.40,
+                chunkCountDelta: 6,
+                selectionSigma: 0.40,
+                corpusLearningSigma: 0.40,
+                boundarySigma: 0.40
+            )
+        )
+
+        let mutated = engine.mutate(base, for: .keywordOnly)
+
+        #expect(mutated.chunkedAnalyzer.chunkDurationSeconds == base.chunkedAnalyzer.chunkDurationSeconds)
+        #expect(mutated.chunkedAnalyzer.chunkOverlapSeconds == base.chunkedAnalyzer.chunkOverlapSeconds)
+        #expect(mutated.chunkedAnalyzer.minChunks == base.chunkedAnalyzer.minChunks)
+        #expect(mutated.chunkedAnalyzer.maxChunks == base.chunkedAnalyzer.maxChunks)
+        #expect(mutated.hybridSelection.chunkedClearWinMargin == base.hybridSelection.chunkedClearWinMargin)
+        #expect(mutated.hybridSelection.transcriptSupportWeight == base.hybridSelection.transcriptSupportWeight)
+        #expect(
+            mutated.corpusLearning.learnedKeywordWeightMultiplier != base.corpusLearning.learnedKeywordWeightMultiplier
+                || mutated.boundaryRefinement.distancePenaltyWeight != base.boundaryRefinement.distancePenaltyWeight
+                || mutated.keywordPipeline.minimumPhaseDurationSeconds != base.keywordPipeline.minimumPhaseDurationSeconds
+                || mutated.keywordPipeline.smoothingWindowSize != base.keywordPipeline.smoothingWindowSize
+        )
+    }
+
     private func makeTempDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString, directoryHint: .isDirectory)
@@ -365,12 +835,20 @@ struct AnalyzerOptimizerTests {
                 text = "welcome settle in relax comfortably"
             case .induction:
                 text = "take a deep breath and close your eyes"
+            case .fractionation:
+                text = "open your eyes and drop back down deeper"
             case .deepening:
                 text = "drift deeper and deeper now"
+            case .confusion:
+                text = "the more you try to follow the more you let go"
             case .therapy:
                 text = "allow this healing suggestion to integrate"
             case .suggestions:
                 text = "from now on you will feel calm and strong"
+            case .eroticSuggestions:
+                text = "every warm wave of pleasure carries you deeper"
+            case .brainwashing:
+                text = "obey now repeat after me obey now"
             case .conditioning:
                 text = "every time you breathe you return to calm"
             case .emergence:
@@ -390,6 +868,25 @@ struct AnalyzerOptimizerTests {
             fullText: segments.map(\.text).joined(separator: " "),
             segments: segments,
             duration: example.duration,
+            detectedLanguage: "en"
+        )
+    }
+
+    private func makeTranscription(
+        duration: TimeInterval,
+        segments: [(text: String, timestamp: TimeInterval, duration: TimeInterval)]
+    ) -> AudioTranscriptionResult {
+        AudioTranscriptionResult(
+            fullText: segments.map(\.text).joined(separator: " "),
+            segments: segments.map { segment in
+                AudioTranscriptionSegment(
+                    text: segment.text,
+                    timestamp: segment.timestamp,
+                    duration: segment.duration,
+                    confidence: 0.9
+                )
+            },
+            duration: duration,
             detectedLanguage: "en"
         )
     }

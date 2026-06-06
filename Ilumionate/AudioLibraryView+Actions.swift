@@ -3,6 +3,7 @@
 //
 
 import SwiftUI
+import os
 
 extension AudioLibraryView {
 
@@ -15,7 +16,7 @@ extension AudioLibraryView {
     // MARK: - Analysis Handler
 
     func startAnalysis(for file: AudioFile) {
-        print("🔬 Queuing file for analysis: \(file.filename)")
+        Log.audio.info("🔬 Queuing file for analysis: \(file.filename)")
         selectedFile = file
 
         Task {
@@ -59,21 +60,21 @@ extension AudioLibraryView {
         if let data = UserDefaults.standard.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey),
            let files = try? JSONDecoder().decode([AudioFile].self, from: data) {
             audioFiles = files
-            print("📦 Loaded \(files.count) audio files")
+            Log.audio.info("📦 Loaded \(files.count) audio files")
         }
     }
 
     func saveAudioFiles() {
         if let data = try? JSONEncoder().encode(audioFiles) {
             UserDefaults.standard.set(data, forKey: AnalysisStateManager.audioFilesUserDefaultsKey)
-            print("💾 Saved \(audioFiles.count) audio files")
+            Log.audio.info("💾 Saved \(audioFiles.count) audio files")
         }
     }
 
     func addAudioFile(_ file: AudioFile) {
         audioFiles.insert(file, at: 0)
         saveAudioFiles()
-        print("✅ Added audio file: \(file.filename)")
+        Log.audio.info("✅ Added audio file: \(file.filename)")
     }
 
     func deleteFile(_ file: AudioFile) {
@@ -93,7 +94,7 @@ extension AudioLibraryView {
         // Remove from list
         audioFiles.removeAll { $0.id == file.id }
         saveAudioFiles()
-        print("🗑 Deleted: \(file.filename)")
+        Log.audio.info("🗑 Deleted: \(file.filename)")
     }
 
     func renameFile(_ file: AudioFile, newName: String) {
@@ -109,7 +110,7 @@ extension AudioLibraryView {
 
             audioFiles[index].filename = finalName
             saveAudioFiles()
-            print("✏️ Renamed to: \(finalName)")
+            Log.audio.info("✏️ Renamed to: \(finalName)")
         }
     }
 
@@ -134,7 +135,7 @@ extension AudioLibraryView {
     func showDetailedRatingSheet(for file: AudioFile) {
         // For now, just show a quick rating action sheet
         // TODO: Implement full detailed rating sheet in future update
-        print("📝 Show detailed rating for: \(file.filename)")
+        Log.audio.info("📝 Show detailed rating for: \(file.filename)")
         TranceHaptics.shared.light()
     }
 
@@ -143,12 +144,12 @@ extension AudioLibraryView {
     func toggleSelection(for file: AudioFile) {
         if selectedFiles.contains(file.id) {
             selectedFiles.remove(file.id)
-            print("📋 Deselected: \(file.filename)")
+            Log.audio.info("📋 Deselected: \(file.filename)")
         } else {
             selectedFiles.insert(file.id)
-            print("📋 Selected: \(file.filename)")
+            Log.audio.info("📋 Selected: \(file.filename)")
         }
-        print("📋 Total selected: \(selectedFiles.count)")
+        Log.audio.info("📋 Total selected: \(selectedFiles.count)")
     }
 
     func deleteSelectedFiles() {
@@ -164,7 +165,7 @@ extension AudioLibraryView {
 
     func analyzeSelectedFiles() {
         let filesToAnalyze = audioFiles.filter { selectedFiles.contains($0.id) }
-        print("🔬 Queuing \(filesToAnalyze.count) files for analysis: \(filesToAnalyze.map { $0.filename })")
+        Log.audio.info("🔬 Queuing \(filesToAnalyze.count) files for analysis: \(filesToAnalyze.map { $0.filename })")
 
         Task {
             await analysisManager.queueForAnalysis(filesToAnalyze)
@@ -183,15 +184,15 @@ extension AudioLibraryView {
                 var importedFiles: [AudioFile] = []
                 let totalFiles = urls.count
 
-                print("📥 Starting import of \(totalFiles) audio files...")
+                Log.audio.info("📥 Starting import of \(totalFiles) audio files...")
 
                 for (index, url) in urls.enumerated() {
                     guard url.startAccessingSecurityScopedResource() else {
-                        print("❌ Failed to access file: \(url.lastPathComponent)")
+                        Log.audio.info("❌ Failed to access file: \(url.lastPathComponent)")
                         continue
                     }
 
-                    print("📥 Processing file \(index + 1)/\(totalFiles): \(url.lastPathComponent)")
+                    Log.audio.info("📥 Processing file \(index + 1)/\(totalFiles): \(url.lastPathComponent)")
 
                     // Import with timeout handling
                     if let file = await audioManager.importAudio(from: url) {
@@ -199,9 +200,9 @@ extension AudioLibraryView {
                             addAudioFile(file)
                         }
                         importedFiles.append(file)
-                        print("✅ Imported (\(index + 1)/\(totalFiles)): \(file.filename)")
+                        Log.audio.info("✅ Imported (\(index + 1)/\(totalFiles)): \(file.filename)")
                     } else {
-                        print("⚠️ Skipped (\(index + 1)/\(totalFiles)): \(url.lastPathComponent) - Import failed")
+                        Log.audio.info("⚠️ Skipped (\(index + 1)/\(totalFiles)): \(url.lastPathComponent) - Import failed")
                     }
 
                     url.stopAccessingSecurityScopedResource()
@@ -210,17 +211,17 @@ extension AudioLibraryView {
                 // Automatically queue all imported files for analysis
                 if !importedFiles.isEmpty {
                     if AnalysisPreferences.shared.autoAnalyzeOnImport {
-                        print("🔬 Auto-queuing \(importedFiles.count) files for analysis...")
+                        Log.audio.info("🔬 Auto-queuing \(importedFiles.count) files for analysis...")
                         await analysisManager.queueForAnalysis(importedFiles)
                     }
-                    print("✅ Import complete: \(importedFiles.count)/\(totalFiles) files processed")
+                    Log.audio.info("✅ Import complete: \(importedFiles.count)/\(totalFiles) files processed")
                 } else {
-                    print("⚠️ No files were successfully imported")
+                    Log.audio.info("⚠️ No files were successfully imported")
                 }
             }
 
         case .failure(let error):
-            print("❌ Import failed: \(error)")
+            Log.audio.info("❌ Import failed: \(error)")
         }
     }
 
@@ -245,7 +246,7 @@ extension AudioLibraryView {
 
                     // Auto queue for analysis
                     if AnalysisPreferences.shared.autoAnalyzeOnImport {
-                        print("🔬 Auto-queuing downloaded file for analysis...")
+                        Log.audio.info("🔬 Auto-queuing downloaded file for analysis...")
                         await analysisManager.queueForAnalysis([file])
                     }
                 } else {

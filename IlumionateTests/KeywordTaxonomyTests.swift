@@ -143,4 +143,44 @@ struct KeywordCollisionTests {
                 "'deeply relaxed' weight must be ≥3.0, got \(entry.weight)")
         }
     }
+
+    // MARK: Script-book enrichments
+
+    @Test func suggestibilityTestScoresPreTalk() {
+        let scores = hitMapScores(for: "this suggestibility test explains the critical mind")
+        let preTalk = scores[.preTalk] ?? 0
+        let induction = scores[.induction] ?? 0
+        #expect(preTalk > induction,
+            "preTalk (\(preTalk)) should beat induction (\(induction)) for suggestibility framing")
+    }
+
+    @Test func namedInductionFamiliesScoreInduction() {
+        let scores = hitMapScores(for: "circular breathing eye closure and ultimate body relaxation")
+        let induction = scores[.induction] ?? 0
+        #expect(induction >= 9.0,
+            "named induction phrases should stack strong induction weight, got \(induction)")
+    }
+
+    @Test func triggerInstallationLanguageScoresConditioning() {
+        let scores = hitMapScores(for: "next time you hear the word sleep this post hypnotic trigger activates")
+        let conditioning = scores[.conditioning] ?? 0
+        let suggestions = scores[.suggestions] ?? 0
+        #expect(conditioning > suggestions,
+            "conditioning (\(conditioning)) should beat suggestions (\(suggestions)) for trigger-installation phrasing")
+    }
+
+    @Test func countToFiveScoresEmergence() {
+        let scores = hitMapScores(for: "as i count to five you become wide awake and aware clear headed")
+        let emergence = scores[.emergence] ?? 0
+        #expect(emergence >= 8.0,
+            "emergence score should be strong for count-to-five wake-up language, got \(emergence)")
+    }
+
+    @Test func metaphorAndUtilizationLanguageScoresTherapy() {
+        let scores = hitMapScores(for: "let me tell you a story as a metaphor for change in your own way")
+        let therapy = scores[.therapy] ?? 0
+        let suggestions = scores[.suggestions] ?? 0
+        #expect(therapy > suggestions,
+            "therapy (\(therapy)) should beat suggestions (\(suggestions)) for Ericksonian story/utilization language")
+    }
 }

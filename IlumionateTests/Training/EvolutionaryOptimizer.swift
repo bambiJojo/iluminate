@@ -35,7 +35,7 @@ struct EvolutionaryOptimizer {
     func evaluateConfig(
         _ config: AnalyzerConfig
     ) -> Double {
-        let keywordAnalyzer = HypnosisPhaseAnalyzer(config: config.keywordPipeline)
+        let keywordAnalyzer = HypnosisPhaseAnalyzer(config: config)
         let sessionGenerator = SessionGenerator(config: config.sessionGeneration)
         let fitnessEvaluator = FitnessEvaluator()
 

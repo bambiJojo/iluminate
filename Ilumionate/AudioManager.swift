@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import AVFoundation
 import Observation
 
@@ -37,9 +38,9 @@ class AudioManager: NSObject {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try session.setActive(true)
-            print("✅ Audio session configured")
+            Log.audio.info("✅ Audio session configured")
         } catch {
-            print("❌ Failed to setup audio session: \(error)")
+            Log.audio.info("❌ Failed to setup audio session: \(error)")
         }
     }
 
@@ -57,9 +58,9 @@ class AudioManager: NSObject {
 
             startTimeUpdateTimer()
 
-            print("▶️ Playback started: \(url.lastPathComponent)")
+            Log.audio.info("▶️ Playback started: \(url.lastPathComponent)")
         } catch {
-            print("❌ Failed to start playback: \(error)")
+            Log.audio.info("❌ Failed to start playback: \(error)")
         }
     }
 
@@ -70,7 +71,7 @@ class AudioManager: NSObject {
         // Stop timer immediately to save CPU
         timeUpdateTimer?.invalidate()
         timeUpdateTimer = nil
-        print("⏸ Playback paused")
+        Log.audio.info("⏸ Playback paused")
     }
 
     func resumePlayback() {
@@ -79,7 +80,7 @@ class AudioManager: NSObject {
 
         // Restart timer with current state
         startTimeUpdateTimer()
-        print("▶️ Playback resumed")
+        Log.audio.info("▶️ Playback resumed")
     }
 
     func stopPlayback() {
@@ -89,7 +90,7 @@ class AudioManager: NSObject {
         currentTime = 0
         timeUpdateTimer?.invalidate()
         timeUpdateTimer = nil
-        print("⏹ Playback stopped")
+        Log.audio.info("⏹ Playback stopped")
     }
 
     func seek(to time: TimeInterval) {
@@ -150,7 +151,7 @@ class AudioManager: NSObject {
         do {
             // Copy file to documents directory
             try FileManager.default.copyItem(at: url, to: finalDestinationURL)
-            print("📁 File copied to: \(finalDestinationURL.path)")
+            Log.audio.info("📁 File copied to: \(finalDestinationURL.path)")
 
             // Get file size first (fast operation)
             let resources = try finalDestinationURL.resourceValues(forKeys: [.fileSizeKey])
@@ -164,13 +165,13 @@ class AudioManager: NSObject {
                         let asset = AVURLAsset(url: finalDestinationURL)
                         // Use optimized loading for better performance
 
-                        print("🔍 Loading audio properties for: \(finalFilename)")
+                        Log.audio.info("🔍 Loading audio properties for: \(finalFilename)")
                         let duration = try await asset.load(.duration)
                         let seconds = duration.seconds
-                        print("⏱️ Duration loaded: \(seconds) seconds")
+                        Log.audio.info("⏱️ Duration loaded: \(seconds) seconds")
                         return seconds.isFinite ? seconds : 0
                     } catch {
-                        print("❌ Failed to load duration: \(error)")
+                        Log.audio.info("❌ Failed to load duration: \(error)")
                         return 0
                     }
                 }
@@ -178,7 +179,7 @@ class AudioManager: NSObject {
                 // Reduced timeout for better UX
                 group.addTask {
                     try? await Task.sleep(for: .seconds(3))
-                    print("⚠️ Audio loading timeout reached for: \(finalFilename)")
+                    Log.audio.info("⚠️ Audio loading timeout reached for: \(finalFilename)")
                     return 0
                 }
 
@@ -197,11 +198,11 @@ class AudioManager: NSObject {
                 fileSize: fileSize
             )
 
-            print("✅ Imported audio: \(finalFilename) (Duration: \(durationSeconds)s)")
+            Log.audio.info("✅ Imported audio: \(finalFilename) (Duration: \(durationSeconds)s)")
             return audioFile
 
         } catch {
-            print("❌ Failed to import audio: \(error)")
+            Log.audio.info("❌ Failed to import audio: \(error)")
             // Clean up partial file if copy succeeded but metadata failed
             try? FileManager.default.removeItem(at: finalDestinationURL)
             return nil
@@ -257,7 +258,7 @@ class AudioManager: NSObject {
         do {
             // Move downloaded temp file to documents directory
             try FileManager.default.moveItem(at: tempURL, to: finalDestinationURL)
-            print("📁 File downloaded and saved to: \(finalDestinationURL.path)")
+            Log.audio.info("📁 File downloaded and saved to: \(finalDestinationURL.path)")
             
             // Get file size
             let resources = try finalDestinationURL.resourceValues(forKeys: [.fileSizeKey])
@@ -268,20 +269,20 @@ class AudioManager: NSObject {
                 group.addTask {
                     do {
                         let asset = AVURLAsset(url: finalDestinationURL)
-                        print("🔍 Loading audio properties for downloaded file: \(finalFilename)")
+                        Log.audio.info("🔍 Loading audio properties for downloaded file: \(finalFilename)")
                         let duration = try await asset.load(.duration)
                         let seconds = duration.seconds
-                        print("⏱️ Duration loaded: \(seconds) seconds")
+                        Log.audio.info("⏱️ Duration loaded: \(seconds) seconds")
                         return seconds.isFinite ? seconds : 0
                     } catch {
-                        print("❌ Failed to load duration: \(error)")
+                        Log.audio.info("❌ Failed to load duration: \(error)")
                         return 0
                     }
                 }
                 
                 group.addTask {
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
-                    print("⚠️ Audio loading timeout reached for downloaded file: \(finalFilename)")
+                    Log.audio.info("⚠️ Audio loading timeout reached for downloaded file: \(finalFilename)")
                     return 0
                 }
                 
@@ -298,11 +299,11 @@ class AudioManager: NSObject {
                 fileSize: fileSize
             )
 
-            print("✅ Successfully downloaded audio: \(finalFilename) (Duration: \(durationSeconds)s)")
+            Log.audio.info("✅ Successfully downloaded audio: \(finalFilename) (Duration: \(durationSeconds)s)")
             return audioFile
             
         } catch {
-            print("❌ Failed to move downloaded file to Library: \(error)")
+            Log.audio.info("❌ Failed to move downloaded file to Library: \(error)")
             // Clean up files on error
             try? FileManager.default.removeItem(at: tempURL)
             try? FileManager.default.removeItem(at: finalDestinationURL)
@@ -338,7 +339,7 @@ extension AudioManager: AVAudioPlayerDelegate {
             self.currentTime = 0
             self.timeUpdateTimer?.invalidate()
             self.timeUpdateTimer = nil
-            print("🎵 Playback finished: \(flag ? "success" : "failed")")
+            Log.audio.info("🎵 Playback finished: \(flag ? "success" : "failed")")
         }
     }
 
@@ -349,7 +350,7 @@ extension AudioManager: AVAudioPlayerDelegate {
             self.timeUpdateTimer?.invalidate()
             self.timeUpdateTimer = nil
             if let error = error {
-                print("❌ Playback error: \(error.localizedDescription)")
+                Log.audio.info("❌ Playback error: \(error.localizedDescription)")
             }
         }
     }

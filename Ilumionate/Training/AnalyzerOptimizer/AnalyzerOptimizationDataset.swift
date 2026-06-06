@@ -49,18 +49,19 @@ struct AnalyzerOptimizationDataset: Sendable {
         func makeAudioFileForDocumentsBackedCorpus() throws -> AudioFile {
             let documentsPath = URL.documentsDirectory.standardizedFileURL.path()
             let audioPath = audioURL.standardizedFileURL.path()
-            guard audioPath.hasPrefix(documentsPath + "/") else {
-                throw AnalyzerOptimizerError.documentsBackedAudioRequired(audioURL)
+            let storedPath: String
+            if audioPath.hasPrefix(documentsPath + "/") {
+                storedPath = String(audioPath.dropFirst(documentsPath.count + 1))
+            } else {
+                storedPath = audioPath
             }
-
-            let relativePath = String(audioPath.dropFirst(documentsPath.count + 1))
             let resourceValues = try? audioURL.resourceValues(forKeys: [.fileSizeKey, .creationDateKey])
             let fileSize = Int64(resourceValues?.fileSize ?? 0)
             let createdDate = resourceValues?.creationDate ?? example.source.labeledAt
 
             return AudioFile(
                 id: example.exampleID,
-                filename: relativePath,
+                filename: storedPath,
                 duration: example.audio.durationSeconds,
                 fileSize: fileSize,
                 createdDate: createdDate
@@ -134,7 +135,7 @@ struct AnalyzerOptimizationDataset: Sendable {
     }
 
     static func load(
-        from corpusDirectory: URL = URL.documentsDirectory.appending(path: "TrainingCorpus")
+        from corpusDirectory: URL = TrainingCorpusLocation.defaultURL()
     ) throws -> AnalyzerOptimizationDataset {
         let datasetDirectory = corpusDirectory.appending(path: "AnalyzerDataset", directoryHint: .isDirectory)
         let datasetIndexURL = datasetDirectory.appending(path: "dataset.jsonl")

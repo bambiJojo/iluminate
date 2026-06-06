@@ -3,7 +3,7 @@
 //  LumeLabel
 //
 //  Keyboard shortcuts:
-//    1–7     Mark phase at playhead
+//    1–9     Mark phase at playhead
 //    Space   Play / Pause
 //    ←  →   Seek ±10 seconds
 //    ⌘S     Save
@@ -41,6 +41,7 @@ struct LabelingDetailView: View {
             }
             let newEditor = LabelingDetailEditor(file: file, corpus: corpus)
             newEditor.preparePlayer()
+            await newEditor.loadTranscriptIfAvailable()
             editor = newEditor
         }
         .onDisappear {
@@ -74,9 +75,14 @@ struct LabelingDetailView: View {
             HStack(alignment: .top, spacing: 0) {
                 phaseButtons(editor)
                     .padding()
-                    .frame(width: 180)
+                    .frame(width: 190)
                 Divider()
-                phaseListPanel(editor).padding()
+                phaseListPanel(editor)
+                    .padding()
+                    .frame(width: 300)
+                Divider()
+                transcriptInspector(editor)
+                    .padding()
             }
             .frame(minHeight: 220)
 

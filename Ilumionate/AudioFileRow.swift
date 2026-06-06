@@ -177,7 +177,7 @@ struct AudioFileRow: View {
                         HStack(spacing: 4) {
                             Image(systemName: contentTypeIcon(result.contentType))
                                 .font(.system(size: 10))
-                            Text(result.contentType.rawValue.capitalized)
+                            Text(result.contentType.displayName)
                         }
                         .font(TranceTypography.caption)
                         .padding(.horizontal, 6)
@@ -187,7 +187,7 @@ struct AudioFileRow: View {
                         .clipShape(Capsule())
 
                         // Trance Depth Badge (for hypnosis)
-                        if result.contentType == .hypnosis,
+                        if result.contentType.isHypnosisLike,
                            let depth = result.hypnosisMetadata?.estimatedTranceDeph {
                             HStack(spacing: 2) {
                                 Image(systemName: tranceDepthIcon(depth))

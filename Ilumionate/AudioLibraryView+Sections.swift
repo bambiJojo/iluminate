@@ -154,7 +154,7 @@ extension AudioLibraryView {
                     }
 
                     // Trance Depth Filter (only show if we have analyzed files)
-                    if audioFiles.contains(where: { $0.isAnalyzed && $0.analysisResult?.contentType == .hypnosis }) {
+                    if audioFiles.contains(where: { $0.isAnalyzed && ($0.analysisResult.map { $0.contentType.isHypnosisLike } ?? false) }) {
                         Menu {
                             Picker("Trance Depth", selection: $tranceDepthFilter) {
                                 ForEach(TranceDepthFilter.allCases, id: \.self) { filter in
@@ -287,7 +287,11 @@ extension AudioLibraryView {
         switch filter {
         case .all: return "list.bullet"
         case .hypnosis: return "brain.head.profile"
+        case .eroticHypnosis: return "flame"
+        case .sleepHypnosis: return "moon.zzz"
         case .meditation: return "leaf"
+        case .brainwave: return "waveform.path.ecg"
+        case .asmr: return "ear"
         case .music: return "music.note"
         case .guided: return "figure.mind.and.body"
         case .affirmations: return "quote.bubble"
@@ -301,7 +305,11 @@ extension AudioLibraryView {
             switch filter {
             case .all: return true
             case .hypnosis: return file.analysisResult?.contentType == .hypnosis
+            case .eroticHypnosis: return file.analysisResult?.contentType == .eroticHypnosis
+            case .sleepHypnosis: return file.analysisResult?.contentType == .sleepHypnosis
             case .meditation: return file.analysisResult?.contentType == .meditation
+            case .brainwave: return file.analysisResult?.contentType == .brainwave
+            case .asmr: return file.analysisResult?.contentType == .asmr
             case .music: return file.analysisResult?.contentType == .music
             case .guided: return file.analysisResult?.contentType == .guidedImagery
             case .affirmations: return file.analysisResult?.contentType == .affirmations

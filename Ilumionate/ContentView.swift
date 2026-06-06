@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct ContentView: View {
     // MARK: - State Management (Trance navigation system)
@@ -141,7 +142,7 @@ struct ContentView: View {
                 let session = try LightScoreReader.loadSession(named: name)
                 loaded.append(session)
             } catch {
-                print("❌ Failed to load session '\(name)': \(error)")
+                Log.ui.info("❌ Failed to load session '\(name)': \(error)")
             }
         }
         sessions = loaded

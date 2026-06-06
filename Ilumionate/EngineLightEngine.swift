@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import QuartzCore
 import Observation
 
@@ -120,7 +121,7 @@ final class LightEngine {
             )
 
             let efficiencyText = powerEfficiencyGain > 0 ? String(format: " (%.1f%% power savings)", powerEfficiencyGain) : ""
-            print("🔄 Adaptive refresh rate: \(optimalRate)Hz (therapeutic: \(String(format: "%.1f", max(currentFrequency + abs(currentBilateralOffset), currentFrequency - abs(currentBilateralOffset))))Hz)\(efficiencyText)")
+            Log.engine.info("🔄 Adaptive refresh rate: \(optimalRate)Hz (therapeutic: \(String(format: "%.1f", max(self.currentFrequency + abs(self.currentBilateralOffset), self.currentFrequency - abs(self.currentBilateralOffset))))Hz)\(efficiencyText)")
         }
     }
 
@@ -318,8 +319,8 @@ final class LightEngine {
         link.add(to: .main, forMode: .common)
         displayLink = link
 
-        print("🚀 Light engine started with adaptive refresh rate: \(targetRefreshRate)Hz")
-        print("   Therapeutic frequency: \(String(format: "%.1f", currentFrequency))Hz")
+        Log.engine.info("🚀 Light engine started with adaptive refresh rate: \(self.targetRefreshRate)Hz")
+        Log.engine.info("   Therapeutic frequency: \(String(format: "%.1f", self.currentFrequency))Hz")
     }
 
     /// Stop the display loop and reset state.
@@ -347,14 +348,14 @@ final class LightEngine {
         brightness = 0.0
         brightnessLeft = 0.0
         brightnessRight = 0.0
-        print("⏸️ Light engine paused")
+        Log.engine.info("⏸️ Light engine paused")
     }
 
     /// Resume the engine from pause state
     func resume() {
         guard isRunning else { return }
         isPaused = false
-        print("▶️ Light engine resumed")
+        Log.engine.info("▶️ Light engine resumed")
     }
 
     // MARK: - Display Tick
@@ -399,12 +400,12 @@ final class LightEngine {
         #if DEBUG
         let tickDuration = CFAbsoluteTimeGetCurrent() - tickStart
         if tickDuration > 0.016 {
-            print("⚠️ Light Engine slow tick: \(String(format: "%.3f", tickDuration * 1000))ms")
+            Log.engine.info("⚠️ Light Engine slow tick: \(String(format: "%.3f", tickDuration * 1000))ms")
         }
         if frameCounter % 240 == 0 {
-            let freqStr = String(format: "%.1f", currentFrequency)
+            let freqStr = String(format: "%.1f", self.currentFrequency)
             let brightStr = String(format: "%.3f", brightness)
-            print("🔄 Engine: brightness=\(brightStr) freq=\(freqStr)Hz")
+            Log.engine.info("🔄 Engine: brightness=\(brightStr) freq=\(freqStr)Hz")
         }
         #endif
     }
@@ -433,7 +434,7 @@ final class LightEngine {
         lastFPSCheck = timestamp
 
         if currentFPS < 50 {
-            print("⚠️ Light Engine FPS: \(currentFPS) (target: \(targetRefreshRate)+)")
+            Log.engine.info("⚠️ Light Engine FPS: \(self.currentFPS) (target: \(self.targetRefreshRate)+)")
         }
     }
 

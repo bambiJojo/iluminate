@@ -7,11 +7,12 @@
 
 import SwiftUI
 
-extension MindMachineView {
+struct BinauralCard: View {
+    @Bindable var model: MindMachineModel
 
     // MARK: - Binaural Beats Card
 
-    var binauralCard: some View {
+    var body: some View {
         GlassCard(label: "Binaural Beats") {
             if model.selectedVisualMode == .colorPulse {
                 VStack(alignment: .leading, spacing: TranceSpacing.list) {

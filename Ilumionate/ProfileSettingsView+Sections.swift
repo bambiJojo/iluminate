@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 import StoreKit
 
 extension ProfileSettingsView {
@@ -416,13 +417,13 @@ extension ProfileSettingsView {
                     color: .roseDeep
                 ) {
                     TranceHaptics.shared.light()
-                    print("=== ENGINE DIAGNOSTICS ===")
-                    print("Profile: \(profileName) | Goal: \(profileGoal)")
-                    print("Haptics: \(hapticFeedbackEnabled) | Keep Awake: \(autoLockEnabled)")
-                    print("Freq Scale: \(userFrequencyMultiplier) | Countdown: \(countdownDuration)")
-                    print("History: \(listeningHistoryEnabled)")
-                    print("AI Prefs: \(prefs.snapshot)")
-                    print("==========================")
+                    Log.ui.info("=== ENGINE DIAGNOSTICS ===")
+                    Log.ui.info("Profile: \(profileName) | Goal: \(profileGoal)")
+                    Log.ui.info("Haptics: \(hapticFeedbackEnabled) | Keep Awake: \(autoLockEnabled)")
+                    Log.ui.info("Freq Scale: \(userFrequencyMultiplier) | Countdown: \(countdownDuration)")
+                    Log.ui.info("History: \(listeningHistoryEnabled)")
+                    Log.ui.info("AI Prefs: \(String(describing: prefs.snapshot))")
+                    Log.ui.info("==========================")
                 }
                 settingsButton(
                     title: "Reset Preferences",

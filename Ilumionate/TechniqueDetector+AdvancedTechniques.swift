@@ -67,6 +67,57 @@ private extension TechniqueDetector {
 
 extension TechniqueDetector {
 
+    // MARK: Metaphorical Story
+
+    func detectMetaphoricalStories(wordTimestamps: [WordTimestamp]) -> TechniqueDetectionResult {
+        let patterns: [[String]] = [
+            ["let", "me", "tell", "you", "a", "story"],
+            ["i", "want", "to", "tell", "you", "a", "story"],
+            ["there", "was", "once"],
+            ["once", "upon", "a", "time"],
+            ["a", "parable"],
+            ["a", "metaphor", "for"],
+            ["this", "story", "is", "about"]
+        ]
+
+        return detectPatterns(
+            wordTimestamps: wordTimestamps,
+            patterns: patterns,
+            techniqueName: "metaphorical_story",
+            markerType: .metaphoricalStory,
+            descriptionPrefix: "Metaphorical story",
+            suggestedLightSync: "narrative_color_drift",
+            strength: 0.8
+        )
+    }
+
+    // MARK: Utilization / Ericksonian Response Following
+
+    func detectUtilizationLanguage(wordTimestamps: [WordTimestamp]) -> TechniqueDetectionResult {
+        let patterns: [[String]] = [
+            ["thats", "right"],
+            ["that's", "right"],
+            ["use", "that"],
+            ["use", "that", "feeling"],
+            ["whatever", "happens"],
+            ["in", "your", "own", "way"],
+            ["your", "unconscious", "mind"],
+            ["inner", "resources"],
+            ["you", "may", "notice"],
+            ["you", "can", "notice"]
+        ]
+
+        return detectPatterns(
+            wordTimestamps: wordTimestamps,
+            patterns: patterns,
+            techniqueName: "utilization",
+            markerType: .utilizationOfResponse,
+            descriptionPrefix: "Utilization / response-following",
+            suggestedLightSync: "adaptive_follow_mode",
+            strength: 0.72
+        )
+    }
+
     // MARK: Confusion Technique
 
     func detectConfusionTechnique(wordTimestamps: [WordTimestamp]) -> TechniqueDetectionResult {
@@ -74,7 +125,6 @@ extension TechniqueDetector {
             ["you", "know", "that", "you", "don't", "know"],
             ["the", "more", "you", "try", "the", "less"],
             ["don't", "try", "to", "understand"],
-            ["don't", "think", "about"],
             ["you", "can't", "not"],
             ["try", "not", "to"],
             ["the", "harder", "you", "try"],
@@ -82,12 +132,6 @@ extension TechniqueDetector {
             ["isn't", "it", "interesting"],
             ["isn't", "it", "curious"],
             ["can", "you", "not"],
-            ["you", "may", "wonder"],
-            ["you", "might", "wonder"],
-            ["I", "wonder", "if", "you"],
-            ["which", "means", "that"],
-            ["or", "does", "it"],
-            ["or", "is", "it"],
             ["that's", "right", "isn't", "it"]
         ]
 
@@ -225,10 +269,6 @@ extension TechniqueDetector {
         // Positive hallucination (seeing/hearing something not there) and
         // negative hallucination (not perceiving something present)
         let patterns: [[String]] = [
-            ["you", "can", "see"],
-            ["you", "can", "hear"],
-            ["you", "can", "feel"],
-            ["you", "can", "smell"],
             ["you", "begin", "to", "see"],
             ["you", "begin", "to", "hear"],
             ["imagine", "you", "see"],
@@ -246,10 +286,8 @@ extension TechniqueDetector {
             ["cannot", "hear"],
             ["cannot", "feel"],
             ["invisible", "to", "you"],
-            ["a", "beautiful", "light"],
-            ["a", "warm", "light"],
-            ["a", "golden", "light"],
-            ["you", "notice", "a"]
+            ["a", "voice", "that", "isn't", "there"],
+            ["see", "something", "that", "isn't", "there"]
         ]
 
         return detectPatterns(
@@ -268,7 +306,6 @@ extension TechniqueDetector {
     func detectDoubleBinds(wordTimestamps: [WordTimestamp]) -> TechniqueDetectionResult {
         let patterns: [[String]] = [
             ["you", "can", "either"],
-            ["whether", "you"],
             ["you", "may", "choose", "to"],
             ["sooner", "or", "later"],
             ["now", "or", "in", "a", "moment"],
@@ -276,13 +313,9 @@ extension TechniqueDetector {
             ["one", "way", "or", "another"],
             ["either", "way"],
             ["the", "choice", "is", "yours"],
-            ["you", "can", "choose"],
             ["it", "doesn't", "matter", "whether"],
             ["it", "doesn't", "matter", "if"],
-            ["perhaps", "now", "or", "perhaps"],
-            ["you", "might", "already"],
-            ["I", "don't", "know", "if"],
-            ["I", "don't", "know", "whether"]
+            ["perhaps", "now", "or", "perhaps"]
         ]
 
         return detectPatterns(
@@ -322,14 +355,8 @@ extension TechniqueDetector {
             ["blank", "mind"],
             ["mindless"],
             ["you", "are", "nothing"],
-            ["you", "are", "mine"],
             ["belong", "to", "me"],
-            ["I", "own", "you"],
             ["you", "exist", "to"],
-            ["your", "only", "purpose"],
-            ["good", "girl"],
-            ["good", "boy"],
-            ["good", "pet"],
             ["say", "it", "again"],
             ["repeat", "after", "me"],
             ["say", "yes"],
@@ -340,9 +367,6 @@ extension TechniqueDetector {
             ["I", "control", "you"],
             ["you", "are", "programmed"],
             ["programming", "complete"],
-            ["accept", "this", "truth"],
-            ["this", "is", "your", "truth"],
-            ["you", "know", "this", "is", "true"],
             ["deeper", "into", "obedience"],
             ["sink", "into", "obedience"]
         ]
@@ -364,10 +388,12 @@ extension TechniqueDetector {
         let conditioningKeywords = Set([
             "obey", "submit", "surrender", "comply", "serve",
             "programmed", "brainwashed", "mindless", "empty",
-            "drone", "slave", "puppet", "toy", "object"
+            "drone", "slave", "puppet"
         ])
 
-        let windowSize: TimeInterval = 60.0
+        let windowSize: TimeInterval = 45.0
+        let minimumKeywordHits = 6
+        let minimumUniqueKeywords = 3
         var windowStart: TimeInterval = 0
 
         while windowStart < duration {
@@ -382,8 +408,14 @@ extension TechniqueDetector {
                 )
             }
 
-            // 4+ conditioning keywords in 60 seconds = high-density conditioning
-            if hits.count >= 4, let firstHit = hits.first {
+            let uniqueHits = Set(hits.map {
+                $0.word.lowercased().trimmingCharacters(in: .punctuationCharacters)
+            })
+
+            // Require both repetition and variety to avoid flagging ordinary emphasis.
+            if hits.count >= minimumKeywordHits,
+               uniqueHits.count >= minimumUniqueKeywords,
+               let firstHit = hits.first {
                 techniques.append(HypnoticTechnique(
                     technique: "brainwashing_conditioning_loop",
                     timestamp: firstHit.startTime,

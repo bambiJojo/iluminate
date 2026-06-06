@@ -3,6 +3,7 @@
 //
 
 import SwiftUI
+import os
 
 extension AudioLibraryView {
 
@@ -61,7 +62,7 @@ extension AudioLibraryView {
             onUpdateRating: { newRating in updateRating(for: file, rating: newRating) },
             onDetailedRating: { showDetailedRatingSheet(for: file) },
             onAddToPlaylist: {
-                print("🎵 Add \(file.filename) to playlist")
+                Log.audio.info("🎵 Add \(file.filename) to playlist")
                 TranceHaptics.shared.light()
             }
         )
@@ -90,7 +91,11 @@ extension AudioLibraryView {
                 switch contentFilter {
                 case .all: return true
                 case .hypnosis: return file.analysisResult?.contentType == .hypnosis
+                case .eroticHypnosis: return file.analysisResult?.contentType == .eroticHypnosis
+                case .sleepHypnosis: return file.analysisResult?.contentType == .sleepHypnosis
                 case .meditation: return file.analysisResult?.contentType == .meditation
+                case .brainwave: return file.analysisResult?.contentType == .brainwave
+                case .asmr: return file.analysisResult?.contentType == .asmr
                 case .music: return file.analysisResult?.contentType == .music
                 case .guided: return file.analysisResult?.contentType == .guidedImagery
                 case .affirmations: return file.analysisResult?.contentType == .affirmations

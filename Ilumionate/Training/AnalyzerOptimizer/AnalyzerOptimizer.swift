@@ -6,9 +6,61 @@
 //
 
 import Foundation
+import CryptoKit
 
-struct AnalyzerOptimizer {
-    struct Parameters: Sendable {
+actor OptimizerProgressCounter {
+    var completedUnitCount: Int
+
+    init(initialValue: Int) {
+        self.completedUnitCount = initialValue
+    }
+
+    func next() -> Int {
+        completedUnitCount += 1
+        return completedUnitCount
+    }
+}
+
+struct OptimizerConcurrencyProfile: Sendable {
+    let cacheWarmLimit: Int
+    let candidateEvaluationLimit: Int
+    let fileEvaluationLimit: Int
+
+    static func `for`(
+        mode: AnalyzerEvaluationMode,
+        processorCount: Int = ProcessInfo.processInfo.activeProcessorCount
+    ) -> OptimizerConcurrencyProfile {
+        let availableProcessors = max(1, processorCount)
+
+        switch mode {
+        case .keywordOnly:
+            let totalBudget = max(2, availableProcessors)
+            let candidateLimit = max(1, min(4, totalBudget / 2))
+            let fileLimit = max(1, min(4, totalBudget / max(candidateLimit, 1)))
+            let cacheLimit = max(fileLimit, min(6, totalBudget))
+            return OptimizerConcurrencyProfile(
+                cacheWarmLimit: cacheLimit,
+                candidateEvaluationLimit: candidateLimit,
+                fileEvaluationLimit: fileLimit
+            )
+        case .chunkedOnly:
+            return OptimizerConcurrencyProfile(
+                cacheWarmLimit: max(1, min(4, availableProcessors / 2)),
+                candidateEvaluationLimit: max(1, min(2, availableProcessors / 4)),
+                fileEvaluationLimit: max(1, min(2, availableProcessors / 3))
+            )
+        case .hybridRuntime:
+            return OptimizerConcurrencyProfile(
+                cacheWarmLimit: max(1, min(4, availableProcessors / 2)),
+                candidateEvaluationLimit: 1,
+                fileEvaluationLimit: max(1, min(2, availableProcessors / 4))
+            )
+        }
+    }
+}
+
+struct AnalyzerOptimizer: Sendable {
+    struct Parameters: Codable, Sendable {
         var populationSize: Int = 8
         var maxGenerations: Int = 8
         var elitismCount: Int = 2
@@ -43,8 +95,12 @@ struct AnalyzerOptimizer {
     }
 
     struct Progress: Sendable {
+        let title: String
         let message: String
         let generation: Int?
+        let completedUnitCount: Int?
+        let totalUnitCount: Int?
+        let isEstimatedTotal: Bool
     }
 
     struct OutputFiles: Sendable {
@@ -69,18 +125,55 @@ struct AnalyzerOptimizer {
         let historyURL: URL
     }
 
-    private struct PopulationEntry {
+    enum CheckpointStage: String, Codable, Sendable {
+        case generationLoop
+        case finalization
+    }
+
+    struct Checkpoint: Codable, Sendable {
+        struct PopulationEntrySnapshot: Codable, Sendable {
+            let config: AnalyzerConfig
+            let trainingMetrics: AnalyzerOptimizationAggregateMetrics
+            let validationMetrics: AnalyzerOptimizationAggregateMetrics
+        }
+
+        let schemaVersion: Int
+        let savedAt: Date
+        let datasetHash: String
+        let params: Parameters
+        let baseConfig: AnalyzerConfig
+        let stage: CheckpointStage
+        let nextGeneration: Int
+        let progressBase: Int
+        let childGenerationCount: Int
+        let stagnantGenerations: Int
+        let baselineTrainingMetrics: AnalyzerOptimizationAggregateMetrics
+        let baselineValidationMetrics: AnalyzerOptimizationAggregateMetrics
+        let baselineOverallMetrics: AnalyzerOptimizationAggregateMetrics
+        let population: [PopulationEntrySnapshot]
+        let bestEntry: PopulationEntrySnapshot
+        let bestGeneration: Int
+        let bestSelectionScore: Double
+        let generationHistory: [AnalyzerOptimizationReport.GenerationSnapshot]
+    }
+
+    struct PopulationEntry: Sendable {
         let config: AnalyzerConfig
         let trainingMetrics: AnalyzerOptimizationAggregateMetrics
         let validationMetrics: AnalyzerOptimizationAggregateMetrics
     }
 
-    private let corpusDirectory: URL
-    private let outputDirectory: URL
-    private let mutationEngine: AnalyzerMutationEngine
+    struct PopulationEvaluationJob: Sendable {
+        let config: AnalyzerConfig
+        let progressLabel: String
+    }
+
+    let corpusDirectory: URL
+    let outputDirectory: URL
+    let mutationEngine: AnalyzerMutationEngine
 
     init(
-        corpusDirectory: URL = URL.documentsDirectory.appending(path: "TrainingCorpus"),
+        corpusDirectory: URL = TrainingCorpusLocation.defaultURL(),
         outputDirectory: URL = URL.documentsDirectory.appending(path: "TrainingOutput"),
         mutationEngine: AnalyzerMutationEngine = .init()
     ) {
@@ -93,11 +186,28 @@ struct AnalyzerOptimizer {
         try AnalyzerOptimizationDataset.load(from: corpusDirectory)
     }
 
+    func loadCheckpoint() throws -> Checkpoint? {
+        let url = checkpointURL()
+        guard FileManager.default.fileExists(atPath: url.path()) else { return nil }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(Checkpoint.self, from: Data(contentsOf: url))
+    }
+
+    func clearCheckpoint() throws {
+        let url = checkpointURL()
+        guard FileManager.default.fileExists(atPath: url.path()) else { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
     func run(
         seedConfig: AnalyzerConfig? = nil,
         params: Parameters = .init(),
+        resumeFrom checkpoint: Checkpoint? = nil,
         transcribe: (@Sendable (AnalyzerOptimizationDataset.Example) async throws -> AudioTranscriptionResult)? = nil,
-        onProgress: (@Sendable (Progress) async -> Void)? = nil
+        onProgress: (@Sendable (Progress) async -> Void)? = nil,
+        pauseRequested: (@Sendable () async -> Bool)? = nil
     ) async throws -> RunResult {
         try Task.checkCancellation()
         let dataset = try loadDataset()
@@ -105,60 +215,181 @@ struct AnalyzerOptimizer {
             throw AnalyzerOptimizerError.emptyDataset
         }
 
-        await onProgress?(Progress(message: "Loaded \(dataset.examples.count) analyzer examples.", generation: nil))
+        if checkpoint == nil {
+            try? clearCheckpoint()
+        }
 
-        let split = split(dataset.examples, trainFraction: params.trainFraction, validationFraction: params.validationFraction)
+        let resolvedParams = checkpoint?.params ?? params
+        if let checkpoint, checkpoint.datasetHash != dataset.datasetHash {
+            throw AnalyzerOptimizerError.invalidCheckpoint("The saved optimizer checkpoint no longer matches the current analyzer dataset.")
+        }
+
+        let split = split(
+            dataset.examples,
+            trainFraction: resolvedParams.trainFraction,
+            validationFraction: resolvedParams.validationFraction
+        )
+        let concurrencyProfile = OptimizerConcurrencyProfile.for(mode: resolvedParams.evaluationMode)
         let cache = AnalyzerTranscriptCache(cacheDirectory: dataset.transcriptCacheDirectory)
-        let engine = AnalyzerEvaluationEngine(mode: params.evaluationMode)
-        let baseConfig = seedConfig ?? AnalyzerConfigLoader.load()
+        let engine = AnalyzerEvaluationEngine(mode: resolvedParams.evaluationMode)
+        let baseConfig = checkpoint?.baseConfig ?? seedConfig ?? AnalyzerConfigLoader.load()
+        let populationSize = max(1, resolvedParams.populationSize)
+        let eliteCount = max(1, min(resolvedParams.elitismCount, populationSize))
+        let perCandidateUnitCount = split.train.count + split.validation.count
+        let preparationUnitCount = dataset.examples.count
+        let baselineUnitCount = dataset.examples.count
+        let seedPopulationUnitCount = populationSize * perCandidateUnitCount
+        let childCountPerGeneration = max(0, populationSize - eliteCount)
+        let finalizationUnitCount = dataset.examples.count
+        let estimatedTotalUnitCount = preparationUnitCount
+            + baselineUnitCount
+            + seedPopulationUnitCount
+            + (resolvedParams.maxGenerations * childCountPerGeneration * perCandidateUnitCount)
+            + finalizationUnitCount
+        var childGenerationCount = checkpoint?.childGenerationCount ?? 0
+        var progressBase = checkpoint?.progressBase ?? 0
+        var baselineTrainingMetrics: AnalyzerOptimizationAggregateMetrics
+        var baselineValidationMetrics: AnalyzerOptimizationAggregateMetrics
+        var baselineOverallMetrics: AnalyzerOptimizationAggregateMetrics
+        var population: [PopulationEntry]
+        var history: [AnalyzerOptimizationReport.GenerationSnapshot]
+        var stagnantGenerations: Int
+        var bestEntry: PopulationEntry
+        var bestGeneration: Int
+        var bestSelectionScore: Double
+        var startGeneration: Int
+        let resumeStage = checkpoint?.stage ?? .generationLoop
 
-        try Task.checkCancellation()
-        let baselineTrainingResults = try await evaluate(
-            config: baseConfig,
-            examples: split.train,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
-        )
-        try Task.checkCancellation()
-        let baselineValidationResults = try await evaluate(
-            config: baseConfig,
-            examples: split.validation,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
-        )
-        try Task.checkCancellation()
-        let baselineAllResults = try await evaluate(
-            config: baseConfig,
-            examples: dataset.examples,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
-        )
+        if let checkpoint {
+            baselineTrainingMetrics = checkpoint.baselineTrainingMetrics
+            baselineValidationMetrics = checkpoint.baselineValidationMetrics
+            baselineOverallMetrics = checkpoint.baselineOverallMetrics
+            population = checkpoint.population.map(populationEntry(from:))
+            history = checkpoint.generationHistory
+            stagnantGenerations = checkpoint.stagnantGenerations
+            bestEntry = populationEntry(from: checkpoint.bestEntry)
+            bestGeneration = checkpoint.bestGeneration
+            bestSelectionScore = checkpoint.bestSelectionScore
+            startGeneration = checkpoint.nextGeneration
 
-        var population = try await seedPopulation(
-            seed: baseConfig,
-            params: params,
-            split: split,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
-        )
+            await onProgress?(
+                Progress(
+                    title: "Optimizing Analyzer",
+                    message: "Resuming saved optimizer run from generation \(startGeneration).",
+                    generation: startGeneration,
+                    completedUnitCount: progressBase,
+                    totalUnitCount: estimatedTotalUnitCount,
+                    isEstimatedTotal: true
+                )
+            )
+        } else {
+            await onProgress?(
+                Progress(
+                    title: "Optimizing Analyzer",
+                    message: "Loaded \(dataset.examples.count) analyzer examples.",
+                    generation: nil,
+                    completedUnitCount: 0,
+                    totalUnitCount: estimatedTotalUnitCount,
+                    isEstimatedTotal: true
+                )
+            )
 
-        var history: [AnalyzerOptimizationReport.GenerationSnapshot] = []
-        var stagnantGenerations = 0
-
-        let initialBest = population.max(by: { selectionScore(for: $0) < selectionScore(for: $1) })!
-        var bestEntry = initialBest
-        var bestGeneration = 0
-        var bestSelectionScore = selectionScore(for: initialBest)
-
-        for generation in 0..<params.maxGenerations {
             try Task.checkCancellation()
-            population.sort { $0.trainingMetrics.overallScore > $1.trainingMetrics.overallScore }
+            try await warmPreparedInputs(
+                examples: dataset.examples,
+                cache: cache,
+                transcribe: transcribe,
+                maxConcurrent: concurrencyProfile.cacheWarmLimit,
+                progressBase: progressBase,
+                totalUnitCount: estimatedTotalUnitCount,
+                title: "Optimizing Analyzer",
+                messagePrefix: "Preparing cached analyzer inputs",
+                generation: nil,
+                isEstimatedTotal: true,
+                onProgress: onProgress
+            )
+            progressBase += preparationUnitCount
 
-            let bestTrainingScore = population.first?.trainingMetrics.overallScore ?? 0
+            try Task.checkCancellation()
+            let baselineAllResults = try await evaluate(
+                config: baseConfig,
+                examples: dataset.examples,
+                cache: cache,
+                engine: engine,
+                transcribe: transcribe,
+                maxConcurrent: concurrencyProfile.fileEvaluationLimit,
+                progressBase: progressBase,
+                progress: { example, completedUnitCount in
+                    let splitName = splitName(for: example.id, in: split)
+                    await onProgress?(
+                        Progress(
+                            title: "Optimizing Analyzer",
+                            message: "Scoring baseline across the full corpus · \(splitName) · \(example.originalFilename)",
+                            generation: nil,
+                            completedUnitCount: completedUnitCount,
+                            totalUnitCount: estimatedTotalUnitCount,
+                            isEstimatedTotal: true
+                        )
+                    )
+                }
+            )
+            progressBase += dataset.examples.count
+            let baselinePartition = partitionResults(baselineAllResults, by: split)
+
+            population = try await seedPopulation(
+                seed: baseConfig,
+                params: resolvedParams,
+                evaluationMode: resolvedParams.evaluationMode,
+                split: split,
+                cache: cache,
+                engine: engine,
+                concurrencyProfile: concurrencyProfile,
+                transcribe: transcribe,
+                progressBase: progressBase,
+                totalUnitCount: estimatedTotalUnitCount,
+                onProgress: onProgress
+            )
+            progressBase += seedPopulationUnitCount
+
+            baselineTrainingMetrics = AnalyzerMetrics.aggregate(baselinePartition.train.map(\.metrics))
+            baselineValidationMetrics = AnalyzerMetrics.aggregate(baselinePartition.validation.map(\.metrics))
+            baselineOverallMetrics = AnalyzerMetrics.aggregate(baselineAllResults.map(\.metrics))
+            history = []
+            stagnantGenerations = 0
+
+            let initialBest = population.max(by: { selectionScore(for: $0) < selectionScore(for: $1) })!
+            bestEntry = initialBest
+            bestGeneration = 0
+            bestSelectionScore = selectionScore(for: initialBest)
+            startGeneration = 0
+
+            try await pauseIfRequested(
+                pauseRequested,
+                dataset: dataset,
+                params: resolvedParams,
+                baseConfig: baseConfig,
+                stage: .generationLoop,
+                nextGeneration: startGeneration,
+                progressBase: progressBase,
+                childGenerationCount: childGenerationCount,
+                stagnantGenerations: stagnantGenerations,
+                baselineTrainingMetrics: baselineTrainingMetrics,
+                baselineValidationMetrics: baselineValidationMetrics,
+                baselineOverallMetrics: baselineOverallMetrics,
+                population: population,
+                bestEntry: bestEntry,
+                bestGeneration: bestGeneration,
+                bestSelectionScore: bestSelectionScore,
+                history: history
+            )
+        }
+
+        if resumeStage == .generationLoop {
+            for generation in startGeneration..<resolvedParams.maxGenerations {
+                try Task.checkCancellation()
+                population.sort { selectionScore(for: $0) > selectionScore(for: $1) }
+
+            let bestTrainingScore = population.map(\.trainingMetrics.overallScore).max() ?? 0
             let bestValidationScore = population.map(selectionScore(for:)).max() ?? 0
             let averageTrainingScore = population.map(\.trainingMetrics.overallScore).reduce(0, +) / Double(population.count)
             let averageValidationScore = population.map { selectionScore(for: $0) }.reduce(0, +) / Double(population.count)
@@ -175,8 +406,12 @@ struct AnalyzerOptimizer {
 
             await onProgress?(
                 Progress(
+                    title: "Optimizing Analyzer",
                     message: "Generation \(generation) complete. train=\(bestTrainingScore.formatted(.number.precision(.fractionLength(4)))) val=\(bestValidationScore.formatted(.number.precision(.fractionLength(4))))",
-                    generation: generation
+                    generation: generation,
+                    completedUnitCount: progressBase,
+                    totalUnitCount: estimatedTotalUnitCount,
+                    isEstimatedTotal: true
                 )
             )
 
@@ -192,94 +427,159 @@ struct AnalyzerOptimizer {
                 }
             }
 
-            if stagnantGenerations >= params.earlyStopPatience {
-                break
-            }
+                if stagnantGenerations >= resolvedParams.earlyStopPatience {
+                    break
+                }
 
-            let elites = Array(population.prefix(max(1, min(params.elitismCount, population.count))))
-            var nextGeneration = elites
+                let elites = Array(population.prefix(max(1, min(resolvedParams.elitismCount, population.count))))
+                let plannedChildren = max(0, populationSize - elites.count)
+                var childJobs: [PopulationEvaluationJob] = []
+                childJobs.reserveCapacity(plannedChildren)
 
-            while nextGeneration.count < max(1, params.populationSize) {
-                try Task.checkCancellation()
-                let parentA = elites.randomElement() ?? population[0]
-                let parentB = elites.randomElement() ?? population[0]
-                let base = mutationEngine.crossover(parentA.config, parentB.config)
-                let child = Double.random(in: 0...1) < params.mutationRate
-                    ? mutationEngine.mutate(base)
-                    : base
-                let entry = try await evaluatePopulationEntry(
-                    config: child,
+                while childJobs.count < plannedChildren {
+                    try Task.checkCancellation()
+                    let parentA = elites.randomElement() ?? population[0]
+                    let parentB = elites.randomElement() ?? population[0]
+                    let base = mutationEngine.crossover(
+                        parentA.config,
+                        parentB.config,
+                        for: resolvedParams.evaluationMode
+                    )
+                    let child = Double.random(in: 0...1) < resolvedParams.mutationRate
+                        ? mutationEngine.mutate(base, for: resolvedParams.evaluationMode)
+                        : base
+                    childJobs.append(
+                        PopulationEvaluationJob(
+                            config: child,
+                            progressLabel: "Evaluating generation \(generation + 1) candidate \(childJobs.count + 1) of \(max(plannedChildren, 1))"
+                        )
+                    )
+                }
+
+                let evaluatedChildren = try await evaluatePopulationEntries(
+                    jobs: childJobs,
                     split: split,
                     cache: cache,
                     engine: engine,
-                    transcribe: transcribe
+                    concurrencyProfile: concurrencyProfile,
+                    transcribe: transcribe,
+                    progressBase: progressBase,
+                    totalUnitCount: estimatedTotalUnitCount,
+                    title: "Optimizing Analyzer",
+                    generation: generation + 1,
+                    isEstimatedTotal: true,
+                    onProgress: onProgress
                 )
-                nextGeneration.append(entry)
-            }
+                var nextGeneration = elites
+                nextGeneration.append(contentsOf: evaluatedChildren)
 
-            population = nextGeneration
+                population = nextGeneration
+                progressBase += plannedChildren * perCandidateUnitCount
+                childGenerationCount += 1
+
+                try await pauseIfRequested(
+                    pauseRequested,
+                    dataset: dataset,
+                    params: resolvedParams,
+                    baseConfig: baseConfig,
+                    stage: .generationLoop,
+                    nextGeneration: generation + 1,
+                    progressBase: progressBase,
+                    childGenerationCount: childGenerationCount,
+                    stagnantGenerations: stagnantGenerations,
+                    baselineTrainingMetrics: baselineTrainingMetrics,
+                    baselineValidationMetrics: baselineValidationMetrics,
+                    baselineOverallMetrics: baselineOverallMetrics,
+                    population: population,
+                    bestEntry: bestEntry,
+                    bestGeneration: bestGeneration,
+                    bestSelectionScore: bestSelectionScore,
+                    history: history
+                )
+            }
         }
 
         var selectedConfig = bestEntry.config
         selectedConfig.generation = bestGeneration
         selectedConfig.fitness = bestSelectionScore
+        let finalizedTotalUnitCount = preparationUnitCount
+            + baselineUnitCount
+            + seedPopulationUnitCount
+            + (childGenerationCount * childCountPerGeneration * perCandidateUnitCount)
+            + finalizationUnitCount
 
-        try Task.checkCancellation()
-        let testResults = try await evaluate(
-            config: selectedConfig,
-            examples: split.test,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
+        try await pauseIfRequested(
+            pauseRequested,
+            dataset: dataset,
+            params: resolvedParams,
+            baseConfig: baseConfig,
+            stage: .finalization,
+            nextGeneration: resolvedParams.maxGenerations,
+            progressBase: progressBase,
+            childGenerationCount: childGenerationCount,
+            stagnantGenerations: stagnantGenerations,
+            baselineTrainingMetrics: baselineTrainingMetrics,
+            baselineValidationMetrics: baselineValidationMetrics,
+            baselineOverallMetrics: baselineOverallMetrics,
+            population: population,
+            bestEntry: bestEntry,
+            bestGeneration: bestGeneration,
+            bestSelectionScore: bestSelectionScore,
+            history: history
         )
+
         try Task.checkCancellation()
         let selectedAllResults = try await evaluate(
             config: selectedConfig,
             examples: dataset.examples,
             cache: cache,
             engine: engine,
-            transcribe: transcribe
+            transcribe: transcribe,
+            maxConcurrent: concurrencyProfile.fileEvaluationLimit,
+            progressBase: progressBase,
+            progress: { example, completedUnitCount in
+                let splitName = splitName(for: example.id, in: split)
+                await onProgress?(
+                    Progress(
+                        title: "Optimizing Analyzer",
+                        message: "Scoring selected config across the full corpus · \(splitName) · \(example.originalFilename)",
+                        generation: bestGeneration,
+                        completedUnitCount: completedUnitCount,
+                        totalUnitCount: finalizedTotalUnitCount,
+                        isEstimatedTotal: false
+                    )
+                )
+            }
         )
+        progressBase += dataset.examples.count
+        let selectedPartition = partitionResults(selectedAllResults, by: split)
         let diagnostics = buildDiagnostics(from: selectedAllResults)
-        let baselineOverallMetrics = AnalyzerMetrics.aggregate(baselineAllResults.map(\.metrics))
         let selectedOverallMetrics = AnalyzerMetrics.aggregate(selectedAllResults.map(\.metrics))
         try Task.checkCancellation()
         let scorecard = buildScorecard(
             config: selectedConfig,
             dataset: dataset,
-            evaluationMode: params.evaluationMode,
+            evaluationMode: resolvedParams.evaluationMode,
             split: split,
-            trainResults: try await evaluate(
-                config: selectedConfig,
-                examples: split.train,
-                cache: cache,
-                engine: engine,
-                transcribe: transcribe
-            ),
-            validationResults: try await evaluate(
-                config: selectedConfig,
-                examples: split.validation,
-                cache: cache,
-                engine: engine,
-                transcribe: transcribe
-            ),
-            testResults: testResults,
+            trainResults: selectedPartition.train,
+            validationResults: selectedPartition.validation,
+            testResults: selectedPartition.test,
             allResults: selectedAllResults
         )
         let report = AnalyzerOptimizationReport(
             generatedAt: Date(),
             optimizerVersion: 1,
-            evaluationMode: params.evaluationMode,
+            evaluationMode: resolvedParams.evaluationMode,
             dataset: dataset.summary,
             outputDirectory: outputDirectory.path(),
             trainCount: split.train.count,
             validationCount: split.validation.count,
             testCount: split.test.count,
-            baselineTrainingMetrics: AnalyzerMetrics.aggregate(baselineTrainingResults.map(\.metrics)),
-            baselineValidationMetrics: AnalyzerMetrics.aggregate(baselineValidationResults.map(\.metrics)),
+            baselineTrainingMetrics: baselineTrainingMetrics,
+            baselineValidationMetrics: baselineValidationMetrics,
             bestTrainingMetrics: bestEntry.trainingMetrics,
             bestValidationMetrics: bestEntry.validationMetrics,
-            testMetrics: AnalyzerMetrics.aggregate(testResults.map(\.metrics)),
+            testMetrics: AnalyzerMetrics.aggregate(selectedPartition.test.map(\.metrics)),
             baselineOverallMetrics: baselineOverallMetrics,
             selectedOverallMetrics: selectedOverallMetrics,
             overallImprovement: selectedOverallMetrics.overallScore - baselineOverallMetrics.overallScore,
@@ -292,9 +592,20 @@ struct AnalyzerOptimizer {
 
         try Task.checkCancellation()
         let outputFiles = try writeOutputs(config: selectedConfig, report: report, scorecard: scorecard)
-        if params.publishBestConfigToDocuments {
+        if resolvedParams.publishBestConfigToDocuments {
             try AnalyzerConfigLoader.save(selectedConfig)
         }
+        try? clearCheckpoint()
+        await onProgress?(
+            Progress(
+                title: "Optimizing Analyzer",
+                message: "Writing optimized outputs.",
+                generation: bestGeneration,
+                completedUnitCount: finalizedTotalUnitCount,
+                totalUnitCount: finalizedTotalUnitCount,
+                isEstimatedTotal: false
+            )
+        )
 
         return RunResult(
             bestConfig: selectedConfig,
@@ -304,188 +615,153 @@ struct AnalyzerOptimizer {
         )
     }
 
-    func measure(
-        config: AnalyzerConfig? = nil,
-        evaluationMode: AnalyzerEvaluationMode = .keywordOnly,
-        transcribe: (@Sendable (AnalyzerOptimizationDataset.Example) async throws -> AudioTranscriptionResult)? = nil
-    ) async throws -> MeasurementResult {
-        try Task.checkCancellation()
-        let dataset = try loadDataset()
-        guard !dataset.examples.isEmpty else {
-            throw AnalyzerOptimizerError.emptyDataset
-        }
-
-        let activeConfig = config ?? AnalyzerConfigLoader.load()
-        let split = split(dataset.examples, trainFraction: 0.7, validationFraction: 0.15)
-        let cache = AnalyzerTranscriptCache(cacheDirectory: dataset.transcriptCacheDirectory)
-        let engine = AnalyzerEvaluationEngine(mode: evaluationMode)
-
-        try Task.checkCancellation()
-        let trainResults = try await evaluate(
-            config: activeConfig,
-            examples: split.train,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
-        )
-        try Task.checkCancellation()
-        let validationResults = try await evaluate(
-            config: activeConfig,
-            examples: split.validation,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
-        )
-        try Task.checkCancellation()
-        let testResults = try await evaluate(
-            config: activeConfig,
-            examples: split.test,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
-        )
-        try Task.checkCancellation()
-        let allResults = try await evaluate(
-            config: activeConfig,
-            examples: dataset.examples,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
-        )
-
-        let scorecard = buildScorecard(
-            config: activeConfig,
-            dataset: dataset,
-            evaluationMode: evaluationMode,
-            split: split,
-            trainResults: trainResults,
-            validationResults: validationResults,
-            testResults: testResults,
-            allResults: allResults
-        )
-        try Task.checkCancellation()
-        let outputURL = try writeScorecard(scorecard)
-        let historyURL = try appendScorecardHistory(scorecard)
-        return MeasurementResult(scorecard: scorecard, outputURL: outputURL, historyURL: historyURL)
-    }
-
-    private func seedPopulation(
-        seed: AnalyzerConfig,
+    func pauseIfRequested(
+        _ pauseRequested: (@Sendable () async -> Bool)?,
+        dataset: AnalyzerOptimizationDataset,
         params: Parameters,
-        split: (train: [AnalyzerOptimizationDataset.Example], validation: [AnalyzerOptimizationDataset.Example], test: [AnalyzerOptimizationDataset.Example]),
-        cache: AnalyzerTranscriptCache,
-        engine: AnalyzerEvaluationEngine,
-        transcribe: (@Sendable (AnalyzerOptimizationDataset.Example) async throws -> AudioTranscriptionResult)?
-    ) async throws -> [PopulationEntry] {
-        var population: [PopulationEntry] = []
-        try Task.checkCancellation()
-        population.append(
-            try await evaluatePopulationEntry(
-                config: seed,
-                split: split,
-                cache: cache,
-                engine: engine,
-                transcribe: transcribe
-            )
-        )
+        baseConfig: AnalyzerConfig,
+        stage: CheckpointStage,
+        nextGeneration: Int,
+        progressBase: Int,
+        childGenerationCount: Int,
+        stagnantGenerations: Int,
+        baselineTrainingMetrics: AnalyzerOptimizationAggregateMetrics,
+        baselineValidationMetrics: AnalyzerOptimizationAggregateMetrics,
+        baselineOverallMetrics: AnalyzerOptimizationAggregateMetrics,
+        population: [PopulationEntry],
+        bestEntry: PopulationEntry,
+        bestGeneration: Int,
+        bestSelectionScore: Double,
+        history: [AnalyzerOptimizationReport.GenerationSnapshot]
+    ) async throws {
+        guard let pauseRequested, await pauseRequested() else { return }
 
-        let targetSize = max(1, params.populationSize)
-        while population.count < targetSize {
-            try Task.checkCancellation()
-            let mutated = mutationEngine.mutate(seed)
-            population.append(
-                try await evaluatePopulationEntry(
-                    config: mutated,
-                    split: split,
-                    cache: cache,
-                    engine: engine,
-                    transcribe: transcribe
-                )
-            )
+        let checkpoint = Checkpoint(
+            schemaVersion: 1,
+            savedAt: Date(),
+            datasetHash: dataset.datasetHash,
+            params: params,
+            baseConfig: baseConfig,
+            stage: stage,
+            nextGeneration: nextGeneration,
+            progressBase: progressBase,
+            childGenerationCount: childGenerationCount,
+            stagnantGenerations: stagnantGenerations,
+            baselineTrainingMetrics: baselineTrainingMetrics,
+            baselineValidationMetrics: baselineValidationMetrics,
+            baselineOverallMetrics: baselineOverallMetrics,
+            population: population.map(checkpointEntry(from:)),
+            bestEntry: checkpointEntry(from: bestEntry),
+            bestGeneration: bestGeneration,
+            bestSelectionScore: bestSelectionScore,
+            generationHistory: history
+        )
+        try writeCheckpoint(checkpoint)
+        throw AnalyzerOptimizerError.paused(checkpointURL())
+    }
+
+    func checkpointEntry(from entry: PopulationEntry) -> Checkpoint.PopulationEntrySnapshot {
+        Checkpoint.PopulationEntrySnapshot(
+            config: entry.config,
+            trainingMetrics: entry.trainingMetrics,
+            validationMetrics: entry.validationMetrics
+        )
+    }
+
+    func populationEntry(from snapshot: Checkpoint.PopulationEntrySnapshot) -> PopulationEntry {
+        PopulationEntry(
+            config: snapshot.config,
+            trainingMetrics: snapshot.trainingMetrics,
+            validationMetrics: snapshot.validationMetrics
+        )
+    }
+
+    func checkpointURL() -> URL {
+        outputDirectory.appending(path: "AnalyzerOptimizationCheckpoint.json")
+    }
+
+    func writeCheckpoint(_ checkpoint: Checkpoint) throws {
+        try ensureOutputDirectory()
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        let url = checkpointURL()
+        do {
+            try encoder.encode(checkpoint).write(to: url, options: .atomic)
+        } catch {
+            throw AnalyzerOptimizerError.outputWriteFailed(url, underlying: error.localizedDescription)
         }
-
-        return population
     }
 
-    private func evaluatePopulationEntry(
-        config: AnalyzerConfig,
-        split: (train: [AnalyzerOptimizationDataset.Example], validation: [AnalyzerOptimizationDataset.Example], test: [AnalyzerOptimizationDataset.Example]),
-        cache: AnalyzerTranscriptCache,
-        engine: AnalyzerEvaluationEngine,
-        transcribe: (@Sendable (AnalyzerOptimizationDataset.Example) async throws -> AudioTranscriptionResult)?
-    ) async throws -> PopulationEntry {
-        let trainingResults = try await evaluate(
-            config: config,
-            examples: split.train,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
+    func splitName(
+        for exampleID: UUID,
+        in split: (
+            train: [AnalyzerOptimizationDataset.Example],
+            validation: [AnalyzerOptimizationDataset.Example],
+            test: [AnalyzerOptimizationDataset.Example]
         )
-        let validationResults = try await evaluate(
-            config: config,
-            examples: split.validation,
-            cache: cache,
-            engine: engine,
-            transcribe: transcribe
-        )
-
-        return PopulationEntry(
-            config: config,
-            trainingMetrics: AnalyzerMetrics.aggregate(trainingResults.map(\.metrics)),
-            validationMetrics: AnalyzerMetrics.aggregate(validationResults.map(\.metrics))
-        )
-    }
-
-    private func evaluate(
-        config: AnalyzerConfig,
-        examples: [AnalyzerOptimizationDataset.Example],
-        cache: AnalyzerTranscriptCache,
-        engine: AnalyzerEvaluationEngine,
-        transcribe: (@Sendable (AnalyzerOptimizationDataset.Example) async throws -> AudioTranscriptionResult)?
-    ) async throws -> [AnalyzerEvaluationResult] {
-        var results: [AnalyzerEvaluationResult] = []
-        results.reserveCapacity(examples.count)
-
-        for example in examples {
-            try Task.checkCancellation()
-            let transcription = try await cache.transcription(for: example, transcribe: transcribe)
-            let result = await engine.evaluate(config: config, example: example, transcription: transcription)
-            results.append(result)
+    ) -> String {
+        if split.train.contains(where: { $0.id == exampleID }) {
+            return "train"
         }
-
-        return results
+        if split.validation.contains(where: { $0.id == exampleID }) {
+            return "validation"
+        }
+        if split.test.contains(where: { $0.id == exampleID }) {
+            return "test"
+        }
+        return "unassigned"
     }
 
-    private func selectionScore(for entry: PopulationEntry) -> Double {
-        entry.validationMetrics.exampleCount > 0
-            ? entry.validationMetrics.overallScore
-            : entry.trainingMetrics.overallScore
-    }
-
-    private func split(
+    func split(
         _ examples: [AnalyzerOptimizationDataset.Example],
         trainFraction: Double,
         validationFraction: Double
     ) -> (train: [AnalyzerOptimizationDataset.Example], validation: [AnalyzerOptimizationDataset.Example], test: [AnalyzerOptimizationDataset.Example]) {
-        let sorted = examples.sorted { $0.id.uuidString < $1.id.uuidString }
+        let sorted = examples.sorted { stableOrderingKey(for: $0) < stableOrderingKey(for: $1) }
         guard sorted.count > 1 else {
             return (sorted, [], [])
         }
 
         let count = sorted.count
-        let trainCount = max(1, Int(Double(count) * trainFraction))
-        let validationCount = count >= 3 ? max(1, Int(Double(count) * validationFraction)) : 0
-        let clampedTrainCount = min(trainCount, count)
-        let remainingAfterTrain = max(0, count - clampedTrainCount)
-        let clampedValidationCount = min(validationCount, remainingAfterTrain)
+        let minimumValidationCount = count >= 6 ? 2 : (count >= 3 ? 1 : 0)
+        let minimumTestCount = count >= 6 ? 2 : (count >= 4 ? 1 : 0)
 
-        let train = Array(sorted.prefix(clampedTrainCount))
-        let validation = Array(sorted.dropFirst(clampedTrainCount).prefix(clampedValidationCount))
-        let test = Array(sorted.dropFirst(clampedTrainCount + clampedValidationCount))
+        var validationCount = count >= 3
+            ? max(minimumValidationCount, Int(Double(count) * validationFraction))
+            : 0
+        validationCount = min(validationCount, max(0, count - 1 - minimumTestCount))
+
+        var trainCount = max(1, Int(Double(count) * trainFraction))
+        trainCount = min(trainCount, max(1, count - validationCount - minimumTestCount))
+
+        var testCount = max(0, count - trainCount - validationCount)
+        if testCount < minimumTestCount {
+            let deficit = minimumTestCount - testCount
+            trainCount = max(1, trainCount - deficit)
+            testCount = max(0, count - trainCount - validationCount)
+        }
+
+        let train = Array(sorted.prefix(trainCount))
+        let validation = Array(sorted.dropFirst(trainCount).prefix(validationCount))
+        let test = Array(sorted.dropFirst(trainCount + validationCount).prefix(testCount))
         return (train, validation, test)
     }
 
-    private func buildDiagnostics(from results: [AnalyzerEvaluationResult]) -> [AnalyzerOptimizationReport.FileDiagnostic] {
+    func stableOrderingKey(for example: AnalyzerOptimizationDataset.Example) -> String {
+        let fingerprint = [
+            example.id.uuidString,
+            example.originalFilename,
+            String(format: "%.3f", example.duration),
+            example.phaseSegments.map(\.phase.rawValue).joined(separator: ",")
+        ].joined(separator: "|")
+        let digest = SHA256.hash(data: Data(fingerprint.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    func buildDiagnostics(from results: [AnalyzerEvaluationResult]) -> [AnalyzerOptimizationReport.FileDiagnostic] {
         results.map { result in
             AnalyzerOptimizationReport.FileDiagnostic(
                 exampleID: result.exampleID,
@@ -502,7 +778,7 @@ struct AnalyzerOptimizer {
         .sorted { $0.overallScore < $1.overallScore }
     }
 
-    private func writeOutputs(
+    func writeOutputs(
         config: AnalyzerConfig,
         report: AnalyzerOptimizationReport,
         scorecard: AnalyzerTrainingMatchScorecard
@@ -541,7 +817,7 @@ struct AnalyzerOptimizer {
         )
     }
 
-    private func writeScorecard(_ scorecard: AnalyzerTrainingMatchScorecard) throws -> URL {
+    func writeScorecard(_ scorecard: AnalyzerTrainingMatchScorecard) throws -> URL {
         try ensureOutputDirectory()
 
         let encoder = JSONEncoder()
@@ -557,7 +833,7 @@ struct AnalyzerOptimizer {
         return scorecardURL
     }
 
-    private func appendScorecardHistory(_ scorecard: AnalyzerTrainingMatchScorecard) throws -> URL {
+    func appendScorecardHistory(_ scorecard: AnalyzerTrainingMatchScorecard) throws -> URL {
         try ensureOutputDirectory()
 
         let encoder = JSONEncoder()
@@ -608,12 +884,12 @@ struct AnalyzerOptimizer {
         return historyURL
     }
 
-    private func ensureOutputDirectory() throws {
+    func ensureOutputDirectory() throws {
         guard !FileManager.default.fileExists(atPath: outputDirectory.path()) else { return }
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
     }
 
-    private func buildScorecard(
+    func buildScorecard(
         config: AnalyzerConfig,
         dataset: AnalyzerOptimizationDataset,
         evaluationMode: AnalyzerEvaluationMode,

@@ -24,6 +24,13 @@
         "count down": 3.0, "counting down": 3.0, "eyelids heavy": 3.0,
         "eyelids are heavy": 3.0
       },
+      "fractionation": {
+        "open your eyes": 2.8, "open and close": 3.0, "close them again": 3.0,
+        "drop back down": 3.4, "go back down": 3.2, "deeper each time": 3.6,
+        "every time you open": 3.2, "every time you close": 3.2,
+        "fractionation": 3.0, "fractionize": 2.4, "fractionise": 2.4,
+        "reopen": 2.0, "reclose": 2.0, "blink": 1.2
+      },
       "deepening": {
         "deeper": 2.5, "deep": 0.6, "down": 1.5, "drift": 2.0,
         "float": 2.0, "floating": 2.0, "sinking": 2.0, "falling": 1.5,
@@ -38,6 +45,14 @@
         "nothing to do": 2.0, "nowhere to go": 2.0, "one hundred": 1.8,
         "staircase": 2.5, "going down": 2.0
       },
+      "confusion": {
+        "you may wonder": 3.0, "while you are wondering": 3.4,
+        "the more you try": 3.2, "the less you need": 3.2,
+        "and as you don't": 3.0, "before you know": 2.8,
+        "whether you do or don't": 3.4, "confused": 2.4,
+        "confusing": 2.2, "paradox": 2.0, "wondering": 1.8,
+        "uncertain": 1.6, "whether": 1.0
+      },
       "therapy": {
         "deeply": 2.0, "completely": 1.8, "absolute": 1.5, "notice": 1.2,
         "allow": 1.0, "in trance": 3.0, "not right now": 2.0,
@@ -49,6 +64,22 @@
         "you feel": 2.0, "your subconscious": 3.0, "inner mind": 2.5,
         "notice now": 2.5, "in a moment": 1.5, "you are becoming": 3.0,
         "you are now": 2.5
+      },
+      "erotic_suggestions": {
+        "feel that pleasure": 3.5, "wave of pleasure": 3.6, "each touch": 3.0,
+        "arousal grows": 3.5, "body craving": 3.4, "sink into pleasure": 3.6,
+        "obedience feels good": 3.6, "pleasure": 2.6, "sensual": 2.4,
+        "arousal": 2.8, "desire": 2.2, "lust": 2.2, "touch": 1.8,
+        "obedience": 1.6, "submission": 2.0, "tease": 2.0, "orgasmic": 2.8
+      },
+      "brainwashing": {
+        "deeper into obedience": 3.8, "accept this truth": 3.6,
+        "this is your purpose": 3.8, "you are programmed": 3.8,
+        "repeat after me": 3.6, "obey automatically": 3.8,
+        "mindless obedience": 4.0, "programmed": 2.8, "indoctrinate": 3.0,
+        "indoctrination": 3.0, "brainwash": 3.2, "brainwashing": 3.2,
+        "obey": 2.4, "mantra": 2.2, "repeat": 1.8, "erase": 1.8,
+        "rewrite": 2.2, "overwrite": 2.6
       },
       "post_hypnotic_conditioning": {
         "post hypnotic": 3.5, "future pacing": 3.0, "carry with you": 2.5,
@@ -73,7 +104,7 @@
     "chunkOverlapSeconds": 5.0,
     "minChunks": 6,
     "maxChunks": 60,
-    "systemInstructions": "You are a hypnosis session analyst. Classify a short transcript segment into the correct phase of a hypnosis session.\n\nPhases ALWAYS occur in this strict order — use the session position percentage to anchor your classification:\n1. pre_talk         (0–8%):  greeting, welcome, comfort, explaining the process\n2. induction        (5–22%): eye closure, breathing, \"relax\", counting down, body relaxation\n3. deepening        (18–40%): \"deeper\", drift, float, sinking, body scan, staircase\n4. therapy          (30–75%): deep passive trance — imagery, music, silence, minimal narration\n5. suggestions      (40–85%): ACTIVE commands — \"you will\", \"from now on\", \"whenever\", \"your subconscious\", direct therapeutic programming\n6. post_hypnotic_conditioning (70–92%): reinforcing suggestions, anchors, future-pacing\n7. emergence        (80–100%): counting up, \"come back\", alerting, re-orientation, waking\n\nCRITICAL RULES:\n- Session position is your strongest signal. Override ambiguous text with it.\n- therapy = passive (floating, drifting, imagery). suggestions = active commands (\"you will\").\n- If the text contains \"you will\", \"from now on\", \"whenever\", \"your subconscious\", or direct therapeutic commands → suggestions, not therapy.\n- Position >80% with ANY waking language → emergence.\n- Position <10% with calm/welcoming language → pre_talk, not induction.\n- Avoid labelling everything therapy. A 30-minute session has all 7 phases.\n\nRespond with ONLY the single raw phase value (e.g. \"suggestions\").\nNo explanation, no punctuation, no other text.",
+    "systemInstructions": "You are a hypnosis session analyst. Classify a short transcript segment into the correct phase of a hypnosis session.\n\nPhases ALWAYS occur in this strict order — use the session position percentage to anchor your classification:\n1. pre_talk         (0–8%): greeting, welcome, comfort, explaining the process\n2. induction        (5–18%): eye closure, breathing, relaxation, countdown setup\n3. fractionation    (12–28%): brief eye-opening/closing cycles, re-dropping deeper each time\n4. deepening        (20–40%): deeper, drift, float, sinking, body scan, staircase\n5. confusion        (28–52%): pattern interrupts, paradox, overloaded choices, disorientation\n6. therapy          (35–70%): deep passive trance, imagery, metaphor, re-framing, minimal commands\n7. suggestions      (45–82%): active commands, belief shifts, direct therapeutic programming\n8. erotic_suggestions (50–85%): sensual, arousal, submission, pleasure-linked suggestions\n9. brainwashing     (55–88%): repeated indoctrination, identity overwrite, obedience/mantra loops\n10. post_hypnotic_conditioning (72–94%): anchors, future pacing, trigger installation\n11. emergence       (84–100%): counting up, come back, re-orientation, waking\n\nCRITICAL RULES:\n- Session position is your strongest signal. Override ambiguous text with it.\n- fractionation requires repeated in-out or eye-open/close-and-drop language, not just one emergence cue.\n- confusion requires paradoxical or disorienting language, not ordinary uncertainty words alone.\n- suggestions = general programming. erotic_suggestions = clearly sensual/arousal-focused programming.\n- brainwashing requires repetitive indoctrination/obedience/identity-overwrite language, not a single strong command.\n- Position >84% with waking language → emergence.\n- Position <10% with calm/welcoming language → pre_talk, not induction.\n\nRespond with ONLY the single raw phase value (e.g. \"suggestions\").\nNo explanation, no punctuation, no other text.",
     "fewShotExamples": []
   },
 
@@ -87,6 +118,49 @@
   "techniqueDetection": {
     "sensitivityThreshold": 0.6,
     "minConfidence": 0.3
+  },
+
+  "hybridSelection": {
+    "techniqueAlignmentWeight": 0.12,
+    "chunkedClearWinMargin": 0.05,
+    "chunkedCoverageWinMargin": 0.015,
+    "keywordCollapsedMargin": 0.02,
+    "ensembleCompetitiveMargin": 0.03,
+    "ensembleDisagreementThreshold": 0.12,
+    "ensembleChunkedSourceLead": 0.03,
+    "transcriptSupportWeight": 0.55,
+    "techniqueSupportWeight": 0.22,
+    "keywordVoteScale": 0.45,
+    "keywordVoteBias": 0.15,
+    "consensusBonus": 0.18,
+    "continuityBonus": 0.08,
+    "backwardJumpPenalty": 0.05,
+    "transitionPriorWeight": 0.12
+  },
+
+  "corpusLearning": {
+    "learnedKeywordWeightMultiplier": 1.0,
+    "learnedPhraseWeightMultiplier": 1.0,
+    "transitionPriorMultiplier": 1.0
+  },
+
+  "boundaryRefinement": {
+    "minimumSideDurationFactor": 0.45,
+    "minimumSideDurationFloor": 6.0,
+    "minimumSideDurationCeiling": 10.0,
+    "searchRadiusFactor": 0.35,
+    "minimumSearchRadiusSeconds": 6.0,
+    "maximumSearchRadiusSeconds": 18.0,
+    "windowFactor": 0.55,
+    "minimumWindowSeconds": 10.0,
+    "maximumWindowSeconds": 20.0,
+    "phaseSupportWeight": 0.34,
+    "phaseSeparationWeight": 0.18,
+    "paceShiftWeight": 0.12,
+    "repetitionShiftWeight": 0.16,
+    "lexicalShiftWeight": 0.10,
+    "coverageShiftWeight": 0.06,
+    "distancePenaltyWeight": 0.015
   },
 
   "sessionGeneration": {
@@ -105,9 +179,13 @@
     "phaseFrequencyBands": {
       "pre_talk":                   { "lower": 12.0, "upper": 18.0 },
       "induction":                  { "lower": 8.0,  "upper": 12.0 },
+      "fractionation":              { "lower": 6.5,  "upper": 9.5  },
       "deepening":                  { "lower": 5.0,  "upper": 8.0  },
+      "confusion":                  { "lower": 4.5,  "upper": 6.5  },
       "therapy":                    { "lower": 4.5,  "upper": 6.5  },
       "suggestions":                { "lower": 5.0,  "upper": 7.0  },
+      "erotic_suggestions":         { "lower": 3.5,  "upper": 5.5  },
+      "brainwashing":               { "lower": 4.0,  "upper": 5.8  },
       "post_hypnotic_conditioning": { "lower": 5.5,  "upper": 7.5  },
       "emergence":                  { "lower": 8.0,  "upper": 14.0 },
       "transitional":               { "lower": 6.0,  "upper": 10.0 }

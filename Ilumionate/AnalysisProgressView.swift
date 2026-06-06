@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 /// Shows the progress of audio analysis and displays results
 struct AnalysisProgressView: View {
@@ -309,6 +310,6 @@ extension AnalysisStage {
             fileSize: 1024000
         )
     ) { file, _ in
-        print("Analysis complete for: \(file.filename)")
+        Log.ui.info("Analysis complete for: \(file.filename)")
     }
 }

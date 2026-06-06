@@ -117,24 +117,15 @@ final class AnalysisPipeline {
         transcription: AudioTranscriptionResult,
         audioFile: AudioFile
     ) async throws -> AnalysisResult {
-        let prosodySvc = prosodyAnalyzer
-        let fileURL = audioFile.url
-        let segments = transcription.segments
+        let enricher = AudioAnalysisEnricher(
+            prosodyAnalyzer: prosodyAnalyzer,
+            analyzerConfig: analyzerConfig
+        )
 
         // Run prosody on a background thread — errors are non-fatal
         // (the session still generates from text-only analysis).
-        let prosodyConfig = ProsodyAnalyzer.Config(from: analyzerConfig.prosody)
-        let prosodyHandle = Task.detached { [prosodySvc, prosodyConfig] () -> ProsodicProfile? in
-            do {
-                return try prosodySvc.analyze(
-                    url: fileURL,
-                    segments: segments,
-                    config: prosodyConfig
-                )
-            } catch {
-                print("⚠️ Prosody extraction failed: \(error.localizedDescription)")
-                return nil
-            }
+        let prosodyHandle = Task {
+            await enricher.extractProsody(audioFile: audioFile, transcription: transcription)
         }
 
         // Store handle immediately so cancel() can reach it
@@ -149,74 +140,11 @@ final class AnalysisPipeline {
         let prosody = await prosodyHandle.value
         prosodyTask = nil
 
-        // Merge prosodic profile into the analysis result
-        var enriched = analysis
-        enriched.prosodicProfile = prosody
-
-        if let prosody {
-            enriched.voiceCharacteristics = buildVoiceCharacteristics(from: prosody)
-        }
-
-        // Compute word timestamps once, shared by technique detection
-        let wordTimestamps = HypnosisPhaseAnalyzer()
-            .approximateWordTimestamps(from: segments)
-
-        let detector = TechniqueDetector(config: analyzerConfig.techniqueDetection)
-        enriched.techniqueDetection = detector.detect(
-            wordTimestamps: wordTimestamps,
-            segments: segments,
-            prosodic: prosody,
-            duration: prosody?.totalDuration ?? audioFile.duration
+        return enricher.enrich(
+            analysis,
+            transcription: transcription,
+            audioFile: audioFile,
+            prosody: prosody
         )
-
-        return enriched
-    }
-
-    /// Derives `VoiceCharacteristics` from a `ProsodicProfile`.
-    private func buildVoiceCharacteristics(
-        from prosody: ProsodicProfile
-    ) -> VoiceCharacteristics {
-        let pauseDurations = prosody.pauses.map(\.duration)
-
-        // Infer tonal qualities from pitch and volume curves
-        var tonal: [String] = []
-        let avgPitch = prosody.averagePitch
-        if avgPitch > 0 && avgPitch < 160 { tonal.append("low-pitched") }
-        if avgPitch >= 160 && avgPitch < 220 { tonal.append("mid-range") }
-        if avgPitch >= 220 { tonal.append("high-pitched") }
-
-        let voicedPitchSamples = prosody.pitchCurve.filter { $0 > 0 }
-        let pitchVariance = voicedPitchSamples
-            .map { ($0 - avgPitch) * ($0 - avgPitch) }
-            .reduce(0, +) / max(1, Double(voicedPitchSamples.count))
-        if pitchVariance < 200 { tonal.append("monotone") }
-        if pitchVariance > 1000 { tonal.append("expressive") }
-
-        if prosody.averageSpeechRate < 100 { tonal.append("slow-paced") }
-        if prosody.averageSpeechRate > 150 { tonal.append("rapid") }
-
-        // Infer volume pattern from the curve trend
-        let volumePattern = inferVolumePattern(from: prosody.volumeCurve)
-
-        return VoiceCharacteristics(
-            averagePace: prosody.averageSpeechRate,
-            paceVariation: prosody.speechRateVariance,
-            pausePatterns: pauseDurations,
-            tonalQualities: tonal,
-            volumePattern: volumePattern
-        )
-    }
-
-    /// Infers a human-readable volume pattern from the volume curve.
-    private func inferVolumePattern(from curve: [Double]) -> String {
-        guard curve.count >= 4 else { return "steady" }
-        let quarterLen = curve.count / 4
-        let firstQ = curve.prefix(quarterLen).reduce(0, +) / Double(quarterLen)
-        let lastQ = curve.suffix(quarterLen).reduce(0, +) / Double(quarterLen)
-        let diff = lastQ - firstQ
-        if abs(diff) < 0.05 { return "steady" }
-        if diff < -0.15 { return "gradually quieter" }
-        if diff > 0.15 { return "gradually louder" }
-        return "dynamic"
     }
 }

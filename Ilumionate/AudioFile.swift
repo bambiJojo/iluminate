@@ -50,10 +50,14 @@ struct AudioFile: Identifiable, Codable, Sendable {
     var playCount: Int?
     var sessionNotes: String? // User notes about the session
 
-    // Computed from filename so the URL is always valid after app updates.
-    // iOS sandbox container paths include a dynamic UUID that changes on update;
-    // storing only the filename and reconstructing the URL at runtime avoids stale paths.
-    nonisolated var url: URL { URL.documentsDirectory.appending(path: filename) }
+    // Library files are typically stored relative to Documents, but training and
+    // migration flows can hand us an absolute path that should be preserved.
+    nonisolated var url: URL {
+        if filename.hasPrefix("/") {
+            return URL(filePath: filename).standardizedFileURL
+        }
+        return URL.documentsDirectory.appending(path: filename)
+    }
 
     // Exclude `url` from serialization — it is always derived from `filename`.
     // Old stored data may contain a `url` field; Codable ignores unknown keys.
@@ -164,6 +168,7 @@ struct AnalysisResult: Codable, Sendable {
     let classificationConfidence: ClassificationConfidence?
     var prosodicProfile: ProsodicProfile?
     var techniqueDetection: TechniqueDetectionResult?
+    var transcriptAnalysis: TranscriptAnalysis?
 
     nonisolated init(mood: Mood, energyLevel: Double, suggestedFrequencyRange: ClosedRange<Double>,
          suggestedIntensity: Double, suggestedColorTemperature: Double? = nil,
@@ -174,7 +179,8 @@ struct AnalysisResult: Codable, Sendable {
          voiceCharacteristics: VoiceCharacteristics? = nil,
          classificationConfidence: ClassificationConfidence? = nil,
          prosodicProfile: ProsodicProfile? = nil,
-         techniqueDetection: TechniqueDetectionResult? = nil) {
+         techniqueDetection: TechniqueDetectionResult? = nil,
+         transcriptAnalysis: TranscriptAnalysis? = nil) {
         self.mood = mood
         self.energyLevel = energyLevel
         self.suggestedFrequencyRange = suggestedFrequencyRange
@@ -190,6 +196,7 @@ struct AnalysisResult: Codable, Sendable {
         self.classificationConfidence = classificationConfidence
         self.prosodicProfile = prosodicProfile
         self.techniqueDetection = techniqueDetection
+        self.transcriptAnalysis = transcriptAnalysis
     }
 }
 
@@ -529,4 +536,3 @@ struct ClassificationConfidence: Codable, Sendable {
     let alternativeInterpretations: [String]
     let detectionCriteria: [String] // what led to classification
 }
-

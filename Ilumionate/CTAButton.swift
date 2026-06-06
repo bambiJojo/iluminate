@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct CTAButton: View {
     let title: String
@@ -61,17 +62,17 @@ struct CTAButton: View {
 #Preview {
     VStack(spacing: TranceSpacing.cardMargin) {
         CTAButton("Start Session") {
-            print("Start Session tapped")
+            Log.ui.info("Start Session tapped")
         }
 
         CTAButton("Generate Light Script ✦",
                   gradient: [.phaseDeepener, .roseGold]) {
-            print("Generate tapped")
+            Log.ui.info("Generate tapped")
         }
 
         CTAButton("Continue",
                   gradient: [.phaseInduction, .phaseDeepener]) {
-            print("Continue tapped")
+            Log.ui.info("Continue tapped")
         }
     }
     .padding(TranceSpacing.screen)

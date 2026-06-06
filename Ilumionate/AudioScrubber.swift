@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct AudioScrubber: View {
     @Binding var progress: Double  // 0.0–1.0
@@ -58,7 +59,7 @@ struct AudioScrubber: View {
                     .foregroundStyle(.textPrimary)
 
                 AudioScrubber(progress: $progress) { newProgress in
-                    print("Progress changed to: \(newProgress)")
+                    Log.audio.info("Progress changed to: \(newProgress)")
                 }
 
                 HStack {

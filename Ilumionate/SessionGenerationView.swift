@@ -129,7 +129,7 @@ struct SessionGenerationView: View {
                         .font(TranceTypography.caption)
                         .foregroundStyle(.textSecondary)
                     
-                    PhasePill(phase: analysis.contentType.rawValue.capitalized)
+                    PhasePill(phase: analysis.contentType.displayName)
                 }
             }
         }
@@ -333,8 +333,12 @@ struct SessionGenerationView: View {
         switch phase {
         case .preTalk: return .textSecondary
         case .induction: return .bwAlpha
+        case .fractionation: return .phaseFractionation
         case .deepening: return .bwTheta
+        case .confusion: return .mint
         case .therapy, .suggestions: return .roseGold
+        case .eroticSuggestions: return .roseDeep
+        case .brainwashing: return .orange
         case .conditioning: return .roseDeep
         case .emergence: return .bwBeta
         case .transitional: return .textLight

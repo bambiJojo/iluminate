@@ -107,6 +107,8 @@ class AudioLightScoreGenerator {
         // 5. Add closing moment
         moments.append(createClosingMoment(duration: duration, analysis: analysis))
 
+        applyTranscriptAdaptiveShaping(&moments, analysis: analysis)
+
         // Sort by time and return
         return moments.sorted { $0.time < $1.time }
     }
@@ -256,6 +258,16 @@ class AudioLightScoreGenerator {
             bilateralTransition = 3.0
             colorTemp = 3500 // Warm white
 
+        case .fractionation:
+            // Brief re-alert and re-drop cycles prime deeper trance
+            frequency = 7.2
+            intensity = 0.62
+            waveform = .softPulse
+            rampDuration = 18.0
+            bilateral = true
+            bilateralTransition = 4.0
+            colorTemp = 3200
+
         case .deepening:
             // Deep theta - this is where the magic happens
             frequency = 5.5 // Deep theta (4-7Hz range)
@@ -266,6 +278,16 @@ class AudioLightScoreGenerator {
             bilateralTransition = 5.0 // Slow bilateral fade-in
             colorTemp = 2500 // Warm amber - calming
 
+        case .confusion:
+            // Pattern interruption benefits from unstable but still deep theta
+            frequency = 4.8
+            intensity = 0.78
+            waveform = .noiseModulatedSine
+            rampDuration = 14.0
+            bilateral = true
+            bilateralTransition = 4.0
+            colorTemp = 2350
+
         case .therapy, .suggestions:
             // Deepest state - low theta
             frequency = 4.5 // Very deep theta
@@ -275,6 +297,26 @@ class AudioLightScoreGenerator {
             bilateral = true // Keep bilateral active
             bilateralTransition = 4.0
             colorTemp = 2200 // Deep warm - maximum relaxation
+
+        case .eroticSuggestions:
+            // Warm, immersive suggestion work with a slightly lifted rhythm
+            frequency = 4.2
+            intensity = 0.90
+            waveform = .softPulse
+            rampDuration = 16.0
+            bilateral = true
+            bilateralTransition = 4.0
+            colorTemp = 2100
+
+        case .brainwashing:
+            // Repetitive identity/programming loops stay deep and narrow
+            frequency = 4.1
+            intensity = 0.92
+            waveform = .noiseModulatedSine
+            rampDuration = 12.0
+            bilateral = true
+            bilateralTransition = 4.5
+            colorTemp = 2050
 
         case .conditioning:
             // Anchoring state - theta with slight lift
@@ -564,5 +606,56 @@ class AudioLightScoreGenerator {
         return description.contains("bilateral") ||
                description.contains("alternating") ||
                description.contains("emdr")
+    }
+
+    private func applyTranscriptAdaptiveShaping(
+        _ moments: inout [LightMoment],
+        analysis: AnalysisResult
+    ) {
+        guard let transcriptAnalysis = analysis.transcriptAnalysis else { return }
+
+        for index in 0..<moments.count {
+            guard let section = transcriptAnalysis.section(at: moments[index].time) else { continue }
+
+            let paceDelta = clamp(section.normalizedWordsPerMinute - 1.0, lower: -0.45, upper: 0.45)
+            let repetitionLift = clamp(section.normalizedRepetitionDensity - 1.0, lower: -0.5, upper: 1.5)
+            let coverageDelta = clamp(section.normalizedSpeechCoverage - 1.0, lower: -0.5, upper: 0.5)
+            let lexicalTightness = clamp(section.normalizedLexicalTightness - 1.0, lower: -0.5, upper: 1.5)
+
+            let original = moments[index]
+            let frequencyShift = (paceDelta * 1.1) - max(0, repetitionLift) * 0.50 - max(0, lexicalTightness) * 0.30
+            let intensityShift = max(0, repetitionLift) * 0.04 + coverageDelta * 0.03 + max(0, lexicalTightness) * 0.02
+
+            let waveform: WaveformType
+            if max(repetitionLift, lexicalTightness) > 0.9, original.frequency < 12.0 {
+                waveform = .noiseModulatedSine
+            } else if max(repetitionLift, lexicalTightness) > 0.35, original.frequency < 12.0 {
+                waveform = .softPulse
+            } else {
+                waveform = original.waveform
+            }
+
+            let warmedColor: Double?
+            if let originalColor = original.color_temperature {
+                warmedColor = max(2000, originalColor - max(0, repetitionLift) * 180 - max(0, lexicalTightness) * 90)
+            } else {
+                warmedColor = nil
+            }
+
+            moments[index] = LightMoment(
+                time: original.time,
+                frequency: max(0.5, original.frequency + frequencyShift),
+                intensity: clamp(original.intensity + intensityShift, lower: 0.10, upper: 1.0),
+                waveform: waveform,
+                ramp_duration: original.ramp_duration,
+                bilateral: original.bilateral ?? (max(repetitionLift, lexicalTightness) > 0.8 ? true : nil),
+                bilateral_transition_duration: original.bilateral_transition_duration,
+                color_temperature: warmedColor
+            )
+        }
+    }
+
+    private func clamp(_ value: Double, lower: Double, upper: Double) -> Double {
+        max(lower, min(upper, value))
     }
 }

@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import os
 
 /// Generates synchronized light therapy sessions from audio analysis.
 @MainActor
@@ -58,44 +59,54 @@ class SessionGenerator {
         analysis: AnalysisResult,
         config: GenerationConfig = .default
     ) -> LightSession {
-        print("🎵 Generating session for: \(audioFile.filename)")
-        print("📊 Content type: \(analysis.contentType)")
+        Log.analysis.info("🎵 Generating session for: \(audioFile.filename)")
+        Log.analysis.info("📊 Content type: \(String(describing: analysis.contentType))")
 
-        let moments: [LightMoment]
+        let rawMoments: [LightMoment]
         switch analysis.contentType {
         case .hypnosis:
-            moments = generateHypnosisSession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateHypnosisSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .meditation:
-            moments = generateMeditationSession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateMeditationSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .music:
-            moments = generateMusicSession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateMusicSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .guidedImagery:
-            moments = generateGuidedImagerySession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateGuidedImagerySession(analysis: analysis, duration: audioFile.duration, config: config)
         case .affirmations:
-            moments = generateAffirmationsSession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateAffirmationsSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .eroticHypnosis:
-            moments = generateEroticHypnosisSession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateEroticHypnosisSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .brainwave:
-            moments = generateBrainwaveSession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateBrainwaveSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .asmr:
-            moments = generateASMRSession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateASMRSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .sleepHypnosis:
-            moments = generateSleepHypnosisSession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateSleepHypnosisSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .unknown:
-            moments = generateGeneralSession(analysis: analysis, duration: audioFile.duration, config: config)
+            rawMoments = generateGeneralSession(analysis: analysis, duration: audioFile.duration, config: config)
         }
 
-        let baseName = audioFile.filename
-            .replacing(".m4a", with: "")
-            .replacing(".mp3", with: "")
-            .replacing(".wav", with: "")
-
-        return LightSession(
-            id: UUID(),
-            session_name: "\(baseName) — AI Light Session",
-            duration_sec: audioFile.duration,
-            light_score: moments
+        let optimized = LightScoreAlignmentOptimizer().optimize(
+            rawMoments: rawMoments,
+            duration: audioFile.duration,
+            analysis: analysis,
+            config: config
         )
+        let session = LightSession(
+            id: UUID(),
+            session_name: "\(audioFile.displayName) — AI Light Session",
+            duration_sec: audioFile.duration,
+            light_score: optimized.moments,
+            alignment_report: optimized.report
+        )
+
+        if optimized.report.meetsProductionTarget {
+            Log.analysis.info("✅ Light score alignment: \(Int(optimized.report.overallScore * 100))%")
+        } else {
+            Log.analysis.info("⚠️ Light score alignment below target after \(optimized.iterationCount) repair pass(es): \(Int(optimized.report.overallScore * 100))%")
+        }
+
+        return session
     }
 
     // MARK: - Emergence Guard
@@ -189,6 +200,7 @@ class SessionGenerator {
         freq: Double,
         amp: Double,
         waveform: WaveformType,
+        ramp: Double? = nil,
         colorTemp: Double? = nil,
         bilateral: Bool? = nil,
         bilateralTransition: Double? = nil
@@ -198,6 +210,7 @@ class SessionGenerator {
             frequency: freq,
             intensity: max(0, min(1, amp)),
             waveform: waveform,
+            ramp_duration: ramp,
             bilateral: bilateral,
             bilateral_transition_duration: bilateralTransition,
             color_temperature: colorTemp

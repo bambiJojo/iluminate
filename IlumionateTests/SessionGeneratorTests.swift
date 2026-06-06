@@ -164,3 +164,347 @@ struct ClampTests {
         #expect(gen.clamp(5.0, lower: 5.0, upper: 5.0) == 5.0)
     }
 }
+
+// MARK: - Expanded Content Types
+
+struct AudioContentTypeTests {
+
+    @Test func parseRecognizesExpandedAliases() {
+        #expect(AudioContentType.parse("eroticHypnosis") == .eroticHypnosis)
+        #expect(AudioContentType.parse("sleep_hypnosis") == .sleepHypnosis)
+        #expect(AudioContentType.parse("brainwave entrainment") == .brainwave)
+        #expect(AudioContentType.parse("ASMR") == .asmr)
+    }
+
+    @Test func displayNamesStayHumanReadable() {
+        #expect(AudioContentType.eroticHypnosis.displayName == "Erotic Hypnosis")
+        #expect(AudioContentType.sleepHypnosis.displayName == "Sleep Hypnosis")
+        #expect(AudioContentType.guidedImagery.displayName == "Guided Imagery")
+    }
+}
+
+// MARK: - Advanced Strategy Tests
+
+@MainActor
+struct AdvancedSessionStrategyTests {
+
+    private let gen = SessionGenerator()
+    private let config = SessionGenerator.GenerationConfig.default
+
+    @Test func broadBrainwaveRangeUsesPreferredCenterInsteadOfLowerBound() {
+        let analysis = AnalysisResult(
+            mood: .meditative,
+            energyLevel: 0.2,
+            suggestedFrequencyRange: 1.0...40.0,
+            suggestedIntensity: 0.4,
+            suggestedColorTemperature: 4000,
+            keyMoments: [],
+            aiSummary: "test",
+            recommendedPreset: "Brainwave Session",
+            contentType: .brainwave
+        )
+
+        let moments = gen.generateBrainwaveSession(analysis: analysis, duration: 600, config: config)
+
+        #expect(abs((moments.first?.frequency ?? 0) - 7.83) < 0.05)
+    }
+
+    @Test func hypnosisFromPhasesCanSkipEmergenceRamp() {
+        let phases = [
+            PhaseSegment(phase: .induction, startTime: 0, endTime: 120, characteristics: "induction", tranceDepthEstimate: 0.3),
+            PhaseSegment(phase: .deepening, startTime: 120, endTime: 240, characteristics: "deepening", tranceDepthEstimate: 0.7),
+            PhaseSegment(phase: .emergence, startTime: 240, endTime: 300, characteristics: "emergence", tranceDepthEstimate: 0.2)
+        ]
+
+        let moments = gen.generateHypnosisFromPhases(
+            phases: phases.filter { $0.phase != .emergence },
+            duration: 300,
+            config: config,
+            includeEmergence: false
+        )
+
+        #expect((moments.last?.frequency ?? 99) < 10.0)
+    }
+}
+
+// MARK: - Transcript Feature Analysis
+
+struct TranscriptFeatureAnalysisTests {
+
+    @Test func transcriptFeaturesNormalizeAgainstTheCurrentFile() {
+        let transcription = AudioTranscriptionResult(
+            fullText: """
+            relax soften settle into comfort and drift
+            obey now obey now obey now obey now obey now obey now
+            awake alert refreshed aware and back in the room
+            """,
+            segments: [
+                AudioTranscriptionSegment(
+                    text: "relax soften settle into comfort and drift",
+                    timestamp: 0,
+                    duration: 60,
+                    confidence: 0.95
+                ),
+                AudioTranscriptionSegment(
+                    text: "obey now obey now obey now obey now obey now obey now",
+                    timestamp: 60,
+                    duration: 60,
+                    confidence: 0.95
+                ),
+                AudioTranscriptionSegment(
+                    text: "awake alert refreshed aware and back in the room",
+                    timestamp: 120,
+                    duration: 60,
+                    confidence: 0.95
+                )
+            ],
+            duration: 180,
+            detectedLanguage: "en"
+        )
+
+        let phases = [
+            PhaseSegment(phase: .induction, startTime: 0, endTime: 60, characteristics: "induction", tranceDepthEstimate: 0.2),
+            PhaseSegment(phase: .brainwashing, startTime: 60, endTime: 120, characteristics: "brainwashing", tranceDepthEstimate: 0.8),
+            PhaseSegment(phase: .emergence, startTime: 120, endTime: 180, characteristics: "emergence", tranceDepthEstimate: 0.2)
+        ]
+
+        let analysis = TranscriptFeatureAnalyzer().analyze(
+            transcription: transcription,
+            phases: phases
+        )
+
+        let induction = analysis.sections.first { $0.phase == .induction }
+        let brainwashing = analysis.sections.first { $0.phase == .brainwashing }
+        let emergence = analysis.sections.first { $0.phase == .emergence }
+
+        #expect(induction != nil)
+        #expect(brainwashing != nil)
+        #expect(emergence != nil)
+        #expect((brainwashing?.normalizedWordsPerMinute ?? 0) > 1.0)
+        #expect((induction?.normalizedWordsPerMinute ?? 99) < 1.0)
+        #expect((brainwashing?.normalizedRepetitionDensity ?? 0) > 1.5)
+        #expect(brainwashing?.topDistinctiveWords.first?.word == "obey")
+        #expect((emergence?.topDistinctiveWords.first?.word ?? "").contains("alert")
+            || (emergence?.topDistinctiveWords.first?.word ?? "").contains("awake"))
+    }
+}
+
+// MARK: - Transcript Adaptive Modulation
+
+@MainActor
+struct TranscriptAdaptiveModulationTests {
+
+    private let gen = SessionGenerator()
+
+    @Test func slowRepetitiveSectionsDeepenTheGeneratedMoment() {
+        let overall = TranscriptSectionMetrics(
+            id: UUID(),
+            phase: nil,
+            startTime: 0,
+            endTime: 180,
+            duration: 180,
+            wordCount: 30,
+            uniqueWordCount: 18,
+            wordsPerMinute: 10,
+            normalizedWordsPerMinute: 1.0,
+            speechCoverage: 0.55,
+            normalizedSpeechCoverage: 1.0,
+            lexicalDiversity: 0.60,
+            normalizedLexicalDiversity: 1.0,
+            repetitionDensity: 1.0,
+            normalizedRepetitionDensity: 1.0,
+            topWords: [],
+            topDistinctiveWords: []
+        )
+
+        let slowLoop = TranscriptSectionMetrics(
+            id: UUID(),
+            phase: .brainwashing,
+            startTime: 40,
+            endTime: 80,
+            duration: 40,
+            wordCount: 8,
+            uniqueWordCount: 3,
+            wordsPerMinute: 6,
+            normalizedWordsPerMinute: 0.6,
+            speechCoverage: 0.70,
+            normalizedSpeechCoverage: 1.27,
+            lexicalDiversity: 0.35,
+            normalizedLexicalDiversity: 0.58,
+            repetitionDensity: 3.5,
+            normalizedRepetitionDensity: 3.5,
+            topWords: [],
+            topDistinctiveWords: [
+                TranscriptWordStatistic(word: "obey", count: 5, share: 0.62, normalizedShareLift: 3.0)
+            ]
+        )
+
+        let transcriptAnalysis = TranscriptAnalysis(overall: overall, sections: [slowLoop])
+        let analysis = AnalysisResult(
+            mood: .relaxing,
+            energyLevel: 0.2,
+            suggestedFrequencyRange: 4.0...8.0,
+            suggestedIntensity: 0.3,
+            keyMoments: [],
+            aiSummary: "test",
+            recommendedPreset: "test",
+            contentType: .hypnosis,
+            transcriptAnalysis: transcriptAnalysis
+        )
+
+        var moments = [
+            LightMoment(
+                time: 55,
+                frequency: 7.0,
+                intensity: 0.30,
+                waveform: .sine,
+                bilateral: nil,
+                color_temperature: 3000
+            )
+        ]
+
+        gen.applyTranscriptAdaptiveModulation(&moments, analysis: analysis, config: .default)
+
+        #expect(moments[0].frequency < 7.0)
+        #expect(moments[0].intensity > 0.30)
+        #expect(moments[0].bilateral == true)
+        #expect(moments[0].waveform == .softPulse || moments[0].waveform == .noiseModulatedSine)
+        #expect((moments[0].color_temperature ?? 9999) < 3000)
+    }
+}
+
+// MARK: - Light Score Post-Processing
+
+@MainActor
+struct LightScorePostProcessorTests {
+
+    @Test func postProcessorClampsCoalescesAndAppliesUserOverrides() {
+        let config = SessionGenerator.GenerationConfig(
+            colorTemperatureOverride: 6000,
+            bilateralMode: true
+        )
+        let processed = LightScorePostProcessor().process(
+            moments: [
+                LightMoment(time: -1, frequency: 4, intensity: 0.4, waveform: .sine),
+                LightMoment(time: 0, frequency: 8, intensity: 1.2, waveform: .softPulse, color_temperature: 2600)
+            ],
+            duration: 60,
+            analysis: AnalysisFixtures.hypnosisAnalysis,
+            config: config
+        )
+
+        let times = processed.map(\.time)
+        #expect(processed.first?.time == 0)
+        #expect(processed.last?.time == 60)
+        #expect(Set(times).count == times.count)
+        #expect(processed.allSatisfy { $0.intensity >= 0 && $0.intensity <= 1 })
+        #expect(processed.allSatisfy { $0.color_temperature == 6000 })
+        #expect(processed.first?.bilateral == true)
+    }
+
+    @Test func deliberatePauseAddsDeepeningResponseMoment() {
+        let analysis = AnalysisResult(
+            mood: .relaxing,
+            energyLevel: 0.2,
+            suggestedFrequencyRange: 4.0...8.0,
+            suggestedIntensity: 0.3,
+            keyMoments: [],
+            aiSummary: "test",
+            recommendedPreset: "test",
+            contentType: .hypnosis,
+            prosodicProfile: AnalysisFixtures.prosodicProfile
+        )
+
+        let processed = LightScorePostProcessor().process(
+            moments: [
+                LightMoment(time: 0, frequency: 8.0, intensity: 0.50, waveform: .sine, color_temperature: 3000),
+                LightMoment(time: 120, frequency: 6.0, intensity: 0.40, waveform: .sine, color_temperature: 2600)
+            ],
+            duration: 120,
+            analysis: analysis,
+            config: .default
+        )
+
+        let pauseMoment = processed.first { abs($0.time - 42) < 0.001 }
+        #expect(pauseMoment != nil)
+        #expect((pauseMoment?.frequency ?? 99) < 8.0)
+        #expect(pauseMoment?.waveform == .noiseModulatedSine)
+    }
+
+    @Test func scorerDetectsWeakPhaseAlignment() {
+        let weakSession = LightSession(
+            session_name: "Weak",
+            duration_sec: 300,
+            light_score: [
+                LightMoment(time: 0, frequency: 18, intensity: 0.5, waveform: .sine),
+                LightMoment(time: 300, frequency: 18, intensity: 0.5, waveform: .sine)
+            ]
+        )
+
+        let report = LightScoreAlignmentScorer().score(
+            session: weakSession,
+            analysis: AnalysisFixtures.hypnosisAnalysis
+        )
+
+        #expect(report.overallScore < LightScoreAlignmentReport.productionTarget)
+    }
+}
+
+struct PhaseTimelineNormalizerTests {
+
+    @Test func normalizerFillsGapsAndAddsEmergenceForHypnosis() {
+        let phases = [
+            PhaseSegment(
+                phase: .induction,
+                startTime: 10,
+                endTime: 90,
+                characteristics: "Induction",
+                tranceDepthEstimate: 0.3
+            ),
+            PhaseSegment(
+                phase: .therapy,
+                startTime: 120,
+                endTime: 200,
+                characteristics: "Therapy",
+                tranceDepthEstimate: 0.8
+            )
+        ]
+
+        let normalized = PhaseTimelineNormalizer().normalize(
+            phases,
+            duration: 300,
+            contentType: .hypnosis
+        )
+
+        #expect(normalized.first?.startTime == 0)
+        #expect(normalized.last?.endTime == 300)
+        #expect(normalized.contains { $0.phase == .preTalk && $0.startTime == 0 && $0.endTime == 10 })
+        #expect(normalized.contains { $0.phase == .transitional && $0.startTime == 90 && $0.endTime == 120 })
+        #expect(normalized.last?.phase == .emergence)
+
+        for index in 1..<normalized.count {
+            #expect(abs(normalized[index - 1].endTime - normalized[index].startTime) < 0.001)
+        }
+    }
+
+    @Test func normalizerDoesNotForceEmergenceForSleepHypnosis() {
+        let phases = [
+            PhaseSegment(
+                phase: .deepening,
+                startTime: 0,
+                endTime: 120,
+                characteristics: "Sleep deepening",
+                tranceDepthEstimate: 0.7
+            )
+        ]
+
+        let normalized = PhaseTimelineNormalizer().normalize(
+            phases,
+            duration: 300,
+            contentType: .sleepHypnosis
+        )
+
+        #expect(normalized.last?.endTime == 300)
+        #expect(normalized.contains { $0.phase == .emergence } == false)
+    }
+}

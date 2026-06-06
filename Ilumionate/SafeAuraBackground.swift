@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 /// Safe version of AuraBackground with reduced memory footprint
 struct SafeAuraBackground: View {
@@ -50,7 +51,7 @@ struct SafeAuraBackground: View {
             .ignoresSafeArea()
         }
         .onAppear {
-            print("🟢 SafeAuraBackground appeared successfully")
+            Log.ui.info("🟢 SafeAuraBackground appeared successfully")
             OrbCrashLogger.shared.logOrbRendering("SafeAuraBackground", details: "Safe version rendered")
         }
     }
@@ -72,7 +73,7 @@ struct MinimalOrbBackground: View {
             .ignoresSafeArea()
         }
         .onAppear {
-            print("🟢 MinimalOrbBackground appeared successfully")
+            Log.ui.info("🟢 MinimalOrbBackground appeared successfully")
         }
     }
 }
@@ -158,15 +159,15 @@ struct MemoryLeakTest: View {
         }
         .onAppear {
             memoryAtStart = getCurrentMemoryUsage()
-            print("🔍 MemoryLeakTest started with \(memoryAtStart)MB")
+            Log.ui.info("🔍 MemoryLeakTest started with \(memoryAtStart)MB")
         }
         .onChange(of: testStage) { _, newStage in
             let currentMemory = getCurrentMemoryUsage()
             let memoryIncrease = currentMemory - memoryAtStart
-            print("📊 Stage \(newStage): Memory = \(currentMemory)MB (+\(memoryIncrease)MB)")
+            Log.ui.info("📊 Stage \(newStage): Memory = \(currentMemory)MB (+\(memoryIncrease)MB)")
 
             if memoryIncrease > 50 {
-                print("🚨 MEMORY LEAK DETECTED: +\(memoryIncrease)MB at stage \(newStage)")
+                Log.ui.info("🚨 MEMORY LEAK DETECTED: +\(memoryIncrease)MB at stage \(newStage)")
                 OrbCrashLogger.shared.logPotentialCrash("Memory leak at stage \(newStage)", context: "MemoryLeakTest +\(memoryIncrease)MB")
             }
         }

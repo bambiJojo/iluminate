@@ -16,27 +16,17 @@ struct AnalyzerView: View {
     @State private var audioFiles: [AudioFile] = []
     @State private var showingClearQueueConfirm = false
 
-    /// Merges UserDefaults-persisted files with in-memory completed analyses so
-    /// newly finished sessions appear immediately without requiring a tab switch.
-    /// Accessing `analysisManager.completedAnalyses` here registers @Observable
-    /// tracking — the view re-renders as soon as a new analysis finishes.
-    private var allAnalyzedFiles: [AudioFile] {
-        var byId: [UUID: AudioFile] = Dictionary(uniqueKeysWithValues: audioFiles.map { ($0.id, $0) })
-        for completed in analysisManager.completedAnalyses {
-            var updated = completed.audioFile
-            updated.analysisResult = completed.analysis
-            byId[updated.id] = updated
-        }
-        return Array(byId.values)
-    }
 
     var body: some View {
         ZStack {
             Color.bgPrimary.ignoresSafeArea()
             ScrollView {
                 VStack(spacing: TranceSpacing.content) {
-                    liveStatusSection
-                    libraryIntelligenceSection
+                    AnalyzerLiveStatusSection(manager: analysisManager)
+                    AnalyzerLibraryIntelligenceSection(
+                        files: audioFiles,
+                        onAnalyzeAll: { Task { await queueAllUnanalyzed() } }
+                    )
                 }
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.card)
@@ -67,20 +57,55 @@ struct AnalyzerView: View {
         }
     }
 
-    // MARK: - Live Status
+    // MARK: - Actions
 
-    private var liveStatusSection: some View {
+    private func loadAudioFiles() {
+        if let data = UserDefaults.standard.data(forKey: "audioFiles"),
+           let files = try? JSONDecoder().decode([AudioFile].self, from: data) {
+            audioFiles = files
+        }
+    }
+
+    private func queueAllUnanalyzed() async {
+        let unanalyzed = audioFiles.filter { !$0.isAnalyzed }
+        await analysisManager.queueForAnalysis(unanalyzed)
+    }
+}
+
+// MARK: - Analyzer Sections
+
+private struct AnalyzerSectionHeader: View {
+    let title: String
+    let symbol: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.roseGold)
+            Text(title.uppercased())
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.textSecondary)
+                .tracking(1.2)
+        }
+    }
+}
+
+private struct AnalyzerLiveStatusSection: View {
+    let manager: AnalysisStateManager
+
+    var body: some View {
         VStack(alignment: .leading, spacing: TranceSpacing.list) {
-            sectionHeader("Live Status", symbol: "waveform")
-            if let active = analysisManager.currentAnalysis {
+            AnalyzerSectionHeader(title: "Live Status", symbol: "waveform")
+            if let active = manager.currentAnalysis {
                 activeAnalysisCard(active)
-            } else if analysisManager.analysisQueue.isEmpty {
+            } else if manager.analysisQueue.isEmpty {
                 idleCard
             }
-            if !analysisManager.analysisQueue.isEmpty {
+            if !manager.analysisQueue.isEmpty {
                 queueCard
             }
-            if !analysisManager.failedAnalyses.isEmpty {
+            if !manager.failedAnalyses.isEmpty {
                 failureLogCard
             }
         }
@@ -116,7 +141,7 @@ struct AnalyzerView: View {
                         .font(TranceTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                     Spacer()
-                    Button("Cancel") { analysisManager.cancelCurrentAnalysis() }
+                    Button("Cancel") { manager.cancelCurrentAnalysis() }
                         .font(TranceTypography.caption)
                         .foregroundStyle(Color.roseGold)
                 }
@@ -147,7 +172,7 @@ struct AnalyzerView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Queue · \(analysisManager.analysisQueue.count) file\(analysisManager.analysisQueue.count == 1 ? "" : "s")")
+                    Text("Queue · \(manager.analysisQueue.count) file\(manager.analysisQueue.count == 1 ? "" : "s")")
                         .font(TranceTypography.sectionTitle)
                         .foregroundStyle(Color.textPrimary)
                     Spacer()
@@ -155,9 +180,9 @@ struct AnalyzerView: View {
                         .foregroundStyle(Color.textSecondary)
                 }
                 Divider()
-                ForEach(Array(analysisManager.analysisQueue.enumerated()), id: \.element.id) { index, file in
+                ForEach(Array(manager.analysisQueue.enumerated()), id: \.element.id) { index, file in
                     queueRow(file: file, position: index + 1)
-                    if index < analysisManager.analysisQueue.count - 1 {
+                    if index < manager.analysisQueue.count - 1 {
                         Divider().padding(.leading, 36)
                     }
                 }
@@ -172,19 +197,19 @@ struct AnalyzerView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                         .font(.caption)
-                    Text("Recent Failures · \(analysisManager.failedAnalyses.count)")
+                    Text("Recent Failures · \(manager.failedAnalyses.count)")
                         .font(TranceTypography.sectionTitle)
                         .foregroundStyle(Color.textPrimary)
                     Spacer()
                     Button {
-                        analysisManager.failedAnalyses.removeAll()
+                        manager.failedAnalyses.removeAll()
                     } label: {
                         Image(systemName: "xmark.circle")
                             .foregroundStyle(Color.textSecondary)
                     }
                 }
                 Divider()
-                ForEach(analysisManager.failedAnalyses.suffix(5)) { failure in
+                ForEach(manager.failedAnalyses.suffix(5)) { failure in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(failure.audioFile.displayName)
                             .font(TranceTypography.body)
@@ -221,7 +246,7 @@ struct AnalyzerView: View {
                 if position > 1 {
                     Button {
                         TranceHaptics.shared.light()
-                        analysisManager.prioritizeInQueue(audioFile: file)
+                        manager.prioritizeInQueue(audioFile: file)
                     } label: {
                         Image(systemName: "arrow.up.circle")
                             .foregroundStyle(Color.roseGold)
@@ -229,7 +254,7 @@ struct AnalyzerView: View {
                 }
                 Button {
                     TranceHaptics.shared.light()
-                    analysisManager.removeFromQueue(audioFile: file)
+                    manager.removeFromQueue(audioFile: file)
                 } label: {
                     Image(systemName: "minus.circle")
                         .foregroundStyle(Color.textSecondary)
@@ -240,19 +265,33 @@ struct AnalyzerView: View {
         .padding(.vertical, 2)
     }
 
-    // MARK: - Library Intelligence
+    private func stageName(_ stage: AnalysisStage) -> String {
+        switch stage {
+        case .starting:           "Starting…"
+        case .transcribing:       "Transcribing"
+        case .analyzing:          "Analyzing"
+        case .generatingSession:  "Generating Session"
+        case .complete:           "Complete"
+        case .failed:             "Failed"
+        }
+    }
+}
 
-    private var libraryIntelligenceSection: some View {
+private struct AnalyzerLibraryIntelligenceSection: View {
+    let files: [AudioFile]
+    let onAnalyzeAll: () -> Void
+
+    var body: some View {
         VStack(alignment: .leading, spacing: TranceSpacing.list) {
-            sectionHeader("Library Intelligence", symbol: "brain.head.profile")
+            AnalyzerSectionHeader(title: "Library Intelligence", symbol: "brain.head.profile")
             GlassCard {
                 VStack(spacing: 16) {
                     statsRow
-                    if !audioFiles.isEmpty {
+                    if !files.isEmpty {
                         Divider()
                         contentBreakdown
                     }
-                    if !audioFiles.isEmpty {
+                    if !files.isEmpty {
                         Divider()
                         analysisReadinessRow
                     }
@@ -263,14 +302,14 @@ struct AnalyzerView: View {
 
     private var statsRow: some View {
         HStack(spacing: 0) {
-            statCell(value: "\(audioFiles.count)", label: "Files")
+            statCell(value: "\(files.count)", label: "Files")
             statDivider
             statCell(value: "\(analyzedCount)", label: "Analyzed")
             statDivider
             statCell(value: "\(lightSyncReadyCount)", label: "Light Ready")
             statDivider
             statCell(
-                value: audioFiles.isEmpty ? "–" : "\(Int(Double(analyzedCount) / Double(audioFiles.count) * 100))%",
+                value: files.isEmpty ? "–" : "\(Int(Double(analyzedCount) / Double(files.count) * 100))%",
                 label: "Coverage"
             )
         }
@@ -339,7 +378,7 @@ struct AnalyzerView: View {
             Spacer()
             if unanalyzedCount > 0 {
                 Button {
-                    Task { await queueAllUnanalyzed() }
+                    onAnalyzeAll()
                 } label: {
                     Text("Analyze All")
                         .font(TranceTypography.caption.weight(.medium))
@@ -349,40 +388,26 @@ struct AnalyzerView: View {
         }
     }
 
-    // MARK: - Shared Components
-
-    private func sectionHeader(_ title: String, symbol: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.roseGold)
-            Text(title.uppercased())
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.textSecondary)
-                .tracking(1.2)
-        }
-    }
-
-    // MARK: - Computed Library Stats
+    // MARK: - Derived Stats
 
     private var analyzedCount: Int {
-        audioFiles.count(where: \.isAnalyzed)
+        files.count(where: \.isAnalyzed)
     }
 
     private var lightSyncReadyCount: Int {
         let sessionsURL = URL.documentsDirectory.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
-        return audioFiles.filter { file in
+        return files.filter { file in
             let base = file.displayName
             let url = sessionsURL.appending(path: "\(base)_session.json")
             return FileManager.default.fileExists(atPath: url.path)
         }.count
     }
 
-    private var unanalyzedCount: Int { audioFiles.count - analyzedCount }
+    private var unanalyzedCount: Int { files.count - analyzedCount }
 
     private var contentTypeCounts: [String: Int] {
         var counts: [String: Int] = [:]
-        for file in audioFiles {
+        for file in files {
             if let result = file.analysisResult {
                 let key = result.contentType.rawValue
                 counts[key, default: 0] += 1
@@ -392,7 +417,7 @@ struct AnalyzerView: View {
     }
 
     private var readinessMessage: String {
-        let total = audioFiles.count
+        let total = files.count
         guard total > 0 else { return "Add audio files to your library to begin" }
         let ready = lightSyncReadyCount
         if ready == total { return "All \(total) files have Light Sync sessions" }
@@ -400,39 +425,18 @@ struct AnalyzerView: View {
         return "\(unanalyzedCount) file\(unanalyzedCount == 1 ? "" : "s") not yet analyzed"
     }
 
-    // MARK: - Actions
-
-    private func loadAudioFiles() {
-        if let data = UserDefaults.standard.data(forKey: "audioFiles"),
-           let files = try? JSONDecoder().decode([AudioFile].self, from: data) {
-            audioFiles = files
-        }
-    }
-
-    private func queueAllUnanalyzed() async {
-        let unanalyzed = audioFiles.filter { !$0.isAnalyzed }
-        await analysisManager.queueForAnalysis(unanalyzed)
-    }
-
-    private func stageName(_ stage: AnalysisStage) -> String {
-        switch stage {
-        case .starting:           "Starting…"
-        case .transcribing:       "Transcribing"
-        case .analyzing:          "Analyzing"
-        case .generatingSession:  "Generating Session"
-        case .complete:           "Complete"
-        case .failed:             "Failed"
-        }
-    }
-
     private func iconForContentType(_ type: String) -> String {
-        switch type {
-        case "hypnosis":       "eye.fill"
-        case "meditation":     "leaf.fill"
-        case "music":          "music.note"
-        case "guidedImagery":  "photo.fill"
-        case "affirmations":   "quote.bubble.fill"
-        default:               "waveform"
+        switch AudioContentType.parse(type) {
+        case .hypnosis: return "eye.fill"
+        case .eroticHypnosis: return "flame.fill"
+        case .sleepHypnosis: return "moon.zzz.fill"
+        case .meditation: return "leaf.fill"
+        case .brainwave: return "waveform.path.ecg"
+        case .asmr: return "ear"
+        case .music: return "music.note"
+        case .guidedImagery: return "photo.fill"
+        case .affirmations: return "quote.bubble.fill"
+        case .unknown: return "waveform"
         }
     }
 }

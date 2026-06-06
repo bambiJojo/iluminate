@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 import AVFoundation
 
 // MARK: - Playback State
@@ -28,6 +29,13 @@ final class UnifiedPlayerViewModel {
 
     let mode: PlayerMode
     let engine: LightEngine
+
+    // MARK: - Injected Dependencies
+    // Default to the shared singletons in production; injectable for testing.
+    private let nowPlaying: NowPlayingState
+    private let analysisManager: AnalysisStateManager
+    private let sessionHistory: SessionHistoryManager
+    private let haptics: TranceHaptics
 
     // MARK: - Universal Playback State
 
@@ -125,9 +133,20 @@ final class UnifiedPlayerViewModel {
 
     // MARK: - Init
 
-    init(mode: PlayerMode, engine: LightEngine) {
+    init(
+        mode: PlayerMode,
+        engine: LightEngine,
+        nowPlaying: NowPlayingState = .shared,
+        analysisManager: AnalysisStateManager = .shared,
+        sessionHistory: SessionHistoryManager = .shared,
+        haptics: TranceHaptics = .shared
+    ) {
         self.mode = mode
         self.engine = engine
+        self.nowPlaying = nowPlaying
+        self.analysisManager = analysisManager
+        self.sessionHistory = sessionHistory
+        self.haptics = haptics
 
         if case .flashMode(let freq, _, let colorTemp, _, _, _, _) = mode {
             flashFrequency = freq
@@ -147,7 +166,7 @@ final class UnifiedPlayerViewModel {
             setupMode()
         }
         startUIUpdateTimer()
-        NowPlayingState.shared.activate(
+        nowPlaying.activate(
             mode: mode,
             title: mode.title,
             engine: engine,
@@ -161,7 +180,7 @@ final class UnifiedPlayerViewModel {
         UIApplication.shared.isIdleTimerDisabled = false
         if dismissToMiniPlayer {
             // Keep this exact player alive so the mini-player can resume it.
-            NowPlayingState.shared.updatePlaybackState(playbackState)
+            nowPlaying.updatePlaybackState(playbackState)
         } else {
             stopAll()
         }
@@ -170,7 +189,7 @@ final class UnifiedPlayerViewModel {
     // MARK: - Playback Controls
 
     func togglePlayPause() {
-        TranceHaptics.shared.medium()
+        haptics.medium()
 
         switch playbackState {
         case .idle:
@@ -245,7 +264,7 @@ final class UnifiedPlayerViewModel {
     // MARK: - Light Sync (Audio Mode)
 
     func toggleLightSync() {
-        TranceHaptics.shared.medium()
+        haptics.medium()
 
         switch lightSyncStatus {
         case .enabled:
@@ -262,11 +281,11 @@ final class UnifiedPlayerViewModel {
             break
         case .queued(let position):
             if position > 1, case .audioLight(let file) = mode {
-                AnalysisStateManager.shared.prioritizeInQueue(audioFile: file)
+                analysisManager.prioritizeInQueue(audioFile: file)
             }
         case .unavailable:
             if case .audioLight(let file) = mode {
-                Task { await AnalysisStateManager.shared.queueForAnalysis(file) }
+                Task { await analysisManager.queueForAnalysis(file) }
             }
         }
     }
@@ -283,7 +302,7 @@ final class UnifiedPlayerViewModel {
 
         guard case .audioLight(let file) = mode else { return .unavailable }
 
-        let manager = AnalysisStateManager.shared
+        let manager = analysisManager
         if let current = manager.currentAnalysis,
            current.audioFile.id == file.id {
             return .analyzing(progress: current.progress, stage: stageLabel(current.stage))
@@ -297,17 +316,17 @@ final class UnifiedPlayerViewModel {
 
     func toggleBilateral() {
         bilateralMode.toggle()
-        TranceHaptics.shared.medium()
+        haptics.medium()
     }
 
     func toggleBinaural() {
         binauralActive.toggle()
-        TranceHaptics.shared.medium()
+        haptics.medium()
     }
 
     func setDriftRate(_ rate: Double) {
         bilateralDriftRate = rate
-        TranceHaptics.shared.light()
+        haptics.light()
     }
 
     // MARK: - Safety Warning
@@ -423,7 +442,7 @@ final class UnifiedPlayerViewModel {
                 do {
                     try await sync.loadAudioAsync(from: audioFile.url)
                 } catch {
-                    print("Failed to load session audio: \(error)")
+                    Log.general.info("Failed to load session audio: \(error)")
                 }
             }
         }
@@ -453,7 +472,7 @@ final class UnifiedPlayerViewModel {
                 duration = player.duration
                 await checkForLightSession()
             } catch {
-                print("Failed to load audio: \(error)")
+                Log.general.info("Failed to load audio: \(error)")
             }
         }
     }
@@ -474,7 +493,7 @@ final class UnifiedPlayerViewModel {
         countdownMessage = "Close your eyes and relax in\u{2026}"
         countdownValue = count
         playbackState = .countdown
-        TranceHaptics.shared.light()
+        haptics.light()
 
         countdownTask = Task {
             for tick in stride(from: count - 1, through: 1, by: -1) {
@@ -483,7 +502,7 @@ final class UnifiedPlayerViewModel {
                 withAnimation(.easeInOut(duration: 0.35)) {
                     countdownValue = tick
                 }
-                TranceHaptics.shared.light()
+                haptics.light()
             }
             try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
@@ -491,7 +510,7 @@ final class UnifiedPlayerViewModel {
                 countdownValue = nil
                 countdownMessage = "Close your eyes"
             }
-            TranceHaptics.shared.medium()
+            haptics.medium()
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.3)) {
@@ -621,7 +640,7 @@ final class UnifiedPlayerViewModel {
         }
 
         playbackState = .idle
-        NowPlayingState.shared.deactivate()
+        nowPlaying.deactivate()
     }
 
     // MARK: - Private: Timer
@@ -687,8 +706,8 @@ final class UnifiedPlayerViewModel {
         }
 
         // Keep mini-player in sync
-        NowPlayingState.shared.updateProgress(progress)
-        NowPlayingState.shared.updatePlaybackState(playbackState)
+        nowPlaying.updateProgress(progress)
+        nowPlaying.updatePlaybackState(playbackState)
     }
 
     // MARK: - Private: Phase Detection (Session Mode)
@@ -719,7 +738,7 @@ final class UnifiedPlayerViewModel {
             lastSessionId = ""
             lastSessionProgress = 0.0
         }
-        SessionHistoryManager.shared.record(
+        sessionHistory.record(
             sessionName: session.displayName,
             category: sessionCategory,
             durationListened: listenedDuration,

@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import os
 
 // MARK: - Library Navigation Destination
 
@@ -45,11 +46,30 @@ struct LibraryView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        categoryRowsSection
+                        LibraryCategoryRows(
+                            creatorCount: creatorCount,
+                            folderCount: folderCount,
+                            favoritesCount: favoritesCount,
+                            analysisQueueCount: analysisQueueCount,
+                            onPlaylists: {
+                                TranceHaptics.shared.light()
+                                showingPlaylists = true
+                            },
+                            onAnalysisQueue: {
+                                TranceHaptics.shared.light()
+                                showingAnalysisQueue = true
+                            }
+                        )
                         divider
-                        recentsSection
+                        RecentsStrip(files: recentFiles, onPlay: playWithLights)
                         divider
-                        sessionsSection
+                        LibrarySessionsList(
+                            files: sortedAudioFiles,
+                            engine: engine,
+                            sortOption: $sortOption,
+                            onPlay: playWithLights,
+                            onAddToPlaylist: { fileForPlaylist = $0 }
+                        )
                         bottomSpacer
                     }
                 }
@@ -93,182 +113,6 @@ struct LibraryView: View {
             }
             .onChange(of: audioFiles) { _, _ in recomputeDerivedCollections() }
             .onChange(of: sortOption) { _, _ in recomputeDerivedCollections() }
-        }
-    }
-
-    // MARK: - Category Rows
-
-    private var categoryRowsSection: some View {
-        VStack(spacing: 0) {
-            LibraryCategoryRow(icon: "music.note.list", iconColor: .roseGold, title: "Playlists", count: nil) {
-                TranceHaptics.shared.light()
-                showingPlaylists = true
-            }
-            rowDivider
-            NavigationLink(value: LibraryDestination.creators) {
-                LibraryCategoryRowLabel(icon: "person.wave.2.fill", iconColor: .bwTheta, title: "Creators", count: creatorCount)
-            }
-            .buttonStyle(PlainButtonStyle())
-            rowDivider
-            NavigationLink(value: LibraryDestination.folders) {
-                LibraryCategoryRowLabel(icon: "folder.fill", iconColor: .warmAccent, title: "Folders", count: folderCount)
-            }
-            .buttonStyle(PlainButtonStyle())
-            rowDivider
-            NavigationLink(value: LibraryDestination.favorites) {
-                LibraryCategoryRowLabel(icon: "heart.fill", iconColor: Color(hex: "E85D75"), title: "Favorites", count: favoritesCount)
-            }
-            .buttonStyle(.plain)
-            rowDivider
-            NavigationLink(value: LibraryDestination.builtInSessions) {
-                LibraryCategoryRowLabel(
-                    icon: "sparkles",
-                    iconColor: .bwGamma,
-                    title: "Built-in Sessions",
-                    count: nil
-                )
-            }
-            .buttonStyle(.plain)
-            rowDivider
-            LibraryCategoryRow(
-                icon: "waveform",
-                iconColor: .roseGold,
-                title: "Analysis Queue",
-                count: analysisQueueCount
-            ) {
-                TranceHaptics.shared.light()
-                showingAnalysisQueue = true
-            }
-        }
-        .padding(.horizontal, TranceSpacing.screen)
-        .padding(.top, TranceSpacing.card)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                .strokeBorder(Color.glassBorder, lineWidth: 1)
-        )
-        .padding(.horizontal, TranceSpacing.screen)
-        .padding(.top, TranceSpacing.content)
-    }
-
-    // MARK: - Recents Strip
-
-    @ViewBuilder
-    private var recentsSection: some View {
-        if !recentFiles.isEmpty {
-            VStack(alignment: .leading, spacing: TranceSpacing.card) {
-                sectionHeader("Recently Played")
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: TranceSpacing.card) {
-                        ForEach(recentFiles) { file in
-                            SessionMiniCard(file: file) {
-                                playWithLights(file)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, TranceSpacing.screen)
-                    .padding(.bottom, TranceSpacing.inner)
-                }
-            }
-            .padding(.top, TranceSpacing.content)
-        }
-    }
-
-    // MARK: - Sessions List
-
-    private var sessionsSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                sectionHeader("Audio Files")
-                Spacer()
-                Menu {
-                    Picker("Sort By", selection: $sortOption) {
-                        ForEach(LibrarySortOption.allCases, id: \.self) { opt in
-                            Text(opt.label).tag(opt)
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.arrow.down")
-                        Text(sortOption.label)
-                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
-                    }
-                    .font(TranceTypography.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.textSecondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.glassBorder.opacity(0.1))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().strokeBorder(Color.glassBorder.opacity(0.3), lineWidth: 1))
-                }
-                .padding(.trailing, TranceSpacing.screen)
-            }
-            .padding(.leading, TranceSpacing.screen)
-            .padding(.top, TranceSpacing.content)
-
-            if sortedAudioFiles.isEmpty {
-                emptySessionsHint
-            } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(sortedAudioFiles) { file in
-                        NavigationLink {
-                            SessionDetailView(audioFile: file, engine: engine)
-                        } label: {
-                            LibrarySessionRowLabel(file: file)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Play with Light Sync", systemImage: "play.fill") {
-                                playWithLights(file)
-                            }
-                            Button("View Details", systemImage: "info.circle") {
-                                // NavigationLink handles this — no-op as context menu
-                            }
-                            Button("Analyze", systemImage: "waveform") {
-                                Task {
-                                    await AnalysisStateManager.shared.queueForAnalysis(file)
-                                }
-                            }
-                            Button("Add to Playlist", systemImage: "plus") {
-                                fileForPlaylist = file
-                            }
-                        }
-                        .swipeActions(edge: .trailing) {
-                            Button {
-                                playWithLights(file)
-                            } label: {
-                                Label("Play", systemImage: "play.fill")
-                            }
-                            .tint(.roseGold)
-
-                            Button {
-                                fileForPlaylist = file
-                            } label: {
-                                Label("Add to Playlist", systemImage: "plus")
-                            }
-                            .tint(.bwTheta)
-                        }
-                        if file.id != sortedAudioFiles.last?.id {
-                            rowDivider
-                                .padding(.leading, 56)
-                                .padding(.horizontal, TranceSpacing.screen)
-                        }
-                    }
-                }
-                .padding(.horizontal, TranceSpacing.screen)
-                .padding(.top, TranceSpacing.inner)
-                .background(Color.bgCard)
-                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
-                .overlay(
-                    RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                        .strokeBorder(Color.glassBorder, lineWidth: 1)
-                )
-                .padding(.horizontal, TranceSpacing.screen)
-                .padding(.top, TranceSpacing.inner)
-            }
         }
     }
 
@@ -344,27 +188,229 @@ struct LibraryView: View {
         PlaylistStore.save(playlists)
     }
 
-    // MARK: - Reusable Sub-views
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(TranceTypography.sectionTitle)
-            .foregroundStyle(.textPrimary)
-            .fontWeight(.bold)
-    }
+    // MARK: - Layout Spacers
 
     private var divider: some View {
         Color.bgPrimary.frame(height: TranceSpacing.inner)
     }
 
-    private var rowDivider: some View {
+    private var bottomSpacer: some View {
+        Color.clear.frame(height: TranceSpacing.tabBarClearance + TranceSpacing.content)
+    }
+}
+
+// MARK: - Library Section Components
+
+/// Shared bold section title used across the library's sections.
+private struct LibrarySectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(TranceTypography.sectionTitle)
+            .foregroundStyle(.textPrimary)
+            .fontWeight(.bold)
+    }
+}
+
+/// Thin hairline divider between rows.
+private struct LibraryRowDivider: View {
+    var body: some View {
         Rectangle()
             .fill(Color.glassBorder.opacity(0.3))
             .frame(height: 1)
     }
+}
 
-    private var bottomSpacer: some View {
-        Color.clear.frame(height: TranceSpacing.tabBarClearance + TranceSpacing.content)
+/// The top card of category navigation rows (Playlists, Creators, Folders, …).
+private struct LibraryCategoryRows: View {
+    let creatorCount: Int
+    let folderCount: Int
+    let favoritesCount: Int
+    let analysisQueueCount: Int
+    let onPlaylists: () -> Void
+    let onAnalysisQueue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            LibraryCategoryRow(icon: "music.note.list", iconColor: .roseGold, title: "Playlists", count: nil) {
+                onPlaylists()
+            }
+            LibraryRowDivider()
+            NavigationLink(value: LibraryDestination.creators) {
+                LibraryCategoryRowLabel(icon: "person.wave.2.fill", iconColor: .bwTheta, title: "Creators", count: creatorCount)
+            }
+            .buttonStyle(PlainButtonStyle())
+            LibraryRowDivider()
+            NavigationLink(value: LibraryDestination.folders) {
+                LibraryCategoryRowLabel(icon: "folder.fill", iconColor: .warmAccent, title: "Folders", count: folderCount)
+            }
+            .buttonStyle(PlainButtonStyle())
+            LibraryRowDivider()
+            NavigationLink(value: LibraryDestination.favorites) {
+                LibraryCategoryRowLabel(icon: "heart.fill", iconColor: Color(hex: "E85D75"), title: "Favorites", count: favoritesCount)
+            }
+            .buttonStyle(.plain)
+            LibraryRowDivider()
+            NavigationLink(value: LibraryDestination.builtInSessions) {
+                LibraryCategoryRowLabel(
+                    icon: "sparkles",
+                    iconColor: .bwGamma,
+                    title: "Built-in Sessions",
+                    count: nil
+                )
+            }
+            .buttonStyle(.plain)
+            LibraryRowDivider()
+            LibraryCategoryRow(
+                icon: "waveform",
+                iconColor: .roseGold,
+                title: "Analysis Queue",
+                count: analysisQueueCount
+            ) {
+                onAnalysisQueue()
+            }
+        }
+        .padding(.horizontal, TranceSpacing.screen)
+        .padding(.top, TranceSpacing.card)
+        .background(Color.bgCard)
+        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
+        .overlay(
+            RoundedRectangle(cornerRadius: TranceRadius.glassCard)
+                .strokeBorder(Color.glassBorder, lineWidth: 1)
+        )
+        .padding(.horizontal, TranceSpacing.screen)
+        .padding(.top, TranceSpacing.content)
+    }
+}
+
+/// Horizontal strip of recently played sessions.
+private struct RecentsStrip: View {
+    let files: [AudioFile]
+    let onPlay: (AudioFile) -> Void
+
+    var body: some View {
+        if !files.isEmpty {
+            VStack(alignment: .leading, spacing: TranceSpacing.card) {
+                LibrarySectionHeader(title: "Recently Played")
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: TranceSpacing.card) {
+                        ForEach(files) { file in
+                            SessionMiniCard(file: file) {
+                                onPlay(file)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, TranceSpacing.screen)
+                    .padding(.bottom, TranceSpacing.inner)
+                }
+            }
+            .padding(.top, TranceSpacing.content)
+        }
+    }
+}
+
+/// The inline audio-files list with sort menu and per-row actions.
+private struct LibrarySessionsList: View {
+    let files: [AudioFile]
+    let engine: LightEngine
+    @Binding var sortOption: LibrarySortOption
+    let onPlay: (AudioFile) -> Void
+    let onAddToPlaylist: (AudioFile) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                LibrarySectionHeader(title: "Audio Files")
+                Spacer()
+                Menu {
+                    Picker("Sort By", selection: $sortOption) {
+                        ForEach(LibrarySortOption.allCases, id: \.self) { opt in
+                            Text(opt.label).tag(opt)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.arrow.down")
+                        Text(sortOption.label)
+                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
+                    }
+                    .font(TranceTypography.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.textSecondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.glassBorder.opacity(0.1))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().strokeBorder(Color.glassBorder.opacity(0.3), lineWidth: 1))
+                }
+                .padding(.trailing, TranceSpacing.screen)
+            }
+            .padding(.leading, TranceSpacing.screen)
+            .padding(.top, TranceSpacing.content)
+
+            if files.isEmpty {
+                emptySessionsHint
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(files) { file in
+                        NavigationLink {
+                            SessionDetailView(audioFile: file, engine: engine)
+                        } label: {
+                            LibrarySessionRowLabel(file: file)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Play with Light Sync", systemImage: "play.fill") {
+                                onPlay(file)
+                            }
+                            Button("View Details", systemImage: "info.circle") {
+                                // NavigationLink handles this — no-op as context menu
+                            }
+                            Button("Analyze", systemImage: "waveform") {
+                                Task {
+                                    await AnalysisStateManager.shared.queueForAnalysis(file)
+                                }
+                            }
+                            Button("Add to Playlist", systemImage: "plus") {
+                                onAddToPlaylist(file)
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button {
+                                onPlay(file)
+                            } label: {
+                                Label("Play", systemImage: "play.fill")
+                            }
+                            .tint(.roseGold)
+
+                            Button {
+                                onAddToPlaylist(file)
+                            } label: {
+                                Label("Add to Playlist", systemImage: "plus")
+                            }
+                            .tint(.bwTheta)
+                        }
+                        if file.id != files.last?.id {
+                            LibraryRowDivider()
+                                .padding(.leading, 56)
+                                .padding(.horizontal, TranceSpacing.screen)
+                        }
+                    }
+                }
+                .padding(.horizontal, TranceSpacing.screen)
+                .padding(.top, TranceSpacing.inner)
+                .background(Color.bgCard)
+                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
+                .overlay(
+                    RoundedRectangle(cornerRadius: TranceRadius.glassCard)
+                        .strokeBorder(Color.glassBorder, lineWidth: 1)
+                )
+                .padding(.horizontal, TranceSpacing.screen)
+                .padding(.top, TranceSpacing.inner)
+            }
+        }
     }
 
     private var emptySessionsHint: some View {
@@ -492,7 +538,11 @@ private struct SessionMiniCard: View {
     private var contentTypeColor: Color {
         switch file.analysisResult?.contentType {
         case .hypnosis:     return .bwDelta
+        case .eroticHypnosis: return .roseDeep
+        case .sleepHypnosis: return .bwDelta
         case .meditation:   return .bwAlpha
+        case .brainwave:    return .bwGamma
+        case .asmr:         return .warmAccent
         case .music:        return .bwBeta
         case .guidedImagery: return .bwTheta
         case .affirmations: return .warmAccent
@@ -511,7 +561,11 @@ private struct SessionMiniCard: View {
     private var contentTypeIcon: String {
         switch file.analysisResult?.contentType {
         case .hypnosis:     return "brain.head.profile"
+        case .eroticHypnosis: return "flame"
+        case .sleepHypnosis: return "moon.zzz"
         case .meditation:   return "leaf"
+        case .brainwave:    return "waveform.path.ecg"
+        case .asmr:         return "ear"
         case .music:        return "music.note"
         case .guidedImagery: return "figure.mind.and.body"
         case .affirmations: return "quote.bubble"
@@ -529,7 +583,7 @@ struct LibrarySessionRow: View {
 
     var body: some View {
         Button(action: {
-            print("🎯 LibrarySessionRow: button tapped for \(file.displayName)")
+            Log.ui.info("🎯 LibrarySessionRow: button tapped for \(file.displayName)")
             onPlay()
         }) {
             HStack(spacing: TranceSpacing.list) {
@@ -588,7 +642,11 @@ struct LibrarySessionRow: View {
     private var contentTypeColor: Color {
         switch file.analysisResult?.contentType {
         case .hypnosis:      return .bwDelta
+        case .eroticHypnosis: return .roseDeep
+        case .sleepHypnosis: return .bwDelta
         case .meditation:    return .bwAlpha
+        case .brainwave:     return .bwGamma
+        case .asmr:          return .warmAccent
         case .music:         return .bwBeta
         case .guidedImagery: return .bwTheta
         case .affirmations:  return .warmAccent
@@ -599,7 +657,11 @@ struct LibrarySessionRow: View {
     private var contentTypeIcon: String {
         switch file.analysisResult?.contentType {
         case .hypnosis:      return "brain.head.profile"
+        case .eroticHypnosis: return "flame"
+        case .sleepHypnosis: return "moon.zzz"
         case .meditation:    return "leaf"
+        case .brainwave:     return "waveform.path.ecg"
+        case .asmr:          return "ear"
         case .music:         return "music.note"
         case .guidedImagery: return "figure.mind.and.body"
         case .affirmations:  return "quote.bubble"
@@ -665,7 +727,11 @@ struct LibrarySessionRowLabel: View {
     private var contentTypeColor: Color {
         switch file.analysisResult?.contentType {
         case .hypnosis:      return .bwDelta
+        case .eroticHypnosis: return .roseDeep
+        case .sleepHypnosis: return .bwDelta
         case .meditation:    return .bwAlpha
+        case .brainwave:     return .bwGamma
+        case .asmr:          return .warmAccent
         case .music:         return .bwBeta
         case .guidedImagery: return .bwTheta
         case .affirmations:  return .warmAccent
@@ -676,7 +742,11 @@ struct LibrarySessionRowLabel: View {
     private var contentTypeIcon: String {
         switch file.analysisResult?.contentType {
         case .hypnosis:      return "brain.head.profile"
+        case .eroticHypnosis: return "flame"
+        case .sleepHypnosis: return "moon.zzz"
         case .meditation:    return "leaf"
+        case .brainwave:     return "waveform.path.ecg"
+        case .asmr:          return "ear"
         case .music:         return "music.note"
         case .guidedImagery: return "figure.mind.and.body"
         case .affirmations:  return "quote.bubble"

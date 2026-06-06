@@ -103,7 +103,7 @@ struct SessionDetailView: View {
                             Label(audioFile.durationFormatted, systemImage: "clock")
                             if let type = analysis?.contentType {
                                 Text("·")
-                                Text(type.rawValue.capitalized)
+                                Text(type.displayName)
                             }
                         }
                         .font(TranceTypography.caption)
@@ -437,7 +437,11 @@ struct SessionDetailView: View {
     private var contentTypeColor: Color {
         switch analysis?.contentType {
         case .hypnosis:      return .bwDelta
+        case .eroticHypnosis: return .roseDeep
+        case .sleepHypnosis: return .bwDelta
         case .meditation:    return .bwAlpha
+        case .brainwave:     return .bwGamma
+        case .asmr:          return .warmAccent
         case .music:         return .bwBeta
         case .guidedImagery: return .bwTheta
         case .affirmations:  return .warmAccent
@@ -448,7 +452,11 @@ struct SessionDetailView: View {
     private var contentTypeIcon: String {
         switch analysis?.contentType {
         case .hypnosis:      return "brain.head.profile"
+        case .eroticHypnosis: return "flame"
+        case .sleepHypnosis: return "moon.zzz"
         case .meditation:    return "leaf"
+        case .brainwave:     return "waveform.path.ecg"
+        case .asmr:          return "ear"
         case .music:         return "music.note"
         case .guidedImagery: return "figure.mind.and.body"
         case .affirmations:  return "quote.bubble"
@@ -459,8 +467,12 @@ struct SessionDetailView: View {
     private func phaseColor(_ phase: HypnosisMetadata.Phase) -> Color {
         switch phase {
         case .induction:    return .phaseInduction
+        case .fractionation:return .phaseFractionation
         case .deepening:    return .phaseDeepener
+        case .confusion:    return .mint
         case .therapy, .suggestions: return .phaseSuggestion
+        case .eroticSuggestions: return .roseDeep
+        case .brainwashing: return .orange
         case .emergence:    return .bwBeta
         case .preTalk:      return .bwAlpha
         case .conditioning: return .bwGamma

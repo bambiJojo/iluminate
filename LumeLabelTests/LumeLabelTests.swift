@@ -125,6 +125,33 @@ struct LumeLabelTests {
 
     @Test
     @MainActor
+    func corpusNormalizationForcesHypnosisContentType() async throws {
+        let baseDirectory = try makeTempDirectory()
+        let manager = TrainingCorpusManager(baseDirectory: baseDirectory, autoLoad: false)
+        let source = try makeWAVFile(
+            at: baseDirectory.appending(path: "normalize/source.wav"),
+            frequency: 330
+        )
+
+        let imported = try await manager.importAudio(from: source)
+        var edited = imported
+        edited.expectedContentType = .asmr
+        edited.phases = [
+            .init(phase: .preTalk, startTime: 0, endTime: imported.audioDuration)
+        ]
+
+        let saved = try await manager.save(edited)
+        #expect(saved.expectedContentType == .hypnosis)
+
+        await manager.reload()
+        #expect(manager.labeledFiles.first?.expectedContentType == .hypnosis)
+
+        let dataset = try AnalyzerOptimizationDataset.load(from: baseDirectory)
+        #expect(dataset.examples.first?.example.labels.contentType == .hypnosis)
+    }
+
+    @Test
+    @MainActor
     func importedUnlabeledAudioIsExcludedFromAnalyzerDataset() async throws {
         let baseDirectory = try makeTempDirectory()
         let manager = TrainingCorpusManager(baseDirectory: baseDirectory, autoLoad: false)
@@ -154,6 +181,57 @@ struct LumeLabelTests {
         #expect(manifest.exampleFiles.isEmpty)
         #expect(dataset.examples.isEmpty)
         #expect(dataset.issues.isEmpty)
+    }
+
+    @Test
+    func trancePhaseExpansionHasStableOrderAndNames() {
+        #expect(TrancePhase.orderedHypnosisPhases == [
+            .preTalk,
+            .induction,
+            .fractionation,
+            .deepening,
+            .confusion,
+            .therapy,
+            .suggestions,
+            .eroticSuggestions,
+            .brainwashing,
+            .conditioning,
+            .emergence
+        ])
+
+        #expect(TrancePhase.fractionation.displayName == "Fractionation")
+        #expect(TrancePhase.confusion.displayName == "Confusion")
+        #expect(TrancePhase.eroticSuggestions.displayName == "Erotic Suggestions")
+        #expect(TrancePhase.brainwashing.displayName == "Brainwashing")
+        #expect(TrancePhase.eroticSuggestions.rawValue == "erotic_suggestions")
+    }
+
+    @Test
+    @MainActor
+    func savePreservesExpandedHypnosisPhasesInAnalyzerDataset() async throws {
+        let baseDirectory = try makeTempDirectory()
+        let manager = TrainingCorpusManager(baseDirectory: baseDirectory, autoLoad: false)
+        let source = try makeWAVFile(
+            at: baseDirectory.appending(path: "expanded/source.wav"),
+            frequency: 220
+        )
+
+        let imported = try await manager.importAudio(from: source)
+        let duration = imported.audioDuration
+        let quarter = duration / 4
+        var labeled = imported
+        labeled.phases = [
+            .init(phase: .induction, startTime: 0, endTime: quarter),
+            .init(phase: .fractionation, startTime: quarter, endTime: quarter * 2),
+            .init(phase: .eroticSuggestions, startTime: quarter * 2, endTime: quarter * 3),
+            .init(phase: .brainwashing, startTime: quarter * 3, endTime: duration)
+        ]
+
+        _ = try await manager.save(labeled)
+        let dataset = try AnalyzerOptimizationDataset.load(from: baseDirectory)
+        let phases = dataset.examples.first?.example.labels.phaseSegments.map(\.phase) ?? []
+
+        #expect(phases == [.induction, .fractionation, .eroticSuggestions, .brainwashing])
     }
 
     @Test
@@ -213,6 +291,67 @@ struct LumeLabelTests {
         #expect(example.labels.denseTimeline.contains { $0.phase == .suggestions })
         #expect(manifest.exampleCount == 1)
         #expect(manifest.exampleFiles == ["examples/\(saved.id.uuidString).json"])
+    }
+
+    @Test
+    func transcriptInsightSummarizesSectionWordsAndRate() throws {
+        let transcription = AudioTranscriptionResult(
+            fullText: "relax deeper relax drift deeper relax calm calm focus",
+            segments: [
+                .init(text: "relax deeper relax", timestamp: 0, duration: 3, confidence: -0.2),
+                .init(text: "drift deeper relax", timestamp: 3, duration: 3, confidence: -0.3),
+                .init(text: "calm calm focus", timestamp: 6, duration: 3, confidence: -0.4)
+            ],
+            duration: 9,
+            detectedLanguage: "en"
+        )
+
+        let insight = try #require(
+            LabelingDetailEditor.makeTranscriptInsight(
+                id: UUID(),
+                phase: .deepening,
+                startTime: 0,
+                endTime: 9,
+                transcription: transcription
+            )
+        )
+
+        #expect(insight.wordCount == 9)
+        #expect(insight.uniqueWordCount == 5)
+        #expect(insight.wordsPerMinute == 60)
+        #expect(insight.excerpts.count == 3)
+        #expect(insight.topWords.prefix(3).map(\.word) == ["relax", "calm", "deeper"])
+        #expect(insight.topWords.prefix(3).map(\.count) == [3, 2, 2])
+    }
+
+    @Test
+    func transcriptInsightClipsToSelectedPhaseWindow() throws {
+        let transcription = AudioTranscriptionResult(
+            fullText: "begin settle deeper deeper awake again",
+            segments: [
+                .init(text: "begin settle", timestamp: 0, duration: 2, confidence: -0.2),
+                .init(text: "deeper deeper", timestamp: 2, duration: 2, confidence: -0.2),
+                .init(text: "awake again", timestamp: 4, duration: 2, confidence: -0.2)
+            ],
+            duration: 6,
+            detectedLanguage: "en"
+        )
+
+        let insight = try #require(
+            LabelingDetailEditor.makeTranscriptInsight(
+                id: UUID(),
+                phase: .deepening,
+                startTime: 1.5,
+                endTime: 4.5,
+                transcription: transcription
+            )
+        )
+
+        #expect(insight.excerpts.count == 3)
+        #expect(insight.wordCount == 6)
+        #expect(insight.topWords.first?.word == "deeper")
+        #expect(insight.topWords.first?.count == 2)
+        #expect(insight.longestPause == 0)
     }
 
     @Test

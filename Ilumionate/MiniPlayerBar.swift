@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import os
 
 struct MiniPlayerBar: View {
 
@@ -106,7 +107,7 @@ struct MiniPlayerBar: View {
                 VStack {
                     Spacer()
                     MiniPlayerBar(nowPlaying: state) {
-                        print("Tapped mini player")
+                        Log.ui.info("Tapped mini player")
                     }
                 }
                 .padding(.bottom, 80)

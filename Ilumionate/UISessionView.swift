@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 /// Full-screen view that modulates brightness based on LightEngine output.
 /// This is the primary visual entrainment surface.
@@ -32,12 +33,12 @@ struct SessionView: View {
             .ignoresSafeArea()
         }
         .onAppear {
-            print("👁 SessionView appeared")
-            print("  Initial brightness: \(engine.brightness)")
+            Log.ui.info("👁 SessionView appeared")
+            Log.ui.info("  Initial brightness: \(engine.brightness)")
             UIApplication.shared.isIdleTimerDisabled = AppSettingsManager.keepsScreenAwakeDuringSessions()
         }
         .onDisappear {
-            print("👁 SessionView disappeared")
+            Log.ui.info("👁 SessionView disappeared")
             UIApplication.shared.isIdleTimerDisabled = false
         }
     }

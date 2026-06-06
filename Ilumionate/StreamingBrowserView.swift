@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct StreamingBrowserView: View {
     @Bindable var engine: LightEngine
@@ -22,16 +23,25 @@ struct StreamingBrowserView: View {
                 Color.bgPrimary.ignoresSafeArea()
 
                 if streamingManager.availableServices.isEmpty {
-                    setupView
+                    StreamingSetupView { showingSettings = true }
                 } else if !streamingManager.availableServices.allSatisfy(\.isAuthenticated) {
-                    connectingView
+                    StreamingConnectingView(errorMessage: streamingManager.errorMessage)
                 } else {
-                    contentView
+                    StreamingContentView(
+                        manager: streamingManager,
+                        searchText: searchText,
+                        selectedCategory: selectedCategory,
+                        onSelectCategory: { category in
+                            selectedCategory = category
+                            Task { await searchCategory(category) }
+                        },
+                        onSelectTrack: selectTrack
+                    )
                 }
 
                 // Analysis overlay
                 if streamingManager.isAnalyzing {
-                    analysisOverlay
+                    StreamingAnalysisOverlay(manager: streamingManager)
                 }
             }
             .navigationTitle("Streaming")
@@ -51,216 +61,6 @@ struct StreamingBrowserView: View {
                 StreamingSettingsView(manager: streamingManager)
             }
         }
-    }
-
-    // MARK: - Setup View
-
-    private var setupView: some View {
-        VStack(spacing: TranceSpacing.content) {
-            Image(systemName: "music.note.house.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.roseGold, .blush],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-
-            Text("Connect to SoundCloud")
-                .font(TranceTypography.screenTitle)
-                .foregroundStyle(.textPrimary)
-
-            Text("Add your SoundCloud credentials to access thousands of full-length meditation, hypnosis, and therapy tracks.")
-                .font(TranceTypography.body)
-                .foregroundStyle(.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, TranceSpacing.content)
-
-            Button("Get Started") {
-                showingSettings = true
-            }
-            .buttonStyle(TranceButtonStyle())
-        }
-    }
-
-    // MARK: - Connecting View
-
-    private var connectingView: some View {
-        VStack(spacing: TranceSpacing.content) {
-            ProgressView()
-                .scaleEffect(1.5)
-                .tint(.roseGold)
-
-            Text("Connecting to services...")
-                .font(TranceTypography.body)
-                .foregroundStyle(.textSecondary)
-
-            if let error = streamingManager.errorMessage {
-                Text(error)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.red)
-                    .padding(.top)
-            }
-        }
-    }
-
-    // MARK: - Analysis Overlay
-
-    private var analysisOverlay: some View {
-        ZStack {
-            Color.bgPrimary.opacity(0.95)
-                .ignoresSafeArea()
-
-            VStack(spacing: TranceSpacing.content) {
-                // Analysis progress circle
-                ZStack {
-                    Circle()
-                        .stroke(Color.glassBorder, lineWidth: 3)
-                        .frame(width: 80, height: 80)
-
-                    Circle()
-                        .trim(from: 0, to: streamingManager.analysisProgress)
-                        .stroke(
-                            LinearGradient(
-                                colors: [.roseGold, .blush],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                        )
-                        .frame(width: 80, height: 80)
-                        .rotationEffect(.degrees(-90))
-
-                    Text("\(Int(streamingManager.analysisProgress * 100))%")
-                        .font(TranceTypography.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.roseGold)
-                }
-
-                VStack(spacing: TranceSpacing.inner) {
-                    Text("Analyzing Content")
-                        .font(TranceTypography.sectionTitle)
-                        .foregroundStyle(.textPrimary)
-
-                    Text(streamingManager.analysisStatus)
-                        .font(TranceTypography.body)
-                        .foregroundStyle(.textSecondary)
-                        .multilineTextAlignment(.center)
-
-                    Text("Creating personalized light therapy session...")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(.textLight)
-                        .multilineTextAlignment(.center)
-                }
-            }
-        }
-    }
-
-    // MARK: - Content View
-
-    private var contentView: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                if !searchText.isEmpty {
-                    searchResultsSection
-                } else {
-                    categoriesSection
-                    featuredSection
-                }
-            }
-        }
-    }
-
-    // MARK: - Categories
-
-    private var categoriesSection: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.card) {
-            sectionHeader("Browse Categories")
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: TranceSpacing.card) {
-                    ForEach(ContentCategory.allCases, id: \.self) { category in
-                        CategoryCard(category: category, isSelected: selectedCategory == category) {
-                            selectedCategory = category
-                            Task { await searchCategory(category) }
-                        }
-                    }
-                }
-                .padding(.horizontal, TranceSpacing.screen)
-            }
-
-            if !streamingManager.searchResults.isEmpty {
-                tracksList
-            }
-        }
-        .padding(.top, TranceSpacing.content)
-    }
-
-    // MARK: - Featured Section
-
-    private var featuredSection: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.card) {
-            sectionHeader("Featured Playlists")
-
-            if streamingManager.featuredPlaylists.isEmpty {
-                ProgressView("Loading...")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, TranceSpacing.content)
-            } else {
-                LazyVStack(spacing: TranceSpacing.card) {
-                    ForEach(streamingManager.featuredPlaylists) { playlist in
-                        PlaylistRow(playlist: playlist) {
-                            // Handle playlist selection
-                        }
-                    }
-                }
-                .padding(.horizontal, TranceSpacing.screen)
-            }
-        }
-        .padding(.top, TranceSpacing.content)
-    }
-
-    // MARK: - Search Results
-
-    private var searchResultsSection: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.card) {
-            sectionHeader("Search Results")
-
-            if streamingManager.isLoading {
-                ProgressView("Searching...")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, TranceSpacing.content)
-            } else {
-                tracksList
-            }
-        }
-        .padding(.top, TranceSpacing.content)
-    }
-
-    // MARK: - Tracks List
-
-    private var tracksList: some View {
-        LazyVStack(spacing: 0) {
-            ForEach(streamingManager.searchResults) { track in
-                StreamingTrackRow(track: track) {
-                    selectTrack(track)
-                }
-
-                if track.id != streamingManager.searchResults.last?.id {
-                    Divider()
-                        .padding(.leading, 56)
-                }
-            }
-        }
-        .padding(.horizontal, TranceSpacing.screen)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                .strokeBorder(Color.glassBorder, lineWidth: 1)
-        )
-        .padding(.horizontal, TranceSpacing.screen)
     }
 
     // MARK: - Toolbar
@@ -328,7 +128,7 @@ struct StreamingBrowserView: View {
                 }
             } catch {
                 await MainActor.run {
-                    print("Failed to analyze track: \(error)")
+                    Log.streaming.info("Failed to analyze track: \(error)")
                     // Fallback to basic creation
                     let audioFile = streamingManager.createAudioFileFromTrack(track)
                     addToLibraryAndPlay(audioFile)
@@ -350,9 +150,9 @@ struct StreamingBrowserView: View {
         }
 
         // Start playback with light synchronization
-        print("🎵 Playing streaming track: \(audioFile.displayName)")
+        Log.streaming.info("🎵 Playing streaming track: \(audioFile.displayName)")
         if let session = lightSession {
-            print("✨ Using custom generated session with \(session.light_score.count) light moments")
+            Log.streaming.info("✨ Using custom generated session with \(session.light_score.count) light moments")
         }
     }
 
@@ -364,21 +164,14 @@ struct StreamingBrowserView: View {
         do {
             let data = try JSONEncoder().encode(session)
             try data.write(to: sessionURL)
-            print("💾 Saved generated session: \(sessionURL.lastPathComponent)")
+            Log.streaming.info("💾 Saved generated session: \(sessionURL.lastPathComponent)")
         } catch {
-            print("❌ Failed to save session: \(error)")
+            Log.streaming.info("❌ Failed to save session: \(error)")
         }
     }
 
     // MARK: - Helpers
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(TranceTypography.sectionTitle)
-            .foregroundStyle(.textPrimary)
-            .fontWeight(.bold)
-            .padding(.leading, TranceSpacing.screen)
-    }
 
     private func loadAudioFiles() -> [AudioFile] {
         guard let data = UserDefaults.standard.data(forKey: "audioFiles"),
@@ -389,6 +182,258 @@ struct StreamingBrowserView: View {
     private func saveAudioFiles(_ files: [AudioFile]) {
         let data = try? JSONEncoder().encode(files)
         UserDefaults.standard.set(data, forKey: "audioFiles")
+    }
+}
+
+// MARK: - Streaming Browser Components
+
+private struct StreamingSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(TranceTypography.sectionTitle)
+            .foregroundStyle(.textPrimary)
+            .fontWeight(.bold)
+            .padding(.leading, TranceSpacing.screen)
+    }
+}
+
+private struct StreamingSetupView: View {
+    let onGetStarted: () -> Void
+
+    var body: some View {
+        VStack(spacing: TranceSpacing.content) {
+            Image(systemName: "music.note.house.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.roseGold, .blush],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            Text("Connect to SoundCloud")
+                .font(TranceTypography.screenTitle)
+                .foregroundStyle(.textPrimary)
+
+            Text("Add your SoundCloud credentials to access thousands of full-length meditation, hypnosis, and therapy tracks.")
+                .font(TranceTypography.body)
+                .foregroundStyle(.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, TranceSpacing.content)
+
+            Button("Get Started") {
+                onGetStarted()
+            }
+            .buttonStyle(TranceButtonStyle())
+        }
+    }
+}
+
+private struct StreamingConnectingView: View {
+    let errorMessage: String?
+
+    var body: some View {
+        VStack(spacing: TranceSpacing.content) {
+            ProgressView()
+                .scaleEffect(1.5)
+                .tint(.roseGold)
+
+            Text("Connecting to services...")
+                .font(TranceTypography.body)
+                .foregroundStyle(.textSecondary)
+
+            if let error = errorMessage {
+                Text(error)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(.red)
+                    .padding(.top)
+            }
+        }
+    }
+}
+
+private struct StreamingAnalysisOverlay: View {
+    let manager: StreamingManager
+
+    var body: some View {
+        ZStack {
+            Color.bgPrimary.opacity(0.95)
+                .ignoresSafeArea()
+
+            VStack(spacing: TranceSpacing.content) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.glassBorder, lineWidth: 3)
+                        .frame(width: 80, height: 80)
+
+                    Circle()
+                        .trim(from: 0, to: manager.analysisProgress)
+                        .stroke(
+                            LinearGradient(
+                                colors: [.roseGold, .blush],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .frame(width: 80, height: 80)
+                        .rotationEffect(.degrees(-90))
+
+                    Text("\(Int(manager.analysisProgress * 100))%")
+                        .font(TranceTypography.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.roseGold)
+                }
+
+                VStack(spacing: TranceSpacing.inner) {
+                    Text("Analyzing Content")
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(.textPrimary)
+
+                    Text(manager.analysisStatus)
+                        .font(TranceTypography.body)
+                        .foregroundStyle(.textSecondary)
+                        .multilineTextAlignment(.center)
+
+                    Text("Creating personalized light therapy session...")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(.textLight)
+                        .multilineTextAlignment(.center)
+                }
+            }
+        }
+    }
+}
+
+private struct StreamingContentView: View {
+    let manager: StreamingManager
+    let searchText: String
+    let selectedCategory: ContentCategory
+    let onSelectCategory: (ContentCategory) -> Void
+    let onSelectTrack: (StreamingTrack) -> Void
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                if !searchText.isEmpty {
+                    StreamingSearchResults(manager: manager, onSelectTrack: onSelectTrack)
+                } else {
+                    StreamingCategoriesSection(
+                        manager: manager,
+                        selectedCategory: selectedCategory,
+                        onSelectCategory: onSelectCategory,
+                        onSelectTrack: onSelectTrack
+                    )
+                    StreamingFeaturedSection(manager: manager)
+                }
+            }
+        }
+    }
+}
+
+private struct StreamingCategoriesSection: View {
+    let manager: StreamingManager
+    let selectedCategory: ContentCategory
+    let onSelectCategory: (ContentCategory) -> Void
+    let onSelectTrack: (StreamingTrack) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: TranceSpacing.card) {
+            StreamingSectionHeader(title: "Browse Categories")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: TranceSpacing.card) {
+                    ForEach(ContentCategory.allCases, id: \.self) { category in
+                        CategoryCard(category: category, isSelected: selectedCategory == category) {
+                            onSelectCategory(category)
+                        }
+                    }
+                }
+                .padding(.horizontal, TranceSpacing.screen)
+            }
+
+            if !manager.searchResults.isEmpty {
+                StreamingTracksList(tracks: manager.searchResults, onSelect: onSelectTrack)
+            }
+        }
+        .padding(.top, TranceSpacing.content)
+    }
+}
+
+private struct StreamingFeaturedSection: View {
+    let manager: StreamingManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: TranceSpacing.card) {
+            StreamingSectionHeader(title: "Featured Playlists")
+
+            if manager.featuredPlaylists.isEmpty {
+                ProgressView("Loading...")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, TranceSpacing.content)
+            } else {
+                LazyVStack(spacing: TranceSpacing.card) {
+                    ForEach(manager.featuredPlaylists) { playlist in
+                        PlaylistRow(playlist: playlist) {
+                            // Handle playlist selection
+                        }
+                    }
+                }
+                .padding(.horizontal, TranceSpacing.screen)
+            }
+        }
+        .padding(.top, TranceSpacing.content)
+    }
+}
+
+private struct StreamingSearchResults: View {
+    let manager: StreamingManager
+    let onSelectTrack: (StreamingTrack) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: TranceSpacing.card) {
+            StreamingSectionHeader(title: "Search Results")
+
+            if manager.isLoading {
+                ProgressView("Searching...")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, TranceSpacing.content)
+            } else {
+                StreamingTracksList(tracks: manager.searchResults, onSelect: onSelectTrack)
+            }
+        }
+        .padding(.top, TranceSpacing.content)
+    }
+}
+
+private struct StreamingTracksList: View {
+    let tracks: [StreamingTrack]
+    let onSelect: (StreamingTrack) -> Void
+
+    var body: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(tracks) { track in
+                StreamingTrackRow(track: track) {
+                    onSelect(track)
+                }
+
+                if track.id != tracks.last?.id {
+                    Divider()
+                        .padding(.leading, 56)
+                }
+            }
+        }
+        .padding(.horizontal, TranceSpacing.screen)
+        .background(Color.bgCard)
+        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
+        .overlay(
+            RoundedRectangle(cornerRadius: TranceRadius.glassCard)
+                .strokeBorder(Color.glassBorder, lineWidth: 1)
+        )
+        .padding(.horizontal, TranceSpacing.screen)
     }
 }
 

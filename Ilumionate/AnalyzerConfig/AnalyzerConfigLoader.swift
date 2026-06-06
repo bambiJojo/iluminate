@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 enum AnalyzerConfigLoader {
 
@@ -18,7 +19,7 @@ enum AnalyzerConfigLoader {
         // 1. Try trained config in Documents
         if let data = try? Data(contentsOf: documentsConfigURL),
            let config = try? JSONDecoder().decode(AnalyzerConfig.self, from: data) {
-            print("📐 Loaded trained AnalyzerConfig (gen \(config.generation), fitness \(config.fitness))")
+            Log.analysis.info("📐 Loaded trained AnalyzerConfig (gen \(config.generation), fitness \(config.fitness))")
             return config
         }
 
@@ -26,7 +27,7 @@ enum AnalyzerConfigLoader {
         if let url = Bundle.main.url(forResource: "AnalyzerConfig_default", withExtension: "json"),
            let data = try? Data(contentsOf: url),
            let config = try? JSONDecoder().decode(AnalyzerConfig.self, from: data) {
-            print("📐 Loaded default AnalyzerConfig from bundle")
+            Log.analysis.info("📐 Loaded default AnalyzerConfig from bundle")
             return config
         }
 
@@ -45,6 +46,6 @@ enum AnalyzerConfigLoader {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(config)
         try data.write(to: url, options: .atomic)
-        print("💾 Saved AnalyzerConfig (gen \(config.generation)) to \(url.path())")
+        Log.analysis.info("💾 Saved AnalyzerConfig (gen \(config.generation)) to \(url.path())")
     }
 }

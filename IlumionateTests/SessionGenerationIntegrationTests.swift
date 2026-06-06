@@ -32,7 +32,7 @@ struct SessionGenerationIntegrationTests {
             from: AnalysisFixtures.audioFile(duration: 300),
             analysis: AnalysisFixtures.hypnosisAnalysis
         )
-        #expect(!session.light_score.isEmpty)
+        #expect(session.light_score.isEmpty == false)
     }
 
     @Test func hypnosis_firstMomentIsHighFrequency() {
@@ -52,7 +52,7 @@ struct SessionGenerationIntegrationTests {
             from: AnalysisFixtures.audioFile(duration: 300),
             analysis: AnalysisFixtures.meditationAnalysis
         )
-        #expect(!session.light_score.isEmpty)
+        #expect(session.light_score.isEmpty == false)
         let freqs = session.light_score.map(\.frequency)
         #expect(freqs.allSatisfy { $0 >= 0.5 && $0 <= 40.0 },
                 "All frequencies must be within the valid AVE range [0.5, 40] Hz")
@@ -66,7 +66,7 @@ struct SessionGenerationIntegrationTests {
             analysis: AnalysisFixtures.musicAnalysis
         )
         #expect(session.duration_sec == 300)
-        #expect(!session.light_score.isEmpty)
+        #expect(session.light_score.isEmpty == false)
     }
 
     // MARK: - Unknown Content Type
@@ -76,7 +76,7 @@ struct SessionGenerationIntegrationTests {
             from: AnalysisFixtures.audioFile(duration: 300),
             analysis: AnalysisFixtures.unknownAnalysis
         )
-        #expect(!session.light_score.isEmpty,
+        #expect(session.light_score.isEmpty == false,
                 "Unknown content type should produce a fallback session")
     }
 
@@ -116,5 +116,56 @@ struct SessionGenerationIntegrationTests {
         let times = session.light_score.map(\.time)
         #expect(times == times.sorted(),
                 "Light moments must be sorted by time for correct playback")
+    }
+
+    @Test func generatedScoreHasUniqueSyncTimes() {
+        let session = generator.generateSession(
+            from: AnalysisFixtures.audioFile(duration: 300),
+            analysis: AnalysisFixtures.hypnosisAnalysis
+        )
+        let times = session.light_score.map { ($0.time * 1000).rounded() / 1000 }
+        #expect(Set(times).count == times.count,
+                "Post-processing should remove duplicate light moments at the same timestamp")
+    }
+
+    @Test func hypnosisLightScoreMeetsNinetyPercentAlignmentTarget() {
+        let session = generator.generateSession(
+            from: AnalysisFixtures.audioFile(duration: 300),
+            analysis: AnalysisFixtures.hypnosisAnalysis
+        )
+        let report = LightScoreAlignmentScorer().score(
+            session: session,
+            analysis: AnalysisFixtures.hypnosisAnalysis
+        )
+
+        #expect(report.overallScore >= LightScoreAlignmentReport.productionTarget,
+                "Expected >=90% light-score alignment, got \(report.overallScore)")
+    }
+
+    @Test func generatedSessionStoresAlignmentReport() throws {
+        let session = generator.generateSession(
+            from: AnalysisFixtures.audioFile(duration: 300),
+            analysis: AnalysisFixtures.hypnosisAnalysis
+        )
+        let report = try #require(session.alignment_report)
+
+        #expect(report.overallScore >= LightScoreAlignmentReport.productionTarget)
+    }
+
+    @Test func optimizerRepairsWeakHypnosisScoreToTarget() {
+        let weakMoments = [
+            LightMoment(time: 0, frequency: 18, intensity: 0.5, waveform: .sine),
+            LightMoment(time: 300, frequency: 18, intensity: 0.5, waveform: .sine)
+        ]
+
+        let optimized = LightScoreAlignmentOptimizer().optimize(
+            rawMoments: weakMoments,
+            duration: 300,
+            analysis: AnalysisFixtures.hypnosisAnalysis,
+            config: .default
+        )
+
+        #expect(optimized.report.overallScore >= LightScoreAlignmentReport.productionTarget,
+                "Expected optimizer to repair weak score to >=90%, got \(optimized.report.overallScore)")
     }
 }

@@ -60,7 +60,7 @@ struct AnalyzedSessionCard: View {
                 headerRow
                 if let result {
                     PhaseTimelineBar(result: result, duration: file.duration)
-                    if result.contentType == .hypnosis,
+                    if result.contentType.isHypnosisLike,
                        let phases = result.hypnosisMetadata?.phases, !phases.isEmpty {
                         PhaseLegendRow(phases: phases)
                     }
@@ -93,7 +93,7 @@ struct AnalyzedSessionCard: View {
 
     private func subtitleFor(_ result: AnalysisResult?) -> String {
         guard let result else { return "Analyzed" }
-        let typeName = result.contentType.rawValue.capitalized
+        let typeName = result.contentType.displayName
         if !result.recommendedPreset.isEmpty {
             return "\(typeName) · \(result.recommendedPreset)"
         }
@@ -103,7 +103,11 @@ struct AnalyzedSessionCard: View {
     private func iconFor(_ type: AnalysisResult.ContentType?) -> String {
         switch type {
         case .hypnosis:      return "eye.fill"
+        case .eroticHypnosis: return "flame.fill"
+        case .sleepHypnosis: return "moon.zzz.fill"
         case .meditation:    return "leaf.fill"
+        case .brainwave:     return "waveform.path.ecg"
+        case .asmr:          return "ear"
         case .music:         return "music.note"
         case .guidedImagery: return "photo.fill"
         case .affirmations:  return "quote.bubble.fill"
@@ -114,7 +118,11 @@ struct AnalyzedSessionCard: View {
     private func colorFor(_ type: AnalysisResult.ContentType?) -> Color {
         switch type {
         case .hypnosis:      return Color.phaseDeepener
+        case .eroticHypnosis: return Color.roseDeep
+        case .sleepHypnosis: return Color.bwDelta
         case .meditation:    return Color.bwTheta
+        case .brainwave:     return Color.bwGamma
+        case .asmr:          return Color.warmAccent
         case .music:         return Color.bwBeta
         case .guidedImagery: return Color.phaseInduction
         case .affirmations:  return Color.warmAccent
@@ -161,9 +169,13 @@ struct PhaseTimelineBar: View {
         switch phase {
         case .preTalk:      return Color.phaseIntro
         case .induction:    return Color.phaseInduction
+        case .fractionation:return Color.phaseFractionation
         case .deepening:    return Color.phaseDeepener
+        case .confusion:    return Color.mint
         case .therapy:      return Color.phaseDeepener.opacity(0.7)
         case .suggestions:  return Color.phaseSuggestion
+        case .eroticSuggestions: return Color.roseDeep
+        case .brainwashing: return Color.orange
         case .conditioning: return Color.phaseFractionation
         case .emergence:    return Color.phaseAwakening
         case .transitional: return Color.textSecondary.opacity(0.5)
@@ -172,8 +184,18 @@ struct PhaseTimelineBar: View {
 
     private func gradientFor(_ type: AnalysisResult.ContentType) -> [Color] {
         switch type {
+        case .hypnosis:
+            return [Color.phaseInduction.opacity(0.6), Color.phaseDeepener, Color.phaseSuggestion.opacity(0.6)]
+        case .eroticHypnosis:
+            return [Color.roseDeep.opacity(0.7), Color.roseGold.opacity(0.85), Color.roseDeep.opacity(0.7)]
+        case .sleepHypnosis:
+            return [Color.bwDelta.opacity(0.6), Color.phaseDeepener.opacity(0.7), Color.bwDelta.opacity(0.6)]
         case .meditation:
             return [Color.bwAlpha.opacity(0.6), Color.bwTheta, Color.bwAlpha.opacity(0.6)]
+        case .brainwave:
+            return [Color.bwGamma.opacity(0.5), Color.bwBeta.opacity(0.75), Color.bwGamma.opacity(0.5)]
+        case .asmr:
+            return [Color.warmAccent.opacity(0.4), Color.roseGold.opacity(0.6), Color.warmAccent.opacity(0.4)]
         case .music:
             return [Color.bwBeta.opacity(0.5), Color.bwGamma, Color.bwBeta.opacity(0.5)]
         case .guidedImagery:
@@ -221,9 +243,13 @@ struct PhaseLegendRow: View {
         switch phase {
         case .preTalk:      return Color.phaseIntro
         case .induction:    return Color.phaseInduction
+        case .fractionation:return Color.phaseFractionation
         case .deepening:    return Color.phaseDeepener
+        case .confusion:    return Color.mint
         case .therapy:      return Color.phaseDeepener.opacity(0.7)
         case .suggestions:  return Color.phaseSuggestion
+        case .eroticSuggestions: return Color.roseDeep
+        case .brainwashing: return Color.orange
         case .conditioning: return Color.phaseFractionation
         case .emergence:    return Color.phaseAwakening
         case .transitional: return Color.textSecondary.opacity(0.5)
@@ -234,9 +260,13 @@ struct PhaseLegendRow: View {
         switch phase {
         case .preTalk:      return "Intro"
         case .induction:    return "Induction"
+        case .fractionation:return "Fractionate"
         case .deepening:    return "Deepening"
+        case .confusion:    return "Confusion"
         case .therapy:      return "Therapy"
         case .suggestions:  return "Suggestions"
+        case .eroticSuggestions: return "Erotic"
+        case .brainwashing: return "Brainwash"
         case .conditioning: return "Anchoring"
         case .emergence:    return "Awakening"
         case .transitional: return "Transition"

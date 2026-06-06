@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 /// Invisible multi-touch unlock overlay that prevents accidental session exits.
 /// Requires simultaneous touches on 3 specific screen regions to unlock.
@@ -263,7 +264,7 @@ struct TouchPointView: View {
         .ignoresSafeArea()
 
         SessionLockView {
-            print("Unlocked!")
+            Log.ui.info("Unlocked!")
         }
     }
 }

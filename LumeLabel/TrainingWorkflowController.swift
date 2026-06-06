@@ -31,12 +31,57 @@ enum TrainingWorkflowAction: String, Sendable {
 struct TrainingWorkflowSummary: Sendable {
     let action: TrainingWorkflowAction
     let finishedAt: Date
+    let evaluationMode: AnalyzerEvaluationMode
     let matchPercentage: Double
     let exampleCount: Int
     let outputDirectoryURL: URL
     let scorecardURL: URL
     let optimizedConfigURL: URL?
+    let activeConfigURL: URL?
     let reportURL: URL?
+}
+
+struct TrainingWorkflowResumeSnapshot: Sendable {
+    let savedAt: Date
+    let generation: Int?
+    let outputDirectoryURL: URL
+    let checkpointURL: URL
+    let detail: String
+}
+
+struct TrainingWorkflowProgressSnapshot: Sendable {
+    let title: String
+    let message: String
+    let completedUnitCount: Int?
+    let totalUnitCount: Int?
+    let startedAt: Date
+    let updatedAt: Date
+    let isEstimatedTotal: Bool
+
+    var fractionCompleted: Double? {
+        guard let completedUnitCount, let totalUnitCount, totalUnitCount > 0 else { return nil }
+        return min(max(Double(completedUnitCount) / Double(totalUnitCount), 0), 1)
+    }
+
+    var elapsedTime: TimeInterval {
+        max(0, updatedAt.timeIntervalSince(startedAt))
+    }
+
+    var remainingTimeEstimate: TimeInterval? {
+        guard
+            let completedUnitCount,
+            let totalUnitCount,
+            totalUnitCount > 0,
+            completedUnitCount > 0,
+            completedUnitCount < totalUnitCount
+        else {
+            return nil
+        }
+
+        let unitsPerSecond = Double(completedUnitCount) / max(elapsedTime, 0.001)
+        guard unitsPerSecond > 0 else { return nil }
+        return Double(totalUnitCount - completedUnitCount) / unitsPerSecond
+    }
 }
 
 enum TrainingWorkflowState: Sendable {
@@ -45,12 +90,13 @@ enum TrainingWorkflowState: Sendable {
     case transcribing(current: Int, total: Int, filename: String)
     case measuring
     case optimizing(generation: Int?, message: String)
+    case paused(TrainingWorkflowResumeSnapshot)
     case completed(TrainingWorkflowSummary)
     case failed(String)
 
     var isRunning: Bool {
         switch self {
-        case .idle, .completed, .failed:
+        case .idle, .paused, .completed, .failed:
             return false
         case .preflighting, .transcribing, .measuring, .optimizing:
             return true
@@ -69,6 +115,8 @@ enum TrainingWorkflowState: Sendable {
             return "Measuring Analyzer"
         case .optimizing:
             return "Optimizing Analyzer"
+        case .paused:
+            return "Optimization Paused"
         case .completed(let summary):
             return "\(summary.action.title) Complete"
         case .failed:
@@ -91,8 +139,10 @@ enum TrainingWorkflowState: Sendable {
                 return "[Generation \(generation)] \(message)"
             }
             return message
+        case .paused(let snapshot):
+            return snapshot.detail
         case .completed(let summary):
-            return "\(summary.exampleCount) examples evaluated with \(summary.matchPercentage.formatted(.number.precision(.fractionLength(2))))% overall match."
+            return "\(summary.exampleCount) examples evaluated in \(summary.evaluationMode.displayName) mode with \(summary.matchPercentage.formatted(.number.precision(.fractionLength(2))))% overall match."
         case .failed(let message):
             return message
         }
@@ -157,24 +207,52 @@ struct TrainingWorkflowDatasetSnapshot: Sendable {
 protocol TrainingWorkflowEngine: AnyObject {
     func loadDataset() throws -> AnalyzerOptimizationDataset
     func inspectTranscriptCoverage(dataset: AnalyzerOptimizationDataset) throws -> TrainingTranscriptCoverage
+    func loadOptimizationCheckpoint() throws -> AnalyzerOptimizer.Checkpoint?
     func prepareTranscripts(
         for dataset: AnalyzerOptimizationDataset,
         progress: @escaping @MainActor (_ current: Int, _ total: Int, _ filename: String) -> Void
     ) async throws -> TrainingTranscriptCoverage
-    func measure() async throws -> AnalyzerOptimizer.MeasurementResult
+    func measure(
+        onProgress: @escaping @Sendable (AnalyzerOptimizer.Progress) async -> Void
+    ) async throws -> AnalyzerOptimizer.MeasurementResult
     func optimize(
+        resuming: Bool,
         onProgress: @escaping @Sendable (AnalyzerOptimizer.Progress) async -> Void
     ) async throws -> AnalyzerOptimizer.RunResult
+    func requestPause() async
     func cancelCurrentWork() async
 }
 
 @MainActor
 final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
+    static let optimizationEvaluationMode: AnalyzerEvaluationMode = .keywordOnly
+    static let liveEvaluationMode: AnalyzerEvaluationMode = .hybridRuntime
+    static let hybridRefinementPopulationSize = 4
+    static let hybridRefinementGenerationCount = 3
+    static let hybridRefinementEarlyStopPatience = 2
+
+    actor RunControl {
+        private var pauseRequested = false
+
+        func requestPause() {
+            pauseRequested = true
+        }
+
+        func shouldPause() -> Bool {
+            pauseRequested
+        }
+
+        func reset() {
+            pauseRequested = false
+        }
+    }
+
     private let optimizer: AnalyzerOptimizer
     private let audioAnalyzer: AudioAnalyzer
+    private let runControl = RunControl()
 
     init(
-        corpusDirectory: URL = URL.documentsDirectory.appending(path: "TrainingCorpus"),
+        corpusDirectory: URL = TrainingCorpusLocation.defaultURL(),
         outputDirectory: URL = URL.documentsDirectory.appending(path: "TrainingOutput"),
         audioAnalyzer: AudioAnalyzer? = nil
     ) {
@@ -193,6 +271,10 @@ final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
         try TrainingTranscriptCoverageInspector.inspect(dataset: dataset)
     }
 
+    func loadOptimizationCheckpoint() throws -> AnalyzerOptimizer.Checkpoint? {
+        try optimizer.loadCheckpoint()
+    }
+
     func prepareTranscripts(
         for dataset: AnalyzerOptimizationDataset,
         progress: @escaping @MainActor (_ current: Int, _ total: Int, _ filename: String) -> Void
@@ -204,6 +286,8 @@ final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
 
         let cache = AnalyzerTranscriptCache(cacheDirectory: dataset.transcriptCacheDirectory)
         let total = coverage.missingExamples.count
+
+        try await audioAnalyzer.prepareModel()
 
         for (index, example) in coverage.missingExamples.enumerated() {
             try Task.checkCancellation()
@@ -221,26 +305,95 @@ final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
         return try inspectTranscriptCoverage(dataset: dataset)
     }
 
-    func measure() async throws -> AnalyzerOptimizer.MeasurementResult {
+    func measure(
+        onProgress: @escaping @Sendable (AnalyzerOptimizer.Progress) async -> Void
+    ) async throws -> AnalyzerOptimizer.MeasurementResult {
         try Task.checkCancellation()
         return try await optimizer.measure(
             config: AnalyzerConfigLoader.load(),
-            evaluationMode: .keywordOnly
-        )
-    }
-
-    func optimize(
-        onProgress: @escaping @Sendable (AnalyzerOptimizer.Progress) async -> Void
-    ) async throws -> AnalyzerOptimizer.RunResult {
-        try Task.checkCancellation()
-        return try await optimizer.run(
-            seedConfig: AnalyzerConfigLoader.load(),
-            params: .init(evaluationMode: .keywordOnly),
+            evaluationMode: Self.liveEvaluationMode,
             onProgress: onProgress
         )
     }
 
+    func optimize(
+        resuming: Bool,
+        onProgress: @escaping @Sendable (AnalyzerOptimizer.Progress) async -> Void
+    ) async throws -> AnalyzerOptimizer.RunResult {
+        try Task.checkCancellation()
+        await runControl.reset()
+        let checkpoint = resuming ? try optimizer.loadCheckpoint() : nil
+        let checkpointMode = checkpoint?.params.evaluationMode
+        if !resuming {
+            try? optimizer.clearCheckpoint()
+        }
+
+        defer {
+            Task {
+                await runControl.reset()
+            }
+        }
+
+        let pauseRequested: @Sendable () async -> Bool = { [runControl] in
+            await runControl.shouldPause()
+        }
+
+        let keywordParams = AnalyzerOptimizer.Parameters(
+            evaluationMode: Self.optimizationEvaluationMode,
+            publishBestConfigToDocuments: false
+        )
+        let hybridParams = AnalyzerOptimizer.Parameters(
+            populationSize: Self.hybridRefinementPopulationSize,
+            maxGenerations: Self.hybridRefinementGenerationCount,
+            elitismCount: 1,
+            mutationRate: 0.80,
+            earlyStopPatience: Self.hybridRefinementEarlyStopPatience,
+            evaluationMode: Self.liveEvaluationMode,
+            publishBestConfigToDocuments: true
+        )
+
+        if checkpointMode == Self.liveEvaluationMode {
+            return try await optimizer.run(
+                params: hybridParams,
+                resumeFrom: checkpoint,
+                onProgress: onProgress,
+                pauseRequested: pauseRequested
+            )
+        }
+
+        let keywordResult = try await optimizer.run(
+            seedConfig: AnalyzerConfigLoader.load(),
+            params: keywordParams,
+            resumeFrom: checkpointMode == Self.optimizationEvaluationMode ? checkpoint : nil,
+            onProgress: onProgress,
+            pauseRequested: pauseRequested
+        )
+
+        await onProgress(
+            AnalyzerOptimizer.Progress(
+                title: "Optimizing Analyzer",
+                message: "Keyword optimization complete. Starting \(Self.liveEvaluationMode.displayName) refinement.",
+                generation: nil,
+                completedUnitCount: nil,
+                totalUnitCount: nil,
+                isEstimatedTotal: true
+            )
+        )
+
+        return try await optimizer.run(
+            seedConfig: keywordResult.bestConfig,
+            params: hybridParams,
+            onProgress: onProgress,
+            pauseRequested: pauseRequested
+        )
+    }
+
+    func requestPause() async {
+        await runControl.requestPause()
+    }
+
     func cancelCurrentWork() async {
+        await runControl.reset()
         await audioAnalyzer.cancelTranscription()
     }
 }
@@ -301,7 +454,10 @@ final class TrainingWorkflowController {
     var state: TrainingWorkflowState = .idle
     var datasetSnapshot: TrainingWorkflowDatasetSnapshot = .empty
     var lastRunSummary: TrainingWorkflowSummary?
+    var resumableOptimization: TrainingWorkflowResumeSnapshot?
+    var progressSnapshot: TrainingWorkflowProgressSnapshot?
     var isSheetPresented = false
+    var isPauseRequested = false
 
     init(
         engine: (any TrainingWorkflowEngine)? = nil,
@@ -318,8 +474,21 @@ final class TrainingWorkflowController {
             let dataset = try engine.loadDataset()
             let coverage = try engine.inspectTranscriptCoverage(dataset: dataset)
             datasetSnapshot = TrainingWorkflowDatasetSnapshot(dataset: dataset, coverage: coverage)
+            if let checkpoint = try engine.loadOptimizationCheckpoint(),
+               checkpoint.datasetHash == dataset.datasetHash {
+                resumableOptimization = makeResumeSnapshot(from: checkpoint)
+                if case .idle = state {
+                    state = .paused(makeResumeSnapshot(from: checkpoint))
+                }
+            } else {
+                resumableOptimization = nil
+                if case .paused = state {
+                    state = .idle
+                }
+            }
         } catch {
             datasetSnapshot = TrainingWorkflowDatasetSnapshot(errorMessage: error.localizedDescription)
+            resumableOptimization = nil
         }
     }
 
@@ -328,7 +497,25 @@ final class TrainingWorkflowController {
     }
 
     func startOptimize() {
-        start(.optimize)
+        start(.optimize, resume: resumableOptimization != nil)
+    }
+
+    func resumeOptimize() {
+        guard resumableOptimization != nil else {
+            startOptimize()
+            return
+        }
+        start(.optimize, resume: true)
+    }
+
+    func requestPause() async {
+        guard case .optimizing = state else { return }
+        isPauseRequested = true
+        state = .optimizing(
+            generation: currentOptimizationGeneration,
+            message: "Pause requested. Saving after the current generation finishes..."
+        )
+        await engine.requestPause()
     }
 
     func cancel() async {
@@ -340,7 +527,7 @@ final class TrainingWorkflowController {
         await runTask?.value
     }
 
-    private func start(_ action: TrainingWorkflowAction) {
+    private func start(_ action: TrainingWorkflowAction, resume: Bool = false) {
         guard runTask == nil else {
             isSheetPresented = true
             return
@@ -348,15 +535,23 @@ final class TrainingWorkflowController {
 
         isSheetPresented = true
         runTask = Task { @MainActor in
-            await execute(action)
+            await execute(action, resume: resume)
         }
     }
 
-    private func execute(_ action: TrainingWorkflowAction) async {
+    private func execute(_ action: TrainingWorkflowAction, resume: Bool) async {
         defer { runTask = nil }
 
         do {
+            isPauseRequested = false
             state = .preflighting
+            updateProgress(
+                title: state.title,
+                message: state.detail,
+                completedUnitCount: nil,
+                totalUnitCount: nil,
+                isEstimatedTotal: false
+            )
             try Task.checkCancellation()
 
             let dataset = try engine.loadDataset()
@@ -375,6 +570,13 @@ final class TrainingWorkflowController {
                 )
                 let updatedCoverage = try await engine.prepareTranscripts(for: dataset) { current, total, filename in
                     self.state = .transcribing(current: current, total: total, filename: filename)
+                    self.updateProgress(
+                        title: self.state.title,
+                        message: "Working on \(filename)",
+                        completedUnitCount: current,
+                        totalUnitCount: total,
+                        isEstimatedTotal: false
+                    )
                 }
                 datasetSnapshot = TrainingWorkflowDatasetSnapshot(dataset: dataset, coverage: updatedCoverage)
             }
@@ -385,48 +587,156 @@ final class TrainingWorkflowController {
             switch action {
             case .measure:
                 state = .measuring
-                let result = try await engine.measure()
+                updateProgress(
+                    title: state.title,
+                    message: state.detail,
+                    completedUnitCount: nil,
+                    totalUnitCount: nil,
+                    isEstimatedTotal: false
+                )
+                let result = try await engine.measure { progress in
+                    await MainActor.run {
+                        self.updateProgress(from: progress)
+                    }
+                }
                 summary = TrainingWorkflowSummary(
                     action: .measure,
                     finishedAt: now(),
+                    evaluationMode: result.scorecard.evaluationMode,
                     matchPercentage: result.scorecard.matchPercentage,
                     exampleCount: result.scorecard.evaluatedExampleCount,
                     outputDirectoryURL: result.outputURL.deletingLastPathComponent(),
                     scorecardURL: result.outputURL,
                     optimizedConfigURL: nil,
+                    activeConfigURL: nil,
                     reportURL: nil
                 )
             case .optimize:
-                state = .optimizing(generation: nil, message: "Preparing optimizer...")
-                let result = try await engine.optimize { progress in
+                let preparationMessage = resume ? "Resuming optimizer..." : "Preparing optimizer..."
+                state = .optimizing(generation: nil, message: preparationMessage)
+                updateProgress(
+                    title: state.title,
+                    message: state.detail,
+                    completedUnitCount: nil,
+                    totalUnitCount: nil,
+                    isEstimatedTotal: true
+                )
+                let result = try await engine.optimize(resuming: resume) { progress in
                     await MainActor.run {
                         self.state = .optimizing(
                             generation: progress.generation,
                             message: progress.message
                         )
+                        self.updateProgress(from: progress)
                     }
                 }
                 summary = TrainingWorkflowSummary(
                     action: .optimize,
                     finishedAt: now(),
+                    evaluationMode: result.scorecard.evaluationMode,
                     matchPercentage: result.scorecard.matchPercentage,
                     exampleCount: result.scorecard.evaluatedExampleCount,
                     outputDirectoryURL: result.outputFiles.scorecardURL.deletingLastPathComponent(),
                     scorecardURL: result.outputFiles.scorecardURL,
                     optimizedConfigURL: result.outputFiles.configURL,
+                    activeConfigURL: AnalyzerConfigLoader.documentsConfigURL,
                     reportURL: result.outputFiles.reportURL
                 )
             }
 
+            resumableOptimization = nil
             lastRunSummary = summary
+            progressSnapshot = nil
+            isPauseRequested = false
             state = .completed(summary)
             await refreshSnapshot()
+        } catch AnalyzerOptimizerError.paused {
+            progressSnapshot = nil
+            isPauseRequested = false
+            do {
+                if let checkpoint = try engine.loadOptimizationCheckpoint() {
+                    let snapshot = makeResumeSnapshot(from: checkpoint)
+                    resumableOptimization = snapshot
+                    state = .paused(snapshot)
+                } else {
+                    state = .failed("The optimizer paused, but no resumable checkpoint could be found.")
+                }
+            } catch {
+                state = .failed(error.localizedDescription)
+            }
+            await refreshSnapshot()
         } catch is CancellationError {
+            progressSnapshot = nil
+            isPauseRequested = false
             state = .failed("Run cancelled.")
             await refreshSnapshot()
         } catch {
+            progressSnapshot = nil
+            isPauseRequested = false
             state = .failed(error.localizedDescription)
             await refreshSnapshot()
         }
+    }
+
+    private func updateProgress(from progress: AnalyzerOptimizer.Progress) {
+        updateProgress(
+            title: progress.title,
+            message: progress.message,
+            completedUnitCount: progress.completedUnitCount,
+            totalUnitCount: progress.totalUnitCount,
+            isEstimatedTotal: progress.isEstimatedTotal
+        )
+    }
+
+    private func updateProgress(
+        title: String,
+        message: String,
+        completedUnitCount: Int?,
+        totalUnitCount: Int?,
+        isEstimatedTotal: Bool
+    ) {
+        let timestamp = now()
+        let startedAt: Date
+        if let progressSnapshot, progressSnapshot.title == title {
+            startedAt = progressSnapshot.startedAt
+        } else {
+            startedAt = timestamp
+        }
+
+        progressSnapshot = TrainingWorkflowProgressSnapshot(
+            title: title,
+            message: message,
+            completedUnitCount: completedUnitCount,
+            totalUnitCount: totalUnitCount,
+            startedAt: startedAt,
+            updatedAt: timestamp,
+            isEstimatedTotal: isEstimatedTotal
+        )
+    }
+
+    private var currentOptimizationGeneration: Int? {
+        if case .optimizing(let generation, _) = state {
+            return generation
+        }
+        return nil
+    }
+
+    private func makeResumeSnapshot(from checkpoint: AnalyzerOptimizer.Checkpoint) -> TrainingWorkflowResumeSnapshot {
+        let generation = checkpoint.stage == .generationLoop ? checkpoint.nextGeneration : checkpoint.bestGeneration
+        let detail: String
+        switch checkpoint.stage {
+        case .generationLoop:
+            detail = "Saved after generation \(max(generation, 0)). Resume when you're ready."
+        case .finalization:
+            detail = "Saved before final scorecard generation. Resume to finish writing the optimized results."
+        }
+
+        return TrainingWorkflowResumeSnapshot(
+            savedAt: checkpoint.savedAt,
+            generation: generation,
+            outputDirectoryURL: URL.documentsDirectory.appending(path: "TrainingOutput"),
+            checkpointURL: URL.documentsDirectory.appending(path: "TrainingOutput/AnalyzerOptimizationCheckpoint.json"),
+            detail: detail
+        )
     }
 }

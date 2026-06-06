@@ -75,6 +75,75 @@ final class MindMachineModel: Sendable {
             }
         }
     }
+
+    // MARK: - Derived Presentation Helpers
+    // Pure functions of model state, shared by the view's child components.
+
+    var brainwaveZone: String {
+        switch frequency {
+        case 0.5..<4: return "Delta"
+        case 4..<8: return "Theta"
+        case 8..<12: return "Alpha"
+        case 12..<30: return "Beta"
+        default: return "Gamma"
+        }
+    }
+
+    var brainwaveColor: Color {
+        switch frequency {
+        case 0.5..<4: return .bwDelta
+        case 4..<8: return .bwTheta
+        case 8..<12: return .bwAlpha
+        case 12..<30: return .bwBeta
+        default: return .bwGamma
+        }
+    }
+
+    func colorForTemperature(_ temp: Int) -> Color {
+        switch temp {
+        case 2700: return .warmAccent
+        case 3000: return .roseGold
+        case 4000: return .blush
+        case 5000: return .lavender
+        case 6500: return .bwBeta
+        default: return .roseGold
+        }
+    }
+
+    var startSessionButtonTitle: String {
+        switch selectedVisualMode {
+        case .colorPulse:
+            return "Start Color Pulse"
+        case .bilateralFlash:
+            return binauralEnabled ? "Start Bilateral + Binaural" : "Start Bilateral Flash"
+        case .fullScreenFlash:
+            return binauralEnabled ? "Start Flash + Binaural" : "Start Flash Session"
+        }
+    }
+
+    var startSessionDescription: String {
+        switch selectedVisualMode {
+        case .colorPulse:
+            return "Starts full-screen color pulse only"
+        case .bilateralFlash:
+            return binauralEnabled
+                ? "Starts bilateral flashes with matched binaural audio"
+                : "Starts bilateral flashes without audio"
+        case .fullScreenFlash:
+            return binauralEnabled
+                ? "Starts full-screen flashes with matched binaural audio"
+                : "Starts full-screen flashes without audio"
+        }
+    }
+
+    var startSessionIcon: String {
+        switch selectedVisualMode {
+        case .colorPulse:
+            return "paintpalette.fill"
+        default:
+            return binauralEnabled ? "headphones" : "play.fill"
+        }
+    }
 }
 
 struct MindMachineView: View {
@@ -90,18 +159,18 @@ struct MindMachineView: View {
         ScrollView {
             VStack(spacing: TranceSpacing.cardMargin) {
                 // Light Visualization + frequency — always visible
-                lightVisualizationSection
-                frequencyCard
+                LightVisualizationCard(model: model)
+                FrequencyCard(model: model)
 
                 // Primary action
-                startSessionCard
+                StartSessionCard(model: model, showingFlashMode: $showingFlashMode)
 
                 // Advanced controls — hidden by default
-                advancedControlsSection
+                AdvancedControlsSection(model: model, showAdvanced: $showAdvanced)
 
                 // Browse research sessions
                 if !sessions.isEmpty {
-                    browseSessionsLink
+                    BrowseSessionsLink(sessionCount: sessions.count)
                 }
             }
             .padding(.horizontal, TranceSpacing.screen)
@@ -151,76 +220,21 @@ struct MindMachineView: View {
             }
         }
     }
+}
 
-    // MARK: - Advanced Controls (Progressive Disclosure)
+// MARK: - Mind Machine Cards (extracted from computed properties)
 
-    private var advancedControlsSection: some View {
-        GlassCard {
-            DisclosureGroup(isExpanded: $showAdvanced) {
-                VStack(spacing: TranceSpacing.cardMargin) {
-                    Divider().background(Color.glassBorder)
+private struct LightVisualizationCard: View {
+    @Bindable var model: MindMachineModel
 
-                    HStack(spacing: TranceSpacing.cardMargin) {
-                        intensityCard
-                        colorTemperatureCard
-                    }
-
-                    visualModeCard
-                    patternSelectionSection
-                    binauralCard
-                }
-                .padding(.top, TranceSpacing.list)
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.roseGold)
-                    Text("Advanced Controls")
-                        .font(TranceTypography.sectionTitle)
-                        .foregroundStyle(Color.textPrimary)
-                }
-            }
-            .tint(Color.roseGold)
-        }
-    }
-
-    // MARK: - Browse Sessions Link
-
-    private var browseSessionsLink: some View {
-        NavigationLink(value: "browseSessions") {
-            GlassCard {
-                HStack {
-                    Image(systemName: "list.bullet.rectangle")
-                        .font(.title3)
-                        .foregroundStyle(Color.roseGold)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Browse Sessions")
-                            .font(TranceTypography.sectionTitle)
-                            .foregroundStyle(Color.textPrimary)
-                        Text("\(sessions.count) research sessions")
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(Color.textSecondary)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Light Visualization Section
-
-    private var lightVisualizationSection: some View {
+    var body: some View {
         GlassCard(label: "Light Visualization") {
             VStack(spacing: TranceSpacing.list) {
                 PhoneScreenOrb(
                     frequency: model.frequency,
                     intensity: model.intensity,
                     kelvin: model.colorTemperature,
-                    brainwaveColor: brainwaveColor
+                    brainwaveColor: model.brainwaveColor
                 )
                 .frame(width: 120, height: 200)
 
@@ -229,9 +243,9 @@ struct MindMachineView: View {
                         Text("\(model.frequency.formatted(.number.precision(.fractionLength(1)))) Hz")
                             .font(TranceTypography.frequency)
                             .foregroundStyle(.textPrimary)
-                        Text(brainwaveZone)
+                        Text(model.brainwaveZone)
                             .font(TranceTypography.caption)
-                            .foregroundStyle(brainwaveColor)
+                            .foregroundStyle(model.brainwaveColor)
                     }
 
                     Spacer()
@@ -248,30 +262,32 @@ struct MindMachineView: View {
             }
         }
     }
+}
 
-    // MARK: - Frequency Card
+private struct FrequencyCard: View {
+    @Bindable var model: MindMachineModel
 
-    private var frequencyCard: some View {
+    var body: some View {
         GlassCard(label: "Frequency") {
             VStack(spacing: TranceSpacing.list) {
                 Text("\(model.frequency.formatted(.number.precision(.fractionLength(1)))) Hz")
                     .font(TranceTypography.frequency)
                     .foregroundStyle(.textPrimary)
 
-                Text(brainwaveZone)
+                Text(model.brainwaveZone)
                     .font(TranceTypography.caption)
-                    .foregroundStyle(brainwaveColor)
+                    .foregroundStyle(model.brainwaveColor)
                     .padding(.horizontal, TranceSpacing.inner)
                     .padding(.vertical, TranceSpacing.micro)
-                    .background(brainwaveColor.opacity(0.1))
+                    .background(model.brainwaveColor.opacity(0.1))
                     .clipShape(Capsule())
 
                 CustomSlider(
                     value: $model.frequency,
                     range: 0.5...40.0,
                     trackColor: .glassBorder,
-                    thumbColor: brainwaveColor,
-                    activeColor: brainwaveColor
+                    thumbColor: model.brainwaveColor,
+                    activeColor: model.brainwaveColor
                 )
                 .onChange(of: model.frequency) { _, _ in
                     TranceHaptics.shared.selection()
@@ -279,10 +295,12 @@ struct MindMachineView: View {
             }
         }
     }
+}
 
-    // MARK: - Color Temperature Card
+private struct ColorTemperatureCard: View {
+    @Bindable var model: MindMachineModel
 
-    private var colorTemperatureCard: some View {
+    var body: some View {
         GlassCard(label: "Color Temperature") {
             VStack(spacing: TranceSpacing.list) {
                 Text("\(model.colorTemperature)K")
@@ -296,7 +314,7 @@ struct MindMachineView: View {
                             TranceHaptics.shared.selection()
                         } label: {
                             Circle()
-                                .fill(colorForTemperature(temp))
+                                .fill(model.colorForTemperature(temp))
                                 .frame(width: 32, height: 32)
                                 .overlay {
                                     Circle()
@@ -314,18 +332,23 @@ struct MindMachineView: View {
             }
         }
     }
+}
 
-    // MARK: - Intensity Card
+private struct IntensityCard: View {
+    @Bindable var model: MindMachineModel
 
-    private var intensityCard: some View {
+    var body: some View {
         GlassCard(label: "Intensity") {
             IntensityDial(intensity: $model.intensity)
         }
     }
+}
 
-    // MARK: - Start Session Card
+private struct StartSessionCard: View {
+    @Bindable var model: MindMachineModel
+    @Binding var showingFlashMode: Bool
 
-    private var startSessionCard: some View {
+    var body: some View {
         GlassCard {
             VStack(spacing: TranceSpacing.list) {
                 Button(action: {
@@ -333,8 +356,8 @@ struct MindMachineView: View {
                     TranceHaptics.shared.heavy()
                 }) {
                     HStack {
-                        Image(systemName: startSessionIcon)
-                        Text(startSessionButtonTitle)
+                        Image(systemName: model.startSessionIcon)
+                        Text(model.startSessionButtonTitle)
                             .font(TranceTypography.body)
                             .fontWeight(.semibold)
                     }
@@ -358,17 +381,19 @@ struct MindMachineView: View {
                 }
                 .buttonStyle(.plain)
 
-                Text(startSessionDescription)
+                Text(model.startSessionDescription)
                     .font(TranceTypography.caption)
                     .foregroundStyle(.textSecondary)
                     .multilineTextAlignment(.center)
             }
         }
     }
+}
 
-    // MARK: - Pattern Selection Section
+private struct PatternSelectionSection: View {
+    @Bindable var model: MindMachineModel
 
-    private var patternSelectionSection: some View {
+    var body: some View {
         GlassCard(label: "Waveform Pattern") {
             VStack(spacing: TranceSpacing.list) {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -388,10 +413,12 @@ struct MindMachineView: View {
             }
         }
     }
+}
 
-    // MARK: - Visual Mode Card
+private struct VisualModeCard: View {
+    @Bindable var model: MindMachineModel
 
-    private var visualModeCard: some View {
+    var body: some View {
         GlassCard(label: "Visual Mode") {
             HStack(spacing: TranceSpacing.list) {
                 ForEach(MindMachineModel.VisualMode.allCases, id: \.self) { mode in
@@ -406,89 +433,69 @@ struct MindMachineView: View {
             }
         }
     }
+}
 
-    // MARK: - Helper Properties
+private struct AdvancedControlsSection: View {
+    @Bindable var model: MindMachineModel
+    @Binding var showAdvanced: Bool
 
-    private var brainwaveZone: String {
-        switch model.frequency {
-        case 0.5..<4:
-            return "Delta"
-        case 4..<8:
-            return "Theta"
-        case 8..<12:
-            return "Alpha"
-        case 12..<30:
-            return "Beta"
-        default:
-            return "Gamma"
+    var body: some View {
+        GlassCard {
+            DisclosureGroup(isExpanded: $showAdvanced) {
+                VStack(spacing: TranceSpacing.cardMargin) {
+                    Divider().background(Color.glassBorder)
+
+                    HStack(spacing: TranceSpacing.cardMargin) {
+                        IntensityCard(model: model)
+                        ColorTemperatureCard(model: model)
+                    }
+
+                    VisualModeCard(model: model)
+                    PatternSelectionSection(model: model)
+                    BinauralCard(model: model)
+                }
+                .padding(.top, TranceSpacing.list)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.roseGold)
+                    Text("Advanced Controls")
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(Color.textPrimary)
+                }
+            }
+            .tint(Color.roseGold)
         }
     }
+}
 
-    private var brainwaveColor: Color {
-        switch model.frequency {
-        case 0.5..<4:
-            return .bwDelta
-        case 4..<8:
-            return .bwTheta
-        case 8..<12:
-            return .bwAlpha
-        case 12..<30:
-            return .bwBeta
-        default:
-            return .bwGamma
-        }
-    }
+private struct BrowseSessionsLink: View {
+    let sessionCount: Int
 
-    private func colorForTemperature(_ temp: Int) -> Color {
-        switch temp {
-        case 2700:
-            return .warmAccent
-        case 3000:
-            return .roseGold
-        case 4000:
-            return .blush
-        case 5000:
-            return .lavender
-        case 6500:
-            return .bwBeta
-        default:
-            return .roseGold
+    var body: some View {
+        NavigationLink(value: "browseSessions") {
+            GlassCard {
+                HStack {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.title3)
+                        .foregroundStyle(Color.roseGold)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Browse Sessions")
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("\(sessionCount) research sessions")
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+            }
         }
-    }
-
-    private var startSessionButtonTitle: String {
-        switch model.selectedVisualMode {
-        case .colorPulse:
-            return "Start Color Pulse"
-        case .bilateralFlash:
-            return model.binauralEnabled ? "Start Bilateral + Binaural" : "Start Bilateral Flash"
-        case .fullScreenFlash:
-            return model.binauralEnabled ? "Start Flash + Binaural" : "Start Flash Session"
-        }
-    }
-
-    private var startSessionDescription: String {
-        switch model.selectedVisualMode {
-        case .colorPulse:
-            return "Starts full-screen color pulse only"
-        case .bilateralFlash:
-            return model.binauralEnabled
-                ? "Starts bilateral flashes with matched binaural audio"
-                : "Starts bilateral flashes without audio"
-        case .fullScreenFlash:
-            return model.binauralEnabled
-                ? "Starts full-screen flashes with matched binaural audio"
-                : "Starts full-screen flashes without audio"
-        }
-    }
-
-    private var startSessionIcon: String {
-        switch model.selectedVisualMode {
-        case .colorPulse:
-            return "paintpalette.fill"
-        default:
-            return model.binauralEnabled ? "headphones" : "play.fill"
-        }
+        .buttonStyle(.plain)
     }
 }
 

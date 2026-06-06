@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import os
 import FoundationModels
 
 // MARK: - AI Analysis Manager Actor
@@ -35,9 +36,9 @@ actor AIAnalysisManager {
         let availability = model.availability
         switch availability {
         case .available:
-            print("✅ Foundation Models available")
+            Log.analysis.info("✅ Foundation Models available")
         case .unavailable(let reason):
-            print("❌ Foundation Models unavailable: \(reason)")
+            Log.analysis.info("❌ Foundation Models unavailable: \(String(describing: reason))")
         }
         return availability
     }
@@ -110,7 +111,7 @@ actor AIAnalysisManager {
                     to: prompt, generating: AIAnalysisResponse.self
                 ).content
             } catch {
-                print("⚠️ AI attempt 1 failed (\(type(of: error))) — retrying with minimal prompt")
+                Log.analysis.info("⚠️ AI attempt 1 failed (\(type(of: error))) — retrying with minimal prompt")
             }
             // Retry with compact prompt; errors here propagate out of the Task.
             let fallback = LanguageModelSession(instructions: AVESystemPrompt.minimalInstructions)
@@ -127,19 +128,19 @@ actor AIAnalysisManager {
             currentTask = nil
             return response
         } catch {
-            print("❌ All AI attempts exhausted (\(type(of: error))) — using keyword fallback")
+            Log.analysis.info("❌ All AI attempts exhausted (\(type(of: error))) — using keyword fallback")
             currentTask = nil
             return nil
         }
     }
 
     private func logCompletedAnalysis(_ result: AnalysisResult) {
-        print("✅ AI Analysis completed")
-        print("📊 Content type: \(result.contentType.rawValue), Mood: \(result.mood.rawValue)")
-        print("🔬 Frequency range: \(result.suggestedFrequencyRange)")
-        print("🎯 Key moments: \(result.keyMoments.count)")
+        Log.analysis.info("✅ AI Analysis completed")
+        Log.analysis.info("📊 Content type: \(result.contentType.rawValue), Mood: \(result.mood.rawValue)")
+        Log.analysis.info("🔬 Frequency range: \(result.suggestedFrequencyRange)")
+        Log.analysis.info("🎯 Key moments: \(result.keyMoments.count)")
         if let meta = result.hypnosisMetadata {
-            print("🧠 Hypnosis phases: \(meta.phases.count)")
+            Log.analysis.info("🧠 Hypnosis phases: \(meta.phases.count)")
         }
     }
 
@@ -181,7 +182,7 @@ actor AIAnalysisManager {
                 let response = try await lmSession.respond(to: prompt, generating: AIAnalysisResponse.self)
                 return response.content
             } catch is LanguageModelSession.GenerationError {
-                print("⚠️ AI generation error in no-transcription path — retrying with minimal prompt")
+                Log.analysis.info("⚠️ AI generation error in no-transcription path — retrying with minimal prompt")
                 let fallbackSession = LanguageModelSession(instructions: AVESystemPrompt.minimalInstructions)
                 let response = try await fallbackSession.respond(to: prompt, generating: AIAnalysisResponse.self)
                 return response.content
@@ -213,6 +214,20 @@ actor AIAnalysisManager {
         duration: TimeInterval,
         onProgress: @escaping @Sendable (ProgressInfo) async -> Void
     ) async -> [PhaseSegment]? {
+        let keywordAnalyzer = HypnosisPhaseAnalyzer()
+        let transcription = AudioTranscriptionResult(
+            fullText: segments.map(\.text).joined(separator: " "),
+            segments: segments,
+            duration: duration,
+            detectedLanguage: Locale.current.language.languageCode?.identifier ?? "en"
+        )
+        let textTechniqueEvidence = TechniqueDetector().detect(
+            wordTimestamps: wordTimestamps,
+            segments: segments,
+            prosodic: nil,
+            duration: duration
+        )
+
         // Scale ChunkedPhaseAnalyzer's 0–1 fraction into the 0.40–0.70 window
         let chunkProgressHandler: @Sendable (Double) async -> Void = { fraction in
             await onProgress(ProgressInfo(
@@ -226,20 +241,45 @@ actor AIAnalysisManager {
             duration: duration,
             onProgress: chunkProgressHandler
         ), !aiPhases.isEmpty {
-            print("🧠 ChunkedPhaseAnalyzer: \(aiPhases.count) phase segments")
-            return aiPhases
+            await onProgress(ProgressInfo(progress: 0.70, message: "Comparing phase models…"))
+
+            let keywordPhases = keywordAnalyzer.analyze(
+                wordTimestamps: wordTimestamps,
+                transcription: transcription,
+                techniqueDetection: textTechniqueEvidence
+            )
+            let selection = keywordAnalyzer.selectPreferredPhases(
+                keywordPhases: keywordPhases,
+                chunkedPhases: aiPhases,
+                transcription: transcription,
+                techniqueDetection: textTechniqueEvidence
+            )
+
+            if selection.usedChunkedAnalyzer {
+                Log.analysis.info("🧠 ChunkedPhaseAnalyzer selected: \(selection.phases.count) phase segments")
+            } else {
+                Log.analysis.info("🔑 Keyword analyzer selected over chunked output: \(selection.phases.count) phase segments")
+            }
+            return keywordAnalyzer.attachLinguisticMarkers(
+                selection.phases,
+                markers: textTechniqueEvidence.markers
+            )
         }
 
         // Keyword fallback is instant — jump straight to 0.70
         await onProgress(ProgressInfo(progress: 0.70, message: "Using keyword phase analysis…"))
 
-        let keywordPhases = HypnosisPhaseAnalyzer().analyze(
-            segments: segments,
-            duration: duration
+        let keywordPhases = keywordAnalyzer.analyze(
+            wordTimestamps: wordTimestamps,
+            transcription: transcription,
+            techniqueDetection: textTechniqueEvidence
         )
         if !keywordPhases.isEmpty {
-            print("🔑 Keyword fallback: \(keywordPhases.count) phase segments")
-            return keywordPhases
+            Log.analysis.info("🔑 Keyword fallback: \(keywordPhases.count) phase segments")
+            return keywordAnalyzer.attachLinguisticMarkers(
+                keywordPhases,
+                markers: textTechniqueEvidence.markers
+            )
         }
 
         return nil
@@ -352,15 +392,7 @@ private extension AIAnalysisManager {
     }
 
     func parseContentType(_ raw: String) -> AnalysisResult.ContentType {
-        switch raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) {
-        case "hypnosis":                          return .hypnosis
-        case "meditation":                        return .meditation
-        case "music":                             return .music
-        case "guidedimagery", "guided_imagery",
-             "guided imagery":                    return .guidedImagery
-        case "affirmations":                      return .affirmations
-        default:                                  return .unknown
-        }
+        AudioContentType.parse(raw)
     }
 
     /// Keyword-based content type inference from a display name (filename without extension).
@@ -411,8 +443,7 @@ private extension AIAnalysisManager {
         aiPhases: [AIPhaseSegment],
         detectedPhases: [PhaseSegment]?
     ) -> HypnosisMetadata? {
-        let hypnosisTypes: Set<AnalysisResult.ContentType> = [.hypnosis, .eroticHypnosis, .sleepHypnosis]
-        if hypnosisTypes.contains(contentType), let phases = detectedPhases, !phases.isEmpty {
+        if contentType.isHypnosisLike, let phases = detectedPhases, !phases.isEmpty {
             return HypnosisMetadata(
                 phases: phases, inductionStyle: nil,
                 estimatedTranceDeph: estimateTranceDephFromPhases(phases),
@@ -465,7 +496,7 @@ private extension AIAnalysisManager {
                       action: actions[idx % actions.count])
         }
         let hypnosisMetadata: HypnosisMetadata?
-        if contentType == .hypnosis, let phases = detectedPhases, !phases.isEmpty {
+        if contentType.isHypnosisLike, let phases = detectedPhases, !phases.isEmpty {
             hypnosisMetadata = HypnosisMetadata(
                 phases: phases, inductionStyle: nil,
                 estimatedTranceDeph: estimateTranceDephFromPhases(phases),
@@ -474,7 +505,7 @@ private extension AIAnalysisManager {
         } else {
             hypnosisMetadata = nil
         }
-        let presetName = contentType == .unknown ? "Alpha Relaxation" : "\(contentType.rawValue.capitalized) Session"
+        let presetName = contentType == .unknown ? "Alpha Relaxation" : "\(contentType.displayName) Session"
         return AnalysisResult(
             mood: mood,
             energyLevel: contentType == .music ? 0.75 : 0.2,

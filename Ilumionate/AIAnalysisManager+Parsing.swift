@@ -16,7 +16,7 @@ extension AIAnalysisManager {
         contentType: AnalysisResult.ContentType,
         phases: [AIPhaseSegment]
     ) -> HypnosisMetadata? {
-        guard contentType == .hypnosis, !phases.isEmpty else { return nil }
+        guard contentType.isHypnosisLike, !phases.isEmpty else { return nil }
 
         let phaseSegments = phases.compactMap { segment -> PhaseSegment? in
             guard let phase = HypnosisMetadata.Phase(rawValue: segment.phase) else { return nil }
