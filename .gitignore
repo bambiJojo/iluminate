@@ -10,3 +10,7 @@ DerivedData/
 
 # corpus-gen output (generated dev artifacts; not committed)
 Corpus/synthetic/*.json
+
+# SwiftPM build artifacts
+Tools/CorpusGenerator/.build/
+.agents/skills/macos-spm-app-packaging/assets/templates/bootstrap/.build/

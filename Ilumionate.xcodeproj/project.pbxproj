@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		798216E12FD3BC6F00FAD431 /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 798216E02FD3BC6F00FAD431 /* CorpusKit */; };
+		798216E32FD3BC8200FAD431 /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 798216E22FD3BC8200FAD431 /* CorpusKit */; };
+		798216E92FD3BCF700FAD431 /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 798216E82FD3BCF700FAD431 /* CorpusKit */; };
 		7988F3942F4FB6E700E1DC5E /* Playlist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3932F4FB6E700E1DC5E /* Playlist.swift */; };
 		7988F3962F4FB70800E1DC5E /* PlaylistEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */; };
 		7988F3982F4FB79400E1DC5E /* PlaylistLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */; };
@@ -78,18 +81,26 @@
 				AudioFile.swift,
 				ChunkedPhaseAnalyzer.swift,
 				"ChunkedPhaseAnalyzer+Smoothing.swift",
+				CorpusPhaseKnowledge.swift,
 				HypnosisPhaseAnalyzer.swift,
 				HypnosisPhaseKeywords.swift,
+				HypnosisPhraseLexicons.swift,
+				Logging.swift,
 				TechniqueDetector.swift,
+				"TechniqueDetector+AdvancedTechniques.swift",
 				Training/AnalyzerOptimizer/AnalyzerEvaluationEngine.swift,
 				Training/AnalyzerOptimizer/AnalyzerMetrics.swift,
 				Training/AnalyzerOptimizer/AnalyzerMutationEngine.swift,
 				Training/AnalyzerOptimizer/AnalyzerOptimizationDataset.swift,
 				Training/AnalyzerOptimizer/AnalyzerOptimizationReport.swift,
 				Training/AnalyzerOptimizer/AnalyzerOptimizer.swift,
+				"Training/AnalyzerOptimizer/AnalyzerOptimizer+Evaluation.swift",
 				Training/AnalyzerOptimizer/AnalyzerTranscriptCache.swift,
 				Training/LabeledFile.swift,
-				TrancePhase.swift,
+				Training/TrainingCorpusManager.swift,
+				TranscriptFeatureAnalyzer.swift,
+				TranscriptModels.swift,
+				WordTimestamp.swift,
 			);
 			target = B3DBB0FD4D277A17D1ADB4CD /* AnalyzerImprover */;
 		};
@@ -102,18 +113,24 @@
 				AudioContentType.swift,
 				ChunkedPhaseAnalyzer.swift,
 				"ChunkedPhaseAnalyzer+Smoothing.swift",
+				CorpusPhaseKnowledge.swift,
 				HypnosisPhaseAnalyzer.swift,
 				HypnosisPhaseKeywords.swift,
+				HypnosisPhraseLexicons.swift,
+				Logging.swift,
 				Training/AnalyzerOptimizer/AnalyzerEvaluationEngine.swift,
 				Training/AnalyzerOptimizer/AnalyzerMetrics.swift,
 				Training/AnalyzerOptimizer/AnalyzerMutationEngine.swift,
 				Training/AnalyzerOptimizer/AnalyzerOptimizationDataset.swift,
 				Training/AnalyzerOptimizer/AnalyzerOptimizationReport.swift,
 				Training/AnalyzerOptimizer/AnalyzerOptimizer.swift,
+				"Training/AnalyzerOptimizer/AnalyzerOptimizer+Evaluation.swift",
 				Training/AnalyzerOptimizer/AnalyzerTranscriptCache.swift,
 				Training/LabeledFile.swift,
 				Training/TrainingCorpusManager.swift,
-				TrancePhase.swift,
+				TranscriptFeatureAnalyzer.swift,
+				TranscriptModels.swift,
+				WordTimestamp.swift,
 			);
 			target = 79999FC32F7B8A4700DC1F2D /* LumeLabel */;
 		};
@@ -174,6 +191,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				79D548392F4F723B00B3B07F /* WhisperKit in Frameworks */,
+				798216E12FD3BC6F00FAD431 /* CorpusKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -181,6 +199,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				798216E92FD3BCF700FAD431 /* CorpusKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -196,6 +215,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				79B4A6D02FF1000100B8A0A1 /* WhisperKit in Frameworks */,
+				798216E32FD3BC8200FAD431 /* CorpusKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -280,6 +300,7 @@
 			name = Ilumionate;
 			packageProductDependencies = (
 				79D548382F4F723B00B3B07F /* WhisperKit */,
+				798216E02FD3BC6F00FAD431 /* CorpusKit */,
 			);
 			productName = Ilumionate;
 			productReference = 795944032F38010900907305 /* Ilumionate.app */;
@@ -303,6 +324,7 @@
 			);
 			name = IlumionateTests;
 			packageProductDependencies = (
+				798216E82FD3BCF700FAD431 /* CorpusKit */,
 			);
 			productName = IlumionateTests;
 			productReference = 795944102F38010B00907305 /* IlumionateTests.xctest */;
@@ -349,6 +371,7 @@
 			name = LumeLabel;
 			packageProductDependencies = (
 				79D548382F4F723B00B3B07F /* WhisperKit */,
+				798216E22FD3BC8200FAD431 /* CorpusKit */,
 			);
 			productName = LumeLabel;
 			productReference = 79999FC42F7B8A4700DC1F2D /* LumeLabel.app */;
@@ -470,6 +493,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				79D548362F4F6FF400B3B07F /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				79491DB82FD0A582005625A7 /* XCLocalSwiftPackageReference "Tools/CorpusGenerator" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 795944042F38010900907305 /* Products */;
@@ -916,10 +940,10 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_USER_SELECTED_FILES = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -950,10 +974,10 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_USER_SELECTED_FILES = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1178,18 +1202,40 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		79491DB82FD0A582005625A7 /* XCLocalSwiftPackageReference "Tools/CorpusGenerator" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Tools/CorpusGenerator;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		79D548362F4F6FF400B3B07F /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = revision;
+				revision = 2870b46b92ebd522c094e4c2da77ba3c415138d8;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		798216E02FD3BC6F00FAD431 /* CorpusKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 79491DB82FD0A582005625A7 /* XCLocalSwiftPackageReference "Tools/CorpusGenerator" */;
+			productName = CorpusKit;
+		};
+		798216E22FD3BC8200FAD431 /* CorpusKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 79491DB82FD0A582005625A7 /* XCLocalSwiftPackageReference "Tools/CorpusGenerator" */;
+			productName = CorpusKit;
+		};
+		798216E82FD3BCF700FAD431 /* CorpusKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 79491DB82FD0A582005625A7 /* XCLocalSwiftPackageReference "Tools/CorpusGenerator" */;
+			productName = CorpusKit;
+		};
 		79D548382F4F723B00B3B07F /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 79D548362F4F6FF400B3B07F /* XCRemoteSwiftPackageReference "WhisperKit" */;
