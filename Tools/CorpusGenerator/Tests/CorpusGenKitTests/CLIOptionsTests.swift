@@ -41,4 +41,20 @@ struct CLIOptionsTests {
         let o = try CLIOptions(arguments: ["--help"])
         #expect(o.showHelp)
     }
+
+    @Test("--import-real sets import mode; --from overrides the source dir")
+    func importReal() throws {
+        let o = try CLIOptions(arguments: ["--import-real", "--from", "/tmp/tc"])
+        #expect(o.importReal)
+        #expect(o.fromDirectory.path == "/tmp/tc")
+        #expect(o.outExplicit == false)   // out left at default so main picks Corpus/real
+    }
+
+    @Test("Default --from is ~/Documents/TrainingCorpus; --out sets outExplicit")
+    func importDefaults() throws {
+        let o = try CLIOptions(arguments: ["--import-real", "--out", "/tmp/real"])
+        #expect(o.fromDirectory.lastPathComponent == "TrainingCorpus")
+        #expect(o.outExplicit)
+        #expect(o.outDirectory.path == "/tmp/real")
+    }
 }

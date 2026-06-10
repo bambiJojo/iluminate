@@ -22,6 +22,29 @@ func run() async -> Int32 {
         return 0
     }
 
+    // Import mode: convert LumeLabel labels into Corpus/real (no generation).
+    if options.importReal {
+        let outDir = options.outExplicit
+            ? options.outDirectory
+            : CorpusLoader.corpusRoot.appending(path: "real")
+        do {
+            let written = try RealCorpusImporter().importAll(
+                trainingCorpusDir: options.fromDirectory, into: outDir
+            )
+            if written.isEmpty {
+                print("No labeled files found under \(options.fromDirectory.path).")
+            }
+            for url in written {
+                print("Imported \(url.lastPathComponent)")
+            }
+            print("Imported \(written.count) real case(s) into \(outDir.path).")
+            return 0
+        } catch {
+            FileHandle.standardError.write(Data("Import failed: \(error)\n".utf8))
+            return 1
+        }
+    }
+
     // Seeds (optional). Default seed dir = ~/Documents/TrainingCorpus.
     let seedDir = options.seedsDirectory
         ?? URL.homeDirectory.appending(path: "Documents").appending(path: "TrainingCorpus")

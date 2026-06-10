@@ -27,8 +27,15 @@ public struct CLIOptions: Sendable {
     public var ambiguity: CorpusAmbiguityLevel = .low
     public var count = 1
     public var outDirectory: URL
+    public var outExplicit = false
     public var seedsDirectory: URL?
     public var model = CLIOptions.defaultModel
+
+    /// When set, import LumeLabel labels into the corpus instead of generating.
+    public var importReal = false
+    /// Source TrainingCorpus directory for `--import-real`
+    /// (default ~/Documents/TrainingCorpus).
+    public var fromDirectory: URL = .documentsDirectory.appending(path: "TrainingCorpus")
 
     public init(arguments: [String]) throws {
         // Default out = <repo>/Corpus/synthetic
@@ -55,9 +62,13 @@ public struct CLIOptions: Sendable {
                 let v = try value(arg)
                 guard let n = Int(v), n > 0 else { throw CLIOptionsError.badCount(v) }
                 count = n
-            case "--out": outDirectory = URL(filePath: try value(arg))
+            case "--out":
+                outDirectory = URL(filePath: try value(arg))
+                outExplicit = true
             case "--seeds": seedsDirectory = URL(filePath: try value(arg))
             case "--model": model = try value(arg)
+            case "--import-real": importReal = true
+            case "--from": fromDirectory = URL(filePath: try value(arg))
             default: break
             }
             i += 1
@@ -70,9 +81,13 @@ public struct CLIOptions: Sendable {
       --dry-run           Use the offline stub responder (no network/API key)
       --ambiguity LEVEL   low | medium | high   (default low)
       --count N           Number of cases to generate (default 1)
-      --out DIR           Output directory (default <repo>/Corpus/synthetic)
+      --out DIR           Output directory (default <repo>/Corpus/synthetic,
+                          or <repo>/Corpus/real with --import-real)
       --seeds DIR         LumeLabel TrainingCorpus dir for few-shot seeds (optional)
       --model NAME        Anthropic model id (default \(defaultModel))
+      --import-real       Import LumeLabel labels into Corpus/real (no generation)
+      --from DIR          Source TrainingCorpus for --import-real
+                          (default ~/Documents/TrainingCorpus)
       --help              Show this help
 
     Real generation reads ANTHROPIC_API_KEY from the environment.
