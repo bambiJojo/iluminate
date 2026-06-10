@@ -58,12 +58,16 @@ struct KeywordPipelineEvaluationTests {
         }
 
         let report = eval.report(scores: scores)
-        // Observed baseline 2026-05-31 (iPhone 17 Pro sim): overallAgreement 0.40,
-        // meanBoundaryError 12.0s, over 2 truth-bearing low-ambiguity fixtures.
-        // This is the number Phase-1 tuning must raise; floor set at the observed
-        // value to catch regressions without overstating current quality.
-        #expect(report.overallAgreement >= 0.40,
-                "overall agreement \(report.overallAgreement); by-ambiguity \(report.agreementByAmbiguity); mean boundary err \(report.meanBoundaryError); cases \(scores.count)")
+        // Real-corpus baseline 2026-06-08 (iPhone 17 Pro sim, OS 26.5), 4 truth-bearing
+        // cases (2 fixtures + 2 real imports): overallAgreement 0.296
+        // (fixtures 0.467 — above the original 2026-05-31 0.40 baseline; real 0.126).
+        // Reflects two analyzer fixes: denoise-before-ordering (no ratchet erasure) and
+        // rejecting structurally-invalid proposals in selectBestAdaptedSegments.
+        // Real cases stay weak (keyword primary is poor on long sessions — the proposal
+        // generator / learned-model work is the next lever). Floor set just below the
+        // observed value to guard against regression; raising it is the Phase-1 goal.
+        #expect(report.overallAgreement >= 0.28,
+                "overall agreement \(report.overallAgreement); by-source \(report.agreementBySource); by-ambiguity \(report.agreementByAmbiguity); mean boundary err \(report.meanBoundaryError); cases \(scores.count)")
     }
 
     // MARK: - Structural validity

@@ -113,14 +113,19 @@ struct HypnosisPhaseAnalyzer {
             bucketCount: bucketCount
         )
         mergeTechniqueEvidence(techniqueEvidence, into: &hitMap)
-        var timeline    = resolveTimeline(hitMap: hitMap, bucketCount: bucketCount)
+        var timeline = resolveTimeline(hitMap: hitMap, bucketCount: bucketCount)
 
-        timeline = enforcePhaseOrdering(timeline: timeline)
+        // Denoise BEFORE enforcing phase order. enforcePhaseOrdering is a monotonic
+        // ratchet: a single transient high-order blip (e.g. a 4s therapy spike) would
+        // otherwise advance the floor and overwrite every following lower-order second,
+        // erasing a long, correctly-detected phase such as deepening. Smoothing and
+        // short-run collapse remove those blips first so ordering acts on clean runs.
         timeline = majorityVoteSmooth(timeline: timeline, windowSize: config.smoothingWindowSize)
         timeline = collapseShortRuns(
             timeline,
             minRun: max(config.minimumPhaseDurationSeconds, Int(duration * config.collapseThresholdFraction))
         )
+        timeline = enforcePhaseOrdering(timeline: timeline)
 
         let phaseSegments = consolidatePhaseSegments(timeline: timeline, duration: duration)
         return phaseSegments
@@ -1165,6 +1170,13 @@ struct HypnosisPhaseAnalyzer {
             return (primarySegments, primaryAnalysis)
         }
 
+        // A proposal with overlapping spans is structurally invalid (a timeline
+        // cannot be in two phases at once). It must never win over the primary on
+        // an intrinsic quality score — reject it outright and keep the primary.
+        guard Self.segmentsAreNonOverlapping(proposalSegments) else {
+            return (primarySegments, primaryAnalysis)
+        }
+
         let proposalAnalysis = transcriptAnalyzer.analyze(
             transcription: transcription,
             phases: proposalSegments
@@ -1191,6 +1203,16 @@ struct HypnosisPhaseAnalyzer {
         }
 
         return (primarySegments, primaryAnalysis)
+    }
+
+    /// True when no two segments overlap in time (sorted by start). A small
+    /// epsilon tolerates floating-point boundary touch-points.
+    static func segmentsAreNonOverlapping(_ segments: [PhaseSegment]) -> Bool {
+        let sorted = segments.sorted { $0.startTime < $1.startTime }
+        for (lhs, rhs) in zip(sorted, sorted.dropFirst()) where lhs.endTime > rhs.startTime + 0.001 {
+            return false
+        }
+        return true
     }
 
     private func mergeAdjacentPhaseSegments(
