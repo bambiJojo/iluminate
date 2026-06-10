@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text Trance — Design Spec</title>
+<style>
+  :root {
+    --bg: #14101a; --surface: #1d1626; --surface2: #251b30;
+    --text: #ece2ea; --muted: #9d8fa0; --accent: #e082b4; --green: #7ec8a0;
+    --border: rgba(255,255,255,0.1);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 -apple-system, 'Helvetica Neue', sans-serif;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 48px 28px 96px; }
+  header h1 { font-size: 2.1rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header .sub { color: var(--muted); }
+  .badge {
+    display: inline-block; padding: 3px 12px; border-radius: 999px; font-size: .78rem;
+    background: rgba(126,200,160,0.15); border: 1px solid rgba(126,200,160,0.45); color: var(--green);
+    margin-top: 10px;
+  }
+  nav {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 22px; margin: 28px 0;
+  }
+  nav b { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  nav a { color: var(--accent); text-decoration: none; display: inline-block; margin: 3px 14px 3px 0; font-size: .92rem; }
+  nav a:hover { text-decoration: underline; }
+  details {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    margin: 14px 0; overflow: hidden;
+  }
+  details summary {
+    cursor: pointer; padding: 16px 22px; font-weight: 600; font-size: 1.05rem;
+    list-style: none; display: flex; align-items: center; gap: 10px;
+  }
+  details summary::before { content: '▸'; color: var(--accent); transition: transform .15s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .body { padding: 0 22px 20px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; }
+  code, pre {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: .86em;
+    background: var(--surface2); border-radius: 6px;
+  }
+  code { padding: 2px 6px; }
+  pre { padding: 16px 18px; overflow-x: auto; border: 1px solid var(--border); line-height: 1.55; }
+  pre code { background: none; padding: 0; }
+  .new { color: var(--accent); font-weight: 600; }
+  .old { color: var(--green); font-weight: 600; }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; }
+  .note {
+    border-left: 3px solid var(--accent); padding: 10px 16px; margin: 12px 0;
+    background: rgba(224,130,180,0.07); border-radius: 0 10px 10px 0; font-size: .94rem;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Text Trance</h1>
+  <div class="sub">RSVP trance-reading feature &middot; LumeSync &middot; 2026-06-10</div>
+  <span class="badge">Design approved — pending implementation plan</span>
+</header>
+
+<nav>
+  <b>Contents</b><br>
+  <a href="#concept">Concept</a><a href="#decisions">Decisions</a><a href="#arch">Architecture</a>
+  <a href="#schema">Script Format</a><a href="#flow">Data Flow</a><a href="#ui">UI Flow</a>
+  <a href="#safety">Errors &amp; Safety</a><a href="#testing">Testing</a><a href="#milestones">Milestones</a>
+</nav>
+
+<details open id="concept">
+<summary>1 · Concept</summary>
+<div class="body">
+<p>A dedicated <strong>Text Trance</strong> screen where AI-generated hypnosis scripts flash word-by-word at a fixed point (RSVP), layered over the existing light entrainment and binaural beats. Reading is the induction vehicle: attention fixates on the word stream while light and sound entrain underneath. Inspired by Readrrr's focus-reading, recast as a trance modality.</p>
+<table>
+  <tr><th>Layer</th><th>Status</th><th>Source</th></tr>
+  <tr><td>Light pulse</td><td class="old">exists</td><td>FlashController (Mind Machine)</td></tr>
+  <tr><td>Binaural beats</td><td class="old">exists</td><td>Mind Machine binaural engine</td></tr>
+  <tr><td>Reading text</td><td class="new">NEW</td><td>This feature</td></tr>
+</table>
+<p>User combos: reading only &middot; beats only &middot; reading + beats — light available under all.</p>
+</div>
+</details>
+
+<details id="decisions">
+<summary>2 · Decisions Log</summary>
+<div class="body">
+<table>
+  <tr><th>Question</th><th>Decision</th></tr>
+  <tr><td>Text/audio relationship</td><td>Composable layers, picked per session</td></tr>
+  <tr><td>Script sourcing</td><td><strong>Hybrid</strong> — vetted bundled library v1; live AI generation later (greyed-out UI placeholder in v1)</td></tr>
+  <tr><td>Presentation</td><td><strong>RSVP word stream</strong> base + experimental, settings-gated <strong>entrainment-lock</strong> mode</td></tr>
+  <tr><td>Focus anchoring</td><td><strong>ORP pivot letter</strong> at fixed anchor, accent-tinted; tick marks fade as session deepens</td></tr>
+  <tr><td>Placement</td><td>Dedicated <strong>Text Trance</strong> screen</td></tr>
+  <tr><td>Session arc</td><td>Per-session choice: <code>fullText</code> or <code>handoff</code></td></tr>
+  <tr><td>v1 themes</td><td>Relaxation, sleep, focus, self-suggestion (strictest review)</td></tr>
+  <tr><td>Architecture</td><td>Structured script + <strong>runtime pacing engine</strong></td></tr>
+</table>
+</div>
+</details>
+
+<details id="arch">
+<summary>3 · Architecture</summary>
+<div class="body">
+<pre><code>TranceScript (model, JSON)          CorpusGenerator (tool, existing)
+        │  loads/validates                │ gains script-output mode
+        ▼                                 ▼
+TranceScriptLibrary (loader)  ◄── bundled resources + (later) AI output
+        │  script + options (arc, layers, speed)
+        ▼
+TextTranceSession (@Observable @MainActor coordinator)
+        ├──► TextPacingEngine (new, pure logic)
+        ├──► FlashController (existing: bg pulse, post-handoff, clock)
+        └──► Binaural engine (existing, optional)
+        ▼
+TextTranceView + Trance UI kit + photosensitivity safety</code></pre>
+<div class="note"><strong>Key boundary:</strong> TextPacingEngine knows nothing about UI or script content. Input: (words, phase, settings, clock) → output: timed word events. Fully unit-testable — same philosophy as the light engine.</div>
+<ul>
+  <li><span class="new">TranceScript</span> — Codable model: metadata + ordered phase segments.</li>
+  <li><span class="new">TranceScriptLibrary</span> — discovers/validates bundled scripts (LightScoreReader posture: bad files excluded, never crash).</li>
+  <li><span class="new">TextTranceSession</span> — phase progression, arc handling, layer lifecycle, emergence signaling.</li>
+  <li><span class="new">TextPacingEngine</span> — word timing = baseWPM (per phase) × deepening curve × user speed; ~2.5× hold at sentence punctuation; ORP pivot index; lock-mode opacity modulation (pivot letter never flickers).</li>
+  <li><span class="new">TextTranceView</span> — library → setup → control-free player (tap-and-hold to end).</li>
+</ul>
+</div>
+</details>
+
+<details id="schema">
+<summary>4 · Script JSON Format</summary>
+<div class="body">
+<pre><code>{
+  "schemaVersion": 1,
+  "id": "deep-drift-01",
+  "title": "Deep Drift",
+  "theme": "relaxation",
+  "supportedArcs": ["fullText", "handoff"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "corpus-gen 1.4", "reviewed": true },
+  "segments": [
+    { "phase": "induction",  "text": "Allow your eyes to rest softly…",   "pacing": { "baseWPM": 140 } },
+    { "phase": "deepening",  "text": "Deeper and deeper with every word…", "pacing": { "baseWPM": 100 } },
+    { "phase": "suggestion", "text": "You find calm easily now…",          "pacing": { "baseWPM": 85 } },
+    { "phase": "emergence",  "text": "In a moment you will return…",       "pacing": { "baseWPM": 130 }, "arcs": ["fullText"] },
+    { "phase": "handoffCue", "text": "And now… let your eyes gently close…", "arcs": ["handoff"] }
+  ]
+}</code></pre>
+<ul>
+  <li>Phases reuse <code>HypnosisMetadata.Phase</code> + new <code>handoffCue</code>.</li>
+  <li><code>arcs:</code> makes segments arc-conditional — one file serves both arcs.</li>
+  <li><code>baseWPM</code> is a hint; engine multiplies by curve and user speed.</li>
+  <li><code>source.reviewed</code> → "reviewed" badge in the library.</li>
+</ul>
+</div>
+</details>
+
+<details id="flow">
+<summary>5 · Runtime Data Flow</summary>
+<div class="body">
+<ol>
+  <li>User picks script + options; session filters segments by arc, tokenizes, starts layers.</li>
+  <li>Engine emits <code>(word, pivotIndex, displayDuration, opacityCurve)</code> events.</li>
+  <li>View aligns pivot letter to fixed anchor; background pulse via FlashController at low intensity.</li>
+  <li><strong>Handoff:</strong> after cue — text fades, light ramps to target frequency, binaural continues, timer runs remainder; emergence = frequency ramp + optional chime, no text.</li>
+  <li><strong>Sleep + handoff:</strong> no emergence — light and audio fade out, session self-terminates.</li>
+</ol>
+<div class="note"><strong>ORP rule:</strong> 1-letter → 1st; 2–5 → 2nd; 6–9 → 3rd; 10+ → 4th. Pivot tinted with Trance accent.</div>
+</div>
+</details>
+
+<details id="ui">
+<summary>6 · UI Flow</summary>
+<div class="body">
+<ol>
+  <li><strong>Library</strong> — theme chips (All/Relax/Sleep/Focus/Suggest); cards: title, theme, read time, arc chips, reviewed badge; greyed-out "Generate new script…" card reserves the AI milestone.</li>
+  <li><strong>Setup</strong> — arc control ("Read → eyes close" / "Read everything"); toggles: light pulse, binaural (headphones note), entrainment-lock (experimental); speed: Slow/Natural/Brisk; post-handoff duration + emergence style.</li>
+  <li><strong>Player</strong> — no visible controls; fixed-point ORP word over radial pulsing field; thin phase rail; tap-and-hold to end; tick marks fade after induction.</li>
+</ol>
+</div>
+</details>
+
+<details id="safety">
+<summary>7 · Error Handling &amp; Safety</summary>
+<div class="body">
+<ul>
+  <li>Malformed scripts excluded at load with a log — never crash the picker.</li>
+  <li>Unsupported arc simply isn't offered in setup.</li>
+  <li>Binaural failure (no headphone route): continue without, quiet notice.</li>
+  <li>Entrainment-lock gated behind photosensitivity validation; settings-gated until comfort-tested.</li>
+  <li>All bundled scripts human-reviewed; self-suggestion themes strictest.</li>
+  <li><code>fullText</code> segments must contain no eyes-closure phrasing — enforced by regression test.</li>
+</ul>
+</div>
+</details>
+
+<details id="testing">
+<summary>8 · Testing Strategy</summary>
+<div class="body">
+<table>
+  <tr><th>Target</th><th>Approach</th></tr>
+  <tr><td>TextPacingEngine</td><td>Unit: timing math, deepening curve, punctuation holds, arc filtering, ORP indexing, lock-mode alignment vs mock clock</td></tr>
+  <tr><td>TranceScriptLibrary</td><td>Schema validation, malformed-file exclusion, filtering</td></tr>
+  <tr><td>TextTranceSession</td><td>Integration: arc transitions with accelerated time</td></tr>
+  <tr><td>Bundled scripts</td><td>Regression: parse, phase coverage, no eyes-closure in fullText, sane WPM</td></tr>
+  <tr><td>Entrainment-lock</td><td>Photosensitivity validation before activation</td></tr>
+</table>
+</div>
+</details>
+
+<details id="milestones">
+<summary>9 · Milestones &amp; Out of Scope</summary>
+<div class="body">
+<ol>
+  <li><strong>M1 — Core engine + bundled library:</strong> schema, loader, pacing engine (RSVP + ORP), screens, both arcs, layer integration, hand-reviewed scripts (all four themes via CorpusGenerator offline).</li>
+  <li><strong>M2 — Entrainment-lock:</strong> settings-gated, safety-validated, comfort testing.</li>
+  <li><strong>M3 — AI generation:</strong> in-app generation, personalization, un-grey the library card; generated scripts marked <code>reviewed: false</code>.</li>
+</ol>
+<p><strong>Out of scope:</strong> LightSession schema integration; narrated-audio caption sync (WordTimestamp "trance karaoke"); non-English scripts.</p>
+</div>
+</details>
+
+</div>
+</body>
+</html>
