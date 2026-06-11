@@ -57,4 +57,24 @@ struct PhaseDatasetExportTests {
         let count = try PhaseDatasetExporter().export(cases: [kase], to: url)
         #expect(count == 20)
     }
+
+    @Test("Generates phase-features.csv from the on-disk labeled corpus")
+    func generatesFromCorpus() throws {
+        let cases = try (CorpusLoader.load(subdirectory: "fixtures")
+                       + CorpusLoader.load(subdirectory: "synthetic")
+                       + CorpusLoader.load(subdirectory: "real"))
+            .filter { !$0.truth.isEmpty }
+        try #require(!cases.isEmpty, "no truth-bearing corpus cases")
+
+        let out = CorpusLoader.corpusRoot.appending(path: "dataset").appending(path: "phase-features.csv")
+        let rows = try PhaseDatasetExporter().export(cases: cases, to: out)
+        #expect(rows > 0)
+
+        let text = try String(contentsOf: out, encoding: .utf8)
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        let expectedColumns = lines.first!.split(separator: ",", omittingEmptySubsequences: false).count
+        for line in lines.dropFirst() {
+            #expect(line.split(separator: ",", omittingEmptySubsequences: false).count == expectedColumns)
+        }
+    }
 }
