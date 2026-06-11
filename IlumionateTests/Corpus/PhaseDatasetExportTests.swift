@@ -1,0 +1,60 @@
+//  PhaseDatasetExportTests.swift
+//  IlumionateTests
+//
+//  TDD tests for PhaseDatasetExporter (Task 4 of phase-eval-harness plan).
+//
+import Testing
+import Foundation
+import CorpusKit
+@testable import Ilumionate
+
+@MainActor
+struct PhaseDatasetExportTests {
+
+    private func makeCase() -> CorpusCase {
+        CorpusCase(
+            id: "t1", source: .synthetic, boundaryMode: .exact, ambiguityLevel: .low,
+            duration: 60,
+            segments: [
+                CorpusSegment(text: "close your eyes and relax", timestamp: 0, duration: 30, confidence: 1),
+                CorpusSegment(text: "going deeper and deeper", timestamp: 30, duration: 30, confidence: 1),
+            ],
+            truth: [
+                PhaseTruthSpan(phase: .induction, start: 0, end: 30),
+                PhaseTruthSpan(phase: .deepening, start: 30, end: 60),
+            ]
+        )
+    }
+
+    @Test("Exports a header plus one row per labeled second")
+    func exportsRowsForLabeledSeconds() throws {
+        let url = URL.temporaryDirectory.appending(path: "ds-\(UUID().uuidString).csv")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let count = try PhaseDatasetExporter().export(cases: [makeCase()], to: url)
+        #expect(count == 60)
+
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        #expect(lines.count == 61)
+        #expect(lines.first?.hasPrefix("case_id,second,") == true)
+        #expect(lines.first?.hasSuffix(",label") == true)
+        for line in lines.dropFirst() {
+            let label = line.split(separator: ",").last.map(String.init) ?? ""
+            #expect(TrancePhase(rawValue: label) != nil, "bad label: \(label)")
+        }
+    }
+
+    @Test("Gray-zone seconds are skipped")
+    func skipsGrayZones() throws {
+        let kase = CorpusCase(
+            id: "g1", source: .real, boundaryMode: .anchored, ambiguityLevel: .unspecified,
+            duration: 60, segments: makeCase().segments,
+            truth: [PhaseTruthSpan(phase: .induction, start: 0, end: 20)]
+        )
+        let url = URL.temporaryDirectory.appending(path: "ds-\(UUID().uuidString).csv")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let count = try PhaseDatasetExporter().export(cases: [kase], to: url)
+        #expect(count == 20)
+    }
+}
