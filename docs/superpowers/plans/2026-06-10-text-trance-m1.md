@@ -1819,6 +1819,81 @@ git commit -m "chore(text-trance): M1 verification pass"
 **Type consistency:** `TextTranceSessionSettings` (session-level: includes layer toggles, beat/handoff) vs `TextPacingSettings` (pacing-only: arc + speed) are distinct by design; the session derives the latter from the former in `begin()`. `ScriptArc`, `TrancePhase`, `PacedWord`, `SegmentPacing` names are consistent across Tasks 1, 4, 8. `light.start()/stop()` and `audio.start()/stop()/syncBeatFrequency(to:)` match the protocols (Task 7) and existing engine APIs.
 
 **Outstanding execution-time confirmations** (call out, don't block):
-1. Simulator name — adjust `iPhone 16` to an installed simulator if needed.
+1. Simulator name — adjust `iPhone 16` to an installed simulator. **Resolved during execution: no iPhone 16 exists; use `platform=iOS Simulator,name=iPhone 17` (iOS 26.2) in all commands.**
 2. `GlassCard` initializer label optionality.
 3. Whether a `suggestion`-themed starter script should be authored in M1 or deferred.
+
+---
+
+## Read Tab = Unified Reading Hub (architecture note, added 2026-06-11)
+
+Per product direction, the **Read tab is the single home for everything Text Trance**:
+- **Bundled scripts** we author (Tasks 1–13).
+- **External script discovery** — curated source lists + user-added URLs — via the **Reading Sources** companion feature (Part B below). This is **link-only**: it opens external sites in the browser. It does **not** fetch, scrape, parse, cache, or import third-party page text. Actual text import into the RSVP reader is a separate future milestone requiring a rights/import design and App Store compliance review (see handoff `docs/superpowers/handoffs/2026-06-11-reading-sources-handoff.md`).
+- **Session controls** — reading speed, audio/binaural, light/flash — live in the per-session Setup screen (Task 10) reached from this tab.
+
+The Text Trance core (Tasks 5–13) is built first; the Read tab initially shows the bundled-script library. The Reading Sources entry point is wired in Part B after the core is green, to keep core tasks independent of the (currently untracked) Reading Sources files.
+
+---
+
+## Part B: Reading Sources Integration (deferred — execute AFTER Task 13)
+
+**Status:** The Reading Sources feature is **already implemented** in the working tree (untracked) from a parallel session — model, store, directory view, tests, and a Library-tab entry point — documented in `docs/superpowers/handoffs/2026-06-11-reading-sources-handoff.md`. Part B brings that work into committed history under the project's verify+review flow and connects it to the Read tab. It does **not** re-implement it.
+
+Existing files (untracked / modified):
+- `Ilumionate/TextTrance/ReadingSource.swift` — `ReadingSource`, `ReadingSourceCatalog.curatedSources` (6 link-only sources), category/license/import-policy/content-rating enums. Metadata-only; stores no page content.
+- `Ilumionate/TextTrance/ReadingSourceStore.swift` — `@Observable ReadingSourceStore.shared`; curated + user-added aggregation; `UserDefaults` persistence (key `readingSourceCustomLinks`); URL normalization; HTTP/HTTPS-only validation; duplicate rejection; delete/reset.
+- `Ilumionate/TextTrance/ReadingSourceDirectoryView.swift` — searchable directory, category chips, source cards, external `openURL`, Add-Source sheet.
+- `IlumionateTests/TextTrance/ReadingSourceStoreTests.swift` — curated-shape, HTTP/HTTPS, no-`adultOnly`-by-default, normalization/persistence, duplicate rejection, invalid-URL, delete-isolation.
+- `Ilumionate/LibraryView.swift` (modified) — adds a "Reading Sources" row → `ReadingSourceDirectoryView`.
+
+**Link-only policy (must hold for M1):** no background fetch; no parse/cache/summarize/transform/save of website text; user-added links are private bookmarks (`linkOnly`, `licenseKind == .userProvided`); no `adultOnly` sources in the default catalog. Release gate language: a reviewer can describe the shipped feature as "a curated external links directory plus user bookmarks" without caveats.
+
+### Task B1: Verify + review + commit the existing Reading Sources files
+
+**Files (commit as-is unless review finds issues):** the five files listed above.
+
+- [ ] **Step 1: Independently verify the build** (controller runs this, not a self-report)
+
+Run:
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -only-testing:IlumionateTests/ReadingSourceStoreTests 2>&1 | grep -E "TEST SUCCEEDED|TEST FAILED|error:"
+```
+Expected: `** TEST SUCCEEDED **`.
+
+- [ ] **Step 2: Spec/policy compliance review** — dispatch a reviewer to confirm against the handoff: model is metadata-only (no content storage), store is HTTP/HTTPS-only with duplicate rejection, no `adultOnly` curated source ships, and the view only opens external URLs (no fetch/parse). Verify by reading code, not the handoff.
+
+- [ ] **Step 3: Code-quality review** — `ReadingSource.swift`, `ReadingSourceStore.swift`, `ReadingSourceDirectoryView.swift` for single-responsibility, naming, error handling, file size; confirm `LibraryView.swift` change is minimal and scoped.
+
+- [ ] **Step 4: Commit** (only these five files; never the unrelated dirty items `xcschememanagement.plist`, `lightMapCreationTool`):
+```bash
+git add Ilumionate/TextTrance/ReadingSource.swift \
+        Ilumionate/TextTrance/ReadingSourceStore.swift \
+        Ilumionate/TextTrance/ReadingSourceDirectoryView.swift \
+        IlumionateTests/TextTrance/ReadingSourceStoreTests.swift \
+        Ilumionate/LibraryView.swift
+git commit -m "feat(text-trance): reading sources directory (link-only external discovery)"
+```
+
+### Task B2: Wire the Reading Sources entry point into the Read tab
+
+**Files:**
+- Modify: `Ilumionate/TextTrance/TextTranceLibraryView.swift` (from Task 11)
+
+- [ ] **Step 1:** Add a "Find more scripts online" row/section in `TextTranceLibraryView` that navigates to `ReadingSourceDirectoryView` (reuse the existing view; do not duplicate). Use the existing `GlassCard`/`TranceSpacing`/`TranceTypography`/color system, matching the Task 11 styling. Include one-line copy clarifying that links open external websites and content/rights vary.
+
+- [ ] **Step 2:** Build and verify the Read tab → Reading Sources navigation works (controller runs the build; manual sim check of the path). Keep the Library-tab row in place (both entry points coexist).
+
+- [ ] **Step 3: Commit:**
+```bash
+git add Ilumionate/TextTrance/TextTranceLibraryView.swift
+git commit -m "feat(text-trance): surface Reading Sources from the Read tab"
+```
+
+### Task B3: Capture release gates (documentation only)
+
+- [ ] Copy the handoff's production-readiness gates (curated-source review, App Store compliance for external content + no medical claims + adult-content exclusion, accessibility/VoiceOver, expanded store tests, analytics/privacy on custom URLs) into a tracked checklist at `docs/superpowers/specs/reading-sources-release-gates.md`. These are **pre-ship gates**, not M1 code tasks. No code changes. Commit the doc.
+
+**Part B explicitly out of scope (future milestone):** importing/extracting script text from any source into the RSVP reader; in-app web views for third-party content; adult-content sources/gating. Import requires its own approved spec + rights review per handoff §10.

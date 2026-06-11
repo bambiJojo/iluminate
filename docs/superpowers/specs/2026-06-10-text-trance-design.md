@@ -133,14 +133,27 @@ Standard ORP indexing: 1-letter word → 1st letter; 2–5 letters → 2nd; 6–
 | Bundled scripts | Corpus-style regression tests: parses, covers required phases, no eyes-closure phrasing in `fullText` segments, WPM hints in sane range |
 | Entrainment-lock | Photosensitivity validation tests before the mode can activate |
 
-## 10. Milestones
+## 10. Read Tab as Unified Reading Hub (added 2026-06-11)
 
-1. **M1 — Core engine + bundled library**: `TranceScript` schema, library loader, pacing engine (RSVP + ORP), Text Trance screens, fullText + handoff arcs, light/binaural layer integration, initial hand-reviewed script set (all four themes, authored via CorpusGenerator offline).
+The Read tab is the single home for everything Text Trance:
+
+- **Bundled scripts** we author and review (this spec's core).
+- **External script discovery** via the **Reading Sources** companion feature: a curated directory of external sites (public-domain libraries, script directories) plus user-added URL bookmarks. **Strictly link-only** — opens sites in the external browser; never fetches, scrapes, parses, caches, or redistributes third-party text. Already implemented in a parallel session; see `docs/superpowers/handoffs/2026-06-11-reading-sources-handoff.md` for the model (`ReadingSource`, `ReadingSourceStore`, `ReadingSourceDirectoryView`), policy constraints (no `adultOnly` sources by default, HTTP/HTTPS-only, duplicate rejection), and the production-readiness gates (curated-source audit, App Store compliance, accessibility, expanded tests).
+- **Session controls** (reading speed, binaural audio, light/flash settings) — in the per-session Setup screen reached from this tab.
+
+Reading Sources keeps its Library-tab entry point and gains a second entry point inside the Read tab's library screen ("Find more scripts online"). Importing external text into the RSVP reader is a **separate future milestone** that requires its own rights/import design and compliance review (handoff §10) — M1 ships link-only.
+
+## 11. Milestones
+
+1. **M1 — Core engine + bundled library**: `TranceScript` schema, library loader, pacing engine (RSVP + ORP), Text Trance screens, fullText + handoff arcs, light/binaural layer integration, initial hand-reviewed script set (all four themes, authored via CorpusGenerator offline). **Part B (after core):** commit + review the existing Reading Sources work and surface it from the Read tab (plan Part B, Tasks B1–B3).
 2. **M2 — Entrainment-lock mode**: settings-gated, safety-validated, user comfort testing.
 3. **M3 — AI generation**: in-app script generation (CorpusGenerator pipeline → on-device or API), personalization input, un-grey the library card. Generated scripts marked `reviewed: false` with appropriate UI treatment.
+4. **M4 — External text import (design-gated)**: explicit user action, per-source rights validation, terms reminder, local-only storage; requires its own approved spec per the handoff's §10 release gate.
 
-## 11. Out of Scope (for now)
+## 12. Out of Scope (for now)
 
 - Folding text tracks into the `LightSession` schema (approach 3) — revisit after the feature proves itself.
 - Narrated-audio caption sync (`WordTimestamp`-driven "trance karaoke") — the engine's event model doesn't preclude it, but it's not in this feature.
 - Non-English scripts.
+- Fetching/parsing/caching any third-party website text (Reading Sources stays link-only until M4 has an approved spec).
+- Adult-only content sources — excluded from the curated catalog until there is a content policy, age gating, and an App Store review strategy.
