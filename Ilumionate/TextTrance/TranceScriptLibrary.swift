@@ -50,8 +50,9 @@ enum TranceScriptLibrary {
         guard !script.segments.isEmpty else {
             throw LibraryError.emptySegments
         }
-        // ★ Review-driven: reject pacing hints the engine would have to ignore.
-        guard script.segments.allSatisfy({ ($0.pacing?.baseWPM ?? 1) > 0 }) else {
+        // Every segment that provides a pacing hint must have a positive WPM;
+        // segments without a hint use the engine's depth-derived default.
+        guard script.segments.compactMap(\.pacing).allSatisfy({ $0.baseWPM > 0 }) else {
             throw LibraryError.nonPositiveWPMHint
         }
     }
