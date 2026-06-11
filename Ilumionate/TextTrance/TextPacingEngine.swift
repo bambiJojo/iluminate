@@ -89,7 +89,7 @@ enum TextPacingEngine {
 
     private static func effectiveWPM(for segment: TranceScriptSegment,
                                      speed: TextPacingSettings.Speed) -> Double {
-        if let hint = segment.pacing?.baseWPM {
+        if let hint = segment.pacing?.baseWPM, hint > 0 {
             return hint * speed.multiplier
         }
         let depth = segment.phase.tranceDepthEstimate            // 0...1

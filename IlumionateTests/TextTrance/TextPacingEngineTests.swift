@@ -81,6 +81,19 @@ struct TextPacingEngineTests {
         #expect(schedule.map(\.text) == ["read", "me"])
     }
 
+    @Test func nonPositiveWPMHintFallsBackToDepthDerivedPace() {
+        let s = script(arcs: [.fullText], segments: [
+            TranceScriptSegment(phase: .induction, text: "rest",
+                                pacing: SegmentPacing(baseWPM: 0),
+                                arcs: nil, triggersHandoff: nil)
+        ])
+        let schedule = TextPacingEngine.schedule(for: s,
+            settings: .init(arc: .fullText, speed: .natural))
+        #expect(schedule.count == 1)
+        #expect(schedule[0].duration.isFinite)
+        #expect(schedule[0].duration > 0)
+    }
+
     @Test func handoffArcStopsAfterTriggerSegment() {
         let s = script(arcs: [.fullText, .handoff], segments: [
             TranceScriptSegment(phase: .induction, text: "read me",
