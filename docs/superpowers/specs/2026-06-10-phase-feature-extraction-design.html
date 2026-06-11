@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase Feature Extraction &amp; Dataset Export — Design</title>
+<style>
+  :root{
+    --bg:#0c0e1a; --panel:#141830; --panel2:#1b2042; --ink:#e8ebff; --muted:#9aa3d0;
+    --line:#2a3160; --accent:#7c5cff; --accent2:#36d1c4; --good:#5be0a0; --warn:#ff6b8b;
+    --amber:#ffc861; --radius:14px; --shadow:0 10px 40px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 700px at 80% -10%,#1a1f45 0%,var(--bg) 55%);
+       color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:48px 24px 120px}
+  header.hero{margin-bottom:34px}
+  .kicker{letter-spacing:.3em;text-transform:uppercase;font-size:12px;color:var(--accent2);font-weight:700}
+  h1{font-size:34px;line-height:1.12;margin:.3em 0 .15em;
+     background:linear-gradient(100deg,#fff,#b9a8ff 60%,#36d1c4);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .status{color:var(--muted);font-size:14px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+         padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--good);
+         background:rgba(91,224,160,.08);margin-right:8px}
+  .toc{display:flex;flex-wrap:wrap;gap:9px;margin:24px 0 8px}
+  .toc a{font-size:12.5px;color:var(--muted);text-decoration:none;border:1px solid var(--line);
+         padding:6px 12px;border-radius:999px;transition:.2s}
+  .toc a:hover{color:#fff;border-color:var(--accent);background:rgba(124,92,255,.12)}
+  section{margin:40px 0}
+  h2{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);margin:0 0 4px}
+  h2 .n{color:var(--accent);font-weight:800;margin-right:8px}
+  .lead{font-size:21px;font-weight:700;margin:0 0 14px;line-height:1.3}
+  .card{background:linear-gradient(180deg,var(--panel),#10142a);border:1px solid var(--line);
+        border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow)}
+  p{margin:.5em 0}
+  ul{margin:.4em 0 .4em 1.1em;padding:0}li{margin:.3em 0}
+  code,pre{font-family:"SF Mono",ui-monospace,Menlo,monospace}
+  code{background:#0a0c18;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px;color:#cdd4ff}
+  pre{background:#0a0c18;border:1px solid var(--line);border-radius:12px;padding:15px;overflow:auto;font-size:12.5px;color:#cdd4ff}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--accent2);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+  td code{font-size:12px}
+  .callout{border-left:3px solid var(--warn);background:rgba(255,107,139,.08);padding:12px 16px;border-radius:0 12px 12px 0;margin:14px 0}
+  .callout.good{border-color:var(--good);background:rgba(91,224,160,.08)}
+  .muted{color:var(--muted)}
+  .footer{text-align:center;color:var(--muted);font-size:12.5px;margin-top:54px;border-top:1px solid var(--line);padding-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="kicker">Ilumionate · Phase 2 track</div>
+    <h1>Phase Feature Extraction &amp; Dataset Export</h1>
+    <p class="status"><span class="badge">Approved design</span>2026-06-10 · companion to the markdown spec (source of truth)</p>
+    <nav class="toc">
+      <a href="#context">Context</a>
+      <a href="#goals">Goals</a>
+      <a href="#arch">Architecture</a>
+      <a href="#schema">Row schema</a>
+      <a href="#files">File layout</a>
+      <a href="#errors">Edge cases</a>
+      <a href="#testing">Testing</a>
+    </nav>
+  </header>
+
+  <section id="context">
+    <h2><span class="n">1</span>Context</h2>
+    <p class="lead">Build the data foundation for the learned model — before training, which is data-blocked.</p>
+    <div class="card">
+      <p>Phase 2 replaces the analyzer's hand-tuned feature fusion with a learned per-second classifier → Viterbi. With only ~2 real labeled sessions, training now would overfit. Instead we build what every later step needs: turning labeled corpus cases into <code>(features, label)</code> rows.</p>
+      <ul>
+        <li><code>CorpusCase</code> carries transcripts only, <strong>not audio</strong> → features are text-derived (no prosody/audio texture yet).</li>
+        <li>Feature extractors are app-target: <code>buildHitMap</code>, <code>TranscriptFeatureAnalyzer</code>, <code>TechniqueDetector</code>, position.</li>
+        <li>The harness grades per-second and the planned classifier is per-second → <strong>per-second is the extraction unit.</strong></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="goals">
+    <h2><span class="n">2</span>Goals &amp; non-goals</h2>
+    <div class="card">
+      <p><strong>Goals:</strong> a reusable deterministic <code>PhaseFeatureExtractor</code> (app) reusing the real extractors so train/infer features match; a <code>PhaseDatasetExporter</code> (test harness) that writes a training-ready CSV from the labeled corpus; unit + export tests.</p>
+      <p class="muted"><strong>Out of scope (later):</strong> audio/prosody features, the model + training pipeline + Core ML conversion + learned transition matrix, runtime model integration, corpus growth.</p>
+    </div>
+  </section>
+
+  <section id="arch">
+    <h2><span class="n">3</span>Architecture</h2>
+    <div class="card">
+      <p><strong>3a · <code>PhaseFeatureExtractor</code></strong> (app, <code>Ilumionate/Training/</code>) — precompute per-second signals once, then <code>featureVector(at:) → PhaseFeatureVector</code>. Deterministic; the same type the eventual model calls at inference (train/infer parity).</p>
+      <p><strong>3b · <code>PhaseDatasetExporter</code></strong> (test, <code>IlumionateTests/Corpus/</code>) — load fixtures+synthetic+real, keep truth-bearing cases, emit one CSV row per <em>labeled</em> second (gray zones skipped) → <code>Corpus/dataset/phase-features.csv</code>.</p>
+<pre>Corpus/* (CorpusCase)
+  → AudioTranscriptionResult (CorpusCase.transcriptionSegments)
+  → PhaseFeatureExtractor.precompute()
+  → for second in 0..&lt;Int(duration):
+       truthPhase(at: second) ?? continue   // skip gray zones
+       row = featureVector(at: second) + label
+  → CSV (header + rows) → phase-features.csv</pre>
+    </div>
+  </section>
+
+  <section id="schema">
+    <h2><span class="n">4</span>Row schema — one row per labeled second</h2>
+    <div class="card">
+      <table>
+        <tr><th>Group</th><th>Columns</th><th>Source</th></tr>
+        <tr><td>Trace (non-feature)</td><td><code>case_id</code>, <code>second</code></td><td>id, loop index</td></tr>
+        <tr><td>Position</td><td><code>position</code></td><td><code>second / duration</code> (0–1)</td></tr>
+        <tr><td>Keyword hit-map</td><td><code>kw_&lt;phase&gt;</code> × 11</td><td><code>buildHitMap[second][phase]</code></td></tr>
+        <tr><td>Transcript features</td><td><code>tf_*</code></td><td><code>TranscriptSectionMetrics</code> at second</td></tr>
+        <tr><td>Technique evidence</td><td><code>tech_*</code></td><td><code>TechniqueDetector</code> evidence</td></tr>
+        <tr><td>Label</td><td><code>label</code></td><td>truth phase rawValue</td></tr>
+      </table>
+      <p class="muted">Exact <code>tf_*</code>/<code>tech_*</code> columns are enumerated from the extractor APIs at implementation time (not invented). Stable column order. <code>case_id</code>/<code>second</code> are for traceability/splitting, excluded from the training feature set. CSV with header — universal for CreateML/coremltools/sklearn.</p>
+    </div>
+  </section>
+
+  <section id="files">
+    <h2><span class="n">5</span>File layout</h2>
+    <div class="card">
+      <table>
+        <tr><th>File</th><th>Target</th><th>Purpose</th></tr>
+        <tr><td><code>Ilumionate/Training/PhaseFeatureExtractor.swift</code></td><td>app</td><td>extractor + <code>PhaseFeatureVector</code></td></tr>
+        <tr><td><code>IlumionateTests/Corpus/PhaseFeatureExtractorTests.swift</code></td><td>test</td><td>unit tests</td></tr>
+        <tr><td><code>IlumionateTests/Corpus/PhaseDatasetExportTests.swift</code></td><td>test</td><td>export harness + shape assertions</td></tr>
+        <tr><td><code>Corpus/dataset/phase-features.csv</code></td><td>output</td><td><strong>gitignored</strong> (derived)</td></tr>
+      </table>
+      <p class="muted">Add <code>Corpus/dataset/*.csv</code> to <code>.gitignore</code>.</p>
+    </div>
+  </section>
+
+  <section id="errors">
+    <h2><span class="n">6</span>Edge cases</h2>
+    <div class="card">
+      <ul>
+        <li><strong>Gray-zone / no-truth second</strong> → skipped (unlabeled, not a class).</li>
+        <li><strong>Empty transcript</strong> → zero signals, row still valid; case with empty <code>truth</code> skipped entirely.</li>
+        <li><strong>Determinism</strong> → stable column order, cases sorted by id, integer-second iteration.</li>
+        <li><strong>Duration</strong> → iterate <code>0..&lt;Int(ceil(duration))</code>, matching the harness bucketing.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="testing">
+    <h2><span class="n">7</span>Testing &amp; success</h2>
+    <div class="card good" style="border:1px solid var(--line)">
+      <p><strong>Unit:</strong> known keyword-dense transcript → assert <code>kw_induction &gt; 0</code> in the induction region, <code>position</code> monotonic, constant vector width, header matches value count.</p>
+      <p><strong>Export:</strong> run over fixtures → well-formed CSV (header, row count == labeled seconds, every <code>label</code> a valid <code>TrancePhase</code>, no gray-zone rows), re-parses to the same count.</p>
+      <div class="callout good"><strong>Done when:</strong> a deterministic fixed-width per-second vector reuses the real extractors, <code>phase-features.csv</code> is produced from the labeled corpus with gray zones excluded, and all new tests are green with no regressions.</div>
+    </div>
+  </section>
+
+  <div class="footer">Markdown spec is the source of truth · this HTML is the readable companion · Ilumionate phase-feature-extraction design</div>
+</div>
+</body>
+</html>
