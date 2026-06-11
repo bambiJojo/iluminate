@@ -14,7 +14,7 @@
 
 ## Deviations from the Spec (intentional, locked during planning)
 
-1. **No `handoffCue` `TrancePhase` case.** `TrancePhase` lives in the shared CorpusKit package and feeds the analyzer/evaluation harness; adding a case there is invasive and semantically wrong (it's a script-authoring concept, not an analysis phase). Instead, a segment carries an optional `triggersHandoff: Bool`. The eyes-close cue is an ordinary `emergence`/`transitional` segment tagged `arcs: ["handoff"]` with `triggersHandoff: true`.
+1. **No `handoffCue` `TrancePhase` case.** `TrancePhase` lives in the shared CorpusKit package and feeds the analyzer/evaluation harness; adding a case there is invasive and semantically wrong (it's a script-authoring concept, not an analysis phase). Instead, a segment carries an optional `triggersHandoff: Bool`. The eyes-close cue is a `transitional` segment (NOT `emergence` — emergence means "wake back up", which is the opposite of the eyes-close handoff intent) tagged `arcs: ["handoff"]` with `triggersHandoff: true`, and carries an explicit slow `baseWPM` so its pace doesn't default to the fast emergence depth. Segment `phase` values must be valid CorpusKit `TrancePhase` raw values (e.g. `suggestions`, plural — not `suggestion`).
 2. **Deepening curve derives from `TrancePhase.tranceDepthEstimate`** (already defined) when a segment omits an explicit `baseWPM`. When a segment *provides* `baseWPM`, that author intent is used directly (no double-applied slowdown).
 3. **`FlashController` runs only in the handoff tail in M1**, because `start()` forces screen brightness to 1.0 — unsuitable behind eyes-open reading. Concurrent reading-time light + the entrainment-lock text mode are deferred to M2. The "Light pulse" toggle therefore appears in Setup only for the `handoff` arc in M1.
 
@@ -74,7 +74,7 @@ struct TranceScriptDecodingTests {
         { "phase": "induction",  "text": "Allow your eyes to rest.", "pacing": { "baseWPM": 140 } },
         { "phase": "deepening",  "text": "Deeper and deeper." },
         { "phase": "emergence",  "text": "Return now, refreshed.", "arcs": ["fullText"] },
-        { "phase": "emergence",  "text": "Let your eyes close.", "arcs": ["handoff"], "triggersHandoff": true }
+        { "phase": "transitional",  "text": "Let your eyes close.", "arcs": ["handoff"], "triggersHandoff": true }
       ]
     }
     """
@@ -814,7 +814,7 @@ git commit -m "feat(text-trance): script library loader + validation"
     { "phase": "deepening", "text": "And with every word you take in, you sink a little further. Down, and down, and gently down. Heavier now. Calmer now. Carried.", "pacing": { "baseWPM": 110 } },
     { "phase": "suggestions", "text": "Stillness is easy for you. Your mind grows quiet and clear, like water with no wind. You hold this calm long after the words are gone.", "pacing": { "baseWPM": 95 } },
     { "phase": "emergence", "text": "In a moment you will lift gently back, bringing the calm with you, awake, clear, and rested.", "pacing": { "baseWPM": 135 }, "arcs": ["fullText"] },
-    { "phase": "emergence", "text": "And now, with the next slow breath, let your eyes drift softly closed, and simply keep drifting.", "arcs": ["handoff"], "triggersHandoff": true }
+    { "phase": "transitional", "text": "And now, with the next slow breath, let your eyes drift softly closed, and simply keep drifting.", "pacing": { "baseWPM": 90 }, "arcs": ["handoff"], "triggersHandoff": true }
   ]
 }
 ```

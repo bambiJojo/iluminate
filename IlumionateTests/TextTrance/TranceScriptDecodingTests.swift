@@ -20,7 +20,7 @@ struct TranceScriptDecodingTests {
         { "phase": "induction",  "text": "Allow your eyes to rest.", "pacing": { "baseWPM": 140 } },
         { "phase": "deepening",  "text": "Deeper and deeper." },
         { "phase": "emergence",  "text": "Return now, refreshed.", "arcs": ["fullText"] },
-        { "phase": "emergence",  "text": "Let your eyes close.", "arcs": ["handoff"], "triggersHandoff": true }
+        { "phase": "transitional",  "text": "Let your eyes close.", "arcs": ["handoff"], "triggersHandoff": true }
       ]
     }
     """

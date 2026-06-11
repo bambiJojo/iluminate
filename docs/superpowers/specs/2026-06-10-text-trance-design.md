@@ -78,15 +78,15 @@ TextTranceView (new screen) + Trance UI kit + photosensitivity safety (existing)
   "segments": [
     { "phase": "induction",  "text": "Allow your eyes to rest softly…", "pacing": { "baseWPM": 140 } },
     { "phase": "deepening",  "text": "Deeper and deeper with every word…", "pacing": { "baseWPM": 100 } },
-    { "phase": "suggestion", "text": "You find calm easily now…", "pacing": { "baseWPM": 85 } },
+    { "phase": "suggestions", "text": "You find calm easily now…", "pacing": { "baseWPM": 85 } },
     { "phase": "emergence",  "text": "In a moment you will return…", "pacing": { "baseWPM": 130 }, "arcs": ["fullText"] },
-    { "phase": "handoffCue", "text": "And now… let your eyes gently close…", "arcs": ["handoff"] }
+    { "phase": "transitional", "text": "And now… let your eyes gently close…", "pacing": { "baseWPM": 85 }, "arcs": ["handoff"], "triggersHandoff": true }
   ]
 }
 ```
 
 Schema decisions:
-- **Phases** reuse the existing `HypnosisMetadata.Phase` vocabulary (induction / deepening / suggestion / emergence) plus one new value: `handoffCue`.
+- **Phases** are `TrancePhase` raw values from CorpusKit (e.g. `induction` / `deepening` / `suggestions` / `emergence` / `transitional`). There is **no** new `handoffCue` phase — the eyes-close cue is a `transitional` segment tagged `arcs: ["handoff"]` with `triggersHandoff: true`. (Note the raw value is `suggestions`, plural.)
 - **Arc-conditional segments** (`arcs:`) let one file serve both arcs — emergence plays only in `fullText`; the eyes-close cue plays only in `handoff`.
 - **`pacing.baseWPM` is a hint**, never a hard timing — the engine multiplies it by the deepening curve and user speed.
 - **`source.reviewed`** flags human-vetted content; surfaced as a "reviewed" badge in the library UI.
@@ -96,7 +96,7 @@ Schema decisions:
 1. User picks script + options (arc, layers, speed). `TextTranceSession` filters segments by arc, tokenizes into words, starts chosen layers.
 2. `TextPacingEngine` walks the word list, emitting `(word, pivotIndex, displayDuration, opacityCurve)` events.
 3. View renders each word with its pivot letter aligned to the fixed anchor; background pulse runs off `FlashController` at low intensity.
-4. **Handoff arc:** after `handoffCue`, text fades out, `FlashController` ramps to the session's target frequency, binaural continues if enabled, duration timer runs the remainder. Emergence = light frequency ramp-up + optional chime — no text.
+4. **Handoff arc:** after the `triggersHandoff` segment, text fades out, `FlashController` ramps to the session's target frequency, binaural continues if enabled, duration timer runs the remainder. Emergence = light frequency ramp-up + optional chime — no text.
 5. **Sleep theme + handoff:** no emergence — light fades to black, audio fades, session self-terminates.
 
 ### ORP pivot rule
