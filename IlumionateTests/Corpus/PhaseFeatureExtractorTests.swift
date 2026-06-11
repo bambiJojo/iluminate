@@ -48,4 +48,15 @@ struct PhaseFeatureExtractorTests {
         let early = extractor.featureVector(at: 5)
         #expect(early.value(for: "kw_induction") > 0)
     }
+
+    @Test("Transcript-feature columns exist and are finite")
+    func transcriptFeatureColumns() {
+        let extractor = PhaseFeatureExtractor(transcription: transcription())
+        let names = PhaseFeatureExtractor.columnNames
+        for column in ["tf_wpm", "tf_coverage", "tf_lexical", "tf_repetition"] {
+            #expect(names.contains(column), "missing \(column)")
+        }
+        let v = extractor.featureVector(at: 10)
+        #expect(v.value(for: "tf_wpm").isFinite)
+    }
 }
