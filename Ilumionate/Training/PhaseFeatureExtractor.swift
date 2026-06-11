@@ -24,12 +24,14 @@ struct PhaseFeatureExtractor {
     private let bucketCount: Int
     private let hitMap: [[HypnosisMetadata.Phase: Double]]
     private let analysis: TranscriptAnalysis
+    private let markerDensity: [Double]   // markers landing in each 1s bucket
 
     /// Stable feature column order (excludes trace columns and the label).
     static let columnNames: [String] =
         ["position"]
         + TrancePhase.orderedHypnosisPhases.map { "kw_\($0.rawValue)" }
         + ["tf_wpm", "tf_coverage", "tf_lexical", "tf_repetition"]
+        + ["tech_marker_density"]
 
     init(transcription: AudioTranscriptionResult) {
         self.duration = max(transcription.duration, 1)
@@ -40,6 +42,21 @@ struct PhaseFeatureExtractor {
             ? Array(repeating: [:], count: bucketCount)
             : analyzer.buildHitMap(wordTimestamps: words, bucketCount: bucketCount)
         self.analysis = TranscriptFeatureAnalyzer().analyze(transcription: transcription, phases: nil)
+        let detector = TechniqueDetector()
+        let markers: [LinguisticMarker] = words.isEmpty
+            ? []
+            : detector.detect(
+                wordTimestamps: words,
+                segments: transcription.segments,
+                prosodic: nil,
+                duration: transcription.duration
+              ).markers
+        var density = Array(repeating: 0.0, count: bucketCount)
+        for marker in markers {
+            let bucket = min(max(Int(marker.timestamp), 0), bucketCount - 1)
+            density[bucket] += 1
+        }
+        self.markerDensity = density
     }
 
     func featureVector(at second: Int) -> PhaseFeatureVector {
@@ -53,6 +70,7 @@ struct PhaseFeatureExtractor {
         values.append(section?.normalizedSpeechCoverage ?? 0)
         values.append(section?.normalizedLexicalDiversity ?? 0)
         values.append(section?.normalizedRepetitionDensity ?? 0)
+        values.append(markerDensity[bucket])
         return PhaseFeatureVector(values: values)
     }
 }

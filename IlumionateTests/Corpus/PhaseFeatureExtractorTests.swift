@@ -59,4 +59,11 @@ struct PhaseFeatureExtractorTests {
         let v = extractor.featureVector(at: 10)
         #expect(v.value(for: "tf_wpm").isFinite)
     }
+
+    @Test("Technique-marker density column exists and is non-negative")
+    func techniqueDensityColumn() {
+        let extractor = PhaseFeatureExtractor(transcription: transcription())
+        #expect(PhaseFeatureExtractor.columnNames.last == "tech_marker_density")
+        #expect(extractor.featureVector(at: 10).value(for: "tech_marker_density") >= 0)
+    }
 }
