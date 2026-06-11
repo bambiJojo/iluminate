@@ -15,6 +15,9 @@ Corpus/synthetic/*.json
 # `corpus-gen --import-real`; never committed)
 Corpus/real/*.json
 
+# Generated training dataset (derived from labeled corpus; regenerate, don't commit)
+Corpus/dataset/*.csv
+
 # SwiftPM build artifacts
 Tools/CorpusGenerator/.build/
 .agents/skills/macos-spm-app-packaging/assets/templates/bootstrap/.build/
