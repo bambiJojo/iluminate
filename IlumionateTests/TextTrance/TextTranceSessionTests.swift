@@ -64,19 +64,18 @@ struct TextTranceSessionTests {
     }
 
     @Test func disabledBinauralNeverStartsAudio() async {
+        let light = MockLightLayer()
+        let audio = MockAudioLayer()
         let session = TextTranceSession(
             script: handoffScript(),
             settings: TextTranceSessionSettings(
                 arc: .fullText, speed: .natural,
                 lightEnabled: false, binauralEnabled: false,
                 beatFrequency: 10, postHandoffDuration: 1),
-            light: MockLightLayer(), audio: { let a = MockAudioLayer(); return a }(),
-            sleep: noSleep)
-        // keep a reference for assertions
-        let audio = session.audioForTesting as? MockAudioLayer
+            light: light, audio: audio, sleep: noSleep)
 
         await session.begin()
-        #expect(audio?.startCount == 0)
+        #expect(audio.startCount == 0)
     }
 
     @Test func lastReadWordIsExposed() async {
@@ -107,6 +106,25 @@ struct TextTranceSessionTests {
         await session.begin()  // loop must bail immediately
 
         #expect(light.startCount == 0)
-        #expect(session.isComplete == false || light.startCount == 0)
+        #expect(session.isComplete == false)
+    }
+
+    @Test func owningTaskCancellationPreventsSpinThroughAndLightStart() async {
+        let light = MockLightLayer()
+        let audio = MockAudioLayer()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .handoff, speed: .natural,
+                lightEnabled: true, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 60),
+            light: light, audio: audio)
+
+        let task = Task { await session.begin() }
+        task.cancel()
+        await task.value
+
+        #expect(light.startCount == 0)
+        #expect(session.isComplete == false)
     }
 }

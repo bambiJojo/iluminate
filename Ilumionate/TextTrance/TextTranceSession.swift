@@ -36,9 +36,7 @@ final class TextTranceSession {
     private let audio: (any AudioLayerControlling)?
     private let sleep: @Sendable (Duration) async -> Void
     private var cancelled = false
-
-    /// Test hook: read-only access to the injected audio layer.
-    var audioForTesting: (any AudioLayerControlling)? { audio }
+    private var isRunning = false
 
     init(script: TranceScript,
          settings: TextTranceSessionSettings,
@@ -54,7 +52,9 @@ final class TextTranceSession {
 
     /// Run the full session to completion (or until `end()` cancels it).
     func begin() async {
-        guard !cancelled, !isComplete else { return }
+        guard !cancelled, !isComplete, !isRunning else { return }
+        isRunning = true
+        defer { isRunning = false }
 
         let pacing = TextPacingSettings(arc: settings.arc, speed: settings.speed)
         let schedule = TextPacingEngine.schedule(for: script, settings: pacing)
@@ -66,7 +66,7 @@ final class TextTranceSession {
 
         isReading = true
         for word in schedule {
-            if cancelled { break }
+            guard !cancelled, !Task.isCancelled else { break }
             currentWord = word.text
             currentPivotIndex = word.pivotIndex
             currentPhase = word.phase
@@ -74,7 +74,7 @@ final class TextTranceSession {
         }
         isReading = false
 
-        if settings.arc == .handoff, !cancelled {
+        if settings.arc == .handoff, !cancelled, !Task.isCancelled {
             if settings.lightEnabled, let light {
                 light.start()
                 lightActive = true
@@ -87,11 +87,12 @@ final class TextTranceSession {
         }
 
         if settings.binauralEnabled { audio?.stop() }
-        isComplete = !cancelled
+        isComplete = !cancelled && !Task.isCancelled
     }
 
     /// Stop everything immediately (user tap-and-hold to end).
     func end() {
+        guard !isComplete else { return }
         cancelled = true
         if lightActive {
             light?.stop()
