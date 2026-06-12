@@ -46,17 +46,18 @@ struct TextTranceSetupView: View {
     }
 
     private func makeSession() -> TextTranceSession {
-        TextTranceSession(
+        let useLight = arc == .handoff && lightEnabled
+        return TextTranceSession(
             script: script,
             settings: TextTranceSessionSettings(
                 arc: arc,
                 speed: speed,
-                lightEnabled: arc == .handoff && lightEnabled,
+                lightEnabled: useLight,
                 binauralEnabled: binauralEnabled,
                 beatFrequency: 10,
                 postHandoffDuration: 600),
-            light: FlashController(frequency: 10, intensity: 0.7, pattern: .sine),
-            audio: BinauralBeatsEngine())
+            light: useLight ? FlashController(frequency: 10, intensity: 0.7, pattern: .sine) : nil,
+            audio: binauralEnabled ? BinauralBeatsEngine() : nil)
     }
 }
 

@@ -46,6 +46,9 @@ struct TextTrancePlayerView: View {
             if session.isComplete { dismiss() }
         }
         .statusBarHidden()
+        .onDisappear {
+            if !session.isComplete { session.end() }
+        }
     }
 
     private var endHoldGesture: some Gesture {

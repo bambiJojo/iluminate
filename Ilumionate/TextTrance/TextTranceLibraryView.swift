@@ -5,6 +5,12 @@
 
 import SwiftUI
 
+/// Typed navigation values for the Text Trance stack (avoids bare-String
+/// destination collisions as more destinations join this stack).
+enum TextTranceDestination: Hashable {
+    case setup(scriptID: String)
+}
+
 struct TextTranceLibraryView: View {
     @State private var scripts: [TranceScript] = []
     @State private var themeFilter: ScriptTheme?
@@ -14,7 +20,7 @@ struct TextTranceLibraryView: View {
             VStack(spacing: TranceSpacing.cardMargin) {
                 ThemeChipsRow(selection: $themeFilter)
                 ForEach(filteredScripts) { script in
-                    NavigationLink(value: script.id) {
+                    NavigationLink(value: TextTranceDestination.setup(scriptID: script.id)) {
                         ScriptCard(script: script)
                     }
                     .buttonStyle(.plain)
@@ -26,9 +32,12 @@ struct TextTranceLibraryView: View {
         .scrollIndicators(.hidden)
         .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle("Text Trance")
-        .navigationDestination(for: String.self) { id in
-            if let script = scripts.first(where: { $0.id == id }) {
-                TextTranceSetupView(script: script)
+        .navigationDestination(for: TextTranceDestination.self) { destination in
+            switch destination {
+            case .setup(let id):
+                if let script = scripts.first(where: { $0.id == id }) {
+                    TextTranceSetupView(script: script)
+                }
             }
         }
         .task {
