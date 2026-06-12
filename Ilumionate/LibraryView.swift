@@ -16,6 +16,7 @@ enum LibraryDestination: Hashable {
     case folders
     case favorites
     case builtInSessions
+    case readingSources
 }
 
 // MARK: - LibraryView
@@ -36,6 +37,7 @@ struct LibraryView: View {
     @State private var showingAnalysisQueue = false
     @State private var playerFile: AudioFile?
     @State private var fileForPlaylist: AudioFile?
+    @State private var readingSourceStore = ReadingSourceStore.shared
 
     @Environment(FolderStore.self) private var folderStore
 
@@ -50,6 +52,7 @@ struct LibraryView: View {
                             creatorCount: creatorCount,
                             folderCount: folderCount,
                             favoritesCount: favoritesCount,
+                            readingSourceCount: readingSourceStore.allSources.count,
                             analysisQueueCount: analysisQueueCount,
                             onPlaylists: {
                                 TranceHaptics.shared.light()
@@ -86,6 +89,8 @@ struct LibraryView: View {
                     LibraryFavoritesView(audioFiles: audioFiles, engine: engine)
                 case .builtInSessions:
                     SessionLibraryView(engine: engine)
+                case .readingSources:
+                    ReadingSourceDirectoryView(store: readingSourceStore)
                 }
             }
             .sheet(isPresented: $showingPlaylists) {
@@ -227,6 +232,7 @@ private struct LibraryCategoryRows: View {
     let creatorCount: Int
     let folderCount: Int
     let favoritesCount: Int
+    let readingSourceCount: Int
     let analysisQueueCount: Int
     let onPlaylists: () -> Void
     let onAnalysisQueue: () -> Void
@@ -258,6 +264,16 @@ private struct LibraryCategoryRows: View {
                     iconColor: .bwGamma,
                     title: "Built-in Sessions",
                     count: nil
+                )
+            }
+            .buttonStyle(.plain)
+            LibraryRowDivider()
+            NavigationLink(value: LibraryDestination.readingSources) {
+                LibraryCategoryRowLabel(
+                    icon: "book.closed.fill",
+                    iconColor: .bwAlpha,
+                    title: "Reading Sources",
+                    count: readingSourceCount
                 )
             }
             .buttonStyle(.plain)
