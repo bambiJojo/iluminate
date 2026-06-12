@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "shoreline-sleep",
+  "title": "Shoreline Sleep",
+  "theme": "sleep",
+  "supportedArcs": ["handoff"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "segments": [
+    { "phase": "induction", "text": "Let each word arrive like a small, slow wave on a quiet shore. You do not have to hold any of them. They simply come, and go, and ease you down.", "pacing": { "baseWPM": 130 } },
+    { "phase": "deepening", "text": "Warmer. Softer. Heavier with every line. The sand holds you. The tide breathes for you. Lower, and slower, and further from the day.", "pacing": { "baseWPM": 95 } },
+    { "phase": "deepening", "text": "And now you no longer need the words at all. Let your eyes close, and let the tide carry you the rest of the way down into sleep.", "pacing": { "baseWPM": 80 }, "triggersHandoff": true }
+  ]
+}

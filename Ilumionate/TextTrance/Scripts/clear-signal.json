@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "clear-signal",
+  "title": "Clear Signal",
+  "theme": "focus",
+  "supportedArcs": ["fullText"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "segments": [
+    { "phase": "induction", "text": "Keep your attention on the single point where each word appears. One word. Then the next. The noise around the edges begins to fall away.", "pacing": { "baseWPM": 170 } },
+    { "phase": "deepening", "text": "Your focus narrows to a clean, bright line. Sharp. Steady. Everything that does not matter goes quiet, and what matters stands out clearly.", "pacing": { "baseWPM": 150 } },
+    { "phase": "suggestions", "text": "You hold this clarity easily. Your mind is a clear signal now, ready, precise, and fully here.", "pacing": { "baseWPM": 145 } },
+    { "phase": "emergence", "text": "Carry this sharpness forward as you lift your eyes, alert, focused, and ready to begin.", "pacing": { "baseWPM": 165 } }
+  ]
+}

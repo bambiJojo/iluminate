@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "deep-drift",
+  "title": "Deep Drift",
+  "theme": "relaxation",
+  "supportedArcs": ["fullText", "handoff"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "segments": [
+    { "phase": "induction", "text": "Allow your gaze to rest softly on each word as it arrives. There is nothing to do here but receive. Each word settles into you like a slow, warm breath.", "pacing": { "baseWPM": 150 } },
+    { "phase": "deepening", "text": "And with every word you take in, you sink a little further. Down, and down, and gently down. Heavier now. Calmer now. Carried.", "pacing": { "baseWPM": 110 } },
+    { "phase": "suggestions", "text": "Stillness is easy for you. Your mind grows quiet and clear, like water with no wind. You hold this calm long after the words are gone.", "pacing": { "baseWPM": 95 } },
+    { "phase": "emergence", "text": "In a moment you will lift gently back, bringing the calm with you, awake, clear, and rested.", "pacing": { "baseWPM": 135 }, "arcs": ["fullText"] },
+    { "phase": "transitional", "text": "And now, with the next slow breath, let your eyes drift softly closed, and simply keep drifting.", "pacing": { "baseWPM": 90 }, "arcs": ["handoff"], "triggersHandoff": true }
+  ]
+}
