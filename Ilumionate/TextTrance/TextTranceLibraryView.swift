@@ -9,6 +9,7 @@ import SwiftUI
 /// destination collisions as more destinations join this stack).
 enum TextTranceDestination: Hashable {
     case setup(scriptID: String)
+    case readingSources
 }
 
 struct TextTranceLibraryView: View {
@@ -25,6 +26,10 @@ struct TextTranceLibraryView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                NavigationLink(value: TextTranceDestination.readingSources) {
+                    ReadingSourcesEntryCard()
+                }
+                .buttonStyle(.plain)
                 GeneratePlaceholderCard()
             }
             .padding(TranceSpacing.screen)
@@ -38,6 +43,8 @@ struct TextTranceLibraryView: View {
                 if let script = scripts.first(where: { $0.id == id }) {
                     TextTranceSetupView(script: script)
                 }
+            case .readingSources:
+                ReadingSourceDirectoryView(store: .shared)
             }
         }
         .task {
@@ -111,6 +118,31 @@ private struct GeneratePlaceholderCard: View {
             .foregroundStyle(Color.textSecondary)
         }
         .opacity(0.6)
+    }
+}
+
+/// Entry point from the Read tab into the link-only Reading Sources directory.
+private struct ReadingSourcesEntryCard: View {
+    var body: some View {
+        GlassCard(label: nil) {
+            HStack(spacing: TranceSpacing.list) {
+                Image(systemName: "globe")
+                    .foregroundStyle(Color.roseGold)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Find more scripts online")
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(Color.textPrimary)
+                    Text("Public-domain libraries & script sites. Opens in your browser.")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
