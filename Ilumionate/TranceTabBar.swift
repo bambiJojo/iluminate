@@ -13,12 +13,14 @@ import SwiftUI
 enum TranceTab: String, CaseIterable {
     case home    = "home"
     case library = "library"
+    case read    = "read"
     case create  = "create"
 
     var title: String {
         switch self {
         case .home:    "Home"
         case .library: "Library"
+        case .read:    "Read"
         case .create:  "Create"
         }
     }
@@ -27,6 +29,7 @@ enum TranceTab: String, CaseIterable {
         switch self {
         case .home:    "house.fill"
         case .library: "books.vertical.fill"
+        case .read:    "text.aligncenter"
         case .create:  "lightbulb.fill"
         }
     }

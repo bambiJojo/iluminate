@@ -65,6 +65,9 @@ struct ContentView: View {
                     LibraryView(engine: engine)
                         .environment(FolderStore.shared)
                         .transition(.opacity)
+                } else if selectedTab == .read {
+                    TextTranceRootView()
+                        .transition(.opacity)
                 } else if selectedTab == .create {
                     NavigationStack {
                         MindMachineView(engine: engine, sessions: sessions)
