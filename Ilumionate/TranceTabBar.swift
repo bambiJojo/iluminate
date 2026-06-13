@@ -51,8 +51,9 @@ struct TranceTabBar: View {
         .padding(.vertical, 10)
         .background {
             Capsule()
-                .fill(.regularMaterial)
-                .shadow(color: TranceShadow.card.color.opacity(0.15), radius: 16, x: 0, y: 8)
+                .fill(.ultraThinMaterial)
+                .background(Capsule().fill(Color.voidElevated.opacity(0.7)))
+                .shadow(color: Color.auroraBlue.opacity(0.15), radius: 16, x: 0, y: 8)
         }
         .overlay {
             Capsule()
@@ -82,7 +83,7 @@ struct TranceTabBar: View {
                 Text(tab.title)
                     .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
             }
-            .foregroundStyle(isSelected ? tabAccentColor : Color.textSecondary)
+            .foregroundStyle(isSelected ? tabAccentColor : Color.textGhost)
             .scaleEffect(isSelected ? 1.05 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.65), value: selected)
             .frame(maxWidth: .infinity)
@@ -92,6 +93,7 @@ struct TranceTabBar: View {
                     Capsule()
                         .fill(tabAccentColor.opacity(0.18))
                         .matchedGeometryEffect(id: "TAB_INDICATOR", in: tabAnimation)
+                        .shadow(color: tabAccentColor.opacity(0.4), radius: 10)
                 }
             }
         }
