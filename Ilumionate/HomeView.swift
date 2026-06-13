@@ -144,7 +144,6 @@ struct HomeView: View {
             }
         }
         .onDisappear { cardsVisible = false }
-        .background(Color.bgPrimary.ignoresSafeArea())
         .sheet(isPresented: $showingProfile) {
             ProfileSettingsView()
         }
