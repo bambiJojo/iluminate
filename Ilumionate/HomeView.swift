@@ -100,10 +100,16 @@ struct HomeView: View {
     }
 
     var body: some View {
+        ZStack {
+            AuroraBackground(mood: PortalRecommender.category(forHour: Calendar.current.component(.hour, from: .now)))
+                .ignoresSafeArea()
         ScrollView {
             VStack(spacing: TranceSpacing.content) {
-                greetingSection
+                portalSection
                     .cardEntrance(visible: cardsVisible, delay: 0.00, reduceMotion: reduceMotion)
+
+                greetingSection
+                    .cardEntrance(visible: cardsVisible, delay: 0.06, reduceMotion: reduceMotion)
 
                 if lastSessionProgress > 0,
                    let lastSession = sessions.first(where: { $0.id.uuidString == lastSessionId }) ?? sessions.first {
@@ -162,20 +168,15 @@ struct HomeView: View {
         .fullScreenCover(item: $playerFile) { file in
             UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
         }
+        } // end ZStack
     }
 
     // MARK: - Greeting Section
 
     private var greetingSection: some View {
         HStack(alignment: .center) {
-            // Left: branding + time-based greeting
-            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                WordmarkView()
-
-                Text("\(currentGreeting) \(displayName)")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-            }
+            // Left: branding wordmark only (greeting moved to portalSection)
+            WordmarkView()
 
             Spacer()
 
@@ -205,6 +206,71 @@ struct HomeView: View {
             .buttonStyle(.plain)
         }
         .padding(.top, TranceSpacing.statusBar)
+    }
+
+    // MARK: - Portal Section
+
+    private var portalSection: some View {
+        let recommended = sessions.first(where: { $0.id.uuidString == lastSessionId && lastSessionProgress > 0 })
+            ?? PortalRecommender.recommend(from: sessions)
+
+        return VStack(spacing: TranceSpacing.content) {
+            VStack(spacing: TranceSpacing.micro) {
+                Text(currentGreeting)
+                    .font(.system(size: 15, weight: .light))
+                    .foregroundStyle(.textDim)
+                Text("Ready to descend?")
+                    .font(.system(size: 26, weight: .ultraLight))
+                    .foregroundStyle(.textBright)
+            }
+            .padding(.top, TranceSpacing.content)
+
+            Button {
+                TranceHaptics.shared.medium()
+                if let recommended { selectedSession = recommended }
+            } label: {
+                ZStack {
+                    LumeOrb(size: .hero, pulse: recommended?.light_score.first?.frequency)
+                    VStack(spacing: 2) {
+                        Text("Begin")
+                            .font(.system(size: 18, weight: .light))
+                            .foregroundStyle(.textBright)
+                        if let recommended {
+                            Text(recommended.session_name)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.textGhost)
+                                .lineLimit(1)
+                                .frame(maxWidth: 140)
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(recommended.map { "Begin \($0.session_name)" } ?? "Begin a session")
+
+            stateChipsRow
+        }
+    }
+
+    private var stateChipsRow: some View {
+        HStack(spacing: TranceSpacing.inner) {
+            ForEach(BrainwaveCategory.allCases, id: \.self) { category in
+                Button {
+                    TranceHaptics.shared.selection()
+                    showingSessionLibrary = true
+                } label: {
+                    Text("\(category.emoji) \(category.rawValue)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.textDim)
+                        .padding(.horizontal, TranceSpacing.list)
+                        .padding(.vertical, TranceSpacing.inner)
+                        .background(category.haloColor.opacity(0.12))
+                        .clipShape(.capsule)
+                        .overlay(Capsule().stroke(category.haloColor.opacity(0.3), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     // MARK: - Continue Session Card
