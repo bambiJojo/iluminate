@@ -9,7 +9,8 @@ import SwiftUI
 
 // MARK: - Brainwave Category
 
-enum BrainwaveCategory: String, CaseIterable {
+enum BrainwaveCategory: String, CaseIterable, Identifiable {
+    var id: String { rawValue }
     case sleep  = "Sleep"
     case focus  = "Focus"
     case energy = "Energy"
@@ -65,6 +66,7 @@ struct HomeView: View {
     @State var showingSessionLibrary = false
     @State private var playerFile: AudioFile?
     @State private var cardsVisible = false
+    @State private var selectedChipCategory: BrainwaveCategory?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -150,6 +152,16 @@ struct HomeView: View {
         .sheet(isPresented: $showingSessionLibrary) {
             SessionLibraryView(engine: engine)
         }
+        .sheet(item: $selectedChipCategory) { category in
+            CategorySessionSheet(
+                category: category,
+                sessions: sessions,
+                onSelect: { session in
+                    selectedChipCategory = nil
+                    selectedSession = session
+                }
+            )
+        }
         .fullScreenCover(isPresented: $showingFlashMode) {
             UnifiedPlayerView(
                 mode: .flashMode(
@@ -215,7 +227,7 @@ struct HomeView: View {
 
         return VStack(spacing: TranceSpacing.content) {
             VStack(spacing: TranceSpacing.micro) {
-                Text(currentGreeting)
+                Text(portalGreeting)
                     .font(.system(size: 15, weight: .light))
                     .foregroundStyle(.textDim)
                 Text("Ready to descend?")
@@ -253,10 +265,10 @@ struct HomeView: View {
 
     private var stateChipsRow: some View {
         HStack(spacing: TranceSpacing.inner) {
-            ForEach(BrainwaveCategory.allCases, id: \.self) { category in
+            ForEach(BrainwaveCategory.allCases) { category in
                 Button {
                     TranceHaptics.shared.selection()
-                    showingSessionLibrary = true
+                    selectedChipCategory = category
                 } label: {
                     Text("\(category.emoji) \(category.rawValue)")
                         .font(.system(size: 12))
@@ -498,6 +510,16 @@ struct HomeView: View {
         case 17..<21: return "Good evening,"
         default:      return "Good night,"
         }
+    }
+
+    /// Greeting shown in portalSection — appends the user's name when one is
+    /// set; strips the trailing comma when displaying without a name.
+    private var portalGreeting: String {
+        let name = userName.trimmingCharacters(in: .whitespaces)
+        if name.isEmpty {
+            return currentGreeting.trimmingCharacters(in: CharacterSet(charactersIn: ", "))
+        }
+        return "\(currentGreeting) \(name)"
     }
 
     private func generateSampleWaveform() -> [CGFloat] {
