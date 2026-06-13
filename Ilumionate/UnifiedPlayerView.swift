@@ -10,6 +10,7 @@ import SwiftUI
 
 struct UnifiedPlayerView: View {
     @State private var viewModel: UnifiedPlayerViewModel
+    @State private var controlsVisibility = PlayerControlsVisibility()
     @Environment(\.dismiss) private var dismiss
 
     init(mode: PlayerMode, engine: LightEngine) {
@@ -85,8 +86,26 @@ struct UnifiedPlayerView: View {
             }
         }
         .onAppear { viewModel.onAppear() }
+        .onAppear { controlsVisibility.registerInteraction() }
         .onDisappear { viewModel.onDisappear() }
+        .onChange(of: controlsVisibility.isVisible) { _, visible in
+            withAnimation(LiminalMotion.fade) { viewModel.showingControls = visible }
+        }
+        .onChange(of: viewModel.showingControls) { _, showing in
+            controlsVisibility.isDrawerOpen = showing
+            if showing { controlsVisibility.registerInteraction() }
+        }
         .statusBarHidden(!viewModel.showingControls)
+        .gesture(
+            DragGesture(minimumDistance: 20)
+                .onEnded { value in
+                    if value.translation.height < -40 {        // swipe up → reveal
+                        controlsVisibility.registerInteraction()
+                    } else if value.translation.height > 40 {   // swipe down → hide
+                        controlsVisibility.hideNow()
+                    }
+                }
+        )
         .preferredColorScheme(viewModel.useDarkChrome ? .dark : .light)
         .sheet(isPresented: $viewModel.showingTrackList) {
             PlayerTrackListSheet(viewModel: viewModel)
@@ -154,60 +173,34 @@ struct UnifiedPlayerView: View {
         }
     }
 
-    // MARK: - Minimal Overlay (controls hidden)
+    // MARK: - Minimal Overlay (Pure Void whisper — auto-fades)
 
     private var minimalOverlay: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                viewModel.showingControls = true
-            }
-        } label: {
-            VStack {
-                HStack {
-                    Spacer()
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.title3)
-                        .foregroundStyle(viewModel.labelColor)
-                        .padding(12)
-                        .background(.ultraThinMaterial)
-                        .clipShape(.circle)
-                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
-                        .padding()
+        VStack {
+            VStack(spacing: TranceSpacing.micro) {
+                if viewModel.mode.hasFrequencyDisplay || viewModel.mode.hasAudioScrubber {
+                    Text(viewModel.formatTime(viewModel.currentTime))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
                 }
+            }
+            .padding(.top, TranceSpacing.statusBar)
 
+            Spacer()
+
+            if viewModel.mode.hasMandalaVisualizer {
+                MandalaVisualizer(size: 250, brightness: viewModel.engine.brightness, isPlaying: viewModel.isPlaying)
                 Spacer()
-
-                // Mandala in session mode
-                if viewModel.mode.hasMandalaVisualizer {
-                    MandalaVisualizer(
-                        size: 250,
-                        brightness: viewModel.engine.brightness,
-                        isPlaying: viewModel.isPlaying
-                    )
-                    Spacer()
-                }
-
-                // Timer display for infinite modes
-                if viewModel.mode.hasFrequencyDisplay {
-                    timerDisplay
-                }
-
-                Text("Tap to show controls")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
-                    .padding(.bottom, TranceSpacing.statusBar)
             }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Show controls")
-    }
 
-    private var timerDisplay: some View {
-        Text(viewModel.formatTime(viewModel.currentTime))
-            .font(TranceTypography.caption)
-            .foregroundStyle(viewModel.secondaryLabelColor)
-            .monospacedDigit()
-            .padding(.bottom, TranceSpacing.content)
+            Text("Tap to show controls · swipe up for settings")
+                .font(TranceTypography.caption)
+                .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.5))
+                .padding(.bottom, TranceSpacing.statusBar)
+        }
+        .contentShape(.rect)
+        .onTapGesture { controlsVisibility.registerInteraction() }
+        .accessibilityLabel("Show controls")
     }
 
     // MARK: - Controls Overlay
