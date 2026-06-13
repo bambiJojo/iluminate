@@ -31,6 +31,8 @@ struct TextTranceLibraryView: View {
                 }
                 .buttonStyle(.plain)
                 GeneratePlaceholderCard()
+                // Clear the app's floating tab bar so the last card isn't cut off.
+                Color.clear.frame(height: TranceSpacing.tabBarClearance)
             }
             .padding(TranceSpacing.screen)
         }

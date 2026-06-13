@@ -2,7 +2,7 @@
 //  Ilumionate
 //
 //  Configure a session for the chosen script: arc, optional layers, speed.
-//  Builds a TextTranceSession and pushes the player.
+//  Builds a TextTranceSession and presents the immersive player full-screen.
 
 import SwiftUI
 
@@ -37,11 +37,14 @@ struct TextTranceSetupView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(Color.roseGold)
                 .controlSize(.large)
-                .padding(TranceSpacing.screen)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, TranceSpacing.screen)
+                .padding(.top, TranceSpacing.cardMargin)
+                // Lift the button clear of the app's floating tab bar.
+                .padding(.bottom, TranceSpacing.tabBarClearance)
         }
-        .navigationDestination(isPresented: $startPlayer) {
+        .fullScreenCover(isPresented: $startPlayer) {
             TextTrancePlayerView(session: makeSession())
-                .navigationBarBackButtonHidden()
         }
     }
 
