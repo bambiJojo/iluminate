@@ -109,31 +109,6 @@ extension ProfileSettingsView {
         .animation(.easeOut(duration: 0.5).delay(0.2), value: animateContent)
     }
 
-    // MARK: - Appearance
-
-    var appearanceSection: some View {
-        GlassCard(label: "Appearance") {
-            VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                HStack {
-                    Image(systemName: "circle.lefthalf.filled")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Color.roseGold)
-                    Text("Color Mode")
-                        .font(TranceTypography.body)
-                        .foregroundStyle(Color.textPrimary)
-                    Spacer()
-                }
-                Picker("Appearance", selection: appearanceMode) {
-                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .tint(.roseGold)
-            }
-        }
-    }
-
     // MARK: - Core Settings
 
     var coreSettingsSection: some View {
