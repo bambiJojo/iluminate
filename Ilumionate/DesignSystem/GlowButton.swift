@@ -50,7 +50,7 @@ struct GlowButton: View {
                 Text(title)
             }
         }
-        .font(.system(size: 16, weight: .semibold))
+        .font(.headline)
         .foregroundStyle(kind == .primary ? Color.voidDeep : Color.textBright)
     }
 

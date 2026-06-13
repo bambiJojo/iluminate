@@ -15,8 +15,10 @@ struct LiminalSurfaceModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(.ultraThinMaterial)
-            .background(Color.voidElevated.opacity(0.6))
+            .background {
+                Color.voidElevated.opacity(0.6)
+                    .background(.ultraThinMaterial)
+            }
             .clipShape(.rect(cornerRadius: cornerRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
