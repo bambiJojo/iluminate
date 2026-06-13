@@ -92,8 +92,10 @@ struct UnifiedPlayerView: View {
             withAnimation(LiminalMotion.fade) { viewModel.showingControls = visible }
         }
         .onChange(of: viewModel.showingControls) { _, showing in
-            controlsVisibility.isDrawerOpen = showing
             if showing { controlsVisibility.registerInteraction() }
+        }
+        .onChange(of: viewModel.showingTrackList) { _, open in
+            controlsVisibility.isDrawerOpen = open
         }
         .statusBarHidden(!viewModel.showingControls)
         .gesture(
@@ -176,30 +178,35 @@ struct UnifiedPlayerView: View {
     // MARK: - Minimal Overlay (Pure Void whisper — auto-fades)
 
     private var minimalOverlay: some View {
-        VStack {
-            VStack(spacing: TranceSpacing.micro) {
-                if viewModel.mode.hasFrequencyDisplay || viewModel.mode.hasAudioScrubber {
-                    Text(viewModel.formatTime(viewModel.currentTime))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
+        Button {
+            controlsVisibility.registerInteraction()
+        } label: {
+            VStack {
+                VStack(spacing: TranceSpacing.micro) {
+                    if viewModel.mode.hasFrequencyDisplay || viewModel.mode.hasAudioScrubber {
+                        Text(viewModel.formatTime(viewModel.currentTime))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
+                    }
                 }
-            }
-            .padding(.top, TranceSpacing.statusBar)
+                .padding(.top, TranceSpacing.statusBar)
 
-            Spacer()
-
-            if viewModel.mode.hasMandalaVisualizer {
-                MandalaVisualizer(size: 250, brightness: viewModel.engine.brightness, isPlaying: viewModel.isPlaying)
                 Spacer()
-            }
 
-            Text("Tap to show controls · swipe up for settings")
-                .font(TranceTypography.caption)
-                .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.5))
-                .padding(.bottom, TranceSpacing.statusBar)
+                if viewModel.mode.hasMandalaVisualizer {
+                    MandalaVisualizer(size: 250, brightness: viewModel.engine.brightness, isPlaying: viewModel.isPlaying)
+                    Spacer()
+                }
+
+                Text("Tap or swipe up to show controls")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.5))
+                    .padding(.bottom, TranceSpacing.statusBar)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(.rect)
         }
-        .contentShape(.rect)
-        .onTapGesture { controlsVisibility.registerInteraction() }
+        .buttonStyle(.plain)
         .accessibilityLabel("Show controls")
     }
 
