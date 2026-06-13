@@ -34,7 +34,7 @@ struct TranceColors {
     static let roseDeep   = Color.auroraBlue     // secondary action accent
     static let blush      = Color.auroraPink
     static let lavender   = Color.auroraViolet
-    static let warmAccent = Color.auroraPink
+    static let warmAccent = Color(hex: "E8B07A")
 
     // MARK: Text
     static let textPrimary   = Color.textBright
