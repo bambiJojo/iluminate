@@ -22,3 +22,6 @@ Corpus/dataset/*.csv
 Tools/CorpusGenerator/.build/
 .agents/skills/macos-spm-app-packaging/assets/templates/bootstrap/.build/
 .superpowers/
+
+# Git worktrees
+.worktrees/
