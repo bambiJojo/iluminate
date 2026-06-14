@@ -366,35 +366,10 @@ private struct StartSessionCard: View {
     var body: some View {
         LiminalCard {
             VStack(spacing: TranceSpacing.list) {
-                Button(action: {
+                GlowButton(title: model.startSessionButtonTitle, systemImage: model.startSessionIcon, kind: .primary) {
                     showingFlashMode = true
                     TranceHaptics.shared.heavy()
-                }) {
-                    HStack {
-                        Image(systemName: model.startSessionIcon)
-                        Text(model.startSessionButtonTitle)
-                            .font(TranceTypography.body)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.vertical, TranceSpacing.list)
-                    .padding(.horizontal, TranceSpacing.card)
-                    .background(
-                        LinearGradient(
-                            colors: [.roseGold, .roseDeep],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
-                    .shadow(
-                        color: TranceShadow.button.color,
-                        radius: TranceShadow.button.radius,
-                        x: TranceShadow.button.x,
-                        y: TranceShadow.button.y
-                    )
                 }
-                .buttonStyle(.plain)
 
                 Text(model.startSessionDescription)
                     .font(TranceTypography.caption)
@@ -605,12 +580,14 @@ struct CustomSlider: View {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(activeColor)
                     .frame(width: thumbPosition, height: 4)
+                    .shadow(color: activeColor.opacity(0.6), radius: 6)
 
                 // Thumb
                 Circle()
                     .fill(thumbColor)
                     .frame(width: 20, height: 20)
                     .scaleEffect(isDragging ? 1.2 : 1.0)
+                    .shadow(color: thumbColor.opacity(0.7), radius: isDragging ? 12 : 8)
                     .offset(x: thumbPosition - 10)
                     .gesture(
                         DragGesture()
