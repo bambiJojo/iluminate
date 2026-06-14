@@ -99,6 +99,19 @@ final class MindMachineModel: Sendable {
         }
     }
 
+    /// Maps the live frequency to a brainwave category for AuroraBackground mood.
+    /// Bands match BrainwaveCategory's own frequencyRange/haloColor so the aurora
+    /// tint agrees with the model's brainwaveColor.
+    var moodCategory: BrainwaveCategory {
+        switch frequency {
+        case 0.5..<4:   return .sleep   // delta  → bwDelta
+        case 4..<8:     return .relax   // theta  → bwTheta
+        case 8..<14:    return .focus   // alpha  → bwAlpha
+        case 14..<30:   return .energy  // beta   → bwBeta
+        default:        return .trance  // gamma  → bwGamma
+        }
+    }
+
     func colorForTemperature(_ temp: Int) -> Color {
         switch temp {
         case 2700: return .warmAccent
@@ -156,67 +169,69 @@ struct MindMachineView: View {
     @State private var showAdvanced = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: TranceSpacing.cardMargin) {
-                // Light Visualization + frequency — always visible
-                LightVisualizationCard(model: model)
-                FrequencyCard(model: model)
+        ZStack {
+            AuroraBackground(mood: model.moodCategory)
+            ScrollView {
+                VStack(spacing: TranceSpacing.cardMargin) {
+                    // Light Visualization + frequency — always visible
+                    LightVisualizationCard(model: model)
+                    FrequencyCard(model: model)
 
-                // Primary action
-                StartSessionCard(model: model, showingFlashMode: $showingFlashMode)
+                    // Primary action
+                    StartSessionCard(model: model, showingFlashMode: $showingFlashMode)
 
-                // Advanced controls — hidden by default
-                AdvancedControlsSection(model: model, showAdvanced: $showAdvanced)
+                    // Advanced controls — hidden by default
+                    AdvancedControlsSection(model: model, showAdvanced: $showAdvanced)
 
-                // Browse research sessions
-                if !sessions.isEmpty {
-                    BrowseSessionsLink(sessionCount: sessions.count)
+                    // Browse research sessions
+                    if !sessions.isEmpty {
+                        BrowseSessionsLink(sessionCount: sessions.count)
+                    }
+                }
+                .padding(.horizontal, TranceSpacing.screen)
+                .padding(.top, TranceSpacing.statusBar)
+                .padding(.bottom, TranceSpacing.tabBarClearance)
+            }
+            .navigationTitle("Create")
+            .navigationBarTitleDisplayMode(.large)
+            .navigationDestination(for: String.self) { destination in
+                if destination == "browseSessions" {
+                    BrowseSessionsView(
+                        sessions: sessions,
+                        engine: engine
+                    )
                 }
             }
-            .padding(.horizontal, TranceSpacing.screen)
-            .padding(.top, TranceSpacing.statusBar)
-            .padding(.bottom, TranceSpacing.tabBarClearance)
-        }
-        .background(Color.bgPrimary)
-        .navigationTitle("Create")
-        .navigationBarTitleDisplayMode(.large)
-        .navigationDestination(for: String.self) { destination in
-            if destination == "browseSessions" {
-                BrowseSessionsView(
-                    sessions: sessions,
+            .fullScreenCover(item: $selectedSession) { session in
+                UnifiedPlayerView(
+                    mode: .session(session: session, audioFile: nil),
                     engine: engine
                 )
             }
-        }
-        .fullScreenCover(item: $selectedSession) { session in
-            UnifiedPlayerView(
-                mode: .session(session: session, audioFile: nil),
-                engine: engine
-            )
-        }
-        .fullScreenCover(isPresented: $showingFlashMode) {
-            switch model.selectedVisualMode {
-            case .colorPulse:
-                UnifiedPlayerView(
-                    mode: .colorPulse(
-                        frequency: model.frequency,
-                        intensity: model.intensity
-                    ),
-                    engine: engine
-                )
-            default:
-                UnifiedPlayerView(
-                    mode: .flashMode(
-                        frequency: model.frequency,
-                        intensity: model.intensity,
-                        colorTemperature: model.colorTemperature,
-                        pattern: model.selectedPattern,
-                        binauralEnabled: model.binauralEnabled,
-                        binauralCarrier: model.binauralCarrierFrequency,
-                        binauralVolume: model.binauralVolume
-                    ),
-                    engine: engine
-                )
+            .fullScreenCover(isPresented: $showingFlashMode) {
+                switch model.selectedVisualMode {
+                case .colorPulse:
+                    UnifiedPlayerView(
+                        mode: .colorPulse(
+                            frequency: model.frequency,
+                            intensity: model.intensity
+                        ),
+                        engine: engine
+                    )
+                default:
+                    UnifiedPlayerView(
+                        mode: .flashMode(
+                            frequency: model.frequency,
+                            intensity: model.intensity,
+                            colorTemperature: model.colorTemperature,
+                            pattern: model.selectedPattern,
+                            binauralEnabled: model.binauralEnabled,
+                            binauralCarrier: model.binauralCarrierFrequency,
+                            binauralVolume: model.binauralVolume
+                        ),
+                        engine: engine
+                    )
+                }
             }
         }
     }
@@ -228,7 +243,7 @@ private struct LightVisualizationCard: View {
     @Bindable var model: MindMachineModel
 
     var body: some View {
-        GlassCard(label: "Light Visualization") {
+        LiminalCard(label: "Light Visualization") {
             VStack(spacing: TranceSpacing.list) {
                 PhoneScreenOrb(
                     frequency: model.frequency,
@@ -241,7 +256,7 @@ private struct LightVisualizationCard: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("\(model.frequency.formatted(.number.precision(.fractionLength(1)))) Hz")
-                            .font(TranceTypography.frequency)
+                            .font(TranceTypography.dataReadout)
                             .foregroundStyle(.textPrimary)
                         Text(model.brainwaveZone)
                             .font(TranceTypography.caption)
@@ -252,7 +267,7 @@ private struct LightVisualizationCard: View {
 
                     VStack(alignment: .trailing, spacing: 4) {
                         Text("\(Int(model.intensity * 100))%")
-                            .font(TranceTypography.frequency)
+                            .font(TranceTypography.dataReadout)
                             .foregroundStyle(.textPrimary)
                         Text("Intensity")
                             .font(TranceTypography.caption)
@@ -268,10 +283,10 @@ private struct FrequencyCard: View {
     @Bindable var model: MindMachineModel
 
     var body: some View {
-        GlassCard(label: "Frequency") {
+        LiminalCard(label: "Frequency") {
             VStack(spacing: TranceSpacing.list) {
                 Text("\(model.frequency.formatted(.number.precision(.fractionLength(1)))) Hz")
-                    .font(TranceTypography.frequency)
+                    .font(TranceTypography.dataReadout)
                     .foregroundStyle(.textPrimary)
 
                 Text(model.brainwaveZone)
@@ -301,10 +316,10 @@ private struct ColorTemperatureCard: View {
     @Bindable var model: MindMachineModel
 
     var body: some View {
-        GlassCard(label: "Color Temperature") {
+        LiminalCard(label: "Color Temperature") {
             VStack(spacing: TranceSpacing.list) {
                 Text("\(model.colorTemperature)K")
-                    .font(TranceTypography.frequency)
+                    .font(TranceTypography.dataReadout)
                     .foregroundStyle(.textPrimary)
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: TranceSpacing.inner) {
@@ -338,7 +353,7 @@ private struct IntensityCard: View {
     @Bindable var model: MindMachineModel
 
     var body: some View {
-        GlassCard(label: "Intensity") {
+        LiminalCard(label: "Intensity") {
             IntensityDial(intensity: $model.intensity)
         }
     }
@@ -349,7 +364,7 @@ private struct StartSessionCard: View {
     @Binding var showingFlashMode: Bool
 
     var body: some View {
-        GlassCard {
+        LiminalCard {
             VStack(spacing: TranceSpacing.list) {
                 Button(action: {
                     showingFlashMode = true
@@ -394,7 +409,7 @@ private struct PatternSelectionSection: View {
     @Bindable var model: MindMachineModel
 
     var body: some View {
-        GlassCard(label: "Waveform Pattern") {
+        LiminalCard(label: "Waveform Pattern") {
             VStack(spacing: TranceSpacing.list) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: TranceSpacing.list) {
@@ -419,7 +434,7 @@ private struct VisualModeCard: View {
     @Bindable var model: MindMachineModel
 
     var body: some View {
-        GlassCard(label: "Visual Mode") {
+        LiminalCard(label: "Visual Mode") {
             HStack(spacing: TranceSpacing.list) {
                 ForEach(MindMachineModel.VisualMode.allCases, id: \.self) { mode in
                     VisualModeButton(
@@ -440,7 +455,7 @@ private struct AdvancedControlsSection: View {
     @Binding var showAdvanced: Bool
 
     var body: some View {
-        GlassCard {
+        LiminalCard {
             DisclosureGroup(isExpanded: $showAdvanced) {
                 VStack(spacing: TranceSpacing.cardMargin) {
                     Divider().background(Color.glassBorder)
@@ -475,7 +490,7 @@ private struct BrowseSessionsLink: View {
 
     var body: some View {
         NavigationLink(value: "browseSessions") {
-            GlassCard {
+            LiminalCard {
                 HStack {
                     Image(systemName: "list.bullet.rectangle")
                         .font(.title3)
