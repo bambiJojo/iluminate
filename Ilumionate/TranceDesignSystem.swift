@@ -233,6 +233,9 @@ struct TranceTypography {
     // Frequency display
     static let frequency = Font.system(size: 18, weight: .semibold)
 
+    // Monospaced data readout (frequency / Hz / counts) — the instrument showing through (spec §2.2)
+    static let dataReadout = Font.system(size: 18, weight: .semibold, design: .monospaced)
+
     // Track title and artist
     static let trackTitle = Font.system(size: 20, weight: .semibold)
     static let trackArtist = Font.system(size: 13, weight: .regular)
