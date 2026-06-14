@@ -11,7 +11,6 @@ struct ReadingSourceStoreTests {
     @Test func curatedSourcesHaveStableSafeShape() {
         let sources = ReadingSourceCatalog.curatedSources
         let allSourcesAreCurated = sources.allSatisfy { $0.isCurated }
-        let allSourcesAvoidAdultOnlyRating = sources.allSatisfy { $0.contentRating != .adultOnly }
         let allSourcesUseWebURLs = sources.allSatisfy { source in
             let scheme = source.url.scheme?.lowercased()
             return scheme == "https" || scheme == "http"
@@ -20,7 +19,6 @@ struct ReadingSourceStoreTests {
         #expect(sources.count >= 5)
         #expect(Set(sources.map(\.id)).count == sources.count)
         #expect(allSourcesAreCurated)
-        #expect(allSourcesAvoidAdultOnlyRating)
         #expect(allSourcesUseWebURLs)
     }
 

@@ -42,4 +42,43 @@ struct ReadingSourceCatalogTests {
         #expect(openAction(for: source, adultConfirmed: false) == .browse(source.url))
         #expect(openAction(for: source, adultConfirmed: true) == .browse(source.url))
     }
+
+    // MARK: New adult directories
+
+    private static let newAdultIDs = [
+        "mc-stories",
+        "spirals-nightclub",
+        "nimja-hypno",
+        "literotica-mc",
+        "warpmymind",
+        "hypnohub",
+        "hypnotube-stories",
+        "reddit-hypnautimagery"
+    ]
+
+    @Test func newAdultDirectoriesArePresent() {
+        let ids = Set(ReadingSourceCatalog.curatedSources.map(\.id))
+        for id in Self.newAdultIDs {
+            #expect(ids.contains(id), "missing curated source: \(id)")
+        }
+    }
+
+    @Test func newAdultDirectoriesAreAdultLinkOnly() {
+        let byID = Dictionary(
+            uniqueKeysWithValues: ReadingSourceCatalog.curatedSources.map { ($0.id, $0) }
+        )
+        for id in Self.newAdultIDs {
+            let source = byID[id]
+            #expect(source?.contentRating == .adultOnly, "\(id) should be adultOnly")
+            #expect(source?.importPolicy == .linkOnly, "\(id) should be linkOnly")
+        }
+    }
+
+    @Test func everyCuratedSourceHasWebURL() {
+        for source in ReadingSourceCatalog.curatedSources {
+            let scheme = source.url.scheme?.lowercased()
+            #expect(scheme == "https" || scheme == "http", "\(source.id) has non-web URL")
+            #expect(source.url.host?.isEmpty == false, "\(source.id) has empty host")
+        }
+    }
 }
