@@ -25,3 +25,16 @@ Tools/CorpusGenerator/.build/
 
 # Git worktrees
 .worktrees/
+
+# Local nested repos/tools; keep out of parent repo tracking
+/catigorizer/
+/lightMapCreationTool/
+
+# Local raw corpus inputs and generated script corpus
+/.awakeners/
+/.deepeners.mp3/
+/.fract/
+/.inductions/
+/.scripts/
+/.stuff/
+/ScriptCorpus/
