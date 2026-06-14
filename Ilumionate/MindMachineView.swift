@@ -526,16 +526,23 @@ struct PatternCard: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: TranceSpacing.inner) {
-                RoundedRectangle(cornerRadius: TranceRadius.pattern)
-                    .fill(pattern.gradient)
-                    .frame(width: 80, height: 50)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: TranceRadius.pattern)
-                            .stroke(
-                                isSelected ? Color.textPrimary : Color.clear,
-                                lineWidth: 2
-                            )
-                    }
+                ZStack {
+                    RoundedRectangle(cornerRadius: TranceRadius.pattern)
+                        .fill(Color.voidElevated.opacity(0.6))
+                        .frame(width: 80, height: 50)
+                    WaveformShape(pattern: pattern)
+                        .stroke(
+                            LinearGradient(colors: [.auroraTeal, .auroraBlue], startPoint: .leading, endPoint: .trailing),
+                            style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+                        )
+                        .frame(width: 64, height: 30)
+                        .shadow(color: .auroraTeal.opacity(isSelected ? 0.7 : 0.4), radius: isSelected ? 10 : 6)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: TranceRadius.pattern)
+                        .stroke(isSelected ? Color.auroraTeal : Color.clear, lineWidth: 2)
+                        .frame(width: 80, height: 50)
+                }
 
                 VStack(spacing: 2) {
                     Text(pattern.rawValue)
