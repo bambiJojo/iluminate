@@ -100,7 +100,7 @@ struct TranceTabBar: View {
         .buttonStyle(.plain)
     }
 
-    // The tint for the active tab — uses the design system's rose-gold
+    // The tint for the active tab — `.roseGold` now resolves to the Liminal aurora teal
     private var tabAccentColor: Color { .roseGold }
 }
 

@@ -13,6 +13,7 @@ struct LumeOrb: View {
     enum Size { case hero, medium, mini
         var diameter: CGFloat { switch self { case .hero: 200; case .medium: 120; case .mini: 40 } }
         var ringInset: CGFloat { switch self { case .hero: 7; case .medium: 5; case .mini: 2 } }
+        var glowRadius: CGFloat { switch self { case .hero: 40; case .medium: 22; case .mini: 8 } }
     }
 
     var size: Size = .hero
@@ -57,7 +58,7 @@ struct LumeOrb: View {
                     .padding(size.ringInset)
             }
             .frame(width: size.diameter, height: size.diameter)
-            .shadow(color: .auroraBlue.opacity(0.4), radius: 40)
+            .shadow(color: .auroraBlue.opacity(0.4), radius: size.glowRadius)
         }
     }
 }

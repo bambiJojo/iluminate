@@ -39,7 +39,6 @@ struct MiniPlayerBar: View {
                 HStack(spacing: TranceSpacing.list) {
                     // Mini orb — identity anchor for the bar
                     LumeOrb(size: .mini)
-                        .frame(width: 40, height: 40)
 
                     // Track title + state
                     VStack(alignment: .leading, spacing: 2) {
