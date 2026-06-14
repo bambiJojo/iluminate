@@ -49,16 +49,7 @@ struct TranceTabBar: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 10)
-        .background {
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .background(Capsule().fill(Color.voidElevated.opacity(0.7)))
-                .shadow(color: Color.auroraBlue.opacity(0.15), radius: 16, x: 0, y: 8)
-        }
-        .overlay {
-            Capsule()
-                .stroke(Color.glassBorder, lineWidth: 1)
-        }
+        .liminalGlass(.capsule)
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
     }

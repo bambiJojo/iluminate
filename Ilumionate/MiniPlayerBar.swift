@@ -64,20 +64,7 @@ struct MiniPlayerBar: View {
                 .frame(height: barHeight)
             }
             .frame(height: barHeight)
-            .background {
-                RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                    .fill(.ultraThinMaterial)
-                    .background(
-                        RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                            .fill(Color.voidElevated.opacity(0.7))
-                    )
-                    .shadow(color: Color.auroraBlue.opacity(0.15), radius: 14, x: 0, y: 6)
-            }
-            .clipShape(.rect(cornerRadius: TranceRadius.glassCard))
-            .overlay {
-                RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                    .stroke(Color.glassBorder, lineWidth: 1)
-            }
+            .liminalGlass(.roundedRect(cornerRadius: TranceRadius.glassCard))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Now playing: \(nowPlaying.currentTitle)")

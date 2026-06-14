@@ -8,30 +8,70 @@
 
 import SwiftUI
 
-/// Applies the Liminal glass treatment to any view.
-struct LiminalSurfaceModifier: ViewModifier {
-    var cornerRadius: CGFloat = TranceRadius.glassCard
+// MARK: - Canonical Liminal Glass
+
+/// The clip shape a Liminal glass surface is cut to.
+///
+/// Surfaces are either fully rounded capsules (the floating tab bar) or
+/// rounded rectangles with an explicit corner radius (cards, the mini player).
+enum LiminalGlassShape {
+    case capsule
+    case roundedRect(cornerRadius: CGFloat)
+
+    /// Type-erased `Shape` used for the fill, clip, and stroke passes so a
+    /// single recipe can serve both the capsule and rounded-rect cases.
+    var shape: AnyShape {
+        switch self {
+        case .capsule:                       AnyShape(.capsule)
+        case .roundedRect(let cornerRadius): AnyShape(.rect(cornerRadius: cornerRadius))
+        }
+    }
+}
+
+/// The ONE canonical Liminal "void-glass" treatment.
+///
+/// Layering (back to front): a tinted `voidElevated` plate establishes the
+/// dark void, `.ultraThinMaterial` sits in *front* of it so its blur stays
+/// visible, a hairline aurora border traces the edge, and a centered
+/// aurora-blue glow blooms outward (an atmospheric halo, not a dark drop
+/// shadow). Every Liminal surface — cards, the tab bar, the mini player —
+/// is expressed through this single modifier, parameterized only by clip
+/// shape and tint strength.
+struct LiminalGlassModifier: ViewModifier {
+    var glassShape: LiminalGlassShape
+    var tintOpacity: Double = 0.7
     var glow: Bool = true
 
     func body(content: Content) -> some View {
-        content
+        let shape = glassShape.shape
+        return content
             .background {
-                Color.voidElevated.opacity(0.6)
-                    .background(.ultraThinMaterial)
+                shape
+                    .fill(.ultraThinMaterial)
+                    .background(shape.fill(Color.voidElevated.opacity(tintOpacity)))
             }
-            .clipShape(.rect(cornerRadius: cornerRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(Color.glassBorder, lineWidth: 1)
-            )
-            .shadow(color: glow ? Color.auroraBlue.opacity(0.12) : .clear,
-                    radius: 18, x: 0, y: 0)
+            .clipShape(shape)
+            .overlay {
+                shape.stroke(Color.glassBorder, lineWidth: 1)
+            }
+            .shadow(color: glow ? Color.auroraBlue.opacity(0.15) : .clear,
+                    radius: 16, x: 0, y: 0)
     }
 }
 
 extension View {
+    /// Applies the canonical Liminal glass treatment cut to `shape`.
+    func liminalGlass(
+        _ shape: LiminalGlassShape,
+        tintOpacity: Double = 0.7,
+        glow: Bool = true
+    ) -> some View {
+        modifier(LiminalGlassModifier(glassShape: shape, tintOpacity: tintOpacity, glow: glow))
+    }
+
+    /// Convenience for the common rounded-rectangle card surface.
     func liminalSurface(cornerRadius: CGFloat = TranceRadius.glassCard, glow: Bool = true) -> some View {
-        modifier(LiminalSurfaceModifier(cornerRadius: cornerRadius, glow: glow))
+        liminalGlass(.roundedRect(cornerRadius: cornerRadius), glow: glow)
     }
 }
 
