@@ -44,7 +44,7 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                Color.bgPrimary.ignoresSafeArea()
+                AuroraBackground()
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -196,7 +196,7 @@ struct LibraryView: View {
     // MARK: - Layout Spacers
 
     private var divider: some View {
-        Color.bgPrimary.frame(height: TranceSpacing.inner)
+        Color.clear.frame(height: TranceSpacing.inner)
     }
 
     private var bottomSpacer: some View {
@@ -289,12 +289,7 @@ private struct LibraryCategoryRows: View {
         }
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.card)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                .strokeBorder(Color.glassBorder, lineWidth: 1)
-        )
+        .liminalSurface()
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.content)
     }
