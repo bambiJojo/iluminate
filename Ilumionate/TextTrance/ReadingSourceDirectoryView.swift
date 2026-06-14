@@ -11,8 +11,10 @@ struct ReadingSourceDirectoryView: View {
     @State private var selectedCategory: ReadingSourceCategory?
     @State private var searchText = ""
     @State private var showingAddSource = false
+    @State private var browserDestination: BrowserDestination?
+    @State private var pendingAdultURL: URL?
 
-    @Environment(\.openURL) private var openURL
+    @AppStorage("readingSourceAdultConfirmed") private var adultConfirmed = false
 
     init(store: ReadingSourceStore = .shared) {
         _store = State(initialValue: store)
@@ -60,6 +62,22 @@ struct ReadingSourceDirectoryView: View {
         .sheet(isPresented: $showingAddSource) {
             AddReadingSourceSheet(store: store)
         }
+        .sheet(item: $browserDestination) { destination in
+            SafariBrowserView(url: destination.url)
+                .ignoresSafeArea()
+        }
+        .alert("Adult content", isPresented: adultGatePresented, presenting: pendingAdultURL) { url in
+            Button("Continue", role: .destructive) {
+                adultConfirmed = true
+                pendingAdultURL = nil
+                browserDestination = BrowserDestination(url: url)
+            }
+            Button("Cancel", role: .cancel) {
+                pendingAdultURL = nil
+            }
+        } message: { _ in
+            Text("This source links to adult (18+) material. Continue?")
+        }
     }
 
     private var filteredSources: [ReadingSource] {
@@ -103,12 +121,29 @@ struct ReadingSourceDirectoryView: View {
 
     private func openSource(_ source: ReadingSource) {
         TranceHaptics.shared.light()
-        openURL(source.url)
+        switch openAction(for: source, adultConfirmed: adultConfirmed) {
+        case .browse(let url):
+            browserDestination = BrowserDestination(url: url)
+        case .confirmAdult(let url):
+            pendingAdultURL = url
+        }
+    }
+
+    private var adultGatePresented: Binding<Bool> {
+        Binding(
+            get: { pendingAdultURL != nil },
+            set: { if !$0 { pendingAdultURL = nil } }
+        )
     }
 
     private func deleteSource(_ source: ReadingSource) {
         store.deleteCustomSource(id: source.id)
     }
+}
+
+private struct BrowserDestination: Identifiable {
+    let id = UUID()
+    let url: URL
 }
 
 private struct SourceSection: View {
@@ -166,6 +201,9 @@ private struct ReadingSourceCard: View {
 
                     Spacer()
 
+                    if source.contentRating == .adultOnly {
+                        AdultBadge()
+                    }
                     ImportPolicyBadge(policy: source.importPolicy)
                 }
 
@@ -271,6 +309,18 @@ private struct ImportPolicyBadge: View {
         case .userInitiatedImport: return .bwTheta
         case .catalogPlanned:      return .roseGold
         }
+    }
+}
+
+private struct AdultBadge: View {
+    var body: some View {
+        Text("18+")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.warmAccent)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.warmAccent.opacity(0.16), in: Capsule())
+            .accessibilityLabel("Adult content")
     }
 }
 
