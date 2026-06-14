@@ -134,7 +134,7 @@ struct LibraryView: View {
                     .symbolRenderingMode(.hierarchical)
                     .font(.system(size: 28))
                     .foregroundStyle(
-                        LinearGradient(colors: [.roseGold, .blush],
+                        LinearGradient(colors: [.auroraTeal, .auroraBlue],
                                        startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
             }
@@ -352,9 +352,7 @@ private struct LibrarySessionsList: View {
                     .foregroundStyle(.textSecondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.glassBorder.opacity(0.1))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().strokeBorder(Color.glassBorder.opacity(0.3), lineWidth: 1))
+                    .liminalGlass(.capsule, glow: false)
                 }
                 .padding(.trailing, TranceSpacing.screen)
             }
@@ -394,7 +392,7 @@ private struct LibrarySessionsList: View {
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                             }
-                            .tint(.roseGold)
+                            .tint(.auroraTeal)
 
                             Button {
                                 onAddToPlaylist(file)
@@ -412,12 +410,7 @@ private struct LibrarySessionsList: View {
                 }
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.inner)
-                .background(Color.bgCard)
-                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
-                .overlay(
-                    RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                        .strokeBorder(Color.glassBorder, lineWidth: 1)
-                )
+                .liminalSurface()
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.inner)
             }
@@ -660,12 +653,12 @@ struct LibraryFavoritesView: View {
 
     var body: some View {
         ZStack {
-            Color.bgPrimary.ignoresSafeArea()
+            AuroraBackground()
             if favorites.isEmpty {
                 VStack(spacing: TranceSpacing.card) {
                     Image(systemName: "heart")
                         .font(.system(size: 56, weight: .ultraLight))
-                        .foregroundStyle(LinearGradient(colors: [.roseGold, .roseDeep], startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(LinearGradient(colors: [.auroraTeal, .auroraBlue], startPoint: .top, endPoint: .bottom))
                     Text("No Favorites Yet")
                         .font(TranceTypography.greeting)
                         .foregroundStyle(.textPrimary)
