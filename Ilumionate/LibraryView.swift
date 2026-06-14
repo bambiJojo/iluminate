@@ -521,15 +521,7 @@ private struct SessionMiniCard: View {
     var body: some View {
         Button(action: onPlay) {
             VStack(alignment: .leading, spacing: TranceSpacing.inner) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: TranceRadius.button)
-                        .fill(contentTypeGradient)
-                        .frame(width: 110, height: 110)
-                    Image(systemName: contentTypeIcon)
-                        .font(.system(size: 36, weight: .ultraLight))
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-                .shadow(color: contentTypeColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                SessionGlowDot(contentType: file.analysisResult?.contentType, size: 110)
 
                 Text(file.displayName)
                     .font(TranceTypography.caption)
@@ -546,43 +538,6 @@ private struct SessionMiniCard: View {
         .buttonStyle(PlainButtonStyle())
     }
 
-    private var contentTypeColor: Color {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:     return .bwDelta
-        case .eroticHypnosis: return .roseDeep
-        case .sleepHypnosis: return .bwDelta
-        case .meditation:   return .bwAlpha
-        case .brainwave:    return .bwGamma
-        case .asmr:         return .warmAccent
-        case .music:        return .bwBeta
-        case .guidedImagery: return .bwTheta
-        case .affirmations: return .warmAccent
-        default:            return .roseGold
-        }
-    }
-
-    private var contentTypeGradient: LinearGradient {
-        LinearGradient(
-            colors: [contentTypeColor, contentTypeColor.opacity(0.65)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private var contentTypeIcon: String {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:     return "brain.head.profile"
-        case .eroticHypnosis: return "flame"
-        case .sleepHypnosis: return "moon.zzz"
-        case .meditation:   return "leaf"
-        case .brainwave:    return "waveform.path.ecg"
-        case .asmr:         return "ear"
-        case .music:        return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations: return "quote.bubble"
-        default:            return "waveform"
-        }
-    }
 }
 
 // MARK: - LibrarySessionRow
@@ -599,14 +554,7 @@ struct LibrarySessionRow: View {
         }) {
             HStack(spacing: TranceSpacing.list) {
                 // Content type icon badge
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(contentTypeColor.opacity(0.18))
-                        .frame(width: 40, height: 40)
-                    Image(systemName: contentTypeIcon)
-                        .font(.system(size: 17))
-                        .foregroundStyle(contentTypeColor)
-                }
+                SessionGlowDot(contentType: file.analysisResult?.contentType, size: 40)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(file.displayName)
@@ -650,35 +598,6 @@ struct LibrarySessionRow: View {
         .buttonStyle(PlainButtonStyle())
     }
 
-    private var contentTypeColor: Color {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:      return .bwDelta
-        case .eroticHypnosis: return .roseDeep
-        case .sleepHypnosis: return .bwDelta
-        case .meditation:    return .bwAlpha
-        case .brainwave:     return .bwGamma
-        case .asmr:          return .warmAccent
-        case .music:         return .bwBeta
-        case .guidedImagery: return .bwTheta
-        case .affirmations:  return .warmAccent
-        default:             return .roseGold
-        }
-    }
-
-    private var contentTypeIcon: String {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:      return "brain.head.profile"
-        case .eroticHypnosis: return "flame"
-        case .sleepHypnosis: return "moon.zzz"
-        case .meditation:    return "leaf"
-        case .brainwave:     return "waveform.path.ecg"
-        case .asmr:          return "ear"
-        case .music:         return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations:  return "quote.bubble"
-        default:             return "waveform"
-        }
-    }
 }
 
 // MARK: - LibrarySessionRowLabel (for NavigationLink usage)
@@ -688,14 +607,7 @@ struct LibrarySessionRowLabel: View {
 
     var body: some View {
         HStack(spacing: TranceSpacing.list) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(contentTypeColor.opacity(0.18))
-                    .frame(width: 40, height: 40)
-                Image(systemName: contentTypeIcon)
-                    .font(.system(size: 17))
-                    .foregroundStyle(contentTypeColor)
-            }
+            SessionGlowDot(contentType: file.analysisResult?.contentType, size: 40)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(file.displayName)
@@ -735,35 +647,6 @@ struct LibrarySessionRowLabel: View {
         .padding(.vertical, TranceSpacing.card)
     }
 
-    private var contentTypeColor: Color {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:      return .bwDelta
-        case .eroticHypnosis: return .roseDeep
-        case .sleepHypnosis: return .bwDelta
-        case .meditation:    return .bwAlpha
-        case .brainwave:     return .bwGamma
-        case .asmr:          return .warmAccent
-        case .music:         return .bwBeta
-        case .guidedImagery: return .bwTheta
-        case .affirmations:  return .warmAccent
-        default:             return .roseGold
-        }
-    }
-
-    private var contentTypeIcon: String {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:      return "brain.head.profile"
-        case .eroticHypnosis: return "flame"
-        case .sleepHypnosis: return "moon.zzz"
-        case .meditation:    return "leaf"
-        case .brainwave:     return "waveform.path.ecg"
-        case .asmr:          return "ear"
-        case .music:         return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations:  return "quote.bubble"
-        default:             return "waveform"
-        }
-    }
 }
 
 // MARK: - Favorites Sub-View
