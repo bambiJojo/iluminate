@@ -10,7 +10,7 @@ struct ReadingSourceCatalogTests {
 
     // MARK: Gate logic
 
-    private func makeSource(rating: ReadingSourceContentRating) -> ReadingSource {
+    private static func makeSource(rating: ReadingSourceContentRating) -> ReadingSource {
         ReadingSource(
             id: "test-\(rating.rawValue)",
             title: "Test",
@@ -28,17 +28,23 @@ struct ReadingSourceCatalogTests {
     }
 
     @Test func adultSourceUnconfirmedRequestsConfirmation() {
-        let source = makeSource(rating: .adultOnly)
+        let source = Self.makeSource(rating: .adultOnly)
         #expect(openAction(for: source, adultConfirmed: false) == .confirmAdult(source.url))
     }
 
     @Test func adultSourceConfirmedBrowsesDirectly() {
-        let source = makeSource(rating: .adultOnly)
+        let source = Self.makeSource(rating: .adultOnly)
         #expect(openAction(for: source, adultConfirmed: true) == .browse(source.url))
     }
 
     @Test func generalSourceBrowsesRegardlessOfConfirmation() {
-        let source = makeSource(rating: .general)
+        let source = Self.makeSource(rating: .general)
+        #expect(openAction(for: source, adultConfirmed: false) == .browse(source.url))
+        #expect(openAction(for: source, adultConfirmed: true) == .browse(source.url))
+    }
+
+    @Test func mixedSourceBrowsesRegardlessOfConfirmation() {
+        let source = Self.makeSource(rating: .mixed)
         #expect(openAction(for: source, adultConfirmed: false) == .browse(source.url))
         #expect(openAction(for: source, adultConfirmed: true) == .browse(source.url))
     }
@@ -78,7 +84,7 @@ struct ReadingSourceCatalogTests {
         for source in ReadingSourceCatalog.curatedSources {
             let scheme = source.url.scheme?.lowercased()
             #expect(scheme == "https" || scheme == "http", "\(source.id) has non-web URL")
-            #expect(source.url.host?.isEmpty == false, "\(source.id) has empty host")
+            #expect(source.url.host(percentEncoded: false)?.isEmpty == false, "\(source.id) has empty host")
         }
     }
 }
