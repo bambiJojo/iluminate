@@ -643,7 +643,7 @@ struct PhoneScreenOrb: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.bgSecondary,
+                                Color.voidElevated,
                                 brainwaveColor.opacity(0.06 + 0.10 * breath)
                             ],
                             startPoint: .top,
