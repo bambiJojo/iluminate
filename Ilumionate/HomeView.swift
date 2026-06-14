@@ -575,6 +575,7 @@ struct HomeView: View {
 struct WordmarkView: View {
     @State private var shimmerOffset: CGFloat = -1.0
     @State private var wavePhase: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Fixed bar heights — a hand-crafted waveform silhouette
     private let bars: [CGFloat] = [
@@ -627,6 +628,7 @@ struct WordmarkView: View {
                 .clipped()
             }
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(
                     .easeInOut(duration: 6.0)
                     .repeatForever(autoreverses: false)
@@ -640,7 +642,7 @@ struct WordmarkView: View {
     // MARK: Waveform Bar
 
     private var waveformBar: some View {
-        TimelineView(.animation(minimumInterval: 1 / 12)) { timeline in
+        TimelineView(.animation(minimumInterval: 1 / 12, paused: reduceMotion)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
                 let count = bars.count
