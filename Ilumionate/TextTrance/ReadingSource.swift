@@ -66,6 +66,27 @@ struct ReadingSource: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+// MARK: - Adult-gate decision
+
+/// What should happen when the user taps a reading source.
+enum ReadingSourceOpenAction: Equatable {
+    /// Open the URL in the in-app browser now.
+    case browse(URL)
+    /// Adult source not yet acknowledged — present the 18+ confirmation first.
+    case confirmAdult(URL)
+}
+
+/// Decides whether a tapped source opens immediately or must clear the adult gate.
+/// Pure so it can be unit-tested without any UI.
+func openAction(for source: ReadingSource, adultConfirmed: Bool) -> ReadingSourceOpenAction {
+    if source.contentRating == .adultOnly && !adultConfirmed {
+        return .confirmAdult(source.url)
+    }
+    return .browse(source.url)
+}
+
+// MARK: - Catalog
+
 enum ReadingSourceCatalog {
     static let curatedSources: [ReadingSource] = [
         ReadingSource(
