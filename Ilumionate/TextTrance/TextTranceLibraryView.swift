@@ -17,27 +17,29 @@ struct TextTranceLibraryView: View {
     @State private var themeFilter: ScriptTheme?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: TranceSpacing.cardMargin) {
-                ThemeChipsRow(selection: $themeFilter)
-                ForEach(filteredScripts) { script in
-                    NavigationLink(value: TextTranceDestination.setup(scriptID: script.id)) {
-                        ScriptCard(script: script)
+        ZStack {
+            AuroraBackground()
+            ScrollView {
+                VStack(spacing: TranceSpacing.cardMargin) {
+                    ThemeChipsRow(selection: $themeFilter)
+                    ForEach(filteredScripts) { script in
+                        NavigationLink(value: TextTranceDestination.setup(scriptID: script.id)) {
+                            ScriptCard(script: script)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    NavigationLink(value: TextTranceDestination.readingSources) {
+                        ReadingSourcesEntryCard()
                     }
                     .buttonStyle(.plain)
+                    GeneratePlaceholderCard()
+                    // Clear the app's floating tab bar so the last card isn't cut off.
+                    Color.clear.frame(height: TranceSpacing.tabBarClearance)
                 }
-                NavigationLink(value: TextTranceDestination.readingSources) {
-                    ReadingSourcesEntryCard()
-                }
-                .buttonStyle(.plain)
-                GeneratePlaceholderCard()
-                // Clear the app's floating tab bar so the last card isn't cut off.
-                Color.clear.frame(height: TranceSpacing.tabBarClearance)
+                .padding(TranceSpacing.screen)
             }
-            .padding(TranceSpacing.screen)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
-        .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle("Text Trance")
         .navigationDestination(for: TextTranceDestination.self) { destination in
             switch destination {
@@ -83,7 +85,7 @@ private struct ScriptCard: View {
     let script: TranceScript
 
     var body: some View {
-        GlassCard(label: nil) {
+        LiminalCard(label: nil) {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 Text(script.title)
                     .font(TranceTypography.sectionTitle)
@@ -105,7 +107,7 @@ private struct ScriptCard: View {
 
 private struct GeneratePlaceholderCard: View {
     var body: some View {
-        GlassCard(label: nil) {
+        LiminalCard(label: nil) {
             HStack {
                 Image(systemName: "sparkles")
                 VStack(alignment: .leading) {
@@ -126,10 +128,10 @@ private struct GeneratePlaceholderCard: View {
 /// Entry point from the Read tab into the link-only Reading Sources directory.
 private struct ReadingSourcesEntryCard: View {
     var body: some View {
-        GlassCard(label: nil) {
+        LiminalCard(label: nil) {
             HStack(spacing: TranceSpacing.list) {
                 Image(systemName: "globe")
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(Color.auroraTeal)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Find more scripts online")
                         .font(TranceTypography.sectionTitle)
@@ -154,8 +156,8 @@ private struct TagChip: View {
         Text(text)
             .font(TranceTypography.caption)
             .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Color.roseGold.opacity(0.18), in: .capsule)
-            .foregroundStyle(Color.roseGold)
+            .background(Color.auroraTeal.opacity(0.18), in: .capsule)
+            .foregroundStyle(Color.auroraTeal)
     }
 }
 
@@ -168,10 +170,10 @@ private struct FilterChip: View {
             .font(TranceTypography.caption)
             .padding(.horizontal, 14).padding(.vertical, 8)
             .background(
-                isOn ? Color.roseGold.opacity(0.22) : Color.glassBorder.opacity(0.4),
+                isOn ? Color.auroraTeal.opacity(0.22) : Color.glassBorder.opacity(0.4),
                 in: .capsule
             )
-            .foregroundStyle(isOn ? Color.roseGold : Color.textSecondary)
+            .foregroundStyle(isOn ? Color.auroraTeal : Color.textSecondary)
             .buttonStyle(.plain)
     }
 }

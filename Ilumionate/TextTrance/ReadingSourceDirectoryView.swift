@@ -20,7 +20,7 @@ struct ReadingSourceDirectoryView: View {
 
     var body: some View {
         ZStack {
-            Color.bgPrimary.ignoresSafeArea()
+            AuroraBackground()
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: TranceSpacing.card) {
@@ -52,7 +52,7 @@ struct ReadingSourceDirectoryView: View {
                     Image(systemName: "plus.circle.fill")
                         .symbolRenderingMode(.hierarchical)
                         .font(.system(size: 28))
-                        .foregroundStyle(.roseGold)
+                        .foregroundStyle(.auroraTeal)
                 }
                 .accessibilityLabel("Add custom source")
             }
@@ -147,7 +147,7 @@ private struct ReadingSourceCard: View {
     let onOpen: (ReadingSource) -> Void
 
     var body: some View {
-        GlassCard {
+        LiminalCard {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 HStack(alignment: .top, spacing: TranceSpacing.list) {
                     SourceIcon(category: source.category)
@@ -185,26 +185,8 @@ private struct ReadingSourceCard: View {
                         .foregroundStyle(.textLight)
                 }
 
-                Button {
+                GlowButton(title: "Open", systemImage: "safari.fill", kind: .primary) {
                     onOpen(source)
-                } label: {
-                    HStack(spacing: TranceSpacing.icon) {
-                        Image(systemName: "safari.fill")
-                        Text("Open")
-                    }
-                    .font(TranceTypography.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(
-                        LinearGradient(
-                            colors: [.roseGold, .roseDeep],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
                 }
                 .accessibilityLabel("Open \(source.title)")
             }
@@ -287,7 +269,7 @@ private struct CategoryChip: View {
                 .foregroundStyle(isSelected ? .white : .textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(isSelected ? Color.roseGold : Color.glassBorder.opacity(0.12), in: Capsule())
+                .background(isSelected ? Color.auroraTeal : Color.glassBorder.opacity(0.12), in: Capsule())
                 .overlay {
                     Capsule()
                         .strokeBorder(isSelected ? Color.clear : Color.glassBorder.opacity(0.35), lineWidth: 1)
