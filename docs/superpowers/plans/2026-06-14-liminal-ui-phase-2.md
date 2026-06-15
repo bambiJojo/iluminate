@@ -607,18 +607,20 @@ In `MindMachineModel`, after `brainwaveColor` (`:100`), add a mapping from the l
 
 ```swift
     /// Maps the live frequency to a brainwave category for AuroraBackground mood.
+    /// Bands match BrainwaveCategory's own frequencyRange/haloColor so the aurora
+    /// tint agrees with the model's brainwaveColor.
     var moodCategory: BrainwaveCategory {
         switch frequency {
-        case 0.5..<4:  return .sleep    // delta
-        case 4..<8:    return .relax    // theta
-        case 8..<12:   return .relax    // alpha
-        case 12..<30:  return .focus    // beta
-        default:       return .energy   // gamma
+        case 0.5..<4:   return .sleep   // delta  → bwDelta
+        case 4..<8:     return .relax   // theta  → bwTheta
+        case 8..<14:    return .focus   // alpha  → bwAlpha
+        case 14..<30:   return .energy  // beta   → bwBeta
+        default:        return .trance  // gamma  → bwGamma
         }
     }
 ```
 
-> Confirm the `BrainwaveCategory` case names in `HomeView.swift:12` (`grep -n "case " Ilumionate/HomeView.swift | head`) and substitute the real cases if they differ from `.sleep/.relax/.focus/.energy`.
+> `BrainwaveCategory` (in `HomeView.swift`) has cases `.sleep/.focus/.energy/.relax/.trance` (confirmed).
 
 - [ ] **Step 2: Swap background + migrate `GlassCard` → `LiminalCard`**
 
