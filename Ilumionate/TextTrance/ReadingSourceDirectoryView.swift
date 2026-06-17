@@ -45,16 +45,11 @@ struct ReadingSourceDirectoryView: View {
         .searchable(text: $searchText, prompt: "Search sources")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
+                Button("Add custom source", systemImage: "plus") {
                     TranceHaptics.shared.light()
                     showingAddSource = true
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.system(size: 28))
-                        .foregroundStyle(.auroraTeal)
                 }
-                .accessibilityLabel("Add custom source")
+                .tint(.auroraTeal)
             }
         }
         .sheet(isPresented: $showingAddSource) {

@@ -202,18 +202,11 @@ struct AudioLibraryView: View {
                         }
 
                         // Add button — triggers action sheet
-                        Button {
+                        Button("Add", systemImage: "plus") {
                             TranceHaptics.shared.light()
                             showingAddSheet = true
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .symbolRenderingMode(.hierarchical)
-                                .font(.system(size: 32))
-                                .foregroundStyle(
-                                    LinearGradient(colors: [.roseGold, .blush],
-                                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-                                )
                         }
+                        .tint(.roseGold)
                     }
                 }
             }

@@ -126,18 +126,11 @@ struct LibraryView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            Button {
+            Button("Add", systemImage: "plus") {
                 TranceHaptics.shared.light()
                 showingSessionsManager = true
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .font(.system(size: 28))
-                    .foregroundStyle(
-                        LinearGradient(colors: [.auroraTeal, .auroraBlue],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
             }
+            .tint(.auroraTeal)
         }
     }
 
