@@ -1,22 +1,30 @@
 //  ReadingSourceDirectoryView.swift
 //  Ilumionate
 //
-//  Curated link directory for reading sources. It opens websites; text import
-//  remains a future explicit user action.
+//  Curated directory for reading sources and user-initiated script imports.
 
 import SwiftUI
 
 struct ReadingSourceDirectoryView: View {
+    private let onImported: ((TranceScript) -> Void)?
+
     @State private var store: ReadingSourceStore
+    @State private var directoryMode: ReadingDirectoryMode = .scripts
     @State private var selectedCategory: ReadingSourceCategory?
+    @State private var selectedScriptKind: ReadingScriptKind?
+    @State private var selectedScriptTheme: ScriptTheme?
     @State private var searchText = ""
     @State private var showingAddSource = false
     @State private var browserDestination: BrowserDestination?
     @State private var pendingAdultURL: URL?
+    @State private var importingScriptID: String?
+    @State private var importErrorText: String?
 
     @AppStorage("readingSourceAdultConfirmed") private var adultConfirmed = false
 
-    init(store: ReadingSourceStore = .shared) {
+    init(store: ReadingSourceStore,
+         onImported: ((TranceScript) -> Void)? = nil) {
+        self.onImported = onImported
         _store = State(initialValue: store)
     }
 
@@ -26,16 +34,8 @@ struct ReadingSourceDirectoryView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: TranceSpacing.card) {
-                    categoryFilter
-
-                    ForEach(groupedSources, id: \.category) { group in
-                        SourceSection(
-                            category: group.category,
-                            sources: group.sources,
-                            onOpen: openSource,
-                            onDelete: deleteSource
-                        )
-                    }
+                    modePicker
+                    directoryContent
 
                     Color.clear.frame(height: TranceSpacing.tabBarClearance)
                 }
@@ -44,7 +44,7 @@ struct ReadingSourceDirectoryView: View {
             }
         }
         .navigationTitle("Reading Sources")
-        .searchable(text: $searchText, prompt: "Search sources")
+        .searchable(text: $searchText, prompt: searchPrompt)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -62,9 +62,13 @@ struct ReadingSourceDirectoryView: View {
         .sheet(isPresented: $showingAddSource) {
             AddReadingSourceSheet(store: store)
         }
-        .sheet(item: $browserDestination) { destination in
-            SafariBrowserView(url: destination.url)
-                .ignoresSafeArea()
+        .fullScreenCover(item: $browserDestination) { destination in
+            SafariBrowserView(
+                url: destination.url,
+                suggestedTitle: destination.suggestedTitle,
+                theme: destination.theme,
+                onImported: onImported
+            )
         }
         .alert("Adult content", isPresented: adultGatePresented, presenting: pendingAdultURL) { url in
             Button("Continue", role: .destructive) {
@@ -91,10 +95,130 @@ struct ReadingSourceDirectoryView: View {
         }
     }
 
-    private var groupedSources: [(category: ReadingSourceCategory, sources: [ReadingSource])] {
+    private var filteredScripts: [ReadingScriptCatalogEntry] {
+        ReadingScriptCatalog.entries(
+            kind: selectedScriptKind,
+            theme: selectedScriptTheme,
+            query: searchText
+        )
+    }
+
+    private var groupedSources: [SourceGroup] {
         ReadingSourceCategory.allCases.compactMap { category in
             let sources = filteredSources.filter { $0.category == category }
-            return sources.isEmpty ? nil : (category, sources)
+            return sources.isEmpty ? nil : SourceGroup(category: category, sources: sources)
+        }
+    }
+
+    private var searchPrompt: String {
+        switch directoryMode {
+        case .scripts: return "Search scripts"
+        case .sites:   return "Search sources"
+        }
+    }
+
+    private var modePicker: some View {
+        Picker("Directory mode", selection: $directoryMode) {
+            ForEach(ReadingDirectoryMode.allCases) { mode in
+                Text(mode.displayName).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ViewBuilder
+    private var directoryContent: some View {
+        switch directoryMode {
+        case .scripts:
+            scriptsContent
+        case .sites:
+            sitesContent
+        }
+    }
+
+    private var scriptsContent: some View {
+        VStack(alignment: .leading, spacing: TranceSpacing.card) {
+            scriptFilters
+            if let importErrorText {
+                EmptyDirectoryMessage(
+                    title: "Import failed",
+                    message: importErrorText
+                )
+            }
+            if filteredScripts.isEmpty {
+                EmptyDirectoryMessage(
+                    title: "No scripts found",
+                    message: "Try a different search or filter."
+                )
+            } else {
+                ScriptCatalogSection(
+                    entries: filteredScripts,
+                    importingScriptID: importingScriptID,
+                    onImport: importScript,
+                    onOpen: openScript
+                )
+            }
+        }
+    }
+
+    private var sitesContent: some View {
+        VStack(alignment: .leading, spacing: TranceSpacing.card) {
+            categoryFilter
+            if groupedSources.isEmpty {
+                EmptyDirectoryMessage(
+                    title: "No sources found",
+                    message: "Try a different search or category."
+                )
+            } else {
+                ForEach(groupedSources) { group in
+                    SourceSection(
+                        category: group.category,
+                        sources: group.sources,
+                        onOpen: openSource,
+                        onDelete: deleteSource
+                    )
+                }
+            }
+        }
+    }
+
+    private var scriptFilters: some View {
+        VStack(alignment: .leading, spacing: TranceSpacing.inner) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: TranceSpacing.inner) {
+                    CategoryChip(
+                        title: "All Types",
+                        isSelected: selectedScriptKind == nil,
+                        action: { selectedScriptKind = nil }
+                    )
+
+                    ForEach(ReadingScriptKind.allCases) { kind in
+                        CategoryChip(
+                            title: kind.displayName,
+                            isSelected: selectedScriptKind == kind,
+                            action: { selectedScriptKind = kind }
+                        )
+                    }
+                }
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: TranceSpacing.inner) {
+                    CategoryChip(
+                        title: "All Themes",
+                        isSelected: selectedScriptTheme == nil,
+                        action: { selectedScriptTheme = nil }
+                    )
+
+                    ForEach(ScriptTheme.allCases) { theme in
+                        CategoryChip(
+                            title: theme.displayName,
+                            isSelected: selectedScriptTheme == theme,
+                            action: { selectedScriptTheme = theme }
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -123,9 +247,54 @@ struct ReadingSourceDirectoryView: View {
         TranceHaptics.shared.light()
         switch openAction(for: source, adultConfirmed: adultConfirmed) {
         case .browse(let url):
-            browserDestination = BrowserDestination(url: url)
+            browserDestination = BrowserDestination(url: url, suggestedTitle: source.title)
         case .confirmAdult(let url):
             pendingAdultURL = url
+        }
+    }
+
+    private func openScript(_ entry: ReadingScriptCatalogEntry) {
+        TranceHaptics.shared.light()
+        switch openAction(for: entry, adultConfirmed: adultConfirmed) {
+        case .browse(let url):
+            browserDestination = BrowserDestination(url: url, suggestedTitle: entry.title, theme: entry.theme)
+        case .confirmAdult(let url):
+            pendingAdultURL = url
+        }
+    }
+
+    private func importScript(_ entry: ReadingScriptCatalogEntry) {
+        guard importingScriptID == nil else { return }
+
+        if entry.contentRating == .adultOnly && adultConfirmed == false {
+            pendingAdultURL = entry.url
+            return
+        }
+
+        guard entry.canImport else {
+            importErrorText = "This source can only be opened as a website."
+            return
+        }
+
+        importingScriptID = entry.id
+        importErrorText = nil
+        Task {
+            do {
+                let script = try await WebReadableTextImporter().importScript(
+                    from: entry.url,
+                    title: entry.title,
+                    theme: entry.theme
+                )
+                await MainActor.run {
+                    importingScriptID = nil
+                    onImported?(script)
+                }
+            } catch {
+                await MainActor.run {
+                    importingScriptID = nil
+                    importErrorText = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -141,9 +310,38 @@ struct ReadingSourceDirectoryView: View {
     }
 }
 
+private enum ReadingDirectoryMode: String, CaseIterable, Identifiable {
+    case scripts
+    case sites
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .scripts: return "Scripts"
+        case .sites:   return "Sites"
+        }
+    }
+}
+
 private struct BrowserDestination: Identifiable {
     let id = UUID()
     let url: URL
+    let suggestedTitle: String?
+    let theme: ScriptTheme
+
+    init(url: URL, suggestedTitle: String? = nil, theme: ScriptTheme = .focus) {
+        self.url = url
+        self.suggestedTitle = suggestedTitle
+        self.theme = theme
+    }
+}
+
+private struct SourceGroup: Identifiable {
+    let category: ReadingSourceCategory
+    let sources: [ReadingSource]
+
+    var id: ReadingSourceCategory { category }
 }
 
 private struct SourceSection: View {
@@ -171,6 +369,129 @@ private struct SourceSection: View {
                                 }
                             }
                         }
+                }
+            }
+        }
+    }
+}
+
+private struct ScriptCatalogSection: View {
+    let entries: [ReadingScriptCatalogEntry]
+    let importingScriptID: String?
+    let onImport: (ReadingScriptCatalogEntry) -> Void
+    let onOpen: (ReadingScriptCatalogEntry) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: TranceSpacing.inner) {
+            Text("Scripts")
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(.textPrimary)
+
+            VStack(spacing: TranceSpacing.inner) {
+                ForEach(entries) { entry in
+                    ScriptCatalogCard(
+                        entry: entry,
+                        isImporting: importingScriptID == entry.id,
+                        onImport: onImport,
+                        onOpen: onOpen
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct ScriptCatalogCard: View {
+    let entry: ReadingScriptCatalogEntry
+    let isImporting: Bool
+    let onImport: (ReadingScriptCatalogEntry) -> Void
+    let onOpen: (ReadingScriptCatalogEntry) -> Void
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: TranceSpacing.list) {
+                HStack(alignment: .top, spacing: TranceSpacing.list) {
+                    ScriptKindIcon(kind: entry.kind)
+
+                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                        Text(entry.title)
+                            .font(TranceTypography.body)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.textPrimary)
+
+                        Text(entry.sourceTitle)
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(.textLight)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    if entry.contentRating == .adultOnly {
+                        AdultBadge()
+                    }
+                    ImportPolicyBadge(policy: entry.importPolicy)
+                }
+
+                Text(entry.summary)
+                    .font(TranceTypography.body)
+                    .foregroundStyle(.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 6) {
+                    TagPill(text: entry.kind.displayName)
+                    TagPill(text: entry.theme.displayName)
+                    TagPill(text: entry.length.displayName)
+                }
+
+                Text(entry.licenseNote)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(.textLight)
+
+                HStack(spacing: TranceSpacing.inner) {
+                    Button {
+                        onImport(entry)
+                    } label: {
+                        HStack(spacing: TranceSpacing.icon) {
+                            if isImporting {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "square.and.arrow.down.fill")
+                            }
+                            Text(isImporting ? "Importing" : "Import")
+                        }
+                        .font(TranceTypography.body)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(
+                            LinearGradient(
+                                colors: [.roseGold, .roseDeep],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
+                    }
+                    .disabled(isImporting || entry.canImport == false)
+                    .accessibilityLabel("Import \(entry.title)")
+
+                    Button {
+                        onOpen(entry)
+                    } label: {
+                        Image(systemName: "safari")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.textPrimary)
+                            .frame(width: 44, height: 44)
+                            .background(Color.glassBorder.opacity(0.14), in: RoundedRectangle(cornerRadius: TranceRadius.button))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: TranceRadius.button)
+                                    .strokeBorder(Color.glassBorder.opacity(0.35), lineWidth: 1)
+                            }
+                    }
+                    .accessibilityLabel("Open \(entry.title) website")
                 }
             }
         }
@@ -250,6 +571,43 @@ private struct ReadingSourceCard: View {
     }
 }
 
+private struct ScriptKindIcon: View {
+    let kind: ReadingScriptKind
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(color.opacity(0.18))
+            .frame(width: 38, height: 38)
+            .overlay {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(color)
+            }
+    }
+
+    private var symbol: String {
+        switch kind {
+        case .induction:    return "sparkles"
+        case .deepening:    return "arrow.down.circle.fill"
+        case .subject:      return "doc.text.fill"
+        case .selfHypnosis: return "moon.zzz.fill"
+        case .story:        return "book.closed.fill"
+        case .book:         return "book.closed.fill"
+        }
+    }
+
+    private var color: Color {
+        switch kind {
+        case .induction:    return .bwTheta
+        case .deepening:    return .bwGamma
+        case .subject:      return .roseGold
+        case .selfHypnosis: return .warmAccent
+        case .story:        return .roseDeep
+        case .book:         return .textSecondary
+        }
+    }
+}
+
 private struct SourceIcon: View {
     let category: ReadingSourceCategory
 
@@ -279,6 +637,38 @@ private struct SourceIcon: View {
         case .openLibrary:     return .bwTheta
         case .scriptDirectory: return .roseGold
         case .userAdded:       return .warmAccent
+        }
+    }
+}
+
+private struct TagPill: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.textSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.glassBorder.opacity(0.12), in: Capsule())
+    }
+}
+
+private struct EmptyDirectoryMessage: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                Text(title)
+                    .font(TranceTypography.sectionTitle)
+                    .foregroundStyle(.textPrimary)
+                Text(message)
+                    .font(TranceTypography.body)
+                    .foregroundStyle(.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

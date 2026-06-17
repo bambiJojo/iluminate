@@ -89,7 +89,7 @@ public struct RealCorpusImporter: Sendable {
                 guard let phase = TrancePhase(rawValue: dto.phase) else {
                     throw ImportError.unknownPhase(dto.phase)
                 }
-                return PhaseTruthSpan(phase: phase, start: dto.startTime, end: dto.endTime)
+                return PhaseTruthSpan(phase: phase.labelingPhase, start: dto.startTime, end: dto.endTime)
             }
 
         let segments = (transcript?.transcription.segments ?? []).map {

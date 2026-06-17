@@ -40,11 +40,11 @@ struct AnalyzerOptimizationDataset: Sendable {
         let example: AnalyzerTrainingExample
         let audioURL: URL
 
-        var id: UUID { example.exampleID }
-        var duration: TimeInterval { example.audio.durationSeconds }
-        var originalFilename: String { example.audio.originalFilename }
-        var phaseSegments: [AnalyzerTrainingExample.PhaseSegment] { example.labels.phaseSegments }
-        var denseTimeline: [AnalyzerTrainingExample.TimelineBucket] { example.labels.denseTimeline }
+        nonisolated var id: UUID { example.exampleID }
+        nonisolated var duration: TimeInterval { example.audio.durationSeconds }
+        nonisolated var originalFilename: String { example.audio.originalFilename }
+        nonisolated var phaseSegments: [AnalyzerTrainingExample.PhaseSegment] { example.labels.phaseSegments }
+        nonisolated var denseTimeline: [AnalyzerTrainingExample.TimelineBucket] { example.labels.denseTimeline }
 
         func makeAudioFileForDocumentsBackedCorpus() throws -> AudioFile {
             let documentsPath = URL.documentsDirectory.standardizedFileURL.path()
@@ -253,6 +253,11 @@ struct AnalyzerOptimizationDataset: Sendable {
         }
 
         examples.sort { $0.id.uuidString < $1.id.uuidString }
+        appendQualityIssues(
+            for: examples,
+            datasetFilename: datasetIndexURL.lastPathComponent,
+            to: &issues
+        )
 
         return AnalyzerOptimizationDataset(
             corpusDirectory: corpusDirectory,
@@ -287,6 +292,46 @@ struct AnalyzerOptimizationDataset: Sendable {
         }
 
         return true
+    }
+
+    private static func appendQualityIssues(
+        for examples: [Example],
+        datasetFilename: String,
+        to issues: inout [AnalyzerOptimizationDatasetIssue]
+    ) {
+        let longSparseDurationThreshold: TimeInterval = 600
+        for example in examples
+            where example.duration >= longSparseDurationThreshold && example.phaseSegments.count <= 1 {
+            issues.append(
+                AnalyzerOptimizationDatasetIssue(
+                    severity: .warning,
+                    exampleID: example.id,
+                    filename: example.originalFilename,
+                    message: "Long example has only one labeled phase segment; it can help phase-language learning but is weak for boundary optimization."
+                )
+            )
+        }
+
+        guard examples.count >= 12 else { return }
+
+        var exampleCountByPhase: [TrancePhase: Int] = [:]
+        for example in examples {
+            for phase in Set(example.phaseSegments.map(\.phase)) {
+                exampleCountByPhase[phase, default: 0] += 1
+            }
+        }
+
+        let minimumExamplesForStableSplit = 4
+        for (phase, count) in exampleCountByPhase.sorted(by: { $0.key.rawValue < $1.key.rawValue })
+            where count < minimumExamplesForStableSplit {
+            issues.append(
+                AnalyzerOptimizationDatasetIssue(
+                    severity: .warning,
+                    filename: datasetFilename,
+                    message: "Rare phase coverage: \(phase.rawValue) appears in \(count) example(s). Optimizer validation may be unstable until this phase appears in at least \(minimumExamplesForStableSplit) examples."
+                )
+            )
+        }
     }
 
     private static func resolveAudioURL(

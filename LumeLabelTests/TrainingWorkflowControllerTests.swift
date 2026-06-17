@@ -29,6 +29,50 @@ struct TrainingWorkflowControllerTests {
     }
 
     @Test
+    func datasetSnapshotSeparatesSilverLabelsAndPhaseCoverage() throws {
+        let handExample = makeDatasetExample(
+            filename: "hand.m4a",
+            labelerNotes: "",
+            segments: [
+                .init(id: UUID(), phase: .preTalk, startTime: 0, endTime: 30, durationSeconds: 30, notes: nil),
+                .init(id: UUID(), phase: .induction, startTime: 30, endTime: 90, durationSeconds: 60, notes: nil)
+            ]
+        )
+        let silverExample = makeDatasetExample(
+            filename: "silver.m4a",
+            labelerNotes: "Silver label: batch folder import as deepening.",
+            segments: [
+                .init(id: UUID(), phase: .deepening, startTime: 0, endTime: 45, durationSeconds: 45, notes: nil)
+            ]
+        )
+        let dataset = AnalyzerOptimizationDataset(
+            corpusDirectory: .temporaryDirectory,
+            datasetDirectory: .temporaryDirectory,
+            datasetIndexURL: .temporaryDirectory.appending(path: "dataset.jsonl"),
+            audioDirectory: .temporaryDirectory,
+            transcriptCacheDirectory: .temporaryDirectory,
+            examples: [handExample, silverExample],
+            issues: [],
+            datasetHash: "hash"
+        )
+
+        let snapshot = TrainingWorkflowDatasetSnapshot(
+            dataset: dataset,
+            coverage: .init(readyExampleCount: 1, totalExampleCount: 2, missingExamples: [silverExample])
+        )
+
+        #expect(snapshot.validExampleCount == 2)
+        #expect(snapshot.readyTranscriptCount == 1)
+        #expect(snapshot.handLabeledExampleCount == 1)
+        #expect(snapshot.silverLabeledExampleCount == 1)
+        #expect(snapshot.coveredPhaseCount == 3)
+        #expect(snapshot.phaseBreakdown.first { $0.phase == .induction }?.segmentCount == 1)
+        #expect(snapshot.phaseBreakdown.first { $0.phase == .deepening }?.durationSeconds == 45)
+        #expect(snapshot.qualityWarning == nil)
+        #expect(snapshot.compactPhaseCoverageText.contains("Pre-Talk 1"))
+    }
+
+    @Test
     func measureRunPreparesMissingTranscriptsAndCompletes() async throws {
         let fixture = try makeDatasetFixture()
         let tempDirectory = fixture.corpusDirectory.deletingLastPathComponent()
@@ -334,6 +378,56 @@ private struct DatasetFixture {
     let dataset: AnalyzerOptimizationDataset
 }
 
+private func makeDatasetExample(
+    filename: String,
+    labelerNotes: String,
+    segments: [AnalyzerTrainingExample.PhaseSegment]
+) -> AnalyzerOptimizationDataset.Example {
+    let duration = segments.map(\.endTime).max() ?? 0
+    let example = AnalyzerTrainingExample(
+        schemaVersion: AnalyzerTrainingExample.currentSchemaVersion,
+        exportedAt: Date(timeIntervalSince1970: 0),
+        exampleID: UUID(),
+        source: .init(
+            corpusFileID: UUID(),
+            corpusLabelFilename: "\(filename).json",
+            datasetRelativeExamplePath: "examples/\(filename).json",
+            originalFilename: filename,
+            labeledAt: Date(timeIntervalSince1970: 0)
+        ),
+        audio: .init(
+            datasetRelativePath: "audio/\(filename)",
+            storedAudioFilename: filename,
+            originalFilename: filename,
+            fileExtension: URL(filePath: filename).pathExtension,
+            sha256: UUID().uuidString,
+            durationSeconds: duration
+        ),
+        labels: .init(
+            contentType: .hypnosis,
+            expectedFrequencyBand: .init(lower: 0.5, upper: 8.0),
+            status: .refined,
+            labelerNotes: labelerNotes,
+            hasPhaseLabels: !segments.isEmpty,
+            hasCompletePhaseCoverage: true,
+            phaseOrder: segments.map(\.phase),
+            phasePoints: segments.map {
+                .init(id: $0.id, timeSeconds: $0.startTime, phase: $0.phase, notes: $0.notes)
+            },
+            phaseSegments: segments,
+            denseTimeline: [
+                .init(secondIndex: 0, startTime: 0, endTime: min(duration, 1), phase: segments.first?.phase)
+            ],
+            techniques: []
+        )
+    )
+
+    return AnalyzerOptimizationDataset.Example(
+        example: example,
+        audioURL: .temporaryDirectory.appending(path: filename)
+    )
+}
+
 private func makeDatasetFixture() throws -> DatasetFixture {
     let root = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)
@@ -567,7 +661,8 @@ private func makeCheckpoint(
         bestEntry: entry,
         bestGeneration: 2,
         bestSelectionScore: metrics.overallScore,
-        generationHistory: []
+        generationHistory: [],
+        randomState: 123
     )
 }
 

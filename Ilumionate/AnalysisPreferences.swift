@@ -116,6 +116,7 @@ enum ColorTempMode: String, CaseIterable, Codable, Sendable {
 enum ContentHint: String, CaseIterable, Codable, Sendable {
     case none
     case hypnosis
+    case eroticHypnosis
     case meditation
     case affirmation
     case sleepAid
@@ -125,6 +126,7 @@ enum ContentHint: String, CaseIterable, Codable, Sendable {
         switch self {
         case .none:        "Auto-detect"
         case .hypnosis:    "Hypnosis / Hypnotherapy"
+        case .eroticHypnosis: "Erotic / Conditioning"
         case .meditation:  "Meditation / Mindfulness"
         case .affirmation: "Affirmations"
         case .sleepAid:    "Sleep Aid"
@@ -136,6 +138,7 @@ enum ContentHint: String, CaseIterable, Codable, Sendable {
         switch self {
         case .none:        "wand.and.sparkles"
         case .hypnosis:    "eye.fill"
+        case .eroticHypnosis: "sparkles"
         case .meditation:  "leaf.fill"
         case .affirmation: "quote.bubble.fill"
         case .sleepAid:    "moon.fill"
@@ -149,6 +152,9 @@ enum ContentHint: String, CaseIterable, Codable, Sendable {
         case .hypnosis:
             "This content is likely hypnosis or hypnotherapy. Pay close attention to " +
             "induction language, deepening techniques, post-hypnotic suggestions, and emergence cues."
+        case .eroticHypnosis:
+            "This content is likely erotic hypnosis or conditioning. Pay close attention to " +
+            "suggestion-work, trigger conditioning, brainwashing-style language, and emergence cues."
         case .meditation:
             "This content is a guided meditation. Focus on breath phases, body scans, " +
             "visualization stages, and transitions between awareness states."
@@ -173,6 +179,7 @@ enum ContentHint: String, CaseIterable, Codable, Sendable {
 final class AnalysisPreferences {
     struct Snapshot: Codable, Sendable {
         let contentHint: ContentHint
+        let corpusSourceProfile: CorpusSourceProfile
         let customInstructions: String
         let intensityMultiplier: Double
         let frequencyProfile: FrequencyProfile
@@ -180,6 +187,56 @@ final class AnalysisPreferences {
         let colorTempMode: ColorTempMode
         let bilateralMode: Bool
         let autoAnalyzeOnImport: Bool
+
+        init(
+            contentHint: ContentHint,
+            corpusSourceProfile: CorpusSourceProfile = .general,
+            customInstructions: String,
+            intensityMultiplier: Double,
+            frequencyProfile: FrequencyProfile,
+            transitionStyle: TransitionStyle,
+            colorTempMode: ColorTempMode,
+            bilateralMode: Bool,
+            autoAnalyzeOnImport: Bool
+        ) {
+            self.contentHint = contentHint
+            self.corpusSourceProfile = corpusSourceProfile
+            self.customInstructions = customInstructions
+            self.intensityMultiplier = intensityMultiplier
+            self.frequencyProfile = frequencyProfile
+            self.transitionStyle = transitionStyle
+            self.colorTempMode = colorTempMode
+            self.bilateralMode = bilateralMode
+            self.autoAnalyzeOnImport = autoAnalyzeOnImport
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case contentHint
+            case corpusSourceProfile
+            case customInstructions
+            case intensityMultiplier
+            case frequencyProfile
+            case transitionStyle
+            case colorTempMode
+            case bilateralMode
+            case autoAnalyzeOnImport
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            contentHint = try container.decode(ContentHint.self, forKey: .contentHint)
+            corpusSourceProfile = try container.decodeIfPresent(
+                CorpusSourceProfile.self,
+                forKey: .corpusSourceProfile
+            ) ?? .general
+            customInstructions = try container.decode(String.self, forKey: .customInstructions)
+            intensityMultiplier = try container.decode(Double.self, forKey: .intensityMultiplier)
+            frequencyProfile = try container.decode(FrequencyProfile.self, forKey: .frequencyProfile)
+            transitionStyle = try container.decode(TransitionStyle.self, forKey: .transitionStyle)
+            colorTempMode = try container.decode(ColorTempMode.self, forKey: .colorTempMode)
+            bilateralMode = try container.decode(Bool.self, forKey: .bilateralMode)
+            autoAnalyzeOnImport = try container.decode(Bool.self, forKey: .autoAnalyzeOnImport)
+        }
     }
 
     static let shared = AnalysisPreferences()
@@ -188,6 +245,10 @@ final class AnalysisPreferences {
 
     var contentHint: ContentHint {
         didSet { UserDefaults.standard.set(contentHint.rawValue, forKey: Keys.contentHint) }
+    }
+
+    var corpusSourceProfile: CorpusSourceProfile {
+        didSet { UserDefaults.standard.set(corpusSourceProfile.rawValue, forKey: CorpusSourceProfile.userDefaultsKey) }
     }
 
     var customInstructions: String {
@@ -239,6 +300,7 @@ final class AnalysisPreferences {
     var snapshot: Snapshot {
         Snapshot(
             contentHint: contentHint,
+            corpusSourceProfile: corpusSourceProfile,
             customInstructions: customInstructions,
             intensityMultiplier: intensityMultiplier,
             frequencyProfile: frequencyProfile,
@@ -270,6 +332,11 @@ final class AnalysisPreferences {
         if let hint = contentHint.aiHint {
             parts.append(hint)
         }
+        if corpusSourceProfile == .eroticConditioning {
+            parts.append("Use adult conditioning corpus cues when the transcript structurally supports erotic hypnosis, brainwashing, or trigger conditioning phases.")
+        } else if corpusSourceProfile == .therapeutic {
+            parts.append("Suppress adult conditioning source-pack cues unless the transcript explicitly requires that domain.")
+        }
         if !customInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             parts.append("Additional user instructions: \(customInstructions)")
         }
@@ -292,6 +359,7 @@ final class AnalysisPreferences {
     private init() {
         let d = UserDefaults.standard
         contentHint = ContentHint(rawValue: d.string(forKey: Keys.contentHint) ?? "") ?? .none
+        corpusSourceProfile = CorpusSourceProfile.storedSelection(defaults: d) ?? .general
         customInstructions = d.string(forKey: Keys.customInstructions) ?? ""
         intensityMultiplier = d.object(forKey: Keys.intensity) as? Double ?? 1.0
         frequencyProfile = FrequencyProfile(rawValue: d.string(forKey: Keys.frequencyProfile) ?? "") ?? .standard
@@ -308,6 +376,7 @@ final class AnalysisPreferences {
 
     func resetToDefaults() {
         contentHint = .none
+        corpusSourceProfile = .general
         customInstructions = ""
         intensityMultiplier = 1.0
         frequencyProfile = .standard

@@ -85,6 +85,13 @@ func openAction(for source: ReadingSource, adultConfirmed: Bool) -> ReadingSourc
     return .browse(source.url)
 }
 
+func openAction(for entry: ReadingScriptCatalogEntry, adultConfirmed: Bool) -> ReadingSourceOpenAction {
+    if entry.contentRating == .adultOnly && !adultConfirmed {
+        return .confirmAdult(entry.url)
+    }
+    return .browse(entry.url)
+}
+
 // MARK: - Catalog
 
 enum ReadingSourceCatalog {
@@ -166,9 +173,9 @@ enum ReadingSourceCatalog {
             category: .scriptDirectory,
             summary: "A large free-to-read hypnosis script directory.",
             licenseKind: .thirdPartyTerms,
-            licenseNote: "Link-only until written permission or clear redistribution terms are confirmed.",
+            licenseNote: "User-initiated import only. Review individual script notes and site terms before use.",
             contentNote: "Scripts are user-facing hypnosis material; review before personal use.",
-            importPolicy: .linkOnly,
+            importPolicy: .userInitiatedImport,
             contentRating: .mixed,
             isCurated: true,
             addedDate: nil
@@ -218,7 +225,7 @@ enum ReadingSourceCatalog {
         ReadingSource(
             id: "literotica-mc",
             title: "Literotica – Mind Control",
-            url: URL(string: "https://www.literotica.com/c/mind-control-stories")!,
+            url: URL(string: "https://www.literotica.com/c/mind-control")!,
             category: .scriptDirectory,
             summary: "Literotica's free Mind Control category — a large hypnosis/MC story collection.",
             licenseKind: .thirdPartyTerms,
@@ -246,9 +253,9 @@ enum ReadingSourceCatalog {
         ReadingSource(
             id: "hypnohub",
             title: "HypnoHub",
-            url: URL(string: "https://hypnohub.net/")!,
+            url: URL(string: "https://hypnohub.net/index.php?page=post&s=list&tags=story")!,
             category: .scriptDirectory,
-            summary: "Free hypnosis-themed imageboard with caption stories.",
+            summary: "Free hypnosis-themed imageboard, opening directly to story-tagged caption posts.",
             licenseKind: .thirdPartyTerms,
             licenseNote: "Link-only. User-submitted material; review site terms before reuse.",
             contentNote: "Adult (18+) erotic hypnosis imagery and captions.",

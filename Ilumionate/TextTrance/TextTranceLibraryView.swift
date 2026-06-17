@@ -15,11 +15,21 @@ enum TextTranceDestination: Hashable {
 struct TextTranceLibraryView: View {
     @State private var scripts: [TranceScript] = []
     @State private var themeFilter: ScriptTheme?
+    @State private var showingWebImport = false
+    @State private var importedSetupScript: TranceScript?
 
     var body: some View {
         ScrollView {
             VStack(spacing: TranceSpacing.cardMargin) {
                 ThemeChipsRow(selection: $themeFilter)
+                Button {
+                    TranceHaptics.shared.light()
+                    showingWebImport = true
+                } label: {
+                    WebImportEntryCard()
+                }
+                .buttonStyle(.plain)
+
                 ForEach(filteredScripts) { script in
                     NavigationLink(value: TextTranceDestination.setup(scriptID: script.id)) {
                         ScriptCard(script: script)
@@ -39,6 +49,12 @@ struct TextTranceLibraryView: View {
         .scrollIndicators(.hidden)
         .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle("Text Trance")
+        .sheet(isPresented: $showingWebImport) {
+            WebTextImportSheet { script in
+                insertImportedScript(script)
+                importedSetupScript = script
+            }
+        }
         .navigationDestination(for: TextTranceDestination.self) { destination in
             switch destination {
             case .setup(let id):
@@ -46,7 +62,15 @@ struct TextTranceLibraryView: View {
                     TextTranceSetupView(script: script)
                 }
             case .readingSources:
-                ReadingSourceDirectoryView(store: .shared)
+                ReadingSourceDirectoryView(store: .shared) { script in
+                    insertImportedScript(script)
+                    importedSetupScript = script
+                }
+            }
+        }
+        .navigationDestination(isPresented: importedSetupPresented) {
+            if let importedSetupScript {
+                TextTranceSetupView(script: importedSetupScript)
             }
         }
         .task {
@@ -57,6 +81,18 @@ struct TextTranceLibraryView: View {
     private var filteredScripts: [TranceScript] {
         guard let themeFilter else { return scripts }
         return scripts.filter { $0.theme == themeFilter }
+    }
+
+    private var importedSetupPresented: Binding<Bool> {
+        Binding(
+            get: { importedSetupScript != nil },
+            set: { if !$0 { importedSetupScript = nil } }
+        )
+    }
+
+    private func insertImportedScript(_ script: TranceScript) {
+        scripts.removeAll { $0.id == script.id }
+        scripts.insert(script, at: 0)
     }
 }
 
@@ -95,6 +131,7 @@ private struct ScriptCard: View {
                     ForEach(script.supportedArcs) { arc in
                         TagChip(text: arc.displayName)
                     }
+                    if script.source.kind == .importedWeb { TagChip(text: "Web") }
                     if script.source.reviewed { TagChip(text: "Reviewed") }
                 }
             }
@@ -120,6 +157,30 @@ private struct GeneratePlaceholderCard: View {
             .foregroundStyle(Color.textSecondary)
         }
         .opacity(0.6)
+    }
+}
+
+private struct WebImportEntryCard: View {
+    var body: some View {
+        GlassCard(label: nil) {
+            HStack(spacing: TranceSpacing.list) {
+                Image(systemName: "square.and.arrow.down")
+                    .foregroundStyle(Color.bwTheta)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Import webpage")
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(Color.textPrimary)
+                    Text("Extract clean text for the reader.")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
@@ -173,6 +234,93 @@ private struct FilterChip: View {
             )
             .foregroundStyle(isOn ? Color.roseGold : Color.textSecondary)
             .buttonStyle(.plain)
+    }
+}
+
+private struct WebTextImportSheet: View {
+    let importer: WebReadableTextImporter
+    let onImported: (TranceScript) -> Void
+
+    @State private var urlString = ""
+    @State private var title = ""
+    @State private var importState: ImportState = .idle
+
+    @Environment(\.dismiss) private var dismiss
+
+    init(importer: WebReadableTextImporter = WebReadableTextImporter(),
+         onImported: @escaping (TranceScript) -> Void) {
+        self.importer = importer
+        self.onImported = onImported
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Page") {
+                    TextField("URL", text: $urlString)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("Title", text: $title)
+                        .textInputAutocapitalization(.words)
+                }
+
+                if importState.isImporting {
+                    Section {
+                        ProgressView("Importing")
+                    }
+                }
+
+                if case .failed(let message) = importState {
+                    Section {
+                        Text(message)
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Import Webpage")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(importState.isImporting)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Import") {
+                        Task { await importPage() }
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(importDisabled)
+                }
+            }
+        }
+    }
+
+    private var importDisabled: Bool {
+        importState.isImporting || urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func importPage() async {
+        importState = .importing
+        do {
+            let script = try await importer.importScript(from: urlString, title: title)
+            onImported(script)
+            dismiss()
+        } catch {
+            importState = .failed(error.localizedDescription)
+        }
+    }
+
+    private enum ImportState: Equatable {
+        case idle
+        case importing
+        case failed(String)
+
+        var isImporting: Bool {
+            if case .importing = self { return true }
+            return false
+        }
     }
 }
 

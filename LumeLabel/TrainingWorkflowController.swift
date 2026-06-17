@@ -157,11 +157,22 @@ struct TrainingTranscriptCoverage: Sendable {
     var missingExampleCount: Int { totalExampleCount - readyExampleCount }
 }
 
+struct TrainingWorkflowPhaseBreakdown: Identifiable, Hashable, Sendable {
+    let phase: TrancePhase
+    let segmentCount: Int
+    let durationSeconds: TimeInterval
+
+    var id: String { phase.rawValue }
+}
+
 struct TrainingWorkflowDatasetSnapshot: Sendable {
     let validExampleCount: Int
     let readyTranscriptCount: Int
     let totalTranscriptCount: Int
     let issueCount: Int
+    let handLabeledExampleCount: Int
+    let silverLabeledExampleCount: Int
+    let phaseBreakdown: [TrainingWorkflowPhaseBreakdown]
     let errorMessage: String?
 
     init(
@@ -169,12 +180,18 @@ struct TrainingWorkflowDatasetSnapshot: Sendable {
         readyTranscriptCount: Int,
         totalTranscriptCount: Int,
         issueCount: Int,
+        handLabeledExampleCount: Int,
+        silverLabeledExampleCount: Int,
+        phaseBreakdown: [TrainingWorkflowPhaseBreakdown],
         errorMessage: String?
     ) {
         self.validExampleCount = validExampleCount
         self.readyTranscriptCount = readyTranscriptCount
         self.totalTranscriptCount = totalTranscriptCount
         self.issueCount = issueCount
+        self.handLabeledExampleCount = handLabeledExampleCount
+        self.silverLabeledExampleCount = silverLabeledExampleCount
+        self.phaseBreakdown = phaseBreakdown
         self.errorMessage = errorMessage
     }
 
@@ -183,6 +200,9 @@ struct TrainingWorkflowDatasetSnapshot: Sendable {
         readyTranscriptCount: 0,
         totalTranscriptCount: 0,
         issueCount: 0,
+        handLabeledExampleCount: 0,
+        silverLabeledExampleCount: 0,
+        phaseBreakdown: [],
         errorMessage: nil
     )
 
@@ -191,6 +211,9 @@ struct TrainingWorkflowDatasetSnapshot: Sendable {
         self.readyTranscriptCount = coverage.readyExampleCount
         self.totalTranscriptCount = coverage.totalExampleCount
         self.issueCount = dataset.issues.count
+        self.handLabeledExampleCount = dataset.examples.filter { !Self.isSilverLabel($0) }.count
+        self.silverLabeledExampleCount = dataset.examples.filter(Self.isSilverLabel).count
+        self.phaseBreakdown = Self.makePhaseBreakdown(for: dataset.examples)
         self.errorMessage = nil
     }
 
@@ -199,7 +222,72 @@ struct TrainingWorkflowDatasetSnapshot: Sendable {
         self.readyTranscriptCount = 0
         self.totalTranscriptCount = 0
         self.issueCount = 0
+        self.handLabeledExampleCount = 0
+        self.silverLabeledExampleCount = 0
+        self.phaseBreakdown = []
         self.errorMessage = errorMessage
+    }
+
+    var coveredPhaseCount: Int {
+        phaseBreakdown.filter { $0.segmentCount > 0 }.count
+    }
+
+    var totalPhaseCount: Int {
+        TrancePhase.orderedHypnosisPhases.count
+    }
+
+    var qualityWarning: String? {
+        guard validExampleCount > 0 else { return nil }
+        if silverLabeledExampleCount > handLabeledExampleCount, handLabeledExampleCount < 10 {
+            return "Silver labels dominate this dataset (\(silverLabeledExampleCount)/\(validExampleCount))."
+        }
+        return nil
+    }
+
+    var compactPhaseCoverageText: String {
+        let presentPhases = phaseBreakdown
+            .filter { $0.segmentCount > 0 }
+            .sorted {
+                if $0.segmentCount == $1.segmentCount {
+                    return Self.phaseSortIndex($0.phase) < Self.phaseSortIndex($1.phase)
+                }
+                return $0.segmentCount > $1.segmentCount
+            }
+
+        guard !presentPhases.isEmpty else { return "No phase coverage" }
+
+        let leading = presentPhases.prefix(4)
+            .map { "\($0.phase.displayName) \($0.segmentCount)" }
+            .joined(separator: " · ")
+        let remainingCount = presentPhases.count - min(presentPhases.count, 4)
+        if remainingCount > 0 {
+            return "\(leading) · +\(remainingCount) more"
+        }
+        return leading
+    }
+
+    private nonisolated static func makePhaseBreakdown(
+        for examples: [AnalyzerOptimizationDataset.Example]
+    ) -> [TrainingWorkflowPhaseBreakdown] {
+        TrancePhase.orderedHypnosisPhases.map { phase in
+            let segments = examples.flatMap(\.phaseSegments).filter { $0.phase == phase }
+            return TrainingWorkflowPhaseBreakdown(
+                phase: phase,
+                segmentCount: segments.count,
+                durationSeconds: segments.reduce(0) { $0 + $1.durationSeconds }
+            )
+        }
+    }
+
+    private nonisolated static func isSilverLabel(_ example: AnalyzerOptimizationDataset.Example) -> Bool {
+        example.example.labels.labelerNotes
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .hasPrefix("silver label:")
+    }
+
+    private nonisolated static func phaseSortIndex(_ phase: TrancePhase) -> Int {
+        TrancePhase.orderedHypnosisPhases.firstIndex(of: phase) ?? Int.max
     }
 }
 
@@ -227,9 +315,9 @@ protocol TrainingWorkflowEngine: AnyObject {
 final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
     static let optimizationEvaluationMode: AnalyzerEvaluationMode = .keywordOnly
     static let liveEvaluationMode: AnalyzerEvaluationMode = .hybridRuntime
-    static let hybridRefinementPopulationSize = 4
-    static let hybridRefinementGenerationCount = 3
-    static let hybridRefinementEarlyStopPatience = 2
+    static let hybridRefinementPopulationSize = 8
+    static let hybridRefinementGenerationCount = 8
+    static let hybridRefinementEarlyStopPatience = 4
 
     actor RunControl {
         private var pauseRequested = false

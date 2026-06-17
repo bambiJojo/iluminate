@@ -60,7 +60,7 @@ struct RealCorpusImporterTests {
         #expect(kase.expectedContentTypeRaw == "hypnosis")
         // truth spans, in time order
         #expect(kase.truth.count == 3)
-        #expect(kase.truth.first?.phase == .preTalk)
+        #expect(kase.truth.first?.phase == .induction)
         #expect(kase.truth.last?.phase == .deepening)
         #expect(kase.truth.last?.end == 300.0)
         // transcript -> segments (negative WhisperKit confidence preserved)

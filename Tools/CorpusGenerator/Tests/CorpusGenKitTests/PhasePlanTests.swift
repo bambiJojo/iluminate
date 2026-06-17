@@ -5,22 +5,42 @@ import CorpusKit
 
 struct PhasePlanTests {
 
-    @Test("Classic archetype has the canonical 5-phase order")
+    @Test("Classic archetype has the canonical 4-phase order")
     func classicOrder() {
         var rng = SeededRNG(seed: 42)
         let plan = PhasePlan.classic(using: &rng)
-        #expect(plan.blocks.map(\.phase) == [.preTalk, .induction, .deepening, .therapy, .emergence])
+        #expect(plan.blocks.map(\.phase) == [.induction, .deepening, .suggestions, .emergence])
+    }
+
+    @Test("Named archetypes produce their configured phase orders")
+    func namedArchetypeOrders() {
+        let cases: [(PhasePlan.Archetype, [TrancePhase])] = [
+            (.classic, [.induction, .deepening, .suggestions, .emergence]),
+            (.fractionationLadder, [.induction, .fractionation, .deepening, .suggestions, .emergence]),
+            (.confusionTherapy, [.induction, .deepening, .confusion, .suggestions, .emergence]),
+            (.suggestionConditioning, [.induction, .deepening, .suggestions, .emergence]),
+            (.directSuggestion, [.induction, .suggestions, .emergence]),
+        ]
+
+        for (archetype, expectedOrder) in cases {
+            var rng = SeededRNG(seed: 42)
+            let plan = PhasePlan.make(archetype: archetype, using: &rng)
+            #expect(plan.archetype == archetype.rawValue)
+            #expect(plan.blocks.map(\.phase) == expectedOrder)
+        }
     }
 
     @Test("Block durations are positive and within configured ranges")
     func durationsInRange() {
-        var rng = SeededRNG(seed: 7)
-        let plan = PhasePlan.classic(using: &rng)
-        for block in plan.blocks {
-            #expect(block.duration > 0)
-            let range = PhasePlan.durationRange(for: block.phase)
-            #expect(block.duration >= range.lowerBound)
-            #expect(block.duration <= range.upperBound)
+        for archetype in PhasePlan.Archetype.allCases {
+            var rng = SeededRNG(seed: 7)
+            let plan = PhasePlan.make(archetype: archetype, using: &rng)
+            for block in plan.blocks {
+                #expect(block.duration > 0)
+                let range = PhasePlan.durationRange(for: block.phase)
+                #expect(block.duration >= range.lowerBound)
+                #expect(block.duration <= range.upperBound)
+            }
         }
     }
 

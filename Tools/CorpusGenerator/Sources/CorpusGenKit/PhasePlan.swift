@@ -39,26 +39,59 @@ public struct PhasePlan: Sendable {
 
     public var totalDuration: TimeInterval { blocks.reduce(0) { $0 + $1.duration } }
 
+    public enum Archetype: String, CaseIterable, Sendable {
+        case classic
+        case fractionationLadder = "fractionation_ladder"
+        case confusionTherapy = "confusion_therapy"
+        case suggestionConditioning = "suggestion_conditioning"
+        case directSuggestion = "direct_suggestion"
+
+        public var phases: [TrancePhase] {
+            switch self {
+            case .classic:
+                return [.induction, .deepening, .suggestions, .emergence]
+            case .fractionationLadder:
+                return [.induction, .fractionation, .deepening, .suggestions, .emergence]
+            case .confusionTherapy:
+                return [.induction, .deepening, .confusion, .suggestions, .emergence]
+            case .suggestionConditioning:
+                return [.induction, .deepening, .suggestions, .emergence]
+            case .directSuggestion:
+                return [.induction, .suggestions, .emergence]
+            }
+        }
+    }
+
     /// Per-phase duration range (seconds) used to vary block lengths.
     public static func durationRange(for phase: TrancePhase) -> ClosedRange<TimeInterval> {
         switch phase {
         case .preTalk:   return 30...90
         case .induction: return 90...240
+        case .fractionation: return 60...180
         case .deepening: return 120...300
-        case .therapy:   return 120...360
+        case .confusion: return 60...180
+        case .suggestions, .therapy, .eroticSuggestions: return 90...300
+        case .conditioning: return 60...180
         case .emergence: return 30...90
         default:         return 60...180
         }
     }
 
-    /// Classic induction→deepening→therapy→emergence archetype with varied lengths.
-    public static func classic<R: RandomNumberGenerator>(using rng: inout R) -> PhasePlan {
-        let order: [TrancePhase] = [.preTalk, .induction, .deepening, .therapy, .emergence]
-        let blocks = order.map { phase -> PhasePlanBlock in
-            let r = durationRange(for: phase)
-            let d = TimeInterval.random(in: r, using: &rng).rounded()
-            return PhasePlanBlock(phase: phase, duration: d)
+    /// Named archetype with varied per-phase block lengths.
+    public static func make<R: RandomNumberGenerator>(
+        archetype: Archetype,
+        using rng: inout R
+    ) -> PhasePlan {
+        let blocks = archetype.phases.map { phase -> PhasePlanBlock in
+            let range = durationRange(for: phase)
+            let duration = TimeInterval.random(in: range, using: &rng).rounded()
+            return PhasePlanBlock(phase: phase, duration: duration)
         }
-        return PhasePlan(archetype: "classic", blocks: blocks)
+        return PhasePlan(archetype: archetype.rawValue, blocks: blocks)
+    }
+
+    /// Classic induction→deepening→suggestions→emergence archetype with varied lengths.
+    public static func classic<R: RandomNumberGenerator>(using rng: inout R) -> PhasePlan {
+        make(archetype: .classic, using: &rng)
     }
 }

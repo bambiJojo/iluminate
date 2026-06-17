@@ -42,4 +42,20 @@ struct TranceScriptDecodingTests {
         #expect(script.segments[3].triggersHandoff == true)
         #expect(script.segments[0].triggersHandoff == nil)
     }
+
+    @Test func decodesImportedWebSourceKind() throws {
+        let data = Data("""
+        {
+          "kind": "importedWeb",
+          "generator": "https://example.com/story",
+          "reviewed": false
+        }
+        """.utf8)
+
+        let source = try JSONDecoder().decode(ScriptSource.self, from: data)
+
+        #expect(source.kind == .importedWeb)
+        #expect(source.generator == "https://example.com/story")
+        #expect(source.reviewed == false)
+    }
 }

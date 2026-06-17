@@ -19,7 +19,8 @@ extension AIAnalysisManager {
         guard contentType.isHypnosisLike, !phases.isEmpty else { return nil }
 
         let phaseSegments = phases.compactMap { segment -> PhaseSegment? in
-            guard let phase = HypnosisMetadata.Phase(rawValue: segment.phase) else { return nil }
+            guard let rawPhase = HypnosisMetadata.Phase(rawValue: segment.phase) else { return nil }
+            let phase = rawPhase.labelingPhase
             let confidence = parseConfidence(segment.confidenceLevel)
             return PhaseSegment(
                 phase: phase,

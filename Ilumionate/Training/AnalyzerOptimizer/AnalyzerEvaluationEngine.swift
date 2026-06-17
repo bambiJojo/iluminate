@@ -95,14 +95,20 @@ struct AnalyzerEvaluationEngine: Sendable {
                 false
             )
         case .chunkedOnly:
-            let chunked = await ChunkedPhaseAnalyzer(config: config.chunkedAnalyzer)
+            let chunked = await ChunkedPhaseAnalyzer(
+                config: config.chunkedAnalyzer,
+                corpusLearning: config.corpusLearning
+            )
                 .analyze(wordTimestamps: wordTimestamps, duration: duration) ?? []
             let adaptedChunked = chunked.isEmpty
                 ? []
                 : keywordAnalyzer.adaptPredictedPhases(chunked, transcription: transcription)
             return (adaptedChunked, !adaptedChunked.isEmpty)
         case .hybridRuntime:
-            let chunked = await ChunkedPhaseAnalyzer(config: config.chunkedAnalyzer)
+            let chunked = await ChunkedPhaseAnalyzer(
+                config: config.chunkedAnalyzer,
+                corpusLearning: config.corpusLearning
+            )
                 .analyze(wordTimestamps: wordTimestamps, duration: duration)
             let keywordPhases = keywordAnalyzer.analyze(
                 wordTimestamps: wordTimestamps,

@@ -138,7 +138,7 @@ struct PhaseTimelineNormalizer: Sendable {
     ) -> PhaseSegment {
         let phase: TrancePhase
         if start <= gapThreshold, next == .induction {
-            phase = .preTalk
+            phase = .induction
         } else {
             phase = .transitional
         }

@@ -236,7 +236,59 @@ struct HypnosisPhraseAssociation: Identifiable, Codable, Sendable {
     let origin: HypnosisPhraseEvidenceOrigin
     let sourceLabel: String?
     let sourceURL: String?
+    let sourcePackIDs: [String]
     let corpusSupport: Double
     let sectionCount: Int
     let exampleCount: Int
+
+    init(
+        phrase: String,
+        phase: HypnosisMetadata.Phase,
+        weight: Double,
+        origin: HypnosisPhraseEvidenceOrigin,
+        sourceLabel: String?,
+        sourceURL: String?,
+        sourcePackIDs: [String] = [],
+        corpusSupport: Double,
+        sectionCount: Int,
+        exampleCount: Int
+    ) {
+        self.phrase = phrase
+        self.phase = phase
+        self.weight = weight
+        self.origin = origin
+        self.sourceLabel = sourceLabel
+        self.sourceURL = sourceURL
+        self.sourcePackIDs = sourcePackIDs
+        self.corpusSupport = corpusSupport
+        self.sectionCount = sectionCount
+        self.exampleCount = exampleCount
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case phrase
+        case phase
+        case weight
+        case origin
+        case sourceLabel
+        case sourceURL
+        case sourcePackIDs
+        case corpusSupport
+        case sectionCount
+        case exampleCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        phrase = try container.decode(String.self, forKey: .phrase)
+        phase = try container.decode(HypnosisMetadata.Phase.self, forKey: .phase)
+        weight = try container.decode(Double.self, forKey: .weight)
+        origin = try container.decode(HypnosisPhraseEvidenceOrigin.self, forKey: .origin)
+        sourceLabel = try container.decodeIfPresent(String.self, forKey: .sourceLabel)
+        sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL)
+        sourcePackIDs = try container.decodeIfPresent([String].self, forKey: .sourcePackIDs) ?? []
+        corpusSupport = try container.decode(Double.self, forKey: .corpusSupport)
+        sectionCount = try container.decode(Int.self, forKey: .sectionCount)
+        exampleCount = try container.decode(Int.self, forKey: .exampleCount)
+    }
 }

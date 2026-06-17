@@ -38,6 +38,22 @@ struct CorpusTrainingWorkflowPanel: View {
                 )
             }
 
+            HStack(spacing: 12) {
+                statChip(title: "Hand", value: "\(workflow.datasetSnapshot.handLabeledExampleCount)")
+                statChip(title: "Silver", value: "\(workflow.datasetSnapshot.silverLabeledExampleCount)")
+                statChip(
+                    title: "Phases",
+                    value: "\(workflow.datasetSnapshot.coveredPhaseCount)/\(workflow.datasetSnapshot.totalPhaseCount)"
+                )
+            }
+
+            if workflow.datasetSnapshot.validExampleCount > 0 {
+                Text(workflow.datasetSnapshot.compactPhaseCoverageText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
             if workflow.isRunning, let progress = workflow.progressSnapshot {
                 progressSummary(progress)
             }
@@ -75,6 +91,12 @@ struct CorpusTrainingWorkflowPanel: View {
                 )
                 .font(.caption)
                 .foregroundStyle(.orange)
+            }
+
+            if let qualityWarning = workflow.datasetSnapshot.qualityWarning {
+                Label(qualityWarning, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
 
             if let errorMessage = workflow.datasetSnapshot.errorMessage {

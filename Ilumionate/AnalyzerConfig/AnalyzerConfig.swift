@@ -8,6 +8,83 @@
 
 import Foundation
 
+enum CorpusSourceProfile: String, CaseIterable, Codable, Identifiable, Sendable {
+    case general
+    case therapeutic
+    case eroticConditioning
+    case sourceDiagnostic
+
+    static let userDefaultsKey = "analysisPref_corpusSourceProfile"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .general:
+            return "General"
+        case .therapeutic:
+            return "Therapeutic"
+        case .eroticConditioning:
+            return "Erotic / Conditioning"
+        case .sourceDiagnostic:
+            return "Source Diagnostic"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .general:
+            return "Keeps adult source packs present but damped for broad hypnosis analysis."
+        case .therapeutic:
+            return "Suppresses adult source packs for meditation, therapeutic, and general wellness content."
+        case .eroticConditioning:
+            return "Boosts adult conditioning source packs for erotic hypnosis and post-hypnotic language."
+        case .sourceDiagnostic:
+            return "Uses source packs at full strength so learned corpus effects are easier to inspect."
+        }
+    }
+
+    var sfSymbol: String {
+        switch self {
+        case .general:
+            return "slider.horizontal.3"
+        case .therapeutic:
+            return "cross.case.fill"
+        case .eroticConditioning:
+            return "sparkles"
+        case .sourceDiagnostic:
+            return "waveform.path.ecg"
+        }
+    }
+
+    static func storedSelection(defaults: UserDefaults = .standard) -> CorpusSourceProfile? {
+        guard defaults.object(forKey: userDefaultsKey) != nil else { return nil }
+        return CorpusSourceProfile(rawValue: defaults.string(forKey: userDefaultsKey) ?? "")
+    }
+
+    nonisolated func multiplier(for sourcePackID: String, phase: HypnosisMetadata.Phase) -> Double {
+        switch (self, sourcePackID) {
+        case (.therapeutic, "bambi"):
+            return 0.0
+        case (.general, "bambi"):
+            return 0.35
+        case (.eroticConditioning, "bambi"):
+            switch phase.labelingPhase {
+            case .brainwashing, .conditioning, .suggestions, .eroticSuggestions:
+                return 1.25
+            case .deepening, .induction:
+                return 0.80
+            default:
+                return 0.60
+            }
+        case (.sourceDiagnostic, "bambi"):
+            return 1.0
+        default:
+            return 1.0
+        }
+    }
+}
+
 struct AnalyzerConfig: Codable, Sendable {
 
     var version: Int = 2
@@ -34,7 +111,25 @@ struct AnalyzerConfig: Codable, Sendable {
         var collapseThresholdFraction: Double
 
         func weightsForPhase(_ phase: HypnosisMetadata.Phase) -> [String: Double] {
-            weights[phase.rawValue] ?? [:]
+            let canonicalPhase = phase.labelingPhase
+            var phaseWeights = weights[canonicalPhase.rawValue] ?? [:]
+            for alias in mergedAliasPhases(for: canonicalPhase) {
+                for (keyword, weight) in weights[alias.rawValue] ?? [:] {
+                    phaseWeights[keyword] = max(phaseWeights[keyword] ?? 0.0, weight)
+                }
+            }
+            return phaseWeights
+        }
+
+        private func mergedAliasPhases(for canonicalPhase: HypnosisMetadata.Phase) -> [HypnosisMetadata.Phase] {
+            switch canonicalPhase {
+            case .induction:
+                return [.preTalk]
+            case .deepening:
+                return [.fractionation, .confusion]
+            default:
+                return []
+            }
         }
     }
 
@@ -52,6 +147,7 @@ struct AnalyzerConfig: Codable, Sendable {
             var text: String
             var position: Double
             var correctPhase: String
+            var sourcePackID: String? = nil
         }
     }
 
@@ -97,6 +193,83 @@ struct AnalyzerConfig: Codable, Sendable {
         var learnedKeywordWeightMultiplier: Double = 1.0
         var learnedPhraseWeightMultiplier: Double = 1.0
         var transitionPriorMultiplier: Double = 1.0
+        var sourceProfile: CorpusSourceProfile = .general
+        var sourcePackWeightMultipliers: [String: Double] = [:]
+
+        nonisolated init(
+            learnedKeywordWeightMultiplier: Double = 1.0,
+            learnedPhraseWeightMultiplier: Double = 1.0,
+            transitionPriorMultiplier: Double = 1.0,
+            sourceProfile: CorpusSourceProfile = .general,
+            sourcePackWeightMultipliers: [String: Double] = [:]
+        ) {
+            self.learnedKeywordWeightMultiplier = learnedKeywordWeightMultiplier
+            self.learnedPhraseWeightMultiplier = learnedPhraseWeightMultiplier
+            self.transitionPriorMultiplier = transitionPriorMultiplier
+            self.sourceProfile = sourceProfile
+            self.sourcePackWeightMultipliers = sourcePackWeightMultipliers
+        }
+
+        nonisolated func sourceMultiplier(
+            for sourcePackIDs: Set<String>,
+            phase: HypnosisMetadata.Phase
+        ) -> Double {
+            guard !sourcePackIDs.isEmpty else { return 1.0 }
+
+            return sourcePackIDs
+                .map { sourcePackID in
+                    let profileMultiplier = sourceProfile.multiplier(
+                        for: sourcePackID,
+                        phase: phase
+                    )
+                    if let configuredMultiplier = sourcePackWeightMultipliers[sourcePackID] {
+                        return configuredMultiplier * profileMultiplier
+                    }
+                    return profileMultiplier
+                }
+                .max() ?? 1.0
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case learnedKeywordWeightMultiplier
+            case learnedPhraseWeightMultiplier
+            case transitionPriorMultiplier
+            case sourceProfile
+            case sourcePackWeightMultipliers
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            learnedKeywordWeightMultiplier = try container.decodeIfPresent(
+                Double.self,
+                forKey: .learnedKeywordWeightMultiplier
+            ) ?? 1.0
+            learnedPhraseWeightMultiplier = try container.decodeIfPresent(
+                Double.self,
+                forKey: .learnedPhraseWeightMultiplier
+            ) ?? 1.0
+            transitionPriorMultiplier = try container.decodeIfPresent(
+                Double.self,
+                forKey: .transitionPriorMultiplier
+            ) ?? 1.0
+            sourceProfile = try container.decodeIfPresent(
+                CorpusSourceProfile.self,
+                forKey: .sourceProfile
+            ) ?? .general
+            sourcePackWeightMultipliers = try container.decodeIfPresent(
+                [String: Double].self,
+                forKey: .sourcePackWeightMultipliers
+            ) ?? [:]
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(learnedKeywordWeightMultiplier, forKey: .learnedKeywordWeightMultiplier)
+            try container.encode(learnedPhraseWeightMultiplier, forKey: .learnedPhraseWeightMultiplier)
+            try container.encode(transitionPriorMultiplier, forKey: .transitionPriorMultiplier)
+            try container.encode(sourceProfile, forKey: .sourceProfile)
+            try container.encode(sourcePackWeightMultipliers, forKey: .sourcePackWeightMultipliers)
+        }
     }
 
     // MARK: - Boundary Refinement
@@ -141,7 +314,9 @@ struct AnalyzerConfig: Codable, Sendable {
         }
 
         func phaseBand(for phase: HypnosisMetadata.Phase) -> FrequencyBand? {
-            phaseFrequencyBands[phase.rawValue]
+            let canonicalPhase = phase.labelingPhase
+            return phaseFrequencyBands[canonicalPhase.rawValue]
+                ?? phaseFrequencyBands[phase.rawValue]
         }
     }
 

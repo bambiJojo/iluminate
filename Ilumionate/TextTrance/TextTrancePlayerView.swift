@@ -31,7 +31,11 @@ struct TextTrancePlayerView: View {
                            value: backgroundPulse)
 
             if session.isReading {
-                AnchoredWord(text: session.currentWord, pivot: session.currentPivotIndex)
+                AnchoredWord(
+                    text: session.currentWord,
+                    pivot: session.currentPivotIndex,
+                    referenceCharacterCount: session.readerReferenceCharacterCount
+                )
             } else if session.lightActive {
                 Text("…")
                     .font(.system(size: 40))
@@ -65,28 +69,28 @@ struct TextTrancePlayerView: View {
 private struct AnchoredWord: View {
     let text: String
     let pivot: Int
+    let referenceCharacterCount: Int
 
     var body: some View {
-        let chars = Array(text)
-        let safePivot = chars.isEmpty ? 0 : min(max(pivot, 0), chars.count - 1)
+        GeometryReader { proxy in
+            let chars = Array(text)
+            let layout = TextTranceWordSizing.layout(
+                for: text,
+                pivot: pivot,
+                containerWidth: proxy.size.width,
+                referenceCharacterCount: referenceCharacterCount
+            )
 
-        HStack(spacing: 0) {
-            ForEach(chars.indices, id: \.self) { index in
-                Text(String(chars[index]))
-                    .foregroundStyle(index == safePivot ? Color.roseGold : Color.textPrimary)
+            HStack(spacing: 0) {
+                ForEach(chars.indices, id: \.self) { index in
+                    Text(String(chars[index]))
+                        .foregroundStyle(index == layout.safePivot ? Color.roseGold : Color.textPrimary)
+                }
             }
+            .font(.system(size: layout.fontSize, weight: .regular, design: .monospaced))
+            .offset(x: layout.anchorOffset)
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
-        .font(.system(size: 34, weight: .regular, design: .monospaced))
-        // Shift the word so the pivot letter's center sits on screen center:
-        // offset = -(pivot index relative to word center) * char advance.
-        .offset(x: anchorOffset(chars: chars.count, pivot: safePivot))
-    }
-
-    private func anchorOffset(chars: Int, pivot: Int) -> CGFloat {
-        guard chars > 0 else { return 0 }
-        let charWidth: CGFloat = 20.4   // ~34pt SF Mono advance; constant for monospaced
-        let wordCenter = CGFloat(chars - 1) / 2
-        return (wordCenter - CGFloat(pivot)) * charWidth
     }
 }
 

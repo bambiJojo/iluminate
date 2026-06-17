@@ -79,6 +79,24 @@ struct KeywordCollisionTests {
             "deepening score should be ≥3.5, got \(deepening)")
     }
 
+    @Test func fractionationTechniqueCuesScoreDeepeningNotFractionation() {
+        let scores = hitMapScores(for: "open and close then drop back down deeper each time")
+        let deepening = scores[.deepening] ?? 0
+        let fractionation = scores[.fractionation] ?? 0
+
+        #expect(deepening > 0, "fractionation technique cues should support deepening")
+        #expect(fractionation == 0, "fractionation should not score as a standalone phase")
+    }
+
+    @Test func confusionTechniqueCuesScoreDeepeningNotConfusion() {
+        let scores = hitMapScores(for: "the more you try the less you need to understand")
+        let deepening = scores[.deepening] ?? 0
+        let confusion = scores[.confusion] ?? 0
+
+        #expect(deepening > 0, "confusion technique cues should support deepening")
+        #expect(confusion == 0, "confusion should not score as a standalone phase")
+    }
+
     // MARK: Fix 3: "whenever" → only conditioning, not suggestions
 
     @Test func wheneverScoresConditioningNotSuggestions() {
@@ -146,12 +164,12 @@ struct KeywordCollisionTests {
 
     // MARK: Script-book enrichments
 
-    @Test func suggestibilityTestScoresPreTalk() {
+    @Test func suggestibilityTestScoresInduction() {
         let scores = hitMapScores(for: "this suggestibility test explains the critical mind")
         let preTalk = scores[.preTalk] ?? 0
         let induction = scores[.induction] ?? 0
-        #expect(preTalk > induction,
-            "preTalk (\(preTalk)) should beat induction (\(induction)) for suggestibility framing")
+        #expect(induction > preTalk,
+            "orientation induction cues should score induction, got induction \(induction) and preTalk \(preTalk)")
     }
 
     @Test func namedInductionFamiliesScoreInduction() {

@@ -222,6 +222,25 @@ extension ProfileSettingsView {
 
                 Divider()
 
+                Picker("Corpus Profile", selection: $prefs.corpusSourceProfile) {
+                    ForEach(CorpusSourceProfile.allCases) { profile in
+                        Label(profile.displayName, systemImage: profile.sfSymbol).tag(profile)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Color.roseGold)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Corpus Profile")
+                        .font(TranceTypography.body)
+                        .foregroundStyle(Color.textPrimary)
+                    Text(prefs.corpusSourceProfile.description)
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+
+                Divider()
+
                 VStack(alignment: .leading, spacing: TranceSpacing.micro) {
                     Text("Custom Instructions")
                         .font(TranceTypography.body)

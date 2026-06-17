@@ -14,15 +14,92 @@ import Foundation
 import os
 import FoundationModels
 
+// MARK: - Structured Chunk Classification
+
+@Generable(description: "Structured hypnosis phase classification for one transcript chunk.")
+struct ChunkPhaseClassification {
+
+    @Guide(description: """
+        Best structural hypnosis phase for this transcript chunk.
+        Fractionation and confusion are techniques, not phase labels; classify them as deepening.
+        Therapeutic work, erotic suggestions, and post-hypnotic conditioning are suggestion-work labels.
+        """)
+    var phase: ChunkPhaseLabel
+
+    @Guide(description: "Confidence in the selected phase.")
+    var confidence: ChunkPhaseConfidence
+
+    @Guide(description: "Brief evidence from the transcript supporting the selected phase.")
+    var rationale: String
+
+    var normalizedPhase: HypnosisMetadata.Phase {
+        phase.normalizedPhase
+    }
+}
+
+@Generable
+enum ChunkPhaseLabel: String, Codable, Sendable {
+    case preTalk = "pre_talk"
+    case induction = "induction"
+    case deepening = "deepening"
+    case therapy = "therapy"
+    case suggestions = "suggestions"
+    case eroticSuggestions = "erotic_suggestions"
+    case brainwashing = "brainwashing"
+    case postHypnoticConditioning = "post_hypnotic_conditioning"
+    case emergence = "emergence"
+
+    var normalizedPhase: HypnosisMetadata.Phase {
+        switch self {
+        case .preTalk:
+            return .preTalk.labelingPhase
+        case .induction:
+            return .induction
+        case .deepening:
+            return .deepening
+        case .therapy:
+            return .therapy.labelingPhase
+        case .suggestions:
+            return .suggestions
+        case .eroticSuggestions:
+            return .eroticSuggestions.labelingPhase
+        case .brainwashing:
+            return .brainwashing
+        case .postHypnoticConditioning:
+            return .conditioning.labelingPhase
+        case .emergence:
+            return .emergence
+        }
+    }
+}
+
+@Generable
+enum ChunkPhaseConfidence: String, Codable, Sendable {
+    case high
+    case medium
+    case low
+}
+
 // MARK: - Analyzer
 
 /// Foundation Models-backed hypnosis phase classifier.
 struct ChunkedPhaseAnalyzer {
 
     let config: AnalyzerConfig.ChunkedAnalyzer
+    let corpusLearning: AnalyzerConfig.CorpusLearning
 
-    init(config: AnalyzerConfig.ChunkedAnalyzer? = nil) {
-        self.config = config ?? AnalyzerConfigLoader.load().chunkedAnalyzer
+    init(
+        config: AnalyzerConfig.ChunkedAnalyzer? = nil,
+        corpusLearning: AnalyzerConfig.CorpusLearning? = nil
+    ) {
+        if let config {
+            self.config = config
+            self.corpusLearning = corpusLearning ?? .init()
+        } else {
+            let analyzerConfig = AnalyzerConfigLoader.load()
+            self.config = analyzerConfig.chunkedAnalyzer
+            self.corpusLearning = corpusLearning ?? analyzerConfig.corpusLearning
+        }
     }
 
     // MARK: - Availability
@@ -138,7 +215,8 @@ extension ChunkedPhaseAnalyzer {
         let evenPairs = try await Self.runPass(
             jobs: evenIdxs.map { jobs[$0] }, previousResults: nil,
             totalDuration: duration, model: model, systemInstructions: instructions,
-            knowledge: knowledge, fewShotSeedExamples: fewShotSeedExamples
+            knowledge: knowledge, corpusLearning: corpusLearning,
+            fewShotSeedExamples: fewShotSeedExamples
         )
         for (idx, phase) in evenPairs { results[idx] = phase }
         await onProgress?(0.5)
@@ -146,7 +224,8 @@ extension ChunkedPhaseAnalyzer {
         let oddPairs = try await Self.runPass(
             jobs: oddIdxs.map { jobs[$0] }, previousResults: results,
             totalDuration: duration, model: model, systemInstructions: instructions,
-            knowledge: knowledge, fewShotSeedExamples: fewShotSeedExamples
+            knowledge: knowledge, corpusLearning: corpusLearning,
+            fewShotSeedExamples: fewShotSeedExamples
         )
         for (idx, phase) in oddPairs { results[idx] = phase }
         await onProgress?(1.0)
@@ -215,8 +294,18 @@ extension ChunkedPhaseAnalyzer {
 
     func buildCorpusCalibrationGuide(from knowledge: CorpusPhaseKnowledge) -> String {
         let phaseLines = HypnosisMetadata.Phase.orderedHypnosisPhases.compactMap { phase -> String? in
-            let wordCues = Self.topLearnedWords(for: phase, knowledge: knowledge, limit: 3)
-            let phraseCues = Self.topLearnedPhrases(for: phase, knowledge: knowledge, limit: 2)
+            let wordCues = Self.topLearnedWords(
+                for: phase,
+                knowledge: knowledge,
+                corpusLearning: corpusLearning,
+                limit: 3
+            )
+            let phraseCues = Self.topLearnedPhrases(
+                for: phase,
+                knowledge: knowledge,
+                corpusLearning: corpusLearning,
+                limit: 2
+            )
             guard !wordCues.isEmpty || !phraseCues.isEmpty else { return nil }
 
             let wordText = wordCues.isEmpty ? nil : "words: \(wordCues.joined(separator: ", "))"
@@ -235,7 +324,8 @@ extension ChunkedPhaseAnalyzer {
     nonisolated static func contextualPromptHints(
         positionPct: Int,
         previousPhase: HypnosisMetadata.Phase?,
-        knowledge: CorpusPhaseKnowledge
+        knowledge: CorpusPhaseKnowledge,
+        corpusLearning: AnalyzerConfig.CorpusLearning = .init()
     ) -> String {
         let candidatePhases = likelyCandidatePhases(
             positionPct: positionPct,
@@ -246,8 +336,18 @@ extension ChunkedPhaseAnalyzer {
         guard !candidatePhases.isEmpty else { return "" }
 
         let lines = candidatePhases.prefix(4).map { phase in
-            let words = topLearnedWords(for: phase, knowledge: knowledge, limit: 3)
-            let phrases = topLearnedPhrases(for: phase, knowledge: knowledge, limit: 2)
+            let words = topLearnedWords(
+                for: phase,
+                knowledge: knowledge,
+                corpusLearning: corpusLearning,
+                limit: 3
+            )
+            let phrases = topLearnedPhrases(
+                for: phase,
+                knowledge: knowledge,
+                corpusLearning: corpusLearning,
+                limit: 2
+            )
             let cueParts = [
                 words.isEmpty ? nil : "words: \(words.joined(separator: ", "))",
                 phrases.isEmpty ? nil : "phrases: \(phrases.joined(separator: " | "))"
@@ -277,6 +377,7 @@ extension ChunkedPhaseAnalyzer {
         positionPct: Int,
         previousPhase: HypnosisMetadata.Phase?,
         knowledge: CorpusPhaseKnowledge,
+        corpusLearning: AnalyzerConfig.CorpusLearning = .init(),
         baseExamples: [AnalyzerConfig.ChunkedAnalyzer.FewShotExample]
     ) -> [AnalyzerConfig.ChunkedAnalyzer.FewShotExample] {
         guard !baseExamples.isEmpty else { return [] }
@@ -289,19 +390,27 @@ extension ChunkedPhaseAnalyzer {
         ))
 
         return baseExamples
+            .filter { example in
+                sourceMultiplier(
+                    for: example,
+                    corpusLearning: corpusLearning
+                ) > 0
+            }
             .sorted { lhs, rhs in
                 contextualFewShotScore(
                     example: lhs,
                     targetPosition: targetPosition,
                     previousPhase: previousPhase,
                     likelyPhases: likelyPhases,
-                    knowledge: knowledge
+                    knowledge: knowledge,
+                    corpusLearning: corpusLearning
                 ) > contextualFewShotScore(
                     example: rhs,
                     targetPosition: targetPosition,
                     previousPhase: previousPhase,
                     likelyPhases: likelyPhases,
-                    knowledge: knowledge
+                    knowledge: knowledge,
+                    corpusLearning: corpusLearning
                 )
             }
             .prefix(4)
@@ -367,31 +476,45 @@ extension ChunkedPhaseAnalyzer {
     nonisolated static func positionAnchoredPhases(for positionPct: Int) -> [HypnosisMetadata.Phase] {
         switch positionPct {
         case 0..<8:
-            return [.preTalk, .induction]
-        case 8..<20:
-            return [.induction, .fractionation, .deepening]
-        case 20..<40:
-            return [.fractionation, .deepening, .confusion, .therapy]
-        case 40..<60:
-            return [.therapy, .confusion, .suggestions, .eroticSuggestions]
-        case 60..<78:
-            return [.suggestions, .eroticSuggestions, .brainwashing, .conditioning]
-        case 78..<90:
-            return [.brainwashing, .conditioning, .emergence]
+            return [.induction]
+        case 8..<35:
+            return [.induction, .deepening]
+        case 35..<65:
+            return [.deepening, .suggestions]
+        case 65..<82:
+            return [.suggestions, .brainwashing]
+        case 82..<90:
+            return [.brainwashing, .emergence]
         default:
-            return [.conditioning, .emergence]
+            return [.emergence]
         }
     }
 
     nonisolated static func topLearnedWords(
         for phase: HypnosisMetadata.Phase,
         knowledge: CorpusPhaseKnowledge,
+        corpusLearning: AnalyzerConfig.CorpusLearning = .init(),
         limit: Int
     ) -> [String] {
-        Array((knowledge.keywordWeights[phase] ?? [:])
+        func weightedValue(_ entry: (key: String, value: Double)) -> Double {
+            entry.value * corpusLearning.sourceMultiplier(
+                for: knowledge.keywordSourcePacks[phase]?[entry.key] ?? Set<String>(),
+                phase: phase
+            )
+        }
+
+        return Array((knowledge.keywordWeights[phase] ?? [:])
+            .filter { word, _ in
+                corpusLearning.sourceMultiplier(
+                    for: knowledge.keywordSourcePacks[phase]?[word] ?? Set<String>(),
+                    phase: phase
+                ) > 0
+            }
             .sorted { lhs, rhs in
-                if abs(lhs.value - rhs.value) < 0.0001 { return lhs.key < rhs.key }
-                return lhs.value > rhs.value
+                let lhsValue = weightedValue(lhs)
+                let rhsValue = weightedValue(rhs)
+                if abs(lhsValue - rhsValue) < 0.0001 { return lhs.key < rhs.key }
+                return lhsValue > rhsValue
             }
             .prefix(limit)
             .map(\.key))
@@ -400,12 +523,28 @@ extension ChunkedPhaseAnalyzer {
     nonisolated static func topLearnedPhrases(
         for phase: HypnosisMetadata.Phase,
         knowledge: CorpusPhaseKnowledge,
+        corpusLearning: AnalyzerConfig.CorpusLearning = .init(),
         limit: Int
     ) -> [String] {
-        Array((knowledge.phraseWeights[phase] ?? [:])
+        func weightedValue(_ entry: (key: String, value: Double)) -> Double {
+            entry.value * corpusLearning.sourceMultiplier(
+                for: knowledge.phraseSourcePacks[phase]?[entry.key] ?? Set<String>(),
+                phase: phase
+            )
+        }
+
+        return Array((knowledge.phraseWeights[phase] ?? [:])
+            .filter { phrase, _ in
+                corpusLearning.sourceMultiplier(
+                    for: knowledge.phraseSourcePacks[phase]?[phrase] ?? Set<String>(),
+                    phase: phase
+                ) > 0
+            }
             .sorted { lhs, rhs in
-                if abs(lhs.value - rhs.value) < 0.0001 { return lhs.key < rhs.key }
-                return lhs.value > rhs.value
+                let lhsValue = weightedValue(lhs)
+                let rhsValue = weightedValue(rhs)
+                if abs(lhsValue - rhsValue) < 0.0001 { return lhs.key < rhs.key }
+                return lhsValue > rhsValue
             }
             .prefix(limit)
             .map(\.key))
@@ -416,7 +555,8 @@ extension ChunkedPhaseAnalyzer {
         targetPosition: Double,
         previousPhase: HypnosisMetadata.Phase?,
         likelyPhases: Set<HypnosisMetadata.Phase>,
-        knowledge: CorpusPhaseKnowledge
+        knowledge: CorpusPhaseKnowledge,
+        corpusLearning: AnalyzerConfig.CorpusLearning = .init()
     ) -> Double {
         let positionPenalty = abs(example.position - targetPosition)
         let phase = HypnosisMetadata.Phase(rawValue: example.correctPhase)
@@ -428,7 +568,17 @@ extension ChunkedPhaseAnalyzer {
             transitionBonus = 0.0
         }
 
-        return likelyBonus + transitionBonus - positionPenalty * 1.8
+        let baseScore = likelyBonus + transitionBonus - positionPenalty * 1.8
+        return baseScore * sourceMultiplier(for: example, corpusLearning: corpusLearning)
+    }
+
+    nonisolated static func sourceMultiplier(
+        for example: AnalyzerConfig.ChunkedAnalyzer.FewShotExample,
+        corpusLearning: AnalyzerConfig.CorpusLearning
+    ) -> Double {
+        let phase = HypnosisMetadata.Phase(rawValue: example.correctPhase) ?? .suggestions
+        let sourcePackIDs = example.sourcePackID.map { Set([$0]) } ?? Set<String>()
+        return corpusLearning.sourceMultiplier(for: sourcePackIDs, phase: phase)
     }
 
     nonisolated static func nextOrderedPhase(after phase: HypnosisMetadata.Phase) -> HypnosisMetadata.Phase? {
@@ -447,8 +597,8 @@ extension ChunkedPhaseAnalyzer {
         totalDuration: Double,
         model: SystemLanguageModel,
         systemInstructions: String,
-        knowledge: CorpusPhaseKnowledge
-        ,
+        knowledge: CorpusPhaseKnowledge,
+        corpusLearning: AnalyzerConfig.CorpusLearning = .init(),
         fewShotSeedExamples: [AnalyzerConfig.ChunkedAnalyzer.FewShotExample]
     ) async throws -> [(Int, HypnosisMetadata.Phase?)] {
         try await withThrowingTaskGroup(of: (Int, HypnosisMetadata.Phase?).self) { group in
@@ -463,12 +613,14 @@ extension ChunkedPhaseAnalyzer {
                         corpusHints: Self.contextualPromptHints(
                             positionPct: job.positionPct,
                             previousPhase: prev,
-                            knowledge: knowledge
+                            knowledge: knowledge,
+                            corpusLearning: corpusLearning
                         ),
                         fewShotExamples: Self.contextualFewShotExamples(
                             positionPct: job.positionPct,
                             previousPhase: prev,
                             knowledge: knowledge,
+                            corpusLearning: corpusLearning,
                             baseExamples: fewShotSeedExamples
                         )
                     )
@@ -519,13 +671,12 @@ extension ChunkedPhaseAnalyzer {
             of \(Int(request.totalDuration))s total):
             "\(request.text)"
 
-            Return the single best raw hypnosis phase value for this segment.
-            Phase:
+            Classify this transcript segment into the single best structural hypnosis phase.
             """
         let session = LanguageModelSession(model: model, instructions: request.systemInstructions)
         do {
-            let response = try await session.respond(to: prompt)
-            return phaseFromResponse(response.content)
+            let response = try await session.respond(to: prompt, generating: ChunkPhaseClassification.self)
+            return response.content.normalizedPhase
         } catch LanguageModelSession.GenerationError.exceededContextWindowSize {
             return try await splitAndClassify(request: request, previousPhase: previousPhase, model: model)
         } catch LanguageModelSession.GenerationError.guardrailViolation {
@@ -574,13 +725,13 @@ private extension ChunkedPhaseAnalyzer {
     static func buildPositionHint(pct: Int) -> String {
         switch pct {
         case 0..<8:
-            return "This is the BEGINNING of the session (\(pct)%). Expect pre_talk or early induction."
+            return "This is the BEGINNING of the session (\(pct)%). Expect orientation-style induction."
         case 8..<20:
-            return "This is early in the session (\(pct)%). Likely induction or fractionation."
+            return "This is early in the session (\(pct)%). Likely induction or early deepening; fractionation is a technique, not a phase."
         case 20..<40:
-            return "This is the early-middle (\(pct)%). Likely fractionation, deepening, or confusion technique."
+            return "This is the early-middle (\(pct)%). Likely deepening; fractionation and confusion are techniques inside the structural phase."
         case 40..<60:
-            return "This is the middle (\(pct)%). Therapy (passive trance), confusion, or early suggestions."
+            return "This is the middle (\(pct)%). Likely deepening or suggestions; confusion language is a technique, not its own phase."
         case 60..<78:
             return "This is the later-middle (\(pct)%). Likely suggestions, erotic_suggestions, or brainwashing if repetitive indoctrination language appears."
         case 75..<88:
@@ -592,22 +743,4 @@ private extension ChunkedPhaseAnalyzer {
         }
     }
 
-    static func phaseFromResponse(_ response: String) -> HypnosisMetadata.Phase? {
-        let cleaned = response.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        if let exact = HypnosisMetadata.Phase(rawValue: cleaned) { return exact }
-        let candidates: [HypnosisMetadata.Phase] = HypnosisMetadata.Phase.orderedHypnosisPhases
-        for phase in candidates where cleaned.localizedStandardContains(phase.rawValue) { return phase }
-        if cleaned.localizedStandardContains("pre_induction") ||
-           cleaned.localizedStandardContains("pre induction") ||
-           cleaned.localizedStandardContains("pre-induction") { return .preTalk }
-        if cleaned.localizedStandardContains("fractionization") ||
-           cleaned.localizedStandardContains("fractionisation") { return .fractionation }
-        if cleaned.localizedStandardContains("deep_trance") ||
-           cleaned.localizedStandardContains("deep trance") { return .therapy }
-        if cleaned.localizedStandardContains("erotic suggestion") ||
-           cleaned.localizedStandardContains("sensual suggestion") { return .eroticSuggestions }
-        if cleaned.localizedStandardContains("conditioning") ||
-           cleaned.localizedStandardContains("post_hypnotic") { return .conditioning }
-        return nil
-    }
 }

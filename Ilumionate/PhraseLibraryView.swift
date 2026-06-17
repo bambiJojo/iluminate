@@ -13,9 +13,7 @@ struct PhraseLibraryView: View {
         case all
         case preTalk
         case induction
-        case fractionation
         case deepening
-        case confusion
         case therapy
         case suggestions
         case eroticSuggestions
@@ -30,9 +28,7 @@ struct PhraseLibraryView: View {
             case .all: return "All Phases"
             case .preTalk: return HypnosisMetadata.Phase.preTalk.displayName
             case .induction: return HypnosisMetadata.Phase.induction.displayName
-            case .fractionation: return HypnosisMetadata.Phase.fractionation.displayName
             case .deepening: return HypnosisMetadata.Phase.deepening.displayName
-            case .confusion: return HypnosisMetadata.Phase.confusion.displayName
             case .therapy: return HypnosisMetadata.Phase.therapy.displayName
             case .suggestions: return HypnosisMetadata.Phase.suggestions.displayName
             case .eroticSuggestions: return HypnosisMetadata.Phase.eroticSuggestions.displayName
@@ -47,9 +43,7 @@ struct PhraseLibraryView: View {
             case .all: return nil
             case .preTalk: return .preTalk
             case .induction: return .induction
-            case .fractionation: return .fractionation
             case .deepening: return .deepening
-            case .confusion: return .confusion
             case .therapy: return .therapy
             case .suggestions: return .suggestions
             case .eroticSuggestions: return .eroticSuggestions
@@ -87,9 +81,37 @@ struct PhraseLibraryView: View {
         }
     }
 
+    private enum SourceFilter: String, CaseIterable, Identifiable {
+        case all
+        case bambi
+        case other
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all: return "All Sources"
+            case .bambi: return "Bambi"
+            case .other: return "Other"
+            }
+        }
+
+        func includes(_ association: HypnosisPhraseAssociation) -> Bool {
+            switch self {
+            case .all:
+                return true
+            case .bambi:
+                return association.sourcePackIDs.contains("bambi")
+            case .other:
+                return !association.sourcePackIDs.contains("bambi")
+            }
+        }
+    }
+
     @State private var searchText = ""
     @State private var phaseFilter: PhaseFilter = .all
     @State private var originFilter: OriginFilter = .all
+    @State private var sourceFilter: SourceFilter = .all
 
     private var knowledge: CorpusPhaseKnowledge {
         CorpusPhaseKnowledgeCache.shared.knowledge()
@@ -108,16 +130,19 @@ struct PhraseLibraryView: View {
         allAssociations.filter { association in
             let phaseMatches = phaseFilter.phase.map { association.phase == $0 } ?? true
             let originMatches = originFilter.origin.map { association.origin == $0 } ?? true
+            let sourceMatches = sourceFilter.includes(association)
             let searchMatches = searchText.isEmpty
                 || association.phrase.localizedCaseInsensitiveContains(searchText)
                 || association.phase.displayName.localizedCaseInsensitiveContains(searchText)
                 || (association.sourceLabel?.localizedCaseInsensitiveContains(searchText) ?? false)
-            return phaseMatches && originMatches && searchMatches
+            return phaseMatches && originMatches && sourceMatches && searchMatches
         }
     }
 
     private var groupedAssociations: [(phase: HypnosisMetadata.Phase, phrases: [HypnosisPhraseAssociation])] {
-        let phases = phaseFilter.phase.map { [$0] } ?? HypnosisMetadata.Phase.allCases.filter { $0 != .transitional }
+        let phases = phaseFilter.phase.map { [$0] } ?? HypnosisMetadata.Phase.allCases.filter {
+            ![.fractionation, .confusion, .transitional].contains($0)
+        }
         return phases.compactMap { phase in
             let phrases = filteredAssociations.filter { $0.phase == phase }
             guard !phrases.isEmpty else { return nil }
@@ -149,7 +174,11 @@ struct PhraseLibraryView: View {
                     .font(TranceTypography.caption)
                     .foregroundStyle(Color.textSecondary)
 
-                HStack(spacing: TranceSpacing.inner) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 118), spacing: TranceSpacing.inner)],
+                    alignment: .leading,
+                    spacing: TranceSpacing.inner
+                ) {
                     summaryBadge(
                         title: "Phrases",
                         value: allAssociations.count.formatted(),
@@ -164,6 +193,11 @@ struct PhraseLibraryView: View {
                         title: "Blended",
                         value: allAssociations.filter { $0.origin == .blended }.count.formatted(),
                         tint: .roseGold
+                    )
+                    summaryBadge(
+                        title: "Bambi",
+                        value: allAssociations.filter { $0.sourcePackIDs.contains("bambi") }.count.formatted(),
+                        tint: .orange
                     )
                 }
             }
@@ -220,6 +254,13 @@ struct PhraseLibraryView: View {
 
                 Picker("Evidence", selection: $originFilter) {
                     ForEach(OriginFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Source", selection: $sourceFilter) {
+                    ForEach(SourceFilter.allCases) { filter in
                         Text(filter.title).tag(filter)
                     }
                 }

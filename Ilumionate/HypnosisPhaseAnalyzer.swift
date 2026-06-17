@@ -567,7 +567,7 @@ struct HypnosisPhaseAnalyzer {
     ) -> [(HypnosisMetadata.Phase, Double)] {
         switch markerType {
         case .normalization, .expectationSetting, .rapportBuilding, .suggestibilityTesting:
-            return [(.preTalk, 2.4)]
+            return [(.induction, 2.4)]
 
         case .eyeFixation, .breathingFocus, .progressiveRelaxation, .sensoryNarrowing, .pacingExperience:
             return [(.induction, 2.4)]
@@ -575,7 +575,7 @@ struct HypnosisPhaseAnalyzer {
         case .countingDown, .descendingImagery, .heavinessContrast, .timeDistortion:
             return [(.deepening, 2.6)]
         case .fractionation:
-            return [(.fractionation, 3.0), (.deepening, 1.0)]
+            return [(.deepening, 3.0), (.induction, 0.8)]
 
         case .directSuggestion, .egoStrengthening:
             return [(.suggestions, 2.2)]
@@ -596,7 +596,7 @@ struct HypnosisPhaseAnalyzer {
             return [(.therapy, 1.6), (.induction, 0.8)]
 
         case .confusionTechnique, .doubleBinding:
-            return [(.confusion, 2.5)]
+            return [(.deepening, 1.7), (.suggestions, 0.9), (.induction, 0.5)]
         case .amnesiaSuggestion, .dissociation, .ageRegression, .hallucination:
             return [(.suggestions, 1.5), (.therapy, 0.8)]
         case .brainwashing:
@@ -680,7 +680,12 @@ struct HypnosisPhaseAnalyzer {
         var configOverrides: [String: (HypnosisMetadata.Phase, Double)] = [:]
         for phase in HypnosisMetadata.Phase.allCases {
             for (phrase, weight) in effectiveWeightsForPhase(phase) {
-                configOverrides[phrase] = (phase, weight)
+                setConfigOverride(
+                    phrase: phrase,
+                    phase: hitMapTargetPhase(for: phase),
+                    weight: weight,
+                    in: &configOverrides
+                )
             }
         }
 
@@ -724,20 +729,111 @@ struct HypnosisPhaseAnalyzer {
 
     private func effectiveWeightsForPhase(_ phase: HypnosisMetadata.Phase) -> [String: Double] {
         let corpusKnowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
-        var weights = config.weightsForPhase(phase)
-        for (keyword, learnedWeight) in corpusKnowledge.keywordWeights[phase] ?? [:] {
-            weights[keyword] = max(
-                weights[keyword] ?? 0,
-                learnedWeight * corpusLearning.learnedKeywordWeightMultiplier
-            )
+        let aliases: [HypnosisMetadata.Phase] = {
+            switch phase {
+            case .preTalk:
+                return [.induction, .preTalk]
+            case .fractionation, .deepening, .confusion, .transitional:
+                return [.deepening, .fractionation, .confusion, .transitional]
+            default:
+                return [phase]
+            }
+        }()
+        var weights: [String: Double]
+        switch phase {
+        case .preTalk:
+            weights = config.weightsForPhase(.induction)
+        case .fractionation, .deepening, .confusion, .transitional:
+            weights = config.weightsForPhase(.deepening)
+        default:
+            weights = configuredWeights(for: phase)
         }
-        for (phrase, learnedWeight) in corpusKnowledge.phraseWeights[phase] ?? [:] {
-            weights[phrase] = max(
-                weights[phrase] ?? 0,
-                learnedWeight * corpusLearning.learnedPhraseWeightMultiplier
-            )
+        for alias in aliases {
+            for (keyword, learnedWeight) in corpusKnowledge.keywordWeights[alias] ?? [:] {
+                let sourceMultiplier = sourceMultiplier(
+                    for: keyword,
+                    phase: alias,
+                    in: corpusKnowledge.keywordSourcePacks
+                )
+                guard sourceMultiplier > 0 else { continue }
+                weights[keyword] = max(
+                    weights[keyword] ?? 0,
+                    learnedWeight * corpusLearning.learnedKeywordWeightMultiplier * sourceMultiplier
+                )
+            }
+            for (phrase, learnedWeight) in corpusKnowledge.phraseWeights[alias] ?? [:] {
+                let sourceMultiplier = sourceMultiplier(
+                    for: phrase,
+                    phase: alias,
+                    in: corpusKnowledge.phraseSourcePacks
+                )
+                guard sourceMultiplier > 0 else { continue }
+                weights[phrase] = max(
+                    weights[phrase] ?? 0,
+                    learnedWeight * corpusLearning.learnedPhraseWeightMultiplier * sourceMultiplier
+                )
+            }
         }
         return weights
+    }
+
+    private func setConfigOverride(
+        phrase: String,
+        phase: HypnosisMetadata.Phase,
+        weight: Double,
+        in configOverrides: inout [String: (HypnosisMetadata.Phase, Double)]
+    ) {
+        guard let existing = configOverrides[phrase] else {
+            configOverrides[phrase] = (phase, weight)
+            return
+        }
+
+        if existing.0 == phase {
+            configOverrides[phrase] = (phase, max(existing.1, weight))
+        } else if weight > existing.1 {
+            configOverrides[phrase] = (phase, weight)
+        }
+    }
+
+    private func sourceMultiplier(
+        for term: String,
+        phase: HypnosisMetadata.Phase,
+        in sourcePacks: [HypnosisMetadata.Phase: [String: Set<String>]]
+    ) -> Double {
+        corpusLearning.sourceMultiplier(
+            for: sourcePacks[phase]?[term] ?? Set<String>(),
+            phase: phase
+        )
+    }
+
+    private func configuredWeights(for phase: HypnosisMetadata.Phase) -> [String: Double] {
+        var weights = config.weights[phase.rawValue] ?? [:]
+        for legacyKey in legacyConfigKeys(for: phase) {
+            for (keyword, weight) in config.weights[legacyKey] ?? [:] {
+                weights[keyword] = max(weights[keyword] ?? 0.0, weight)
+            }
+        }
+        return weights
+    }
+
+    private func legacyConfigKeys(for phase: HypnosisMetadata.Phase) -> [String] {
+        switch phase {
+        case .therapy:
+            return ["therapy"]
+        default:
+            return []
+        }
+    }
+
+    private func hitMapTargetPhase(for phase: HypnosisMetadata.Phase) -> HypnosisMetadata.Phase {
+        switch phase {
+        case .preTalk:
+            return .induction
+        case .fractionation, .confusion, .transitional:
+            return .deepening
+        default:
+            return phase
+        }
     }
 
     // MARK: - Timeline Resolution
@@ -825,7 +921,11 @@ struct HypnosisPhaseAnalyzer {
 
         for secondIndex in 0..<result.count {
             guard let phase = result[secondIndex] else { continue }
-            guard let phaseIndex = Self.orderedPhases.firstIndex(of: phase) else { continue }
+            let canonicalPhase = phase.labelingPhase
+            if canonicalPhase != phase {
+                result[secondIndex] = canonicalPhase
+            }
+            guard let phaseIndex = Self.orderedPhases.firstIndex(of: canonicalPhase) else { continue }
 
             if phaseIndex >= highestIndex {
                 highestIndex = phaseIndex
@@ -844,8 +944,9 @@ struct HypnosisPhaseAnalyzer {
 
         var highestIndex = 0
         let normalized = phaseSegments.map { segment -> PhaseSegment in
+            let canonicalPhase = segment.phase.labelingPhase
             guard
-                let phaseIndex = Self.orderedPhases.firstIndex(of: segment.phase)
+                let phaseIndex = Self.orderedPhases.firstIndex(of: canonicalPhase)
             else {
                 return segment
             }
@@ -853,7 +954,7 @@ struct HypnosisPhaseAnalyzer {
             let resolvedPhase: HypnosisMetadata.Phase
             if phaseIndex >= highestIndex {
                 highestIndex = phaseIndex
-                resolvedPhase = segment.phase
+                resolvedPhase = canonicalPhase
             } else {
                 resolvedPhase = Self.orderedPhases[highestIndex]
             }
@@ -1137,8 +1238,9 @@ struct HypnosisPhaseAnalyzer {
     }
 
     private func candidatePhases(for phase: HypnosisMetadata.Phase) -> [HypnosisMetadata.Phase] {
-        var candidates = Set([phase])
-        if let phaseIndex = Self.orderedPhases.firstIndex(of: phase) {
+        let canonicalPhase = phase.labelingPhase
+        var candidates = Set([canonicalPhase])
+        if let phaseIndex = Self.orderedPhases.firstIndex(of: canonicalPhase) {
             for delta in -2...2 {
                 let candidateIndex = phaseIndex + delta
                 guard Self.orderedPhases.indices.contains(candidateIndex) else { continue }
@@ -1150,7 +1252,7 @@ struct HypnosisPhaseAnalyzer {
             candidates.formUnion([.suggestions, .eroticSuggestions, .brainwashing, .conditioning])
         }
         if [.induction, .fractionation, .deepening, .confusion].contains(phase) {
-            candidates.formUnion([.induction, .fractionation, .deepening, .confusion])
+            candidates.formUnion([.induction, .deepening])
         }
 
         return Self.orderedPhases.filter { candidates.contains($0) }
@@ -1665,7 +1767,7 @@ struct HypnosisPhaseAnalyzer {
     ) -> String {
         var reasons: [String] = []
 
-        if let leadingWaymarker = section.waymarkerMatches.first(where: { $0.phase == evidence.phase }) {
+        if let leadingWaymarker = section.waymarkerMatches.first(where: { $0.phase.labelingPhase == evidence.phase.labelingPhase }) {
             reasons.append("way-marker '\(leadingWaymarker.phrase)' is active")
         }
         if let matchedPhrase = evidence.matchedPhrases.first {
@@ -2177,7 +2279,7 @@ struct HypnosisPhaseAnalyzer {
         }
 
         let waymarkers = section.waymarkerMatches
-            .filter { $0.phase == phase }
+            .filter { $0.phase.labelingPhase == phase.labelingPhase }
             .map(\.phrase)
         if !waymarkers.isEmpty {
             reasons.append("explicit hypnosis marker phrases are present")
@@ -2234,13 +2336,28 @@ struct HypnosisPhaseAnalyzer {
             .filter { !$0.isEmpty }
         let phraseTokens = (corpusKnowledge.phraseWeights[phase] ?? [:])
             .keys
+            .filter { phrase in
+                sourceMultiplier(
+                    for: phrase,
+                    phase: phase,
+                    in: corpusKnowledge.phraseSourcePacks
+                ) > 0
+            }
             .flatMap { phrase in
                 phrase
                     .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "'" })
                     .map { String($0).lowercased() }
             }
+        let learnedTokens = (corpusKnowledge.phaseTokens[phase] ?? [])
+            .filter { token in
+                sourceMultiplier(
+                    for: token,
+                    phase: phase,
+                    in: corpusKnowledge.keywordSourcePacks
+                ) > 0
+            }
         return Set(tokens)
-            .union(corpusKnowledge.phaseTokens[phase] ?? [])
+            .union(learnedTokens)
             .union(phraseTokens)
     }
 
@@ -2249,7 +2366,16 @@ struct HypnosisPhaseAnalyzer {
         let configuredPhrases = HypnosisPhaseKeywords.all
             .filter { $0.phase == phase && $0.phrase.contains(" ") }
             .map { normalizePhrase($0.phrase) }
-        let learnedPhrases = (corpusKnowledge.phraseWeights[phase] ?? [:]).keys.map(normalizePhrase)
+        let learnedPhrases = (corpusKnowledge.phraseWeights[phase] ?? [:])
+            .keys
+            .filter { phrase in
+                sourceMultiplier(
+                    for: phrase,
+                    phase: phase,
+                    in: corpusKnowledge.phraseSourcePacks
+                ) > 0
+            }
+            .map(normalizePhrase)
         let waymarkerPhrases = HypnosisWaymarkerLexicon.phrases(for: phase)
         return Set(configuredPhrases)
             .union(learnedPhrases)
@@ -2260,7 +2386,7 @@ struct HypnosisPhaseAnalyzer {
         for phase: HypnosisMetadata.Phase,
         section: TranscriptSectionMetrics
     ) -> Double {
-        let matches = section.waymarkerMatches.filter { $0.phase == phase }
+        let matches = section.waymarkerMatches.filter { $0.phase.labelingPhase == phase.labelingPhase }
         guard !matches.isEmpty else { return 0.0 }
         let totalScore = matches.reduce(0.0) { $0 + $1.score }
         return clamp(totalScore / 2.5, lower: 0.0, upper: 1.0)
@@ -2304,7 +2430,3 @@ struct HypnosisPhaseAnalyzer {
         min(max(value, lower), upper)
     }
 }
-
-
-
-

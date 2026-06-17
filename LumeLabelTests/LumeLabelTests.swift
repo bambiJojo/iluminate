@@ -184,31 +184,94 @@ struct LumeLabelTests {
     }
 
     @Test
+    @MainActor
+    func batchFolderImportLabelsAudioFilesAsOnePhaseAndSkipsUnsupportedFiles() async throws {
+        let baseDirectory = try makeTempDirectory()
+        let manager = TrainingCorpusManager(baseDirectory: baseDirectory, autoLoad: false)
+        let sourceDirectory = baseDirectory.appending(path: ".inductions", directoryHint: .isDirectory)
+        let first = try makeWAVFile(at: sourceDirectory.appending(path: "deepener-a.wav"), frequency: 220)
+        let second = try makeWAVFile(at: sourceDirectory.appending(path: "deepener-b.wav"), frequency: 440)
+        let nested = try makeWAVFile(at: sourceDirectory.appending(path: "nested/deepener-c.wav"), frequency: 550)
+        try Data("not audio".utf8).write(to: sourceDirectory.appending(path: "notes.txt"), options: .atomic)
+        try Data("not audio".utf8).write(to: sourceDirectory.appending(path: "nested/readme.md"), options: .atomic)
+
+        let result = try await manager.importAudioFolder(from: sourceDirectory, labeledAs: .deepening)
+
+        #expect(result.importedFiles.map(\.originalFilename) == [
+            first.lastPathComponent,
+            second.lastPathComponent,
+            nested.lastPathComponent
+        ])
+        #expect(result.skippedFilenames == ["nested/readme.md", "notes.txt"])
+        #expect(manager.labeledFiles.count == 3)
+
+        for file in result.importedFiles {
+            let phase = try #require(file.phases.first)
+            #expect(file.phases.count == 1)
+            #expect(phase.phase == .deepening)
+            #expect(phase.startTime == 0)
+            #expect(abs(phase.endTime - file.audioDuration) < 0.001)
+            #expect(file.labelerNotes.contains("Silver label"))
+        }
+
+        let dataset = try AnalyzerOptimizationDataset.load(from: baseDirectory)
+        #expect(dataset.examples.count == 3)
+        #expect(dataset.examples.allSatisfy { $0.example.labels.phaseOrder == [.deepening] })
+    }
+
+    @Test
     func trancePhaseExpansionHasStableOrderAndNames() {
         #expect(TrancePhase.orderedHypnosisPhases == [
-            .preTalk,
             .induction,
-            .fractionation,
             .deepening,
-            .confusion,
-            .therapy,
             .suggestions,
-            .eroticSuggestions,
             .brainwashing,
-            .conditioning,
             .emergence
         ])
 
         #expect(TrancePhase.fractionation.displayName == "Fractionation")
         #expect(TrancePhase.confusion.displayName == "Confusion")
-        #expect(TrancePhase.eroticSuggestions.displayName == "Erotic Suggestions")
+        #expect(TrancePhase.suggestions.displayName == "Suggestions")
         #expect(TrancePhase.brainwashing.displayName == "Brainwashing")
-        #expect(TrancePhase.eroticSuggestions.rawValue == "erotic_suggestions")
+        #expect(TrancePhase.preTalk.labelingPhase == .induction)
+        #expect(TrancePhase.fractionation.labelingPhase == .deepening)
+        #expect(TrancePhase.confusion.labelingPhase == .deepening)
+        #expect(TrancePhase.therapy.labelingPhase == .suggestions)
+        #expect(TrancePhase.eroticSuggestions.labelingPhase == .suggestions)
+        #expect(TrancePhase.conditioning.labelingPhase == .suggestions)
+    }
+
+    @Test
+    func legacyContentSpecificPhasesDecodeAsSuggestions() throws {
+        let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+
+        for rawValue in ["therapeutic_work", "erotic_suggestions", "post_hypnotic_conditioning"] {
+            let decoded = try decoder.decode(TrancePhase.self, from: Data("\"\(rawValue)\"".utf8))
+            #expect(decoded == .suggestions)
+
+            let encoded = try String(data: encoder.encode(TrancePhase(rawValue: rawValue) ?? .suggestions), encoding: .utf8)
+            #expect(encoded == "\"suggestions\"")
+        }
+    }
+
+    @Test
+    func legacyTechniquePhasesDecodeAsDeepening() throws {
+        let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+
+        for rawValue in ["fractionation", "confusion"] {
+            let decoded = try decoder.decode(TrancePhase.self, from: Data("\"\(rawValue)\"".utf8))
+            #expect(decoded == .deepening)
+
+            let encoded = try String(data: encoder.encode(TrancePhase(rawValue: rawValue) ?? .deepening), encoding: .utf8)
+            #expect(encoded == "\"deepening\"")
+        }
     }
 
     @Test
     @MainActor
-    func savePreservesExpandedHypnosisPhasesInAnalyzerDataset() async throws {
+    func saveCanonicalizesLegacyContentPhasesInAnalyzerDataset() async throws {
         let baseDirectory = try makeTempDirectory()
         let manager = TrainingCorpusManager(baseDirectory: baseDirectory, autoLoad: false)
         let source = try makeWAVFile(
@@ -231,7 +294,7 @@ struct LumeLabelTests {
         let dataset = try AnalyzerOptimizationDataset.load(from: baseDirectory)
         let phases = dataset.examples.first?.example.labels.phaseSegments.map(\.phase) ?? []
 
-        #expect(phases == [.induction, .fractionation, .eroticSuggestions, .brainwashing])
+        #expect(phases == [.induction, .deepening, .suggestions, .brainwashing])
     }
 
     @Test

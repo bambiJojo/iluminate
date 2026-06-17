@@ -23,7 +23,7 @@ struct ClaudeRequestBuilderTests {
     func userMessageTargets() {
         let builder = ClaudeRequestBuilder(model: "claude-x")
         let body = builder.body(
-            for: BlockRequest(phase: .emergence, durationSec: 45, ambiguity: .high, seeds: [], priorPhases: [.therapy])
+            for: BlockRequest(phase: .emergence, durationSec: 45, ambiguity: .high, seeds: [], priorPhases: [.suggestions])
         )
         let messages = body["messages"] as? [[String: Any]]
         let text = (messages?.first?["content"] as? String) ?? ""

@@ -5,14 +5,12 @@
 
   "keywordPipeline": {
     "weights": {
-      "pre_talk": {
+      "induction": {
         "welcome": 1.2, "hello": 0.8, "introduce": 1.0, "explain": 1.0,
         "comfortable": 0.8, "position": 0.8, "ready": 0.8, "begin": 0.8,
         "today": 0.5, "seated": 0.6, "lying": 0.6, "adjust": 0.6,
         "how are you": 2.0, "let me explain": 2.5, "before we begin": 3.0,
-        "make yourself": 2.0, "find a comfortable": 2.5, "get comfortable": 2.5
-      },
-      "induction": {
+        "make yourself": 2.0, "find a comfortable": 2.5, "get comfortable": 2.5,
         "relax": 1.8, "relaxing": 1.8, "relaxed": 1.5, "breathe": 1.5,
         "breath": 1.2, "breathing": 1.2, "calm": 1.5, "peaceful": 1.5,
         "quiet": 1.2, "gentle": 1.0, "softly": 1.0, "slowly": 1.0,
@@ -104,7 +102,7 @@
     "chunkOverlapSeconds": 5.0,
     "minChunks": 6,
     "maxChunks": 60,
-    "systemInstructions": "You are a hypnosis session analyst. Classify a short transcript segment into the correct phase of a hypnosis session.\n\nPhases ALWAYS occur in this strict order — use the session position percentage to anchor your classification:\n1. pre_talk         (0–8%): greeting, welcome, comfort, explaining the process\n2. induction        (5–18%): eye closure, breathing, relaxation, countdown setup\n3. fractionation    (12–28%): brief eye-opening/closing cycles, re-dropping deeper each time\n4. deepening        (20–40%): deeper, drift, float, sinking, body scan, staircase\n5. confusion        (28–52%): pattern interrupts, paradox, overloaded choices, disorientation\n6. therapy          (35–70%): deep passive trance, imagery, metaphor, re-framing, minimal commands\n7. suggestions      (45–82%): active commands, belief shifts, direct therapeutic programming\n8. erotic_suggestions (50–85%): sensual, arousal, submission, pleasure-linked suggestions\n9. brainwashing     (55–88%): repeated indoctrination, identity overwrite, obedience/mantra loops\n10. post_hypnotic_conditioning (72–94%): anchors, future pacing, trigger installation\n11. emergence       (84–100%): counting up, come back, re-orientation, waking\n\nCRITICAL RULES:\n- Session position is your strongest signal. Override ambiguous text with it.\n- fractionation requires repeated in-out or eye-open/close-and-drop language, not just one emergence cue.\n- confusion requires paradoxical or disorienting language, not ordinary uncertainty words alone.\n- suggestions = general programming. erotic_suggestions = clearly sensual/arousal-focused programming.\n- brainwashing requires repetitive indoctrination/obedience/identity-overwrite language, not a single strong command.\n- Position >84% with waking language → emergence.\n- Position <10% with calm/welcoming language → pre_talk, not induction.\n\nRespond with ONLY the single raw phase value (e.g. \"suggestions\").\nNo explanation, no punctuation, no other text.",
+    "systemInstructions": "You are a hypnosis session analyst. Classify a short transcript segment into the correct structural phase of a hypnosis session.\n\nPhases ALWAYS occur in this strict order — use the session position percentage to anchor your classification:\n1. induction    (0–25%): orientation, rapport, comfort setup, explaining the process, eye closure, breathing, relaxation, countdown setup\n2. deepening    (15–55%): deeper, drift, float, sinking, body scan, staircase, fractionation cycles, confusion techniques\n3. suggestions  (40–85%): therapeutic work, imagery, metaphor, reframing, active commands, belief shifts, future pacing, anchors\n4. brainwashing (55–88%): repeated indoctrination, identity overwrite, obedience/mantra loops\n5. emergence    (84–100%): counting up, come back, re-orientation, waking\n\nTECHNIQUE RULES:\n- fractionation is a technique inside induction or deepening; classify the surrounding structural phase, usually deepening.\n- confusion is a technique inside induction, deepening, or suggestion work; classify the surrounding structural phase, usually deepening unless suggestion content dominates.\n\nCRITICAL RULES:\n- Session position is your strongest signal. Override ambiguous text with it.\n- Early rapport, comfort setup, suggestibility framing, and explanation are induction, not a separate pre_talk phase.\n- suggestions includes general therapeutic work, indirect suggestion, conditioning, and future pacing.\n- brainwashing requires repetitive indoctrination/obedience/identity-overwrite language, not a single strong command.\n- Position >84% with waking language → emergence.\n\nRespond with ONLY one raw phase value from this set: induction, deepening, suggestions, brainwashing, emergence.\nNo explanation, no punctuation, no other text.",
     "fewShotExamples": []
   },
 
@@ -177,7 +175,6 @@
       "unknown": { "lower": 8.0, "upper": 12.0 }
     },
     "phaseFrequencyBands": {
-      "pre_talk":                   { "lower": 12.0, "upper": 18.0 },
       "induction":                  { "lower": 8.0,  "upper": 12.0 },
       "fractionation":              { "lower": 6.5,  "upper": 9.5  },
       "deepening":                  { "lower": 5.0,  "upper": 8.0  },

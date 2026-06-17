@@ -320,7 +320,7 @@ struct TranscriptView: View {
                         TimelineChipItem(
                             id: "library|\(match.phase.rawValue)|\(match.phrase)",
                             text: match.phrase,
-                            detail: "\(match.phase.displayName) · \(match.originLabel)",
+                            detail: match.detailLabel,
                             tint: phaseColor(match.phase)
                         )
                     }
@@ -393,6 +393,7 @@ struct TranscriptView: View {
                         phrase: association.phrase,
                         phase: phase,
                         origin: association.origin,
+                        sourceLabel: association.sourceLabel,
                         weight: association.weight
                     )
                 }
@@ -451,6 +452,7 @@ private struct PhraseLibraryMatch: Identifiable {
     let phrase: String
     let phase: HypnosisMetadata.Phase
     let origin: HypnosisPhraseEvidenceOrigin
+    let sourceLabel: String?
     let weight: Double
 
     var originLabel: String {
@@ -462,6 +464,13 @@ private struct PhraseLibraryMatch: Identifiable {
         case .blended:
             return "blended"
         }
+    }
+
+    var detailLabel: String {
+        if let sourceLabel, !sourceLabel.isEmpty {
+            return "\(phase.displayName) · \(originLabel) · \(sourceLabel)"
+        }
+        return "\(phase.displayName) · \(originLabel)"
     }
 }
 

@@ -453,7 +453,7 @@ extension SessionGenerator {
 
     /// Returns the calibrated target frequency for a phase using research-backed
     /// band-fraction targets. Fractions sourced from AVE phase-response studies:
-    ///   preTalk=100%, induction=75%, deepening=40%, therapy=10%,
+    ///   induction=75%, deepening=40%, therapy=10%,
     ///   suggestions=25%, conditioning=40%, emergence=60%
     func targetFrequencyForPhase(_ phase: HypnosisMetadata.Phase, config: GenerationConfig) -> Double {
         let range = frequencyRangeForPhase(phase)
@@ -463,8 +463,7 @@ extension SessionGenerator {
 
         let fraction: Double
         switch phase {
-        case .preTalk:      fraction = 1.00   // top of beta band
-        case .induction:    fraction = 0.75   // upper alpha
+        case .preTalk, .induction: fraction = 0.75   // upper alpha
         case .fractionation:fraction = 0.55   // light re-alert + re-drop cycling
         case .deepening:    fraction = 0.35   // mid alpha-theta
         case .confusion:    fraction = 0.18   // low theta, destabilizing but not deepest
@@ -500,7 +499,7 @@ extension SessionGenerator {
         let contourShift: Double
 
         switch phase {
-        case .induction:
+        case .preTalk, .induction:
             contourShift = -0.65 * segmentProgress
         case .deepening:
             contourShift = -0.85 * segmentProgress
@@ -514,7 +513,7 @@ extension SessionGenerator {
             contourShift = 1.25 * segmentProgress
         case .eroticSuggestions, .brainwashing:
             contourShift = -0.35 * segmentProgress
-        case .preTalk, .transitional:
+        case .transitional:
             contourShift = 0
         }
 
@@ -561,8 +560,7 @@ extension SessionGenerator {
 
     func expectedDepthForPhase(_ phase: HypnosisMetadata.Phase) -> Double {
         switch phase {
-        case .preTalk: return 0.10
-        case .induction: return 0.30
+        case .preTalk, .induction: return 0.30
         case .fractionation: return 0.45
         case .deepening: return 0.58
         case .confusion: return 0.62
@@ -622,8 +620,7 @@ extension SessionGenerator {
             return band.closedRange
         }
         switch phase {
-        case .preTalk:      return 12.0...18.0
-        case .induction:    return 8.0...12.0
+        case .preTalk, .induction: return 8.0...12.0
         case .fractionation:return 6.5...9.5
         case .deepening:    return 5.0...8.0
         case .confusion:    return 4.5...6.5
@@ -639,8 +636,7 @@ extension SessionGenerator {
 
     func intensityForPhase(_ phase: HypnosisMetadata.Phase) -> Double {
         switch phase {
-        case .preTalk:     return 0.55
-        case .induction:   return 0.45
+        case .preTalk, .induction: return 0.45
         case .fractionation: return 0.41
         case .deepening:   return 0.38
         case .confusion:   return 0.35
@@ -656,8 +652,7 @@ extension SessionGenerator {
 
     func colorTemperatureForPhase(_ phase: HypnosisMetadata.Phase) -> Double {
         switch phase {
-        case .preTalk:     return 5000
-        case .induction:   return 4000
+        case .preTalk, .induction: return 4000
         case .fractionation: return 3400
         case .deepening:   return 3000
         case .confusion:   return 2550

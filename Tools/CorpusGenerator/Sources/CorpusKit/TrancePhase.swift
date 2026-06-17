@@ -14,19 +14,77 @@ public enum TrancePhase: String, Codable, Sendable, CaseIterable {
     case deepening = "deepening"
     case confusion = "confusion"
     case suggestions = "suggestions"
+
+    // Legacy/technique-specific labels. These decode and export as structural
+    // phases so older corpora continue to load while new training data uses one
+    // target taxonomy.
     case therapy = "therapeutic_work"
     case eroticSuggestions = "erotic_suggestions"
-    case brainwashing = "brainwashing"
     case conditioning = "post_hypnotic_conditioning"
+
+    case brainwashing = "brainwashing"
     case emergence = "emergence"
 
     case transitional // Used when phases blend
 
     public static let orderedHypnosisPhases: [TrancePhase] = [
-        .preTalk, .induction, .fractionation, .deepening, .confusion,
-        .therapy, .suggestions, .eroticSuggestions, .brainwashing,
-        .conditioning, .emergence,
+        .induction, .deepening, .suggestions, .brainwashing, .emergence,
     ]
+
+    public var isLabelingPhase: Bool {
+        Self.orderedHypnosisPhases.contains(self)
+    }
+
+    public var labelingPhase: TrancePhase {
+        switch self {
+        case .preTalk:
+            return .induction
+        case .fractionation, .confusion:
+            return .deepening
+        case .therapy, .eroticSuggestions, .conditioning:
+            return .suggestions
+        case .transitional:
+            return .deepening
+        default:
+            return self
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        switch rawValue {
+        case Self.preTalk.rawValue:
+            self = .induction
+        case Self.fractionation.rawValue, Self.confusion.rawValue:
+            self = .deepening
+        case Self.therapy.rawValue, Self.eroticSuggestions.rawValue, Self.conditioning.rawValue:
+            self = .suggestions
+        default:
+            guard let phase = Self(rawValue: rawValue) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Unknown trance phase: \(rawValue)"
+                )
+            }
+            self = phase
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        let encodedPhase: TrancePhase = switch self {
+        case .preTalk:
+            .induction
+        case .fractionation, .confusion:
+            .deepening
+        case .therapy, .eroticSuggestions, .conditioning:
+            .suggestions
+        default:
+            self
+        }
+        try container.encode(encodedPhase.rawValue)
+    }
 
     public var displayName: String {
         switch self {
@@ -47,7 +105,7 @@ public enum TrancePhase: String, Codable, Sendable, CaseIterable {
 
     public var tranceDepthEstimate: Double {
         switch self {
-        case .preTalk: return 0.05
+        case .preTalk: return 0.22
         case .induction: return 0.22
         case .fractionation: return 0.42
         case .deepening: return 0.62

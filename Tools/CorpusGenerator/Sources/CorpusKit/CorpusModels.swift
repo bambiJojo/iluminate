@@ -37,7 +37,7 @@ public struct PhaseTruthSpan: Codable, Sendable {
     private enum CodingKeys: String, CodingKey { case phase, start, end }
 
     public init(phase: TrancePhase, start: TimeInterval, end: TimeInterval) {
-        self.phase = phase; self.start = start; self.end = end
+        self.phase = phase.labelingPhase; self.start = start; self.end = end
     }
 
     public init(from decoder: Decoder) throws {
@@ -49,14 +49,14 @@ public struct PhaseTruthSpan: Codable, Sendable {
                 debugDescription: "Unknown phase rawValue '\(raw)'"
             )
         }
-        self.phase = phase
+        self.phase = phase.labelingPhase
         self.start = try c.decode(TimeInterval.self, forKey: .start)
         self.end = try c.decode(TimeInterval.self, forKey: .end)
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(phase.rawValue, forKey: .phase)
+        try c.encode(phase.labelingPhase.rawValue, forKey: .phase)
         try c.encode(start, forKey: .start)
         try c.encode(end, forKey: .end)
     }
@@ -68,11 +68,52 @@ public struct GenerationParams: Codable, Sendable {
     public let ambiguity: String
     public let seedSetID: String?
     public let model: String?
+    public let seed: UInt64?
     public let createdAt: Date
 
-    public init(archetype: String, ambiguity: String, seedSetID: String?, model: String?, createdAt: Date) {
+    private enum CodingKeys: String, CodingKey {
+        case archetype, ambiguity, seedSetID, model, seed, createdAt
+    }
+
+    public init(
+        archetype: String,
+        ambiguity: String,
+        seedSetID: String?,
+        model: String?,
+        seed: UInt64? = nil,
+        createdAt: Date
+    ) {
         self.archetype = archetype; self.ambiguity = ambiguity
-        self.seedSetID = seedSetID; self.model = model; self.createdAt = createdAt
+        self.seedSetID = seedSetID; self.model = model
+        self.seed = seed; self.createdAt = createdAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        archetype = try c.decode(String.self, forKey: .archetype)
+        ambiguity = try c.decode(String.self, forKey: .ambiguity)
+        seedSetID = try c.decodeIfPresent(String.self, forKey: .seedSetID)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        seed = try c.decodeIfPresent(UInt64.self, forKey: .seed)
+
+        if let raw = try? c.decode(String.self, forKey: .createdAt),
+           let date = ISO8601DateFormatter().date(from: raw) {
+            createdAt = date
+        } else if let seconds = try? c.decode(Double.self, forKey: .createdAt) {
+            createdAt = Date(timeIntervalSince1970: seconds)
+        } else {
+            createdAt = try c.decode(Date.self, forKey: .createdAt)
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(archetype, forKey: .archetype)
+        try c.encode(ambiguity, forKey: .ambiguity)
+        try c.encodeIfPresent(seedSetID, forKey: .seedSetID)
+        try c.encodeIfPresent(model, forKey: .model)
+        try c.encodeIfPresent(seed, forKey: .seed)
+        try c.encode(createdAt, forKey: .createdAt)
     }
 }
 
@@ -116,7 +157,7 @@ public struct CorpusCase: Codable, Sendable {
         self.ambiguityLevel = ambiguityLevel; self.duration = duration
         self.segments = segments; self.truth = truth
         self.expectedContentTypeRaw = expectedContentTypeRaw
-        self.expectedPhaseOrder = expectedPhaseOrder
+        self.expectedPhaseOrder = expectedPhaseOrder?.map(\.labelingPhase)
         self.minimumPhaseCount = minimumPhaseCount
         self.generation = generation
     }
@@ -132,7 +173,7 @@ public struct CorpusCase: Codable, Sendable {
         truth = try c.decodeIfPresent([PhaseTruthSpan].self, forKey: .truth) ?? []
         expectedContentTypeRaw = try c.decodeIfPresent(String.self, forKey: .expectedContentType)
         if let rawOrder = try c.decodeIfPresent([String].self, forKey: .expectedPhaseOrder) {
-            expectedPhaseOrder = rawOrder.compactMap { TrancePhase(rawValue: $0) }
+            expectedPhaseOrder = rawOrder.compactMap { TrancePhase(rawValue: $0)?.labelingPhase }
         } else {
             expectedPhaseOrder = nil
         }
@@ -150,7 +191,7 @@ public struct CorpusCase: Codable, Sendable {
         try c.encode(segments, forKey: .segments)
         try c.encode(truth, forKey: .truth)
         try c.encodeIfPresent(expectedContentTypeRaw, forKey: .expectedContentType)
-        try c.encodeIfPresent(expectedPhaseOrder?.map(\.rawValue), forKey: .expectedPhaseOrder)
+        try c.encodeIfPresent(expectedPhaseOrder?.map { $0.labelingPhase.rawValue }, forKey: .expectedPhaseOrder)
         try c.encodeIfPresent(minimumPhaseCount, forKey: .minimumPhaseCount)
         try c.encodeIfPresent(generation, forKey: .generation)
     }

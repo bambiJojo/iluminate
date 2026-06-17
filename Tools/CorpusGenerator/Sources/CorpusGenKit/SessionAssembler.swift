@@ -17,7 +17,10 @@ public struct SessionAssembler: Sendable {
         ambiguity: CorpusAmbiguityLevel,
         idPrefix: String,
         model: String?,
-        seedSetID: String?
+        seedSetID: String?,
+        caseID: String? = nil,
+        generationSeed: UInt64? = nil,
+        createdAt: Date = Date()
     ) async throws -> CorpusCase {
         var truth: [PhaseTruthSpan] = []
         var segments: [CorpusSegment] = []
@@ -38,9 +41,9 @@ public struct SessionAssembler: Sendable {
             priorPhases.append(block.phase)
         }
 
-        let shortID = UUID().uuidString.prefix(8).lowercased()
+        let generatedID = caseID ?? "\(idPrefix)-\(plan.archetype)-\(UUID().uuidString.prefix(8).lowercased())"
         return CorpusCase(
-            id: "\(idPrefix)-\(plan.archetype)-\(shortID)",
+            id: generatedID,
             source: .synthetic,
             boundaryMode: .exact,
             ambiguityLevel: ambiguity,
@@ -55,7 +58,8 @@ public struct SessionAssembler: Sendable {
                 ambiguity: ambiguity.rawValue,
                 seedSetID: seedSetID,
                 model: model,
-                createdAt: Date()
+                seed: generationSeed,
+                createdAt: createdAt
             )
         )
     }

@@ -9,6 +9,7 @@ import Foundation
 import Observation
 import AVFoundation
 import CoreMedia
+import UniformTypeIdentifiers
 
 nonisolated enum TrainingCorpusLocation {
     static let visibleDirectoryName = "TrainingCorpus"
@@ -65,6 +66,11 @@ struct TrainingCorpusLoadIssue: Identifiable, Hashable, Sendable {
 struct TrainingCorpusSnapshot: Sendable {
     var labeledFiles: [LabeledFile]
     var issues: [TrainingCorpusLoadIssue]
+}
+
+struct BatchPhaseImportResult: Sendable {
+    let importedFiles: [LabeledFile]
+    let skippedFilenames: [String]
 }
 
 nonisolated struct AnalyzerDatasetManifest: Codable, Sendable {
@@ -142,6 +148,11 @@ actor TrainingCorpusStore {
     private func normalizedForHypnosisCorpus(_ file: LabeledFile) -> LabeledFile {
         var normalized = file
         normalized.expectedContentType = .hypnosis
+        normalized.phases = normalized.phases.map { phase in
+            var canonical = phase
+            canonical.phase = phase.phase.labelingPhase
+            return canonical
+        }
         return normalized
     }
 
@@ -525,6 +536,38 @@ final class TrainingCorpusManager {
         return file
     }
 
+    func importAudioFolder(from folderURL: URL, labeledAs phase: TrancePhase) async throws -> BatchPhaseImportResult {
+        let audioURLs = try audioFiles(in: folderURL)
+        guard !audioURLs.isEmpty else {
+            throw TrainingCorpusError.invalidLabel("No supported audio files were found in \(folderURL.lastPathComponent).")
+        }
+
+        var importedFiles: [LabeledFile] = []
+        importedFiles.reserveCapacity(audioURLs.count)
+
+        for url in audioURLs {
+            let imported = try await importAudio(from: url)
+            var labeled = imported
+            labeled.phases = [
+                LabeledFile.LabeledPhase(
+                    phase: phase,
+                    startTime: 0,
+                    endTime: imported.audioDuration
+                )
+            ]
+            labeled.labelerNotes = "Silver label: batch folder import as \(phase.rawValue)."
+            importedFiles.append(try await save(labeled))
+        }
+
+        let importedPaths = Set(audioURLs.map { $0.standardizedFileURL.path })
+        let skipped = try files(in: folderURL)
+            .filter { !importedPaths.contains($0.standardizedFileURL.path) }
+            .map { displayPath(for: $0, relativeTo: folderURL) }
+            .sorted()
+
+        return BatchPhaseImportResult(importedFiles: importedFiles, skippedFilenames: skipped)
+    }
+
     func delete(_ file: LabeledFile) async throws {
         let remainingFiles = labeledFiles.filter { $0.id != file.id }
         try await store.delete(file, remainingFiles: remainingFiles)
@@ -543,4 +586,69 @@ final class TrainingCorpusManager {
         }
         labeledFiles.sort { $0.labeledAt > $1.labeledAt }
     }
+
+    private func audioFiles(in folderURL: URL) throws -> [URL] {
+        try files(in: folderURL)
+            .filter(Self.isSupportedAudioFile)
+            .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    private func files(in folderURL: URL) throws -> [URL] {
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey, .typeIdentifierKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: folderURL,
+            includingPropertiesForKeys: Array(keys),
+            options: []
+        ) else {
+            throw TrainingCorpusError.directoryEnumerationFailed(folderURL, underlying: "Could not open folder.")
+        }
+
+        var files: [URL] = []
+        for case let url as URL in enumerator {
+            do {
+                let values = try url.resourceValues(forKeys: keys)
+                if values.isDirectory == true {
+                    continue
+                }
+                files.append(url)
+            } catch {
+                throw TrainingCorpusError.directoryEnumerationFailed(folderURL, underlying: error.localizedDescription)
+            }
+        }
+        return files
+    }
+
+    private func displayPath(for url: URL, relativeTo folderURL: URL) -> String {
+        let folderPath = folderURL.standardizedFileURL.path
+        let filePath = url.standardizedFileURL.path
+        if filePath.hasPrefix(folderPath + "/") {
+            return String(filePath.dropFirst(folderPath.count + 1))
+        }
+        return url.lastPathComponent
+    }
+
+    private nonisolated static func isSupportedAudioFile(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        if supportedAudioExtensions.contains(ext) {
+            return true
+        }
+        if let type = UTType(filenameExtension: ext), type.conforms(to: .audio) {
+            return true
+        }
+        do {
+            let values = try url.resourceValues(forKeys: [.typeIdentifierKey])
+            if let identifier = values.typeIdentifier,
+               let type = UTType(identifier),
+               type.conforms(to: .audio) {
+                return true
+            }
+        } catch {
+            return false
+        }
+        return false
+    }
+
+    private nonisolated static let supportedAudioExtensions: Set<String> = [
+        "aac", "aif", "aiff", "caf", "flac", "m4a", "mp3", "mp4", "wav"
+    ]
 }

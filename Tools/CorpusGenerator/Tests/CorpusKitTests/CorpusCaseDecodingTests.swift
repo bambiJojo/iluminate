@@ -40,7 +40,32 @@ struct CorpusCaseDecodingTests {
         let kase = try JSONDecoder().decode(CorpusCase.self, from: Data(json.utf8))
         #expect(kase.truth.isEmpty)
         #expect(kase.expectedContentTypeRaw == "hypnosis")
-        #expect(kase.expectedPhaseOrder == [.preTalk, .induction])
+        #expect(kase.expectedPhaseOrder == [.induction, .induction])
+    }
+
+    @Test("Decodes generated provenance with ISO-8601 createdAt")
+    func decodesGeneratedProvenanceDate() throws {
+        let json = """
+        {
+          "id": "synth-generated", "source": "synthetic", "boundaryMode": "exact",
+          "ambiguityLevel": "low", "duration": 60.0,
+          "segments": [], "truth": [],
+          "generation": {
+            "archetype": "classic",
+            "ambiguity": "low",
+            "seedSetID": "seeds-1",
+            "model": "claude-x",
+            "seed": 4242,
+            "createdAt": "2026-06-11T16:41:42Z"
+          }
+        }
+        """
+
+        let kase = try JSONDecoder().decode(CorpusCase.self, from: Data(json.utf8))
+
+        #expect(kase.generation?.archetype == "classic")
+        #expect(kase.generation?.seed == 4242)
+        #expect(kase.generation?.createdAt.timeIntervalSince1970 == 1781196102)
     }
 
     @Test("Round-trips through encode/decode")

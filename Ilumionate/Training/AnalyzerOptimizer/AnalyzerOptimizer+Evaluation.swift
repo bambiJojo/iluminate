@@ -117,11 +117,13 @@ extension AnalyzerOptimizer {
         engine: AnalyzerEvaluationEngine,
         concurrencyProfile: OptimizerConcurrencyProfile,
         transcribe: (@Sendable (AnalyzerOptimizationDataset.Example) async throws -> AudioTranscriptionResult)?,
+        randomState: UInt64,
         progressBase: Int,
         totalUnitCount: Int,
         onProgress: (@Sendable (Progress) async -> Void)?
-    ) async throws -> [PopulationEntry] {
+    ) async throws -> (entries: [PopulationEntry], randomState: UInt64) {
         let targetSize = max(1, params.populationSize)
+        var randomGenerator = SeededRandomNumberGenerator(state: randomState)
         var jobs: [PopulationEvaluationJob] = [
             PopulationEvaluationJob(
                 config: seed,
@@ -134,14 +136,14 @@ extension AnalyzerOptimizer {
             try Task.checkCancellation()
             jobs.append(
                 PopulationEvaluationJob(
-                    config: mutationEngine.mutate(seed, for: evaluationMode),
+                    config: mutationEngine.mutate(seed, for: evaluationMode, using: &randomGenerator),
                     progressLabel: "Seeding candidate \(jobs.count + 1) of \(targetSize)"
                 )
             )
         }
 
         try Task.checkCancellation()
-        return try await evaluatePopulationEntries(
+        let entries = try await evaluatePopulationEntries(
             jobs: jobs,
             split: split,
             cache: cache,
@@ -155,6 +157,7 @@ extension AnalyzerOptimizer {
             isEstimatedTotal: true,
             onProgress: onProgress
         )
+        return (entries, randomGenerator.state)
     }
 
     func evaluatePopulationEntries(

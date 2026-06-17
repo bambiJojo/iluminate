@@ -437,12 +437,18 @@ extension LabeledFile {
         datasetRelativeAudioPath: String,
         datasetRelativeExamplePath: String
     ) -> AnalyzerTrainingExample {
-        let sortedPhases = phases.sorted { lhs, rhs in
-            if lhs.startTime == rhs.startTime {
-                return lhs.endTime < rhs.endTime
+        let sortedPhases = phases
+            .map { phase -> LabeledPhase in
+                var canonical = phase
+                canonical.phase = phase.phase.labelingPhase
+                return canonical
             }
-            return lhs.startTime < rhs.startTime
-        }
+            .sorted { lhs, rhs in
+                if lhs.startTime == rhs.startTime {
+                    return lhs.endTime < rhs.endTime
+                }
+                return lhs.startTime < rhs.startTime
+            }
 
         return AnalyzerTrainingExample(
             schemaVersion: AnalyzerTrainingExample.currentSchemaVersion,

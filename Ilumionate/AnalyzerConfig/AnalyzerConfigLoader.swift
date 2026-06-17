@@ -20,7 +20,7 @@ enum AnalyzerConfigLoader {
         if let data = try? Data(contentsOf: documentsConfigURL),
            let config = try? JSONDecoder().decode(AnalyzerConfig.self, from: data) {
             Log.analysis.info("📐 Loaded trained AnalyzerConfig (gen \(config.generation), fitness \(config.fitness))")
-            return config
+            return applyRuntimePreferences(to: config)
         }
 
         // 2. Fall back to bundled default
@@ -28,7 +28,7 @@ enum AnalyzerConfigLoader {
            let data = try? Data(contentsOf: url),
            let config = try? JSONDecoder().decode(AnalyzerConfig.self, from: data) {
             Log.analysis.info("📐 Loaded default AnalyzerConfig from bundle")
-            return config
+            return applyRuntimePreferences(to: config)
         }
 
         // 3. Last resort — should never happen in production
@@ -47,5 +47,13 @@ enum AnalyzerConfigLoader {
         let data = try encoder.encode(config)
         try data.write(to: url, options: .atomic)
         Log.analysis.info("💾 Saved AnalyzerConfig (gen \(config.generation)) to \(url.path())")
+    }
+
+    private static func applyRuntimePreferences(to config: AnalyzerConfig) -> AnalyzerConfig {
+        var config = config
+        if let sourceProfile = CorpusSourceProfile.storedSelection() {
+            config.corpusLearning.sourceProfile = sourceProfile
+        }
+        return config
     }
 }

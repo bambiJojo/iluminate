@@ -36,8 +36,12 @@ extension ChunkedPhaseAnalyzer {
         var highestIndex = 0
 
         for idx in 0..<result.count {
-            guard let phase = result[idx],
-                  let phaseIndex = orderedPhases.firstIndex(of: phase) else { continue }
+            guard let phase = result[idx] else { continue }
+            let canonicalPhase = phase.labelingPhase
+            if canonicalPhase != phase {
+                result[idx] = canonicalPhase
+            }
+            guard let phaseIndex = orderedPhases.firstIndex(of: canonicalPhase) else { continue }
 
             if phaseIndex >= highestIndex {
                 highestIndex = phaseIndex

@@ -59,4 +59,25 @@ struct SessionAssemblerTests {
         #expect(kase.generation?.seedSetID == "seedset-1")
         #expect(kase.id.hasPrefix("synth-"))
     }
+
+    @Test("Accepts deterministic case id, generation seed, and createdAt")
+    func deterministicProvenance() async throws {
+        let assembler = SessionAssembler(responder: StubResponder())
+        let createdAt = Date(timeIntervalSince1970: 42)
+
+        let kase = try await assembler.assemble(
+            plan: twoBlockPlan(),
+            ambiguity: .low,
+            idPrefix: "synth",
+            model: nil,
+            seedSetID: nil,
+            caseID: "synth-test-seed4242-0001",
+            generationSeed: 4242,
+            createdAt: createdAt
+        )
+
+        #expect(kase.id == "synth-test-seed4242-0001")
+        #expect(kase.generation?.seed == 4242)
+        #expect(kase.generation?.createdAt == createdAt)
+    }
 }

@@ -23,7 +23,8 @@ enum AVESystemPrompt {
     You classify audio content for a light therapy system.
     Content types: hypnosis, meditation, music, guidedImagery, affirmations, unknown.
     Frequency targets: hypnosis 4–8 Hz, meditation 6–8 Hz, music 8–18 Hz, affirmations 9–11 Hz.
-    Phases (hypnosis only): pre_talk, induction, fractionation, deepening, confusion, therapy, suggestions, erotic_suggestions, brainwashing, post_hypnotic_conditioning, emergence.
+    Phases (hypnosis only): pre_talk, induction, deepening, therapy, suggestions, erotic_suggestions, brainwashing, post_hypnotic_conditioning, emergence.
+    Techniques/modifiers, not phases: fractionation, confusion.
     Color temperature: deep states 2200–2800 K, alpha 3000–4000 K, alert 4500–6500 K.
     """
 
@@ -46,15 +47,15 @@ enum AVESystemPrompt {
     HYPNOSIS PHASE DETECTION — identify these in order when present:
     1. pre_talk: Rapport building, expectation setting, normalizing hypnosis
     2. induction: Eye-closure cues, relaxation instructions, fixation exercises
-    3. fractionation: Brief in-out cycles, opening/closing eyes, re-dropping deeper
-    4. deepening: Counting down, descending imagery ("going deeper"), staircase/levator cues
-    5. confusion: Pattern interrupts, overloaded choices, paradoxical or disorienting phrasing
-    6. therapy: The main therapeutic content — metaphors, re-framing, passive trance work
-    7. suggestions: Direct or indirect behavioral/belief suggestions
-    8. erotic_suggestions: Sensual, arousal, submission, pleasure-linked hypnotic suggestions
-    9. brainwashing: Repetitive indoctrination loops, identity overwrite, mantra-style programming
-    10. post_hypnotic_conditioning: Future pacing, trigger installation, anchoring
-    11. emergence: Counting up, re-alerting, "when you open your eyes" language
+    3. deepening: Counting down, descending imagery ("going deeper"), staircase/levator cues.
+       Fractionation cycles and confusion language are techniques inside induction/deepening,
+       not standalone phases.
+    4. therapy: The main therapeutic content — metaphors, re-framing, passive trance work
+    5. suggestions: Direct or indirect behavioral/belief suggestions
+    6. erotic_suggestions: Sensual, arousal, submission, pleasure-linked hypnotic suggestions
+    7. brainwashing: Repetitive indoctrination loops, identity overwrite, mantra-style programming
+    8. post_hypnotic_conditioning: Future pacing, trigger installation, anchoring
+    9. emergence: Counting up, re-alerting, "when you open your eyes" language
 
     CONTENT TYPE CLASSIFICATION:
     • hypnosis: Contains induction + deepening structure; listener is guided into trance
@@ -86,7 +87,7 @@ enum AVESystemPrompt {
     recommendedPreset: Deep Theta Hypnosis
     summary: A classic Ericksonian induction with permissive language, descending staircase deepener,
       passive trance section, and gentle awakening. Light targets mid-theta (4–6 Hz) at peak depth.
-    phases: [pre_talk 0–120s, induction 120–300s, fractionation 300–420s, deepening 420–600s,
+    phases: [pre_talk 0–120s, induction 120–300s, deepening 300–600s,
              therapy 600–1260s, suggestions 1260–1560s, post_hypnotic_conditioning 1560–1740s, emergence 1740–1800s]
     tranceDepthCurve: [0.1, 0.28, 0.5, 0.72, 0.84, 0.78, 0.58, 0.22]
 
@@ -230,9 +231,10 @@ struct AIKeyMoment {
 struct AIPhaseSegment {
 
     @Guide(description: """
-        Phase name — one of: pre_talk, induction, fractionation, deepening,
-        confusion, therapy, suggestions, erotic_suggestions, brainwashing,
+        Phase name — one of: pre_talk, induction, deepening,
+        therapy, suggestions, erotic_suggestions, brainwashing,
         post_hypnotic_conditioning, emergence
+        Fractionation and confusion are techniques/modifiers, not phase names.
         """)
     var phase: String
 

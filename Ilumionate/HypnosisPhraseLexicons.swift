@@ -61,35 +61,35 @@ enum CuratedHypnosisPhraseLibrary {
         ),
         CuratedHypnosisPhrasePrior(
             phrase: "open your eyes",
-            phase: .fractionation,
+            phase: .deepening,
             weight: 3.9,
             sourceLabel: "Learn Hypnosis - Breathing With The Eyes",
             sourceURL: "https://learn.nimja.com/inductions/breathing_with_the_eyes"
         ),
         CuratedHypnosisPhrasePrior(
             phrase: "open your eyes close your eyes",
-            phase: .fractionation,
+            phase: .deepening,
             weight: 4.2,
             sourceLabel: "Learn Hypnosis - Fractionation",
             sourceURL: "https://learn.nimja.com/techniques/fractionation"
         ),
         CuratedHypnosisPhrasePrior(
             phrase: "you are aware and yet you are not aware",
-            phase: .confusion,
+            phase: .deepening,
             weight: 4.0,
             sourceLabel: "Learn Hypnosis - Confusion Induction",
             sourceURL: "https://learn.nimja.com/inductions/confusion"
         ),
         CuratedHypnosisPhrasePrior(
             phrase: "conscious mind",
-            phase: .confusion,
+            phase: .deepening,
             weight: 2.4,
             sourceLabel: "Learn Hypnosis - Confusion Induction",
             sourceURL: "https://learn.nimja.com/inductions/confusion"
         ),
         CuratedHypnosisPhrasePrior(
             phrase: "unconscious mind",
-            phase: .confusion,
+            phase: .deepening,
             weight: 2.8,
             sourceLabel: "Learn Hypnosis - Confusion Induction",
             sourceURL: "https://learn.nimja.com/inductions/confusion"
@@ -153,7 +153,7 @@ enum CuratedHypnosisPhraseLibrary {
     ]
 
     static func priors(for phase: HypnosisMetadata.Phase) -> [CuratedHypnosisPhrasePrior] {
-        priors.filter { $0.phase == phase }
+        priors.filter { $0.phase.labelingPhase == phase.labelingPhase }
     }
 
     static func normalizedPriorMap(
@@ -185,15 +185,15 @@ enum HypnosisWaymarkerLexicon {
         Pattern(phrase: "starting to relax", phase: .induction, weight: 0.9),
         Pattern(phrase: "close your eyes", phase: .induction, weight: 1.0),
         Pattern(phrase: "take a deep breath", phase: .induction, weight: 0.85),
-        Pattern(phrase: "open your eyes", phase: .fractionation, weight: 1.0),
-        Pattern(phrase: "eyes open", phase: .fractionation, weight: 0.85),
-        Pattern(phrase: "drop back down", phase: .fractionation, weight: 1.0),
+        Pattern(phrase: "open your eyes", phase: .deepening, weight: 1.0),
+        Pattern(phrase: "eyes open", phase: .deepening, weight: 0.85),
+        Pattern(phrase: "drop back down", phase: .deepening, weight: 1.0),
         Pattern(phrase: "go deeper", phase: .deepening, weight: 1.0),
         Pattern(phrase: "deeper and deeper", phase: .deepening, weight: 1.0),
         Pattern(phrase: "drift deeper", phase: .deepening, weight: 0.9),
         Pattern(phrase: "sink deeper", phase: .deepening, weight: 0.9),
-        Pattern(phrase: "the more you try", phase: .confusion, weight: 1.0),
-        Pattern(phrase: "the more you listen", phase: .confusion, weight: 0.85),
+        Pattern(phrase: "the more you try", phase: .deepening, weight: 1.0),
+        Pattern(phrase: "the more you listen", phase: .deepening, weight: 0.85),
         Pattern(phrase: "from now on", phase: .suggestions, weight: 1.0),
         Pattern(phrase: "you will find", phase: .suggestions, weight: 0.9),
         Pattern(phrase: "every time you", phase: .conditioning, weight: 1.0),
@@ -208,6 +208,6 @@ enum HypnosisWaymarkerLexicon {
     ]
 
     static func phrases(for phase: HypnosisMetadata.Phase) -> Set<String> {
-        Set(allPatterns.filter { $0.phase == phase }.map(\.phrase))
+        Set(allPatterns.filter { $0.phase.labelingPhase == phase.labelingPhase }.map(\.phrase))
     }
 }

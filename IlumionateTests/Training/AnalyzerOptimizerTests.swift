@@ -59,6 +59,49 @@ struct AnalyzerOptimizerTests {
     }
 
     @Test
+    func datasetLoaderWarnsAboutSparseLongExamplesAndRarePhaseCoverage() throws {
+        let corpusDirectory = try makeTempDirectory()
+        let datasetDirectory = corpusDirectory.appending(path: "AnalyzerDataset", directoryHint: .isDirectory)
+        let audioDirectory = datasetDirectory.appending(path: "audio", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: audioDirectory, withIntermediateDirectories: true)
+
+        let files = (0..<12).map { index in
+            let phase: TrancePhase = index == 0 ? .confusion : .induction
+            let duration: TimeInterval = index == 0 ? 900 : 30
+            return makeLabeledFile(
+                originalFilename: "quality-\(index).wav",
+                storedAudioFilename: "quality-\(index).wav",
+                phases: [
+                    .init(phase: phase, startTime: 0, endTime: duration)
+                ]
+            )
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let lines = try files.map { file -> String in
+            try Data("audio".utf8).write(to: audioDirectory.appending(path: file.storedAudioFilename), options: .atomic)
+            let example = file.analyzerTrainingExample(
+                exportedAt: Date(timeIntervalSince1970: 1_000),
+                datasetRelativeAudioPath: "AnalyzerDataset/audio/\(file.storedAudioFilename)",
+                datasetRelativeExamplePath: "AnalyzerDataset/examples/\(file.id.uuidString).json"
+            )
+            return String(decoding: try encoder.encode(example), as: UTF8.self)
+        }
+        try lines.joined(separator: "\n").write(
+            to: datasetDirectory.appending(path: "dataset.jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let dataset = try AnalyzerOptimizationDataset.load(from: corpusDirectory)
+
+        #expect(dataset.examples.count == 12)
+        #expect(dataset.issues.contains { $0.severity == .warning && $0.message.contains("Long example has only one labeled phase segment") })
+        #expect(dataset.issues.contains { $0.severity == .warning && $0.message.contains("Rare phase coverage: deepening") })
+    }
+
+    @Test
     func datasetLoaderAlsoResolvesModernRelativeAudioPaths() throws {
         let corpusDirectory = try makeTempDirectory()
         let datasetDirectory = corpusDirectory.appending(path: "AnalyzerDataset", directoryHint: .isDirectory)
@@ -264,6 +307,43 @@ struct AnalyzerOptimizerTests {
         #expect(split.train.count == 5)
         #expect(split.validation.count == 2)
         #expect(split.test.count == 2)
+    }
+
+    @Test
+    func splitDistributesRarePhasesAcrossAvailableBuckets() throws {
+        let optimizer = AnalyzerOptimizer(
+            corpusDirectory: try makeTempDirectory(),
+            outputDirectory: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        )
+
+        let examples = (0..<12).map { index in
+            let targetPhase: TrancePhase = index < 3 ? .confusion : .induction
+            let file = makeLabeledFile(
+                originalFilename: "stratified-\(index).wav",
+                storedAudioFilename: "stratified-\(index).wav",
+                phases: [
+                    .init(phase: .preTalk, startTime: 0, endTime: 5),
+                    .init(phase: targetPhase, startTime: 5, endTime: 20)
+                ]
+            )
+            return AnalyzerOptimizationDataset.Example(
+                example: file.analyzerTrainingExample(
+                    exportedAt: Date(timeIntervalSince1970: 1_000),
+                    datasetRelativeAudioPath: "AnalyzerDataset/audio/\(file.storedAudioFilename)",
+                    datasetRelativeExamplePath: "AnalyzerDataset/examples/\(file.id.uuidString).json"
+                ),
+                audioURL: URL(filePath: "/tmp/\(file.storedAudioFilename)")
+            )
+        }
+
+        let split = optimizer.split(examples, trainFraction: 0.7, validationFraction: 0.15)
+
+        #expect(split.train.count == 8)
+        #expect(split.validation.count == 2)
+        #expect(split.test.count == 2)
+        #expect(split.train.contains { $0.phaseSegments.contains { $0.phase == .deepening } })
+        #expect(split.validation.contains { $0.phaseSegments.contains { $0.phase == .deepening } })
+        #expect(split.test.contains { $0.phaseSegments.contains { $0.phase == .deepening } })
     }
 
     @Test
@@ -799,6 +879,24 @@ struct AnalyzerOptimizerTests {
         )
     }
 
+    @Test
+    func mutationEngineRepeatsExactlyWithSeededRandomGenerator() throws {
+        let base = makeMutationTestConfig()
+        let engine = AnalyzerMutationEngine()
+        var firstGenerator = SeededRandomNumberGenerator(seed: 42)
+        var secondGenerator = SeededRandomNumberGenerator(seed: 42)
+
+        let first = engine.mutate(base, for: .hybridRuntime, using: &firstGenerator)
+        let second = engine.mutate(base, for: .hybridRuntime, using: &secondGenerator)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let firstData = try encoder.encode(first)
+        let secondData = try encoder.encode(second)
+        #expect(firstData == secondData)
+        #expect(firstGenerator.state == secondGenerator.state)
+    }
+
     private func makeTempDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString, directoryHint: .isDirectory)
@@ -822,6 +920,45 @@ struct AnalyzerOptimizerTests {
             techniques: [],
             labeledAt: Date(timeIntervalSince1970: 1_000),
             labelerNotes: "test"
+        )
+    }
+
+    private func makeMutationTestConfig() -> AnalyzerConfig {
+        AnalyzerConfig(
+            keywordPipeline: .init(
+                weights: ["pre_talk": ["welcome": 1.0]],
+                contextWindowSeconds: 5,
+                smoothingWindowSize: 5,
+                minimumPhaseDurationSeconds: 20,
+                collapseThresholdFraction: 0.035
+            ),
+            chunkedAnalyzer: .init(
+                chunkDurationSeconds: 15.0,
+                chunkOverlapSeconds: 5.0,
+                minChunks: 6,
+                maxChunks: 60,
+                systemInstructions: "demo",
+                fewShotExamples: []
+            ),
+            prosody: .init(
+                speechRateWindowSeconds: 3.0,
+                pauseThresholdSeconds: 1.0,
+                deliberatePauseMinSeconds: 3.0,
+                musicOnlyPauseMinSeconds: 5.0
+            ),
+            techniqueDetection: .init(
+                sensitivityThreshold: 0.6,
+                minConfidence: 0.3
+            ),
+            hybridSelection: .init(),
+            corpusLearning: .init(),
+            boundaryRefinement: .init(),
+            sessionGeneration: .init(
+                frequencyBands: ["hypnosis": .init(lower: 0.5, upper: 10.0)],
+                phaseFrequencyBands: [:],
+                transitionSmoothingSeconds: 2.0,
+                intensityCurve: "gentle"
+            )
         )
     }
 

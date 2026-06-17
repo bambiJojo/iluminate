@@ -26,7 +26,7 @@ enum LightScorePhaseTargeting {
         let contourShift: Double
 
         switch phase {
-        case .induction:
+        case .preTalk, .induction:
             contourShift = -0.65 * progress
         case .deepening:
             contourShift = -0.85 * progress
@@ -40,7 +40,7 @@ enum LightScorePhaseTargeting {
             contourShift = 1.25 * progress
         case .eroticSuggestions, .brainwashing:
             contourShift = -0.35 * progress
-        case .preTalk, .transitional:
+        case .transitional:
             contourShift = 0
         }
 
@@ -58,8 +58,7 @@ enum LightScorePhaseTargeting {
     ) -> Double {
         let base: Double
         switch phase {
-        case .preTalk: base = 0.55
-        case .induction: base = 0.45
+        case .preTalk, .induction: base = 0.45
         case .fractionation: base = 0.41
         case .deepening: base = 0.38
         case .confusion: base = 0.35
@@ -100,8 +99,7 @@ enum LightScorePhaseTargeting {
 
     static func colorTemperature(for phase: HypnosisMetadata.Phase) -> Double {
         switch phase {
-        case .preTalk: return 5000
-        case .induction: return 4000
+        case .preTalk, .induction: return 4000
         case .fractionation: return 3400
         case .deepening: return 3000
         case .confusion: return 2550
@@ -127,8 +125,7 @@ enum LightScorePhaseTargeting {
 
     static func frequencyRange(for phase: HypnosisMetadata.Phase) -> ClosedRange<Double> {
         switch phase {
-        case .preTalk: return 12.0...18.0
-        case .induction: return 8.0...12.0
+        case .preTalk, .induction: return 8.0...12.0
         case .fractionation: return 6.5...9.5
         case .deepening: return 5.0...8.0
         case .confusion: return 4.5...6.5
@@ -144,8 +141,7 @@ enum LightScorePhaseTargeting {
 
     static func expectedDepth(for phase: HypnosisMetadata.Phase) -> Double {
         switch phase {
-        case .preTalk: return 0.10
-        case .induction: return 0.30
+        case .preTalk, .induction: return 0.30
         case .fractionation: return 0.45
         case .deepening: return 0.58
         case .confusion: return 0.62
@@ -162,8 +158,7 @@ enum LightScorePhaseTargeting {
         let range = frequencyRange(for: phase)
         let fraction: Double
         switch phase {
-        case .preTalk: fraction = 1.00
-        case .induction: fraction = 0.75
+        case .preTalk, .induction: fraction = 0.75
         case .fractionation: fraction = 0.55
         case .deepening: fraction = 0.35
         case .confusion: fraction = 0.18

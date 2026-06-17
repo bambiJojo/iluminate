@@ -376,8 +376,7 @@ struct PhaseLabelingView: View {
 
     private func phaseColor(_ phase: HypnosisMetadata.Phase) -> Color {
         switch phase {
-        case .preTalk:      return .bwAlpha
-        case .induction:    return .phaseInduction
+        case .preTalk, .induction: return .phaseInduction
         case .fractionation:return .cyan
         case .deepening:    return .phaseDeepener
         case .confusion:    return .mint

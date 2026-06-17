@@ -717,7 +717,7 @@ struct ChunkedPromptCalibrationTests {
             ],
             phaseTokens: [:],
             phraseWeights: [
-                .conditioning: ["when i say relax": 4.1]
+                .suggestions: ["when i say relax": 4.1]
             ],
             transitionPriors: [:],
             fewShotExamples: []
@@ -730,6 +730,41 @@ struct ChunkedPromptCalibrationTests {
         #expect(instructions.contains("induction"))
         #expect(instructions.contains("breathe"))
         #expect(instructions.contains("when i say relax"))
+    }
+
+    @Test func therapeuticSourceProfileSuppressesBambiPromptCues() {
+        let analyzer = ChunkedPhaseAnalyzer(
+            config: AnalyzerConfig.ChunkedAnalyzer(
+                chunkDurationSeconds: 15,
+                chunkOverlapSeconds: 5,
+                minChunks: 4,
+                maxChunks: 12,
+                systemInstructions: "Base chunk instructions.",
+                fewShotExamples: []
+            ),
+            corpusLearning: AnalyzerConfig.CorpusLearning(sourceProfile: .therapeutic)
+        )
+        let knowledge = CorpusPhaseKnowledge(
+            keywordWeights: [
+                .brainwashing: ["mindlock": 4.0]
+            ],
+            phraseWeights: [
+                .brainwashing: ["mind lock": 4.0]
+            ],
+            keywordSourcePacks: [
+                .brainwashing: ["mindlock": ["bambi"]]
+            ],
+            phraseSourcePacks: [
+                .brainwashing: ["mind lock": ["bambi"]]
+            ]
+        )
+
+        let instructions = analyzer.effectiveSystemInstructions(knowledge: knowledge)
+
+        #expect(instructions.contains("Base chunk instructions."))
+        #expect(instructions.contains("Corpus calibration cues") == false)
+        #expect(instructions.contains("mindlock") == false)
+        #expect(instructions.contains("mind lock") == false)
     }
 
     @Test func contextualFewShotExamplesFavorNearbyTransitionLikelyPhases() {
@@ -778,5 +813,32 @@ struct ChunkedPromptCalibrationTests {
         #expect(examples.first?.correctPhase == HypnosisMetadata.Phase.conditioning.rawValue)
         #expect(examples.contains { $0.correctPhase == HypnosisMetadata.Phase.brainwashing.rawValue })
         #expect(!examples.prefix(2).contains { $0.correctPhase == HypnosisMetadata.Phase.preTalk.rawValue })
+    }
+}
+
+// MARK: - Chunked Structured Output Tests
+
+struct ChunkedStructuredOutputTests {
+
+    @Test func typedLabelsNormalizeToRuntimePhaseTaxonomy() {
+        #expect(ChunkPhaseLabel.preTalk.normalizedPhase == .induction)
+        #expect(ChunkPhaseLabel.induction.normalizedPhase == .induction)
+        #expect(ChunkPhaseLabel.deepening.normalizedPhase == .deepening)
+        #expect(ChunkPhaseLabel.therapy.normalizedPhase == .suggestions)
+        #expect(ChunkPhaseLabel.suggestions.normalizedPhase == .suggestions)
+        #expect(ChunkPhaseLabel.eroticSuggestions.normalizedPhase == .suggestions)
+        #expect(ChunkPhaseLabel.postHypnoticConditioning.normalizedPhase == .suggestions)
+        #expect(ChunkPhaseLabel.brainwashing.normalizedPhase == .brainwashing)
+        #expect(ChunkPhaseLabel.emergence.normalizedPhase == .emergence)
+    }
+
+    @Test func structuredClassificationUsesNormalizedPhase() {
+        let classification = ChunkPhaseClassification(
+            phase: .postHypnoticConditioning,
+            confidence: .high,
+            rationale: "trigger installation and future pacing"
+        )
+
+        #expect(classification.normalizedPhase == .suggestions)
     }
 }

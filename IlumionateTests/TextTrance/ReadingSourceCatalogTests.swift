@@ -87,4 +87,14 @@ struct ReadingSourceCatalogTests {
             #expect(source.url.host(percentEncoded: false)?.isEmpty == false, "\(source.id) has empty host")
         }
     }
+
+    @Test func fragileAdultDirectoriesUseVerifiedLandingPages() {
+        let byID = Dictionary(
+            uniqueKeysWithValues: ReadingSourceCatalog.curatedSources.map { ($0.id, $0) }
+        )
+
+        #expect(byID["spirals-nightclub"]?.url.absoluteString == "http://www.spiralsnightclub.com/")
+        #expect(byID["literotica-mc"]?.url.absoluteString == "https://www.literotica.com/c/mind-control")
+        #expect(byID["hypnohub"]?.url.absoluteString == "https://hypnohub.net/index.php?page=post&s=list&tags=story")
+    }
 }

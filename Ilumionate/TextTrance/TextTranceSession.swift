@@ -31,6 +31,7 @@ final class TextTranceSession {
 
     let script: TranceScript
     let settings: TextTranceSessionSettings
+    let readerReferenceCharacterCount: Int
 
     private let light: (any LightLayerControlling)?
     private let audio: (any AudioLayerControlling)?
@@ -45,6 +46,12 @@ final class TextTranceSession {
          sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         self.script = script
         self.settings = settings
+        self.readerReferenceCharacterCount = TextTranceWordSizing.referenceCharacterCount(
+            for: TextPacingEngine.schedule(
+                for: script,
+                settings: TextPacingSettings(arc: settings.arc, speed: settings.speed)
+            )
+        )
         self.light = light
         self.audio = audio
         self.sleep = sleep

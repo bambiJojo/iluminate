@@ -61,6 +61,8 @@ struct OptimizerConcurrencyProfile: Sendable {
 
 struct AnalyzerOptimizer: Sendable {
     struct Parameters: Codable, Sendable {
+        nonisolated static let defaultRandomSeed: UInt64 = 0xA13C_5EED_7F4A_7C15
+
         var populationSize: Int = 8
         var maxGenerations: Int = 8
         var elitismCount: Int = 2
@@ -70,6 +72,11 @@ struct AnalyzerOptimizer: Sendable {
         var validationFraction: Double = 0.15
         var evaluationMode: AnalyzerEvaluationMode = .keywordOnly
         var publishBestConfigToDocuments: Bool = false
+        var randomSeed: UInt64?
+
+        var effectiveRandomSeed: UInt64 {
+            randomSeed ?? Self.defaultRandomSeed
+        }
 
         nonisolated init(
             populationSize: Int = 8,
@@ -80,7 +87,8 @@ struct AnalyzerOptimizer: Sendable {
             trainFraction: Double = 0.7,
             validationFraction: Double = 0.15,
             evaluationMode: AnalyzerEvaluationMode = .keywordOnly,
-            publishBestConfigToDocuments: Bool = false
+            publishBestConfigToDocuments: Bool = false,
+            randomSeed: UInt64? = AnalyzerOptimizer.Parameters.defaultRandomSeed
         ) {
             self.populationSize = populationSize
             self.maxGenerations = maxGenerations
@@ -91,6 +99,7 @@ struct AnalyzerOptimizer: Sendable {
             self.validationFraction = validationFraction
             self.evaluationMode = evaluationMode
             self.publishBestConfigToDocuments = publishBestConfigToDocuments
+            self.randomSeed = randomSeed
         }
     }
 
@@ -155,6 +164,7 @@ struct AnalyzerOptimizer: Sendable {
         let bestGeneration: Int
         let bestSelectionScore: Double
         let generationHistory: [AnalyzerOptimizationReport.GenerationSnapshot]
+        let randomState: UInt64?
     }
 
     struct PopulationEntry: Sendable {
@@ -166,6 +176,34 @@ struct AnalyzerOptimizer: Sendable {
     struct PopulationEvaluationJob: Sendable {
         let config: AnalyzerConfig
         let progressLabel: String
+    }
+
+    private enum SplitBucketID: Int, CaseIterable, Sendable {
+        case train
+        case validation
+        case test
+    }
+
+    private struct SplitBucket: Sendable {
+        let id: SplitBucketID
+        let targetCount: Int
+        var examples: [AnalyzerOptimizationDataset.Example] = []
+        var phaseCounts: [TrancePhase: Int] = [:]
+
+        var remainingCapacity: Int {
+            max(0, targetCount - examples.count)
+        }
+
+        var hasCapacity: Bool {
+            remainingCapacity > 0
+        }
+
+        mutating func append(_ example: AnalyzerOptimizationDataset.Example) {
+            examples.append(example)
+            for phase in AnalyzerOptimizer.phaseSet(for: example) {
+                phaseCounts[phase, default: 0] += 1
+            }
+        }
     }
 
     let corpusDirectory: URL
@@ -220,6 +258,9 @@ struct AnalyzerOptimizer: Sendable {
         }
 
         let resolvedParams = checkpoint?.params ?? params
+        var randomGenerator = SeededRandomNumberGenerator(
+            state: checkpoint?.randomState ?? resolvedParams.effectiveRandomSeed
+        )
         if let checkpoint, checkpoint.datasetHash != dataset.datasetHash {
             throw AnalyzerOptimizerError.invalidCheckpoint("The saved optimizer checkpoint no longer matches the current analyzer dataset.")
         }
@@ -336,7 +377,7 @@ struct AnalyzerOptimizer: Sendable {
             progressBase += dataset.examples.count
             let baselinePartition = partitionResults(baselineAllResults, by: split)
 
-            population = try await seedPopulation(
+            let seededPopulation = try await seedPopulation(
                 seed: baseConfig,
                 params: resolvedParams,
                 evaluationMode: resolvedParams.evaluationMode,
@@ -345,10 +386,13 @@ struct AnalyzerOptimizer: Sendable {
                 engine: engine,
                 concurrencyProfile: concurrencyProfile,
                 transcribe: transcribe,
+                randomState: randomGenerator.state,
                 progressBase: progressBase,
                 totalUnitCount: estimatedTotalUnitCount,
                 onProgress: onProgress
             )
+            population = seededPopulation.entries
+            randomGenerator = SeededRandomNumberGenerator(state: seededPopulation.randomState)
             progressBase += seedPopulationUnitCount
 
             baselineTrainingMetrics = AnalyzerMetrics.aggregate(baselinePartition.train.map(\.metrics))
@@ -380,7 +424,8 @@ struct AnalyzerOptimizer: Sendable {
                 bestEntry: bestEntry,
                 bestGeneration: bestGeneration,
                 bestSelectionScore: bestSelectionScore,
-                history: history
+                history: history,
+                randomState: randomGenerator.state
             )
         }
 
@@ -438,15 +483,16 @@ struct AnalyzerOptimizer: Sendable {
 
                 while childJobs.count < plannedChildren {
                     try Task.checkCancellation()
-                    let parentA = elites.randomElement() ?? population[0]
-                    let parentB = elites.randomElement() ?? population[0]
+                    let parentA = elites.randomElement(using: &randomGenerator) ?? population[0]
+                    let parentB = elites.randomElement(using: &randomGenerator) ?? population[0]
                     let base = mutationEngine.crossover(
                         parentA.config,
                         parentB.config,
-                        for: resolvedParams.evaluationMode
+                        for: resolvedParams.evaluationMode,
+                        using: &randomGenerator
                     )
-                    let child = Double.random(in: 0...1) < resolvedParams.mutationRate
-                        ? mutationEngine.mutate(base, for: resolvedParams.evaluationMode)
+                    let child = Double.random(in: 0...1, using: &randomGenerator) < resolvedParams.mutationRate
+                        ? mutationEngine.mutate(base, for: resolvedParams.evaluationMode, using: &randomGenerator)
                         : base
                     childJobs.append(
                         PopulationEvaluationJob(
@@ -494,7 +540,8 @@ struct AnalyzerOptimizer: Sendable {
                     bestEntry: bestEntry,
                     bestGeneration: bestGeneration,
                     bestSelectionScore: bestSelectionScore,
-                    history: history
+                    history: history,
+                    randomState: randomGenerator.state
                 )
             }
         }
@@ -525,7 +572,8 @@ struct AnalyzerOptimizer: Sendable {
             bestEntry: bestEntry,
             bestGeneration: bestGeneration,
             bestSelectionScore: bestSelectionScore,
-            history: history
+            history: history,
+            randomState: randomGenerator.state
         )
 
         try Task.checkCancellation()
@@ -632,7 +680,8 @@ struct AnalyzerOptimizer: Sendable {
         bestEntry: PopulationEntry,
         bestGeneration: Int,
         bestSelectionScore: Double,
-        history: [AnalyzerOptimizationReport.GenerationSnapshot]
+        history: [AnalyzerOptimizationReport.GenerationSnapshot],
+        randomState: UInt64
     ) async throws {
         guard let pauseRequested, await pauseRequested() else { return }
 
@@ -654,7 +703,8 @@ struct AnalyzerOptimizer: Sendable {
             bestEntry: checkpointEntry(from: bestEntry),
             bestGeneration: bestGeneration,
             bestSelectionScore: bestSelectionScore,
-            generationHistory: history
+            generationHistory: history,
+            randomState: randomState
         )
         try writeCheckpoint(checkpoint)
         throw AnalyzerOptimizerError.paused(checkpointURL())
@@ -744,10 +794,145 @@ struct AnalyzerOptimizer: Sendable {
             testCount = max(0, count - trainCount - validationCount)
         }
 
-        let train = Array(sorted.prefix(trainCount))
-        let validation = Array(sorted.dropFirst(trainCount).prefix(validationCount))
-        let test = Array(sorted.dropFirst(trainCount + validationCount).prefix(testCount))
+        let stratified = stratifiedSplit(
+            sorted,
+            trainCount: trainCount,
+            validationCount: validationCount,
+            testCount: testCount
+        )
+        let train = stratified.train
+        let validation = stratified.validation
+        let test = stratified.test
         return (train, validation, test)
+    }
+
+    private func stratifiedSplit(
+        _ sorted: [AnalyzerOptimizationDataset.Example],
+        trainCount: Int,
+        validationCount: Int,
+        testCount: Int
+    ) -> (train: [AnalyzerOptimizationDataset.Example], validation: [AnalyzerOptimizationDataset.Example], test: [AnalyzerOptimizationDataset.Example]) {
+        var buckets = [
+            SplitBucket(id: .train, targetCount: trainCount),
+            SplitBucket(id: .validation, targetCount: validationCount),
+            SplitBucket(id: .test, targetCount: testCount)
+        ]
+        var unassigned = sorted
+        let phaseTotals = phaseExampleCounts(sorted)
+        let spreadablePhases = phaseTotals
+            .filter { $0.value >= 3 }
+            .sorted {
+                if $0.value == $1.value {
+                    return $0.key.rawValue < $1.key.rawValue
+                }
+                return $0.value < $1.value
+            }
+            .map(\.key)
+
+        for phase in spreadablePhases {
+            for bucketID in [SplitBucketID.validation, .test, .train] {
+                guard let bucketIndex = buckets.firstIndex(where: { $0.id == bucketID }),
+                      buckets[bucketIndex].hasCapacity,
+                      buckets[bucketIndex].phaseCounts[phase, default: 0] == 0,
+                      let exampleIndex = bestUnassignedExampleIndex(
+                        containing: phase,
+                        for: buckets[bucketIndex],
+                        in: unassigned,
+                        phaseTotals: phaseTotals
+                      )
+                else {
+                    continue
+                }
+                buckets[bucketIndex].append(unassigned.remove(at: exampleIndex))
+            }
+        }
+
+        while !unassigned.isEmpty {
+            let example = unassigned.removeFirst()
+            guard let bucketIndex = bestBucketIndex(
+                for: example,
+                in: buckets,
+                phaseTotals: phaseTotals
+            ) else {
+                break
+            }
+            buckets[bucketIndex].append(example)
+        }
+
+        let train = buckets.first { $0.id == .train }?.examples ?? []
+        let validation = buckets.first { $0.id == .validation }?.examples ?? []
+        let test = buckets.first { $0.id == .test }?.examples ?? []
+        return (train, validation, test)
+    }
+
+    private func bestUnassignedExampleIndex(
+        containing phase: TrancePhase,
+        for bucket: SplitBucket,
+        in examples: [AnalyzerOptimizationDataset.Example],
+        phaseTotals: [TrancePhase: Int]
+    ) -> Int? {
+        var bestIndex: Int?
+        var bestScore = -Double.infinity
+
+        for (index, example) in examples.enumerated() where Self.phaseSet(for: example).contains(phase) {
+            let score = bucketScore(for: example, bucket: bucket, phaseTotals: phaseTotals)
+            if score > bestScore {
+                bestScore = score
+                bestIndex = index
+            }
+        }
+
+        return bestIndex
+    }
+
+    private func bestBucketIndex(
+        for example: AnalyzerOptimizationDataset.Example,
+        in buckets: [SplitBucket],
+        phaseTotals: [TrancePhase: Int]
+    ) -> Int? {
+        var bestIndex: Int?
+        var bestScore = -Double.infinity
+
+        for (index, bucket) in buckets.enumerated() where bucket.hasCapacity {
+            let score = bucketScore(for: example, bucket: bucket, phaseTotals: phaseTotals)
+            if score > bestScore {
+                bestScore = score
+                bestIndex = index
+            }
+        }
+
+        return bestIndex
+    }
+
+    private func bucketScore(
+        for example: AnalyzerOptimizationDataset.Example,
+        bucket: SplitBucket,
+        phaseTotals: [TrancePhase: Int]
+    ) -> Double {
+        let phases = Self.phaseSet(for: example)
+        let missingPhaseScore = phases.reduce(0.0) { partial, phase in
+            guard bucket.phaseCounts[phase, default: 0] == 0 else { return partial }
+            let total = max(1, phaseTotals[phase, default: 1])
+            return partial + (20.0 / Double(total))
+        }
+        let capacityScore = Double(bucket.remainingCapacity) / Double(max(bucket.targetCount, 1))
+        return missingPhaseScore + capacityScore
+    }
+
+    private func phaseExampleCounts(
+        _ examples: [AnalyzerOptimizationDataset.Example]
+    ) -> [TrancePhase: Int] {
+        var counts: [TrancePhase: Int] = [:]
+        for example in examples {
+            for phase in Self.phaseSet(for: example) {
+                counts[phase, default: 0] += 1
+            }
+        }
+        return counts
+    }
+
+    private static func phaseSet(for example: AnalyzerOptimizationDataset.Example) -> Set<TrancePhase> {
+        Set(example.phaseSegments.map(\.phase))
     }
 
     func stableOrderingKey(for example: AnalyzerOptimizationDataset.Example) -> String {

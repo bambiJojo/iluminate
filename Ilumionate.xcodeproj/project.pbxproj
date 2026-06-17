@@ -19,6 +19,7 @@
 		79D5483B2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */; };
 		79D5483D2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */; };
 		79D548412F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */; };
+		79E9C7102FE2000000C0DEC0 /* ScriptCorpus in Resources */ = {isa = PBXBuildFile; fileRef = 79E9C70F2FE2000000C0DEC0 /* ScriptCorpus */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +67,7 @@
 		79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightScoreGenerator.swift; sourceTree = "<group>"; };
 		79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightSyncPlayer.swift; sourceTree = "<group>"; };
 		79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ENHANCED_LIGHT_SCORE_GUIDE.md; sourceTree = "<group>"; };
+		79E9C70F2FE2000000C0DEC0 /* ScriptCorpus */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ScriptCorpus; sourceTree = "<group>"; };
 		83640685C4B57F62AB496B2B /* AnalyzerImprover */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = AnalyzerImprover; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -97,6 +99,7 @@
 				"Training/AnalyzerOptimizer/AnalyzerOptimizer+Evaluation.swift",
 				Training/AnalyzerOptimizer/AnalyzerTranscriptCache.swift,
 				Training/LabeledFile.swift,
+				Training/ScriptPhaseCorpus.swift,
 				Training/TrainingCorpusManager.swift,
 				TranscriptFeatureAnalyzer.swift,
 				TranscriptModels.swift,
@@ -127,6 +130,7 @@
 				"Training/AnalyzerOptimizer/AnalyzerOptimizer+Evaluation.swift",
 				Training/AnalyzerOptimizer/AnalyzerTranscriptCache.swift,
 				Training/LabeledFile.swift,
+				Training/ScriptPhaseCorpus.swift,
 				Training/TrainingCorpusManager.swift,
 				TranscriptFeatureAnalyzer.swift,
 				TranscriptModels.swift,
@@ -134,12 +138,20 @@
 			);
 			target = 79999FC32F7B8A4700DC1F2D /* LumeLabel */;
 		};
+		79E9C7112FE2000100C0DEC0 /* Exceptions for "Ilumionate" folder in "Ilumionate" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 795944022F38010900907305 /* Ilumionate */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		795944052F38010900907305 /* Ilumionate */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				79E9C7112FE2000100C0DEC0 /* Exceptions for "Ilumionate" folder in "Ilumionate" target */,
 				79999FF72F7C46C700DC1F2D /* Exceptions for "Ilumionate" folder in "LumeLabel" target */,
 				0A5757A1C8F9518170689AA7 /* Exceptions for "Ilumionate" folder in "AnalyzerImprover" target */,
 			);
@@ -246,6 +258,7 @@
 				F204B317B5BBD9934FA8ACDC /* AnalyzerImprover */,
 				79999FD32F7B8A4900DC1F2D /* LumeLabelTests */,
 				79999FDD2F7B8A4900DC1F2D /* LumeLabelUITests */,
+				79E9C70F2FE2000000C0DEC0 /* ScriptCorpus */,
 				79D548372F4F723B00B3B07F /* Frameworks */,
 				795944042F38010900907305 /* Products */,
 				79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */,
@@ -517,6 +530,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				79D548412F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md in Resources */,
+				79E9C7102FE2000000C0DEC0 /* ScriptCorpus in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -776,16 +790,8 @@
 				CURRENT_PROJECT_VERSION = 10010;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = LumeSync;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LumeSync uses speech recognition to transcribe your audio files and generate personalized light therapy sessions based on the content.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIBackgroundModes = audio;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Ilumionate/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -816,16 +822,8 @@
 				CURRENT_PROJECT_VERSION = 10010;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = LumeSync;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LumeSync uses speech recognition to transcribe your audio files and generate personalized light therapy sessions based on the content.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIBackgroundModes = audio;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Ilumionate/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

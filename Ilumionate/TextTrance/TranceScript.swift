@@ -46,6 +46,7 @@ struct ScriptSource: Codable, Sendable {
     enum Kind: String, Codable, Sendable {
         case bundled
         case generated
+        case importedWeb
     }
     let kind: Kind
     let generator: String?

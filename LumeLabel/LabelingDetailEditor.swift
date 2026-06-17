@@ -590,8 +590,7 @@ final class LabelingDetailEditor {
 
     func phaseDepth(_ phase: TrancePhase) -> Double {
         switch phase {
-        case .preTalk:      return 0.10
-        case .induction:    return 0.28
+        case .preTalk, .induction: return 0.28
         case .fractionation:return 0.48
         case .deepening:    return 0.72
         case .confusion:    return 0.82
@@ -607,8 +606,7 @@ final class LabelingDetailEditor {
 
     func phaseColor(_ phase: TrancePhase) -> Color {
         switch phase {
-        case .preTalk:      return .indigo
-        case .induction:    return .blue
+        case .preTalk, .induction: return .blue
         case .fractionation:return .cyan
         case .deepening:    return .teal
         case .confusion:    return .mint
@@ -704,20 +702,7 @@ final class LabelingDetailEditor {
     }
 
     private func trancePhase(for phase: HypnosisMetadata.Phase) -> TrancePhase? {
-        switch phase {
-        case .preTalk: return .preTalk
-        case .induction: return .induction
-        case .fractionation: return .fractionation
-        case .deepening: return .deepening
-        case .confusion: return .confusion
-        case .therapy: return .therapy
-        case .suggestions: return .suggestions
-        case .eroticSuggestions: return .eroticSuggestions
-        case .brainwashing: return .brainwashing
-        case .conditioning: return .conditioning
-        case .emergence: return .emergence
-        case .transitional: return .transitional
-        }
+        phase.labelingPhase
     }
 
     private func makeTranscriptAnalyzer() -> AudioAnalyzer {
