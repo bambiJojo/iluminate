@@ -44,7 +44,7 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                Color.bgPrimary.ignoresSafeArea()
+                AuroraBackground()
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -126,18 +126,11 @@ struct LibraryView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            Button {
+            Button("Add", systemImage: "plus") {
                 TranceHaptics.shared.light()
                 showingSessionsManager = true
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .font(.system(size: 28))
-                    .foregroundStyle(
-                        LinearGradient(colors: [.roseGold, .blush],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
             }
+            .tint(.auroraTeal)
         }
     }
 
@@ -196,7 +189,7 @@ struct LibraryView: View {
     // MARK: - Layout Spacers
 
     private var divider: some View {
-        Color.bgPrimary.frame(height: TranceSpacing.inner)
+        Color.clear.frame(height: TranceSpacing.inner)
     }
 
     private var bottomSpacer: some View {
@@ -289,12 +282,7 @@ private struct LibraryCategoryRows: View {
         }
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.card)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                .strokeBorder(Color.glassBorder, lineWidth: 1)
-        )
+        .liminalSurface()
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.content)
     }
@@ -357,9 +345,7 @@ private struct LibrarySessionsList: View {
                     .foregroundStyle(.textSecondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.glassBorder.opacity(0.1))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().strokeBorder(Color.glassBorder.opacity(0.3), lineWidth: 1))
+                    .liminalGlass(.capsule, glow: false)
                 }
                 .padding(.trailing, TranceSpacing.screen)
             }
@@ -399,7 +385,7 @@ private struct LibrarySessionsList: View {
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                             }
-                            .tint(.roseGold)
+                            .tint(.auroraTeal)
 
                             Button {
                                 onAddToPlaylist(file)
@@ -417,12 +403,7 @@ private struct LibrarySessionsList: View {
                 }
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.inner)
-                .background(Color.bgCard)
-                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
-                .overlay(
-                    RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                        .strokeBorder(Color.glassBorder, lineWidth: 1)
-                )
+                .liminalSurface()
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.inner)
             }
@@ -431,10 +412,9 @@ private struct LibrarySessionsList: View {
 
     private var emptySessionsHint: some View {
         HStack(spacing: TranceSpacing.list) {
-            Image(systemName: "plus.circle.fill")
-                .symbolRenderingMode(.hierarchical)
+            Image(systemName: "plus")
                 .font(.title2)
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(Color.auroraTeal)
             Text("Tap  +  to add your first session")
                 .font(TranceTypography.body)
                 .foregroundStyle(.textSecondary)
@@ -526,15 +506,7 @@ private struct SessionMiniCard: View {
     var body: some View {
         Button(action: onPlay) {
             VStack(alignment: .leading, spacing: TranceSpacing.inner) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: TranceRadius.button)
-                        .fill(contentTypeGradient)
-                        .frame(width: 110, height: 110)
-                    Image(systemName: contentTypeIcon)
-                        .font(.system(size: 36, weight: .ultraLight))
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-                .shadow(color: contentTypeColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                SessionGlowDot(contentType: file.analysisResult?.contentType, size: 110)
 
                 Text(file.displayName)
                     .font(TranceTypography.caption)
@@ -551,43 +523,6 @@ private struct SessionMiniCard: View {
         .buttonStyle(PlainButtonStyle())
     }
 
-    private var contentTypeColor: Color {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:     return .bwDelta
-        case .eroticHypnosis: return .roseDeep
-        case .sleepHypnosis: return .bwDelta
-        case .meditation:   return .bwAlpha
-        case .brainwave:    return .bwGamma
-        case .asmr:         return .warmAccent
-        case .music:        return .bwBeta
-        case .guidedImagery: return .bwTheta
-        case .affirmations: return .warmAccent
-        default:            return .roseGold
-        }
-    }
-
-    private var contentTypeGradient: LinearGradient {
-        LinearGradient(
-            colors: [contentTypeColor, contentTypeColor.opacity(0.65)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private var contentTypeIcon: String {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:     return "brain.head.profile"
-        case .eroticHypnosis: return "flame"
-        case .sleepHypnosis: return "moon.zzz"
-        case .meditation:   return "leaf"
-        case .brainwave:    return "waveform.path.ecg"
-        case .asmr:         return "ear"
-        case .music:        return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations: return "quote.bubble"
-        default:            return "waveform"
-        }
-    }
 }
 
 // MARK: - LibrarySessionRow
@@ -604,14 +539,7 @@ struct LibrarySessionRow: View {
         }) {
             HStack(spacing: TranceSpacing.list) {
                 // Content type icon badge
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(contentTypeColor.opacity(0.18))
-                        .frame(width: 40, height: 40)
-                    Image(systemName: contentTypeIcon)
-                        .font(.system(size: 17))
-                        .foregroundStyle(contentTypeColor)
-                }
+                SessionGlowDot(contentType: file.analysisResult?.contentType, size: 40)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(file.displayName)
@@ -643,9 +571,9 @@ struct LibrarySessionRow: View {
                     Button {
                         onAddToPlaylist()
                     } label: {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 22))
-                            .foregroundStyle(.roseGold)
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.auroraTeal)
                     }
                     .buttonStyle(.plain)
                 }
@@ -655,35 +583,6 @@ struct LibrarySessionRow: View {
         .buttonStyle(PlainButtonStyle())
     }
 
-    private var contentTypeColor: Color {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:      return .bwDelta
-        case .eroticHypnosis: return .roseDeep
-        case .sleepHypnosis: return .bwDelta
-        case .meditation:    return .bwAlpha
-        case .brainwave:     return .bwGamma
-        case .asmr:          return .warmAccent
-        case .music:         return .bwBeta
-        case .guidedImagery: return .bwTheta
-        case .affirmations:  return .warmAccent
-        default:             return .roseGold
-        }
-    }
-
-    private var contentTypeIcon: String {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:      return "brain.head.profile"
-        case .eroticHypnosis: return "flame"
-        case .sleepHypnosis: return "moon.zzz"
-        case .meditation:    return "leaf"
-        case .brainwave:     return "waveform.path.ecg"
-        case .asmr:          return "ear"
-        case .music:         return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations:  return "quote.bubble"
-        default:             return "waveform"
-        }
-    }
 }
 
 // MARK: - LibrarySessionRowLabel (for NavigationLink usage)
@@ -693,14 +592,7 @@ struct LibrarySessionRowLabel: View {
 
     var body: some View {
         HStack(spacing: TranceSpacing.list) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(contentTypeColor.opacity(0.18))
-                    .frame(width: 40, height: 40)
-                Image(systemName: contentTypeIcon)
-                    .font(.system(size: 17))
-                    .foregroundStyle(contentTypeColor)
-            }
+            SessionGlowDot(contentType: file.analysisResult?.contentType, size: 40)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(file.displayName)
@@ -740,35 +632,6 @@ struct LibrarySessionRowLabel: View {
         .padding(.vertical, TranceSpacing.card)
     }
 
-    private var contentTypeColor: Color {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:      return .bwDelta
-        case .eroticHypnosis: return .roseDeep
-        case .sleepHypnosis: return .bwDelta
-        case .meditation:    return .bwAlpha
-        case .brainwave:     return .bwGamma
-        case .asmr:          return .warmAccent
-        case .music:         return .bwBeta
-        case .guidedImagery: return .bwTheta
-        case .affirmations:  return .warmAccent
-        default:             return .roseGold
-        }
-    }
-
-    private var contentTypeIcon: String {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:      return "brain.head.profile"
-        case .eroticHypnosis: return "flame"
-        case .sleepHypnosis: return "moon.zzz"
-        case .meditation:    return "leaf"
-        case .brainwave:     return "waveform.path.ecg"
-        case .asmr:          return "ear"
-        case .music:         return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations:  return "quote.bubble"
-        default:             return "waveform"
-        }
-    }
 }
 
 // MARK: - Favorites Sub-View
@@ -782,12 +645,12 @@ struct LibraryFavoritesView: View {
 
     var body: some View {
         ZStack {
-            Color.bgPrimary.ignoresSafeArea()
+            AuroraBackground()
             if favorites.isEmpty {
                 VStack(spacing: TranceSpacing.card) {
                     Image(systemName: "heart")
                         .font(.system(size: 56, weight: .ultraLight))
-                        .foregroundStyle(LinearGradient(colors: [.roseGold, .roseDeep], startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(LinearGradient(colors: [.auroraTeal, .auroraBlue], startPoint: .top, endPoint: .bottom))
                     Text("No Favorites Yet")
                         .font(TranceTypography.greeting)
                         .foregroundStyle(.textPrimary)

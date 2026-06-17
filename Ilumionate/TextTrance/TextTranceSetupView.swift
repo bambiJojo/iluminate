@@ -21,22 +21,21 @@ struct TextTranceSetupView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: TranceSpacing.cardMargin) {
-                ArcCard(script: script, arc: $arc)
-                LayersCard(arc: arc, lightEnabled: $lightEnabled, binauralEnabled: $binauralEnabled)
-                SpeedCard(speed: $speed)
+        ZStack {
+            AuroraBackground()
+            ScrollView {
+                VStack(spacing: TranceSpacing.cardMargin) {
+                    ArcCard(script: script, arc: $arc)
+                    LayersCard(arc: arc, lightEnabled: $lightEnabled, binauralEnabled: $binauralEnabled)
+                    SpeedCard(speed: $speed)
+                }
+                .padding(TranceSpacing.screen)
             }
-            .padding(TranceSpacing.screen)
         }
-        .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle(script.title)
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
-            Button("Begin", systemImage: "play.fill") { startPlayer = true }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.roseGold)
-                .controlSize(.large)
+            GlowButton(title: "Begin", systemImage: "play.fill", kind: .primary) { startPlayer = true }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.cardMargin)
@@ -69,7 +68,7 @@ private struct ArcCard: View {
     @Binding var arc: ScriptArc
 
     var body: some View {
-        GlassCard(label: "Arc") {
+        LiminalCard(label: "Arc") {
             Picker("Arc", selection: $arc) {
                 ForEach(script.supportedArcs) { Text($0.displayName).tag($0) }
             }
@@ -84,7 +83,7 @@ private struct LayersCard: View {
     @Binding var binauralEnabled: Bool
 
     var body: some View {
-        GlassCard(label: "Layers") {
+        LiminalCard(label: "Layers") {
             VStack(spacing: TranceSpacing.list) {
                 Toggle("Binaural beats", isOn: $binauralEnabled)
                 Text("Requires headphones")
@@ -96,7 +95,7 @@ private struct LayersCard: View {
                     Toggle("Light pulse after handoff", isOn: $lightEnabled)
                 }
             }
-            .tint(Color.roseGold)
+            .tint(.auroraTeal)
         }
     }
 }
@@ -105,7 +104,7 @@ private struct SpeedCard: View {
     @Binding var speed: TextPacingSettings.Speed
 
     var body: some View {
-        GlassCard(label: "Reading speed") {
+        LiminalCard(label: "Reading speed") {
             Picker("Speed", selection: $speed) {
                 ForEach(TextPacingSettings.Speed.allCases) { Text($0.displayName).tag($0) }
             }

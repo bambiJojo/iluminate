@@ -26,7 +26,7 @@ struct MiniPlayerBar: View {
                 // Thin progress tint along the top edge
                 GeometryReader { proxy in
                     Rectangle()
-                        .fill(Color.roseGold)
+                        .fill(Color.auroraTeal)
                         .frame(
                             width: proxy.size.width * nowPlaying.progress,
                             height: 2
@@ -37,6 +37,9 @@ struct MiniPlayerBar: View {
 
                 // Content row
                 HStack(spacing: TranceSpacing.list) {
+                    // Mini orb — identity anchor for the bar
+                    LumeOrb(size: .mini)
+
                     // Track title + state
                     VStack(alignment: .leading, spacing: 2) {
                         Text(nowPlaying.currentTitle)
@@ -54,25 +57,14 @@ struct MiniPlayerBar: View {
                     // Play / Pause indicator
                     Image(systemName: nowPlaying.playbackState == .playing ? "pause.fill" : "play.fill")
                         .font(.system(size: 22))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(Color.auroraTeal)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .padding(.horizontal, TranceSpacing.card)
                 .frame(height: barHeight)
             }
             .frame(height: barHeight)
-            .background(.regularMaterial)
-            .clipShape(.rect(cornerRadius: TranceRadius.glassCard))
-            .overlay {
-                RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                    .stroke(Color.glassBorder, lineWidth: 1)
-            }
-            .shadow(
-                color: TranceShadow.card.color.opacity(0.15),
-                radius: 10,
-                x: 0,
-                y: 4
-            )
+            .liminalGlass(.roundedRect(cornerRadius: TranceRadius.glassCard))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Now playing: \(nowPlaying.currentTitle)")

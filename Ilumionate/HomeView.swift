@@ -9,7 +9,8 @@ import SwiftUI
 
 // MARK: - Brainwave Category
 
-enum BrainwaveCategory: String, CaseIterable {
+enum BrainwaveCategory: String, CaseIterable, Identifiable {
+    var id: String { rawValue }
     case sleep  = "Sleep"
     case focus  = "Focus"
     case energy = "Energy"
@@ -65,6 +66,7 @@ struct HomeView: View {
     @State var showingSessionLibrary = false
     @State private var playerFile: AudioFile?
     @State private var cardsVisible = false
+    @State private var selectedChipCategory: BrainwaveCategory?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -100,10 +102,16 @@ struct HomeView: View {
     }
 
     var body: some View {
+        ZStack {
+            AuroraBackground(mood: PortalRecommender.category(forHour: Calendar.current.component(.hour, from: .now)))
+                .ignoresSafeArea()
         ScrollView {
             VStack(spacing: TranceSpacing.content) {
-                greetingSection
+                portalSection
                     .cardEntrance(visible: cardsVisible, delay: 0.00, reduceMotion: reduceMotion)
+
+                greetingSection
+                    .cardEntrance(visible: cardsVisible, delay: 0.06, reduceMotion: reduceMotion)
 
                 if lastSessionProgress > 0,
                    let lastSession = sessions.first(where: { $0.id.uuidString == lastSessionId }) ?? sessions.first {
@@ -138,12 +146,21 @@ struct HomeView: View {
             }
         }
         .onDisappear { cardsVisible = false }
-        .background(Color.bgPrimary.ignoresSafeArea())
         .sheet(isPresented: $showingProfile) {
             ProfileSettingsView()
         }
         .sheet(isPresented: $showingSessionLibrary) {
             SessionLibraryView(engine: engine)
+        }
+        .sheet(item: $selectedChipCategory) { category in
+            CategorySessionSheet(
+                category: category,
+                sessions: sessions,
+                onSelect: { session in
+                    selectedChipCategory = nil
+                    selectedSession = session
+                }
+            )
         }
         .fullScreenCover(isPresented: $showingFlashMode) {
             UnifiedPlayerView(
@@ -162,20 +179,15 @@ struct HomeView: View {
         .fullScreenCover(item: $playerFile) { file in
             UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
         }
+        } // end ZStack
     }
 
     // MARK: - Greeting Section
 
     private var greetingSection: some View {
         HStack(alignment: .center) {
-            // Left: branding + time-based greeting
-            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                WordmarkView()
-
-                Text("\(currentGreeting) \(displayName)")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-            }
+            // Left: branding wordmark only (greeting moved to portalSection)
+            WordmarkView()
 
             Spacer()
 
@@ -205,6 +217,71 @@ struct HomeView: View {
             .buttonStyle(.plain)
         }
         .padding(.top, TranceSpacing.statusBar)
+    }
+
+    // MARK: - Portal Section
+
+    private var portalSection: some View {
+        let recommended = sessions.first(where: { $0.id.uuidString == lastSessionId && lastSessionProgress > 0 })
+            ?? PortalRecommender.recommend(from: sessions)
+
+        return VStack(spacing: TranceSpacing.content) {
+            VStack(spacing: TranceSpacing.micro) {
+                Text(portalGreeting)
+                    .font(.system(size: 15, weight: .light))
+                    .foregroundStyle(.textDim)
+                Text("Ready to descend?")
+                    .font(.system(size: 26, weight: .ultraLight))
+                    .foregroundStyle(.textBright)
+            }
+            .padding(.top, TranceSpacing.content)
+
+            Button {
+                TranceHaptics.shared.medium()
+                if let recommended { selectedSession = recommended }
+            } label: {
+                ZStack {
+                    LumeOrb(size: .hero, pulse: recommended?.light_score.first?.frequency)
+                    VStack(spacing: 2) {
+                        Text("Begin")
+                            .font(.system(size: 18, weight: .light))
+                            .foregroundStyle(.textBright)
+                        if let recommended {
+                            Text(recommended.session_name)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.textGhost)
+                                .lineLimit(1)
+                                .frame(maxWidth: 140)
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(recommended.map { "Begin \($0.session_name)" } ?? "Begin a session")
+
+            stateChipsRow
+        }
+    }
+
+    private var stateChipsRow: some View {
+        HStack(spacing: TranceSpacing.inner) {
+            ForEach(BrainwaveCategory.allCases) { category in
+                Button {
+                    TranceHaptics.shared.selection()
+                    selectedChipCategory = category
+                } label: {
+                    Text("\(category.emoji) \(category.rawValue)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.textDim)
+                        .padding(.horizontal, TranceSpacing.list)
+                        .padding(.vertical, TranceSpacing.inner)
+                        .background(category.haloColor.opacity(0.12))
+                        .clipShape(.capsule)
+                        .overlay(Capsule().stroke(category.haloColor.opacity(0.3), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     // MARK: - Continue Session Card
@@ -435,6 +512,16 @@ struct HomeView: View {
         }
     }
 
+    /// Greeting shown in portalSection — appends the user's name when one is
+    /// set; strips the trailing comma when displaying without a name.
+    private var portalGreeting: String {
+        let name = userName.trimmingCharacters(in: .whitespaces)
+        if name.isEmpty {
+            return currentGreeting.trimmingCharacters(in: CharacterSet(charactersIn: ", "))
+        }
+        return "\(currentGreeting) \(name)"
+    }
+
     private func generateSampleWaveform() -> [CGFloat] {
         [0.3, 0.7, 0.4, 0.8, 0.2, 0.6, 0.9, 0.1, 0.5, 0.8, 0.3, 0.7, 0.4, 0.6, 0.2, 0.9]
     }
@@ -488,6 +575,7 @@ struct HomeView: View {
 struct WordmarkView: View {
     @State private var shimmerOffset: CGFloat = -1.0
     @State private var wavePhase: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Fixed bar heights — a hand-crafted waveform silhouette
     private let bars: [CGFloat] = [
@@ -540,6 +628,7 @@ struct WordmarkView: View {
                 .clipped()
             }
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(
                     .easeInOut(duration: 6.0)
                     .repeatForever(autoreverses: false)
@@ -553,7 +642,7 @@ struct WordmarkView: View {
     // MARK: Waveform Bar
 
     private var waveformBar: some View {
-        TimelineView(.animation(minimumInterval: 1 / 12)) { timeline in
+        TimelineView(.animation(minimumInterval: 1 / 12, paused: reduceMotion)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
                 let count = bars.count

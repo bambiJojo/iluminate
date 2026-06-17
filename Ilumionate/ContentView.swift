@@ -24,19 +24,8 @@ struct ContentView: View {
     @State private var nowPlaying = NowPlayingState.shared
     @State private var analysisManager = AnalysisStateManager.shared
 
-    // Appearance — mirrors SettingsView's AppStorage key
-    @AppStorage("appearanceMode") private var appearanceModeRaw = "system"
-
     // Synced to engine on appear and on change
     @AppStorage("userFrequencyMultiplier") private var userFrequencyMultiplierPref = 1.0
-
-    private var preferredScheme: ColorScheme? {
-        switch appearanceModeRaw {
-        case "light": return .light
-        case "dark":  return .dark
-        default:      return nil
-        }
-    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -131,7 +120,7 @@ struct ContentView: View {
                 AnalyzerView()
             }
         }
-        .preferredColorScheme(preferredScheme)
+        .preferredColorScheme(.dark)
     }
 
     // MARK: - Actions

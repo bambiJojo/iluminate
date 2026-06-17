@@ -23,9 +23,6 @@ struct ProfileSettingsView: View {
     @State var draftName = ""
     @State var draftGoal = ""
 
-    // Appearance
-    @AppStorage("appearanceMode") var appearanceModeRaw = "system"
-
     // Core Settings
     @AppStorage("hapticFeedbackEnabled") var hapticFeedbackEnabled = true
     @AppStorage("autoLockEnabled") var autoLockEnabled = true
@@ -60,7 +57,6 @@ struct ProfileSettingsView: View {
                         avatarHeader
                         statsRow
                         weeklyActivityCard
-                        appearanceSection
                         coreSettingsSection
                         sessionDefaultsSection
                         lightSyncPreferencesSection
@@ -85,7 +81,7 @@ struct ProfileSettingsView: View {
             }
             .navigationTitle("Profile & Settings")
             .navigationBarTitleDisplayMode(.large)
-            .preferredColorScheme(currentColorScheme)
+            .preferredColorScheme(.dark)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
@@ -113,38 +109,6 @@ struct ProfileSettingsView: View {
         }
     }
 
-    // MARK: - Appearance Mode
-
-    enum AppearanceMode: String, CaseIterable {
-        case system, light, dark
-
-        var label: String {
-            switch self {
-            case .system: "System"
-            case .light:  "Light"
-            case .dark:   "Dark"
-            }
-        }
-
-        var colorScheme: ColorScheme? {
-            switch self {
-            case .system: nil
-            case .light:  .light
-            case .dark:   .dark
-            }
-        }
-    }
-
-    var appearanceMode: Binding<AppearanceMode> {
-        Binding(
-            get: { AppearanceMode(rawValue: appearanceModeRaw) ?? .system },
-            set: { appearanceModeRaw = $0.rawValue }
-        )
-    }
-
-    var currentColorScheme: ColorScheme? {
-        (AppearanceMode(rawValue: appearanceModeRaw) ?? .system).colorScheme
-    }
 }
 
 // MARK: - Preview

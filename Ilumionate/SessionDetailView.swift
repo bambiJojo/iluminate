@@ -28,30 +28,37 @@ struct SessionDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: TranceSpacing.content) {
-                headerSection
-                playCTASection
-                if audioFile.isAnalyzed {
-                    if let phases, !phases.isEmpty {
-                        phaseTimelineSection(phases)
+        ZStack {
+            AuroraBackground()
+            ScrollView {
+                VStack(spacing: TranceSpacing.content) {
+                    headerSection
+                    playCTASection
+                    if audioFile.isAnalyzed {
+                        if let phases, !phases.isEmpty {
+                            phaseTimelineSection(phases)
+                        }
+                        if let transcript, !transcript.isEmpty {
+                            transcriptPreviewSection(transcript)
+                        }
+                        if let lightSession {
+                            lightScorePreviewSection(lightSession)
+                        }
+                        analysisInsightsSection
+                    } else {
+                        // Generic session-arc preview when there is no analyzed
+                        // phase data yet (the real PhaseTimelineBar shows once analyzed).
+                        LiminalCard(label: "Phases") {
+                            PhaseTimeline(current: nil)
+                        }
+                        analyzeNowSection
                     }
-                    if let transcript, !transcript.isEmpty {
-                        transcriptPreviewSection(transcript)
-                    }
-                    if let lightSession {
-                        lightScorePreviewSection(lightSession)
-                    }
-                    analysisInsightsSection
-                } else {
-                    analyzeNowSection
+                    reanalyzeSection
                 }
-                reanalyzeSection
+                .padding(.horizontal, TranceSpacing.screen)
+                .padding(.bottom, TranceSpacing.tabBarClearance + TranceSpacing.content)
             }
-            .padding(.horizontal, TranceSpacing.screen)
-            .padding(.bottom, TranceSpacing.tabBarClearance + TranceSpacing.content)
         }
-        .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle(audioFile.displayName)
         .navigationBarTitleDisplayMode(.large)
         .fullScreenCover(isPresented: $showingPlayer) {
@@ -80,7 +87,7 @@ struct SessionDetailView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        GlassCard {
+        LiminalCard {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 HStack(spacing: TranceSpacing.list) {
                     // Content type badge
@@ -117,10 +124,10 @@ struct SessionDetailView: View {
                 if audioFile.isAnalyzed {
                     HStack(spacing: TranceSpacing.inner) {
                         Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(Color.auroraTeal)
                         Text("AI Analyzed")
                             .font(TranceTypography.caption)
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(Color.auroraTeal)
 
                         if let confidence = analysis?.classificationConfidence?.overallConfidence {
                             Text("·")
@@ -146,41 +153,18 @@ struct SessionDetailView: View {
     // MARK: - Play CTA
 
     private var playCTASection: some View {
-        Button {
-            TranceHaptics.shared.heavy()
+        GlowButton(
+            title: lightSession != nil ? "Play with Light Sync" : "Play",
+            systemImage: "play.fill"
+        ) {
             showingPlayer = true
-        } label: {
-            HStack {
-                Image(systemName: "play.fill")
-                Text(lightSession != nil ? "Play with Light Sync" : "Play")
-                    .bold()
-            }
-            .font(TranceTypography.sectionTitle)
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, TranceSpacing.card)
-            .background(
-                LinearGradient(
-                    colors: [.roseGold, .roseDeep],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(.rect(cornerRadius: TranceRadius.button))
-            .shadow(
-                color: TranceShadow.button.color,
-                radius: TranceShadow.button.radius,
-                x: TranceShadow.button.x,
-                y: TranceShadow.button.y
-            )
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Phase Timeline
 
     private func phaseTimelineSection(_ phases: [PhaseSegment]) -> some View {
-        GlassCard(label: "Phase Timeline") {
+        LiminalCard(label: "Phase Timeline") {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 // Color-coded horizontal bar (reuses existing component)
                 if let result = analysis {
@@ -212,7 +196,7 @@ struct SessionDetailView: View {
     // MARK: - Transcript Preview
 
     private func transcriptPreviewSection(_ text: String) -> some View {
-        GlassCard(label: "Transcript") {
+        LiminalCard(label: "Transcript") {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 Text(String(text.prefix(300)) + (text.count > 300 ? "..." : ""))
                     .font(TranceTypography.body)
@@ -233,7 +217,7 @@ struct SessionDetailView: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .bold))
                     }
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(Color.auroraTeal)
                 }
                 .buttonStyle(.plain)
             }
@@ -243,7 +227,7 @@ struct SessionDetailView: View {
     // MARK: - Light Score Preview
 
     private func lightScorePreviewSection(_ session: LightSession) -> some View {
-        GlassCard(label: "Light Score") {
+        LiminalCard(label: "Light Score") {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 // Mini frequency curve
                 LightScoreMiniGraph(moments: session.light_score, duration: session.duration_sec)
@@ -276,7 +260,7 @@ struct SessionDetailView: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .bold))
                     }
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(Color.auroraTeal)
                 }
                 .buttonStyle(.plain)
             }
@@ -286,7 +270,7 @@ struct SessionDetailView: View {
     // MARK: - Analysis Insights
 
     private var analysisInsightsSection: some View {
-        GlassCard(label: "AI Insights") {
+        LiminalCard(label: "AI Insights") {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 if let summary = analysis?.aiSummary, !summary.isEmpty {
                     Text(summary)
@@ -316,36 +300,22 @@ struct SessionDetailView: View {
     // MARK: - Analyze Now (unanalyzed files)
 
     private var analyzeNowSection: some View {
-        GlassCard {
+        LiminalCard {
             VStack(spacing: TranceSpacing.card) {
                 Image(systemName: "waveform.badge.magnifyingglass")
                     .font(.system(size: 40, weight: .light))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(Color.auroraTeal)
 
                 Text("Analyze this file to unlock phase timeline, transcript, and AI-generated light sessions.")
                     .font(TranceTypography.body)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
 
-                Button {
-                    TranceHaptics.shared.medium()
+                GlowButton(title: "Analyze Now", systemImage: "sparkles") {
                     Task {
                         await AnalysisStateManager.shared.queueForAnalysis(audioFile)
                     }
-                } label: {
-                    HStack {
-                        Image(systemName: "sparkles")
-                        Text("Analyze Now")
-                            .bold()
-                    }
-                    .font(TranceTypography.body)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, TranceSpacing.list)
-                    .background(Color.roseGold)
-                    .clipShape(.rect(cornerRadius: TranceRadius.button))
                 }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -411,7 +381,7 @@ struct SessionDetailView: View {
         HStack(spacing: TranceSpacing.inner) {
             Image(systemName: icon)
                 .font(.system(size: 14))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(Color.auroraTeal)
                 .frame(width: 20)
             Text(label)
                 .font(TranceTypography.caption)
@@ -445,7 +415,7 @@ struct SessionDetailView: View {
         case .music:         return .bwBeta
         case .guidedImagery: return .bwTheta
         case .affirmations:  return .warmAccent
-        default:             return .roseGold
+        default:             return .auroraTeal
         }
     }
 

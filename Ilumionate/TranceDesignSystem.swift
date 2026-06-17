@@ -24,56 +24,46 @@ extension Color {
 
 struct TranceColors {
 
-    // MARK: Backgrounds
-    static let bgPrimary   = Color(light: Color(hex: "FFF5F7"), dark: Color(hex: "1A0D14"))
-    static let bgSecondary = Color(light: Color(hex: "FFECF0"), dark: Color(hex: "261219"))
-    static let bgCard      = Color(
-        light: Color(hex: "FFE4E8").opacity(0.55),
-        dark:  Color(hex: "2E1520").opacity(0.65)
-    )
+    // MARK: Backgrounds (Liminal void — dark only)
+    static let bgPrimary   = Color.voidPrimary
+    static let bgSecondary = Color.voidElevated
+    static let bgCard      = Color.voidElevated.opacity(0.65)
 
-    // MARK: Accents
-    static let roseGold   = Color(light: Color(hex: "D4789A"), dark: Color(hex: "E896B4"))
-    static let roseDeep   = Color(light: Color(hex: "C06080"), dark: Color(hex: "D4789A"))
-    static let blush      = Color(light: Color(hex: "F8C8D4"), dark: Color(hex: "5A2A3A"))
-    static let lavender   = Color(light: Color(hex: "E8D0F0"), dark: Color(hex: "3A2050"))
-    static let warmAccent = Color(light: Color(hex: "F5C78E"), dark: Color(hex: "C4884A"))
+    // MARK: Accents (aurora)
+    static let roseGold   = Color.auroraTeal     // primary action accent
+    static let roseDeep   = Color.auroraBlue     // secondary action accent
+    static let blush      = Color.auroraPink
+    static let lavender   = Color.auroraViolet
+    static let warmAccent = Color(hex: "E8B07A")
 
     // MARK: Text
-    static let textPrimary   = Color(light: Color(hex: "4A2035"), dark: Color(hex: "F5E8EE"))
-    static let textSecondary = Color(light: Color(hex: "8A6075"), dark: Color(hex: "B08898"))
-    static let textLight     = Color(light: Color(hex: "B08898"), dark: Color(hex: "6E4E5E"))
+    static let textPrimary   = Color.textBright
+    static let textSecondary = Color.textDim
+    static let textLight     = Color.textGhost
 
     // MARK: Borders & Glass
-    static let glassBorder = Color(
-        light: Color(hex: "E8A0B0").opacity(0.3),
-        dark:  Color(hex: "7A3A55").opacity(0.35)
-    )
-    static let glassFill = Color(
-        light: Color.white.opacity(0.15),
-        dark:  Color.white.opacity(0.08)
-    )
+    static let glassBorder = Color.auroraBlue.opacity(0.18)
+    static let glassFill   = Color.white.opacity(0.06)
 
-    // MARK: Brainwave Zone Colors (vivid — unchanged between modes)
+    // MARK: Brainwave Zone Colors (re-tuned for the void)
     static let bwDelta = Color(hex: "8B6BA8")
     static let bwTheta = Color(hex: "B07DC8")
-    static let bwAlpha = Color(hex: "D4789A")
-    static let bwBeta  = Color(hex: "E88A9A")
-    static let bwGamma = Color(hex: "F5B87A")
+    static let bwAlpha = Color(hex: "7C9EFF")
+    static let bwBeta  = Color(hex: "7EE8D8")
+    static let bwGamma = Color(hex: "E8B07A")
 
-    // MARK: Hypnosis Phase Colors (vivid — unchanged)
-    static let phaseIntro         = Color(hex: "78A0D2")
-    static let phaseInduction     = Color(hex: "4ECDC4")
-    static let phaseDeepener      = Color(hex: "8B6BA8")
-    static let phaseFractionation = Color(hex: "E8A060")
-    static let phaseSuggestion    = Color(hex: "D4789A")
-    static let phaseAwakening     = Color(hex: "F5C78E")
+    // MARK: Hypnosis Phase Colors
+    static let phaseIntro         = Color(hex: "7C9EFF")
+    static let phaseInduction     = Color(hex: "7EE8D8")
+    static let phaseDeepener      = Color(hex: "B07DC8")
+    static let phaseFractionation = Color(hex: "E8B07A")
+    static let phaseSuggestion    = Color(hex: "E87CB8")
+    static let phaseAwakening     = Color(hex: "F5D08E")
 
-    // MARK: Flash Mode Colors
-    // flashOn stays rose in both modes (light therapy needs visibility).
-    // flashOff goes near-black in dark for better contrast / immersion.
-    static let flashOn  = Color(light: Color(hex: "F8C8D4"), dark: Color(hex: "F8C8D4"))
-    static let flashOff = Color(light: Color(hex: "FFF5F7"), dark: Color(hex: "0A0508"))
+    // MARK: Flash Mode Colors (light-therapy output — DO NOT restyle hues)
+    // flashOn must stay bright/visible; flashOff goes to true void.
+    static let flashOn  = Color(hex: "F8C8D4")
+    static let flashOff = Color.voidDeep
 }
 
 // MARK: - Color Extension — Semantic Accessors
@@ -180,38 +170,38 @@ struct TranceRadius {
 // MARK: - Shadow Styles
 
 struct TranceShadow {
-    // Card shadow
+    // Card glow (soft aurora bloom instead of a dark drop shadow)
     static let card = (
-        color: Color(red: 0.353, green: 0.188, blue: 0.271).opacity(0.05), // 5A3045
-        radius: 10.0,
+        color: Color.auroraBlue.opacity(0.10),
+        radius: 16.0,
         x: 0.0,
-        y: 4.0
+        y: 0.0
     )
 
-    // CTA button shadow
+    // CTA button glow
     static let button = (
-        color: Color.roseGold.opacity(0.3),
-        radius: 12.0,
+        color: Color.auroraTeal.opacity(0.35),
+        radius: 18.0,
         x: 0.0,
-        y: 8.0
+        y: 6.0
     )
 
     // Category icon halo glow
     static func iconHalo(_ color: Color) -> (Color, CGFloat, CGFloat, CGFloat) {
-        return (color.opacity(0.3), 10.0, 0.0, 0.0)
+        return (color.opacity(0.4), 14.0, 0.0, 0.0)
     }
 
-    // Elevated card hover
+    // Elevated card glow
     static let elevated = (
-        color: Color.roseGold.opacity(0.15),
-        radius: 12.0,
+        color: Color.auroraBlue.opacity(0.18),
+        radius: 20.0,
         x: 0.0,
-        y: 8.0
+        y: 0.0
     )
 
-    // Phone frame (dev preview only)2
+    // Phone frame (dev preview only)
     static let phoneFrame = (
-        color: Color(red: 0.353, green: 0.188, blue: 0.271).opacity(0.12), // 5A3045
+        color: Color.black.opacity(0.5),
         radius: 40.0,
         x: 0.0,
         y: 25.0
@@ -242,6 +232,9 @@ struct TranceTypography {
 
     // Frequency display
     static let frequency = Font.system(size: 18, weight: .semibold)
+
+    // Monospaced data readout (frequency / Hz / counts) — the instrument showing through (spec §2.2)
+    static let dataReadout = Font.system(size: 18, weight: .semibold, design: .monospaced)
 
     // Track title and artist
     static let trackTitle = Font.system(size: 20, weight: .semibold)

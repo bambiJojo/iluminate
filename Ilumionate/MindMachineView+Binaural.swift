@@ -13,7 +13,7 @@ struct BinauralCard: View {
     // MARK: - Binaural Beats Card
 
     var body: some View {
-        GlassCard(label: "Binaural Beats") {
+        LiminalCard(label: "Binaural Beats") {
             if model.selectedVisualMode == .colorPulse {
                 VStack(alignment: .leading, spacing: TranceSpacing.list) {
                     Label("Color Pulse is visual-only", systemImage: "info.circle")
@@ -46,7 +46,7 @@ struct BinauralCard: View {
                             )
                         )
                         .labelsHidden()
-                        .tint(.roseGold)
+                        .tint(.auroraTeal)
                     }
 
                     if model.binauralEnabled {
@@ -56,7 +56,7 @@ struct BinauralCard: View {
                         // Headphones reminder
                         Label("Best experienced with headphones", systemImage: "headphones")
                             .font(TranceTypography.caption)
-                            .foregroundStyle(Color.roseGold.opacity(0.85))
+                            .foregroundStyle(Color.auroraTeal.opacity(0.85))
                             .frame(maxWidth: .infinity, alignment: .leading)
 
                         // Carrier frequency
@@ -170,8 +170,8 @@ private struct BinauralSliderRow: View {
                 value: $value,
                 range: range,
                 trackColor: .glassBorder,
-                thumbColor: .roseGold,
-                activeColor: .roseGold
+                thumbColor: .auroraTeal,
+                activeColor: .auroraTeal
             )
             .onChange(of: value) { _, _ in TranceHaptics.shared.selection() }
         }

@@ -18,24 +18,20 @@ struct FeaturedSessionCard: View {
     var body: some View {
         Button(action: action) {
             ZStack(alignment: .bottomLeading) {
-                // Gradient background
+                // Soft accent bloom over the void glass — color identity as a glow, not a bright slab
                 RoundedRectangle(cornerRadius: TranceRadius.glassCard)
                     .fill(
-                        LinearGradient(
-                            colors: session.gradientColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                        RadialGradient(
+                            colors: [session.accentColor.opacity(0.38), .clear],
+                            center: .topTrailing,
+                            startRadius: 0,
+                            endRadius: 230
                         )
-                    )
-                    .overlay(
-                        // Subtle noise texture overlay
-                        RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                            .fill(.white.opacity(0.05))
                     )
 
                 // Content
                 VStack(alignment: .leading, spacing: TranceSpacing.inner) {
-                    // Category badge
+                    // Category badge — tinted glass
                     HStack(spacing: 5) {
                         Image(systemName: session.categoryIcon)
                             .font(.system(size: 10, weight: .semibold))
@@ -43,10 +39,10 @@ struct FeaturedSessionCard: View {
                             .font(.system(size: 9, weight: .bold))
                             .tracking(1.2)
                     }
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(session.accentColor)
                     .padding(.horizontal, TranceSpacing.inner)
                     .padding(.vertical, 5)
-                    .background(.white.opacity(0.18))
+                    .background(session.accentColor.opacity(0.15))
                     .clipShape(Capsule())
 
                     Spacer()
@@ -54,31 +50,32 @@ struct FeaturedSessionCard: View {
                     // Session name
                     Text(session.displayName)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.textBright)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Tagline
                     Text(session.tagline)
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.75))
+                        .foregroundStyle(.textDim)
                         .lineLimit(1)
 
                     // Duration + play row
                     HStack {
                         Label(session.durationFormatted, systemImage: "clock")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.75))
+                            .foregroundStyle(.textDim)
 
                         Spacer()
 
                         Image(systemName: "play.circle.fill")
                             .font(.system(size: 28))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(session.accentColor)
                     }
                 }
                 .padding(TranceSpacing.list)
             }
+            .liminalSurface()
         }
         .buttonStyle(.plain)
         .frame(width: 195, height: 160)

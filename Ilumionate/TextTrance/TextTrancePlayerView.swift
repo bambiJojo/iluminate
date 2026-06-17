@@ -19,12 +19,12 @@ struct TextTrancePlayerView: View {
 
     var body: some View {
         ZStack {
-            Color.bgPrimary.ignoresSafeArea()
+            Color.voidDeep.ignoresSafeArea()
 
             // Subtle decorative pulse (NOT the entrainment light layer —
             // FlashController only runs in the post-handoff tail in M1).
             RadialGradient(
-                colors: [Color.roseGold.opacity(backgroundPulse ? 0.22 : 0.08), .clear],
+                colors: [Color.auroraTeal.opacity(backgroundPulse ? 0.22 : 0.08), .clear],
                 center: .center, startRadius: 20, endRadius: 420)
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 4).repeatForever(autoreverses: true),
@@ -84,7 +84,7 @@ private struct AnchoredWord: View {
             HStack(spacing: 0) {
                 ForEach(chars.indices, id: \.self) { index in
                     Text(String(chars[index]))
-                        .foregroundStyle(index == layout.safePivot ? Color.roseGold : Color.textPrimary)
+                        .foregroundStyle(index == layout.safePivot ? Color.auroraTeal : Color.textPrimary)
                 }
             }
             .font(.system(size: layout.fontSize, weight: .regular, design: .monospaced))

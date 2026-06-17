@@ -49,15 +49,7 @@ struct TranceTabBar: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 10)
-        .background {
-            Capsule()
-                .fill(.regularMaterial)
-                .shadow(color: TranceShadow.card.color.opacity(0.15), radius: 16, x: 0, y: 8)
-        }
-        .overlay {
-            Capsule()
-                .stroke(Color.glassBorder, lineWidth: 1)
-        }
+        .liminalGlass(.capsule)
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
     }
@@ -82,7 +74,7 @@ struct TranceTabBar: View {
                 Text(tab.title)
                     .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
             }
-            .foregroundStyle(isSelected ? tabAccentColor : Color.textSecondary)
+            .foregroundStyle(isSelected ? tabAccentColor : Color.textGhost)
             .scaleEffect(isSelected ? 1.05 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.65), value: selected)
             .frame(maxWidth: .infinity)
@@ -92,13 +84,14 @@ struct TranceTabBar: View {
                     Capsule()
                         .fill(tabAccentColor.opacity(0.18))
                         .matchedGeometryEffect(id: "TAB_INDICATOR", in: tabAnimation)
+                        .shadow(color: tabAccentColor.opacity(0.4), radius: 10)
                 }
             }
         }
         .buttonStyle(.plain)
     }
 
-    // The tint for the active tab — uses the design system's rose-gold
+    // The tint for the active tab — `.roseGold` now resolves to the Liminal aurora teal
     private var tabAccentColor: Color { .roseGold }
 }
 
