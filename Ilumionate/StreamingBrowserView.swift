@@ -553,8 +553,8 @@ struct StreamingTrackRow: View {
 
                 Spacer()
 
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 24))
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.roseGold)
             }
             .padding(.vertical, TranceSpacing.card)

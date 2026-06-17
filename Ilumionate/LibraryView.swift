@@ -412,10 +412,9 @@ private struct LibrarySessionsList: View {
 
     private var emptySessionsHint: some View {
         HStack(spacing: TranceSpacing.list) {
-            Image(systemName: "plus.circle.fill")
-                .symbolRenderingMode(.hierarchical)
+            Image(systemName: "plus")
                 .font(.title2)
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(Color.auroraTeal)
             Text("Tap  +  to add your first session")
                 .font(TranceTypography.body)
                 .foregroundStyle(.textSecondary)
@@ -572,9 +571,9 @@ struct LibrarySessionRow: View {
                     Button {
                         onAddToPlaylist()
                     } label: {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 22))
-                            .foregroundStyle(.roseGold)
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.auroraTeal)
                     }
                     .buttonStyle(.plain)
                 }
