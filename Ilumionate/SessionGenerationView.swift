@@ -265,6 +265,7 @@ struct SessionGenerationView: View {
             analysis: analysis,
             config: config
         )
+        UsageAnalytics.shared.sessionGenerated()
     }
     
     private func regenerateSession() {

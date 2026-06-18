@@ -320,6 +320,7 @@ class AnalysisStateManager {
     /// Handle analysis completion with proper actor isolation
     private func handleAnalysisComplete(audioFile: AudioFile, result: CompletedAnalysis) async {
         completedAnalyses.append(result)
+        UsageAnalytics.shared.audioAnalyzeCompleted()
         onAnalysisComplete?(audioFile, result)
 
         // Persist the analysis result, keyed by content fingerprint
@@ -667,6 +668,7 @@ actor AnalysisCoordinator {
                     stage: .starting,
                     progress: 0.0
                 )
+                UsageAnalytics.shared.audioAnalyzeStarted()
             }
 
             let queuePosition = await MainActor.run { analysisManager.queuePosition(for: audioFile) }

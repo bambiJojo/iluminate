@@ -233,6 +233,19 @@ struct MindMachineView: View {
                     )
                 }
             }
+            .onChange(of: showingFlashMode) { _, isShowing in
+                if isShowing {
+                    UsageAnalytics.shared.mindMachineStarted(mode: analyticsMode(model.selectedVisualMode))
+                }
+            }
+        }
+    }
+
+    private func analyticsMode(_ mode: MindMachineModel.VisualMode) -> MindMachineMode {
+        switch mode {
+        case .fullScreenFlash: .flash
+        case .colorPulse:      .colorPulse
+        case .bilateralFlash:  .bilateral
         }
     }
 }

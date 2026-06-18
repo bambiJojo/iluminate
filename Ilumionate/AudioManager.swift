@@ -199,6 +199,7 @@ class AudioManager: NSObject {
             )
 
             Log.audio.info("✅ Imported audio: \(finalFilename) (Duration: \(durationSeconds)s)")
+            UsageAnalytics.shared.audioImported(source: .files)
             return audioFile
 
         } catch {

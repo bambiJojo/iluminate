@@ -51,8 +51,12 @@ struct TextTrancePlayerView: View {
         .gesture(endHoldGesture)
         .task {
             backgroundPulse = true
+            UsageAnalytics.shared.textTranceStarted()
             await session.begin()
-            if session.isComplete { dismiss() }
+            if session.isComplete {
+                UsageAnalytics.shared.textTranceCompleted()
+                dismiss()
+            }
         }
         .statusBarHidden()
         .onDisappear {

@@ -79,6 +79,7 @@ final class ReadingSourceStore {
         )
         customSources.append(source)
         persist()
+        UsageAnalytics.shared.readingSourceImported()
         return source
     }
 

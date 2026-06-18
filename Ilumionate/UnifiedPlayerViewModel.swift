@@ -485,6 +485,8 @@ final class UnifiedPlayerViewModel {
     // MARK: - Private: Countdown & Play
 
     private func startCountdownAndPlay() {
+        UsageAnalytics.shared.sessionStarted(source: sessionSource, category: sessionCategory)
+
         // Maximise screen brightness
         savedBrightness = UIScreen.main.brightness
         UIScreen.main.brightness = 1.0
@@ -619,6 +621,9 @@ final class UnifiedPlayerViewModel {
         switch mode {
         case .session:
             saveProgress()
+            if case .session(let session, _) = mode, session.duration_sec > 0 {
+                UsageAnalytics.shared.sessionCompleted(fraction: currentTime / session.duration_sec)
+            }
             lightScorePlayer?.stop()
             engine.detachSession()
             engine.stop()
@@ -755,6 +760,15 @@ final class UnifiedPlayerViewModel {
         case ..<14.0: return "Focus"
         case ..<30.0: return "Energy"
         default:      return "Trance"
+        }
+    }
+
+    private var sessionSource: SessionSource {
+        switch mode {
+        case .session(_, let audioFile): audioFile == nil ? .preset : .generated
+        case .audioLight:                .generated
+        case .flashMode, .colorPulse:    .mindMachine
+        case .playlist:                  .preset
         }
     }
 

@@ -91,6 +91,12 @@ struct OnboardingView: View {
             }
             UsageAnalytics.shared.screen(.onboarding)
         }
+        .onChange(of: currentPhase) { _, newPhase in
+            UsageAnalytics.shared.onboardingStep(index: newPhase.rawValue)
+            if newPhase == .completed {
+                UsageAnalytics.shared.onboardingCompleted()
+            }
+        }
         .fullScreenCover(isPresented: $showWelcomeSession) {
             if let welcomeSession = loadWelcomeSession() {
                 UnifiedPlayerView(
