@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage Analytics — Design Spec</title>
+<style>
+  :root {
+    --bg: oklch(98% 0.01 320);
+    --surface: oklch(100% 0 0);
+    --text: oklch(22% 0.02 320);
+    --muted: oklch(48% 0.02 320);
+    --accent: oklch(62% 0.16 12);
+    --accent-soft: oklch(95% 0.04 12);
+    --border: oklch(90% 0.01 320);
+    --code-bg: oklch(96% 0.01 320);
+    --good: oklch(58% 0.13 150);
+    --bad: oklch(58% 0.18 25);
+    --radius: 14px;
+    --space: clamp(1.5rem, 1rem + 3vw, 4rem);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: oklch(18% 0.02 320);
+      --surface: oklch(23% 0.02 320);
+      --text: oklch(92% 0.01 320);
+      --muted: oklch(68% 0.02 320);
+      --accent: oklch(76% 0.14 8);
+      --accent-soft: oklch(30% 0.06 12);
+      --border: oklch(32% 0.02 320);
+      --code-bg: oklch(26% 0.02 320);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: var(--space); }
+  header.hero {
+    padding: clamp(2rem, 1rem + 4vw, 4rem);
+    background: linear-gradient(135deg, var(--accent-soft), transparent 70%);
+    border-bottom: 1px solid var(--border);
+  }
+  header.hero .wrap { padding-top: 0; padding-bottom: 0; }
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.72rem;
+    font-weight: 600; color: var(--accent); margin: 0 0 0.5rem;
+  }
+  h1 { font-size: clamp(2rem, 1.2rem + 3vw, 3.2rem); line-height: 1.05; margin: 0 0 0.75rem; letter-spacing: -0.02em; }
+  .status {
+    display: inline-block; font-size: 0.85rem; color: var(--muted);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 0.3rem 0.85rem;
+  }
+  h2 {
+    font-size: 1.5rem; margin: 3rem 0 1rem; letter-spacing: -0.01em;
+    padding-bottom: 0.4rem; border-bottom: 2px solid var(--accent-soft);
+  }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 0.6rem; color: var(--muted); }
+  p, li { color: var(--text); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg); padding: 0.1em 0.4em; border-radius: 6px;
+    font: 0.88em "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.1rem; overflow-x: auto;
+    font: 0.85rem/1.5 "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1rem 0;
+    font-size: 0.92rem; background: var(--surface);
+    border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border);
+  }
+  th, td { text-align: left; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); }
+  th { background: var(--accent-soft); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.2rem 1.4rem; margin: 1.2rem 0;
+  }
+  .toc { font-size: 0.92rem; }
+  .toc ol { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+  .toc li { margin: 0.25rem 0; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  blockquote {
+    margin: 1.2rem 0; padding: 0.8rem 1.2rem; border-left: 3px solid var(--accent);
+    background: var(--accent-soft); border-radius: 0 var(--radius) var(--radius) 0;
+    color: var(--muted);
+  }
+  footer { color: var(--muted); font-size: 0.85rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">LumeSync · Design Spec</p>
+    <h1>Usage Analytics</h1>
+    <span class="status">Approved design · 2026-06-18 · scope: measurement system only</span>
+  </div>
+</header>
+<main class="wrap">
+
+  <div class="card toc">
+    <strong>Contents</strong>
+    <ol>
+      <li><a href="#goal">Goal</a></li>
+      <li><a href="#current">Current state</a></li>
+      <li><a href="#decisions">Decisions (locked)</a></li>
+      <li><a href="#arch">Architecture</a></li>
+      <li><a href="#taxonomy">Event taxonomy</a></li>
+      <li><a href="#privacy">Privacy guardrails</a></li>
+      <li><a href="#testing">Testing</a></li>
+      <li><a href="#rollout">Rollout / timing</a></li>
+      <li><a href="#oos">Out of scope</a></li>
+    </ol>
+  </div>
+
+  <blockquote>Scope is the <strong>measurement system only</strong>. The actual feature-cutting / streamlining is a deliberate follow-up once data is collected.</blockquote>
+
+  <h2 id="goal">1. Goal</h2>
+  <p>Give the developer remote, anonymous visibility into <strong>what features the ~100 TestFlight testers actually use</strong> — so unused/low-reach features can be cut and the kept features streamlined. The new features about to ship should be measured from day one.</p>
+
+  <h2 id="current">2. Current state</h2>
+  <ul>
+    <li><code>SessionHistoryManager</code> is the only existing usage tracking: a <strong>local-only</strong> session history (name, category, duration, completion %), recorded from a single call site, consumed by the Profile activity chart.</li>
+    <li>It is <strong>off by default</strong> (<code>listeningHistoryEnabled</code> defaults <code>false</code>), <strong>local-only</strong>, and <strong>session-playback only</strong>.</li>
+    <li>No analytics SDK, no MetricKit, no remote backend anywhere.</li>
+    <li>"Tagging" remembered = <strong>content tags</strong> on audio files / reading scripts, not usage-event tagging.</li>
+  </ul>
+  <p><strong>Conclusion:</strong> the half-built feature is a local session-history feature, not feature-usage analytics. This spec designs the analytics layer fresh, reusing <code>SessionHistoryManager</code>'s <code>.shared</code> singleton + <code>UserDefaults</code> pattern.</p>
+
+  <h2 id="decisions">3. Decisions (locked)</h2>
+  <table>
+    <tr><th>Decision</th><th>Choice</th></tr>
+    <tr><td>Data delivery</td><td>Privacy-first analytics SDK (remote dashboard)</td></tr>
+    <tr><td>SDK</td><td><strong>TelemetryDeck</strong> — anonymous, no IDFA, Swift Package, free tier covers 100 testers</td></tr>
+    <tr><td>Consent</td><td><strong>On by default, opt-out toggle</strong> in Settings + TestFlight note</td></tr>
+    <tr><td>Depth</td><td>Reach + key actions + funnels</td></tr>
+    <tr><td>Code structure</td><td><strong>Typed facade</strong> over TelemetryDeck (Approach A)</td></tr>
+  </table>
+
+  <h2 id="arch">4. Architecture</h2>
+  <pre><code>View / ViewModel  →  UsageAnalytics.shared.&lt;typed method&gt;  →  TelemetryDeck.signal(...)
+                          │
+                          ├─ opt-out gate (analyticsEnabled, default true)
+                          ├─ event catalog (one enum, no magic strings)
+                          └─ privacy scrubber (only enums + bucketed numbers leave device)</code></pre>
+  <ul>
+    <li><code>UsageAnalytics</code> is <code>@MainActor @Observable final class</code>, <code>.shared</code> singleton — matches <code>SessionHistoryManager</code>.</li>
+    <li>TelemetryDeck is called <strong>only</strong> inside the facade. Nothing else imports the SDK.</li>
+    <li>Internal <code>emit</code> closure (defaults to a TelemetryDeck call) so tests inject a spy — no network, no real SDK in tests.</li>
+  </ul>
+  <h3>Files</h3>
+  <ul>
+    <li><code>Ilumionate/Analytics/UsageAnalytics.swift</code> — facade, opt-out gate, init, <code>emit</code> seam.</li>
+    <li><code>Ilumionate/Analytics/AnalyticsEvent.swift</code> — typed event catalog + parameter enums + bucketing helpers.</li>
+    <li><code>Ilumionate/PrivacyInfo.xcprivacy</code> — updated tracking/collection declarations.</li>
+    <li><code>IlumionateApp</code> — one-time <code>TelemetryDeck.initialize(config:)</code> at startup.</li>
+    <li>SPM: add TelemetryDeck package dependency.</li>
+  </ul>
+  <h3>Configuration</h3>
+  <p>TelemetryDeck <strong>App ID</strong> read from <code>Info.plist</code>/<code>.xcconfig</code>, not hardcoded. Init runs once on launch.</p>
+
+  <h2 id="taxonomy">5. Event taxonomy (~30 events)</h2>
+  <h3>Screen reach — fired on <code>.onAppear</code></h3>
+  <p>Core: <code>home, library, read, create, profile, audioLibrary, analysisQueue, sessionDetail, player, onboarding</code></p>
+  <p>Long-tail (<strong>highest-value signal</strong> — if these never fire across 100 testers, that's the cut list): <code>browseSessions, sessionLibrary, libraryCreators, libraryFolders, streamingBrowser, phraseLibrary, lightScoreEditor</code></p>
+  <h3>Key actions</h3>
+  <table>
+    <tr><th>Event</th><th>Parameters</th></tr>
+    <tr><td><code>session.started</code></td><td><code>source</code> = preset / generated / textTrance / mindMachine; <code>category</code></td></tr>
+    <tr><td><code>session.completed</code></td><td><code>completionBucket</code> = under25 / b25_50 / b50_75 / b75_95 / complete</td></tr>
+    <tr><td><code>audio.imported</code></td><td><code>source</code> = files / url / browser / recording</td></tr>
+    <tr><td><code>audio.analyzeStarted</code></td><td>—</td></tr>
+    <tr><td><code>audio.analyzeCompleted</code></td><td>—</td></tr>
+    <tr><td><code>session.generated</code></td><td>—</td></tr>
+    <tr><td><code>mindMachine.started</code></td><td><code>mode</code> = flash / colorPulse / bilateral</td></tr>
+    <tr><td><code>textTrance.started</code></td><td>—</td></tr>
+    <tr><td><code>textTrance.completed</code></td><td>—</td></tr>
+    <tr><td><code>readingSource.imported</code></td><td>—</td></tr>
+    <tr><td><code>onboarding.step</code></td><td><code>index</code> = 0…5</td></tr>
+    <tr><td><code>onboarding.completed</code></td><td>—</td></tr>
+    <tr><td><code>settings.toggled</code></td><td><code>key</code> = the setting name (fixed set)</td></tr>
+  </table>
+  <h3>Funnels</h3>
+  <ul>
+    <li><strong>Audio → Session:</strong> imported → analyzeStarted → analyzeCompleted → generated → started(generated)</li>
+    <li><strong>Onboarding:</strong> step(index) → completed</li>
+    <li><strong>Text Trance:</strong> read screen → textTrance.started → textTrance.completed</li>
+  </ul>
+
+  <h2 id="privacy">6. Privacy guardrails</h2>
+  <p>Enforced <strong>by construction</strong> so no free-form user content can ever leave the device (critical — health-adjacent content):</p>
+  <ul>
+    <li><span class="bad">Never sent:</span> file names, session/script titles, transcript text, URLs, search queries, any PII.</li>
+    <li><span class="good">Only sent:</span> fixed enum cases and <strong>bucketed</strong> numbers (durations as ranges, never exact seconds).</li>
+    <li>Event method signatures accept <strong>only</strong> enums / bucketed types — no parameter through which a raw string could pass.</li>
+    <li><code>PrivacyInfo.xcprivacy</code>: "Product Interaction" analytics, <strong>not</strong> linked to identity, <strong>not</strong> used for tracking. TelemetryDeck is anonymous (no IDFA) → clean nutrition label.</li>
+    <li>Opt-out toggle in Profile/Settings (default <strong>on</strong>) + a line in the TestFlight "What to Test" notes.</li>
+  </ul>
+
+  <h2 id="testing">7. Testing</h2>
+  <ul>
+    <li>Swift Testing unit tests against the <code>emit</code> spy seam: opt-out gate suppresses emission; each typed method emits correct event name + params; duration bucketing maps boundaries correctly.</li>
+    <li>No network and no real SDK in tests.</li>
+  </ul>
+
+  <h2 id="rollout">8. Rollout / timing</h2>
+  <p>Ship analytics <strong>with</strong> the new-feature push, not after — so new features generate data from day one.</p>
+  <ol>
+    <li>Wire facade + SDK + privacy manifest + opt-out toggle.</li>
+    <li>Instrument screens + actions (including the about-to-ship features).</li>
+    <li>One beta cycle (~1–2 weeks) to collect data.</li>
+    <li><strong>Separate</strong> decision pass: review dashboard, identify zero/low-reach features, plan cuts.</li>
+  </ol>
+
+  <h2 id="oos">9. Out of scope</h2>
+  <ul>
+    <li>Any feature removal or UI streamlining (follow-up, data-driven).</li>
+    <li>Funnel/retention dashboards beyond TelemetryDeck's out-of-the-box offering.</li>
+    <li>Migrating or remotely exporting existing local <code>SessionHistoryManager</code> data.</li>
+  </ul>
+
+  <footer>LumeSync (Ilumionate) · Usage Analytics design spec · 2026-06-18 · companion to <code>2026-06-18-usage-analytics-design.md</code></footer>
+</main>
+</body>
+</html>
