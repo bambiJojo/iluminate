@@ -15,6 +15,26 @@ struct TextTranceSessionSettings: Sendable {
     let binauralEnabled: Bool
     let beatFrequency: Double
     let postHandoffDuration: TimeInterval
+    let subliminalEnabled: Bool
+    let subliminalSpeed: TextPacingSettings.SubliminalSpeed
+
+    init(arc: ScriptArc,
+         speed: TextPacingSettings.Speed,
+         lightEnabled: Bool,
+         binauralEnabled: Bool,
+         beatFrequency: Double,
+         postHandoffDuration: TimeInterval,
+         subliminalEnabled: Bool = true,
+         subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium) {
+        self.arc = arc
+        self.speed = speed
+        self.lightEnabled = lightEnabled
+        self.binauralEnabled = binauralEnabled
+        self.beatFrequency = beatFrequency
+        self.postHandoffDuration = postHandoffDuration
+        self.subliminalEnabled = subliminalEnabled
+        self.subliminalSpeed = subliminalSpeed
+    }
 }
 
 @MainActor
@@ -28,6 +48,8 @@ final class TextTranceSession {
     private(set) var isReading = false
     private(set) var lightActive = false
     private(set) var isComplete = false
+    private(set) var currentFade: FadeKind = .none
+    private(set) var currentDuration: TimeInterval = 0
 
     let script: TranceScript
     let settings: TextTranceSessionSettings
@@ -49,7 +71,10 @@ final class TextTranceSession {
         self.readerReferenceCharacterCount = TextTranceWordSizing.referenceCharacterCount(
             for: TextPacingEngine.schedule(
                 for: script,
-                settings: TextPacingSettings(arc: settings.arc, speed: settings.speed)
+                settings: TextPacingSettings(arc: settings.arc,
+                                             speed: settings.speed,
+                                             subliminalEnabled: settings.subliminalEnabled,
+                                             subliminalSpeed: settings.subliminalSpeed)
             )
         )
         self.light = light
@@ -63,7 +88,10 @@ final class TextTranceSession {
         isRunning = true
         defer { isRunning = false }
 
-        let pacing = TextPacingSettings(arc: settings.arc, speed: settings.speed)
+        let pacing = TextPacingSettings(arc: settings.arc,
+                                        speed: settings.speed,
+                                        subliminalEnabled: settings.subliminalEnabled,
+                                        subliminalSpeed: settings.subliminalSpeed)
         let schedule = TextPacingEngine.schedule(for: script, settings: pacing)
 
         if settings.binauralEnabled, let audio {
@@ -77,6 +105,8 @@ final class TextTranceSession {
             currentWord = word.text
             currentPivotIndex = word.pivotIndex
             currentPhase = word.phase
+            currentFade = word.fade
+            currentDuration = word.duration
             await sleep(.seconds(word.duration))
         }
         isReading = false

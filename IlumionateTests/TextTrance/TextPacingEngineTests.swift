@@ -24,7 +24,7 @@ struct TextPacingEngineTests {
                                 arcs: nil, triggersHandoff: nil)
         ])
         let schedule = TextPacingEngine.schedule(for: s,
-            settings: .init(arc: .fullText, speed: .natural))
+            settings: .init(arc: .fullText, speed: .natural, subliminalEnabled: false))
         #expect(schedule.count == 2)
         #expect(abs(schedule[0].duration - 0.5) < 0.0001)
         #expect(schedule[0].startTime == 0)
@@ -33,15 +33,17 @@ struct TextPacingEngineTests {
         #expect(schedule[0].phase == .induction)
     }
 
-    @Test func sentenceEndAddsHold() {
+    @Test func sentenceEndAddsHoldAndFades() {
         let s = script(arcs: [.fullText], segments: [
             TranceScriptSegment(phase: .induction, text: "rest.",
                                 pacing: SegmentPacing(baseWPM: 120),
                                 arcs: nil, triggersHandoff: nil)
         ])
         let schedule = TextPacingEngine.schedule(for: s,
-            settings: .init(arc: .fullText, speed: .natural))
-        #expect(abs(schedule[0].duration - 1.25) < 0.0001)
+            settings: .init(arc: .fullText, speed: .natural, subliminalEnabled: false))
+        // base 0.5s * breathHoldMultiplier 3.0
+        #expect(abs(schedule[0].duration - 1.5) < 0.0001)
+        #expect(schedule[0].fade == .breath)
     }
 
     @Test func speedMultiplierScalesDuration() {
@@ -51,7 +53,7 @@ struct TextPacingEngineTests {
                                 arcs: nil, triggersHandoff: nil)
         ])
         let brisk = TextPacingEngine.schedule(for: s,
-            settings: .init(arc: .fullText, speed: .brisk))
+            settings: .init(arc: .fullText, speed: .brisk, subliminalEnabled: false))
         #expect(abs(brisk[0].duration - (0.5 / 1.35)) < 0.0001)
     }
 
@@ -88,7 +90,7 @@ struct TextPacingEngineTests {
                                 arcs: nil, triggersHandoff: nil)
         ])
         let schedule = TextPacingEngine.schedule(for: s,
-            settings: .init(arc: .fullText, speed: .natural))
+            settings: .init(arc: .fullText, speed: .natural, subliminalEnabled: false))
         #expect(schedule.count == 1)
         #expect(schedule[0].duration.isFinite)
         #expect(schedule[0].duration > 0)
@@ -109,5 +111,79 @@ struct TextPacingEngineTests {
         let schedule = TextPacingEngine.schedule(for: s,
             settings: .init(arc: .handoff, speed: .natural))
         #expect(schedule.map(\.text) == ["read", "me", "eyes", "close"])
+    }
+
+    // MARK: - Punctuation pauses + subliminal layer
+
+    private func script(_ text: String, wpm: Double = 600) -> TranceScript {
+        script(arcs: [.fullText], segments: [
+            TranceScriptSegment(phase: .induction, text: text,
+                                pacing: SegmentPacing(baseWPM: wpm),
+                                arcs: nil, triggersHandoff: nil)
+        ])
+    }
+
+    private func subSettings(subliminalEnabled: Bool = true,
+                             subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium)
+    -> TextPacingSettings {
+        TextPacingSettings(arc: .fullText, speed: .natural,
+                           subliminalEnabled: subliminalEnabled,
+                           subliminalSpeed: subliminalSpeed)
+    }
+
+    @Test func breathWordHoldsLongerThanPlainWordAndFades() {
+        let words = TextPacingEngine.schedule(for: script("table now."), settings: subSettings(subliminalEnabled: false))
+        // base = 60/600 = 0.1s
+        #expect(abs(words[0].duration - 0.1) < 1e-9)             // "table" plain
+        #expect(abs(words[1].duration - 0.1 * 3.0) < 1e-9)       // "now" breath
+        #expect(words[1].fade == .breath)
+        #expect(words[0].fade == .none)
+    }
+
+    @Test func driftWordUsesDriftMultiplierAndFade() {
+        let words = TextPacingEngine.schedule(for: script("slowly…"), settings: subSettings(subliminalEnabled: false))
+        #expect(abs(words[0].duration - 0.1 * 4.5) < 1e-9)
+        #expect(words[0].fade == .drift)
+    }
+
+    @Test func authoredMarkFlashesOnlyThatWord() {
+        let words = TextPacingEngine.schedule(for: script("you [[relax]] table"), settings: subSettings())
+        // "you" and "table" are lexicon non-matches; "relax" is authored.
+        #expect(words.map(\.isSubliminal) == [false, true, false])
+        #expect(abs(words[1].duration - 0.09) < 1e-9)           // medium flash
+    }
+
+    @Test func lexiconAppliesOnlyWhenNoAuthoredMarks() {
+        // No authored marks → lexicon flags "relax" and "deeper".
+        let words = TextPacingEngine.schedule(for: script("you relax deeper table"), settings: subSettings())
+        #expect(words.map(\.isSubliminal) == [false, true, true, false])
+    }
+
+    @Test func lexiconIgnoredWhenAuthoredMarksPresent() {
+        // Authored mark exists → lexicon word "deeper" is NOT auto-flashed.
+        let words = TextPacingEngine.schedule(for: script("[[relax]] deeper"), settings: subSettings())
+        #expect(words.map(\.isSubliminal) == [true, false])
+    }
+
+    @Test func subliminalDisabledFlagsNothing() {
+        let words = TextPacingEngine.schedule(for: script("you [[relax]] deeper"), settings: subSettings(subliminalEnabled: false))
+        let noneFlash = words.allSatisfy { !$0.isSubliminal }
+        #expect(noneFlash)
+    }
+
+    @Test func subliminalSpeedControlsFlashDuration() {
+        let deep = TextPacingEngine.schedule(for: script("relax"), settings: subSettings(subliminalSpeed: .deep))
+        let gentle = TextPacingEngine.schedule(for: script("relax"), settings: subSettings(subliminalSpeed: .gentle))
+        #expect(abs(deep[0].duration - 0.065) < 1e-9)
+        #expect(abs(gentle[0].duration - 0.12) < 1e-9)
+    }
+
+    @Test func startTimeIsCumulativeSumOfDurations() {
+        let words = TextPacingEngine.schedule(for: script("table now. slowly"), settings: subSettings(subliminalEnabled: false))
+        var cursor = 0.0
+        for word in words {
+            #expect(abs(word.startTime - cursor) < 1e-9)
+            cursor += word.duration
+        }
     }
 }

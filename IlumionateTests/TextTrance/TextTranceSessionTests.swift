@@ -109,6 +109,22 @@ struct TextTranceSessionTests {
         #expect(session.isComplete == false)
     }
 
+    @Test func lexiconWordFlashesFastInSchedule() async {
+        // "go" and "deeper" are lexicon words → both flash fast (0.09s at .medium),
+        // far shorter than the 600-wpm base of 0.1s, proving settings are threaded.
+        let script = TranceScript(
+            schemaVersion: 1, id: "x", title: "X", theme: .relaxation,
+            supportedArcs: [.fullText], language: "en",
+            source: ScriptSource(kind: .bundled, generator: nil, reviewed: true),
+            segments: [TranceScriptSegment(phase: .induction, text: "go deeper",
+                pacing: SegmentPacing(baseWPM: 600), arcs: nil, triggersHandoff: nil)])
+        let words = TextPacingEngine.schedule(
+            for: script,
+            settings: TextPacingSettings(arc: .fullText, speed: .natural))
+        let allFlash = words.allSatisfy(\.isSubliminal)
+        #expect(allFlash)
+    }
+
     @Test func owningTaskCancellationPreventsSpinThroughAndLightStart() async {
         let light = MockLightLayer()
         let audio = MockAudioLayer()

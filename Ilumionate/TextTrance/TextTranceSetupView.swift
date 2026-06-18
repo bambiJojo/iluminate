@@ -13,6 +13,8 @@ struct TextTranceSetupView: View {
     @State private var speed: TextPacingSettings.Speed = .natural
     @State private var lightEnabled = true
     @State private var binauralEnabled = false
+    @State private var subliminalEnabled = true
+    @State private var subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium
     @State private var startPlayer = false
 
     init(script: TranceScript) {
@@ -28,6 +30,7 @@ struct TextTranceSetupView: View {
                     ArcCard(script: script, arc: $arc)
                     LayersCard(arc: arc, lightEnabled: $lightEnabled, binauralEnabled: $binauralEnabled)
                     SpeedCard(speed: $speed)
+                    SubliminalCard(enabled: $subliminalEnabled, speed: $subliminalSpeed)
                 }
                 .padding(TranceSpacing.screen)
             }
@@ -57,7 +60,9 @@ struct TextTranceSetupView: View {
                 lightEnabled: useLight,
                 binauralEnabled: binauralEnabled,
                 beatFrequency: 10,
-                postHandoffDuration: 600),
+                postHandoffDuration: 600,
+                subliminalEnabled: subliminalEnabled,
+                subliminalSpeed: subliminalSpeed),
             light: useLight ? FlashController(frequency: 10, intensity: 0.7, pattern: .sine) : nil,
             audio: binauralEnabled ? BinauralBeatsEngine() : nil)
     }
@@ -109,6 +114,28 @@ private struct SpeedCard: View {
                 ForEach(TextPacingSettings.Speed.allCases) { Text($0.displayName).tag($0) }
             }
             .pickerStyle(.segmented)
+        }
+    }
+}
+
+private struct SubliminalCard: View {
+    @Binding var enabled: Bool
+    @Binding var speed: TextPacingSettings.SubliminalSpeed
+
+    var body: some View {
+        LiminalCard(label: "Subliminal suggestions") {
+            VStack(spacing: TranceSpacing.list) {
+                Toggle("Flash suggestion words", isOn: $enabled)
+                    .tint(.auroraTeal)
+                if enabled {
+                    Picker("Flash speed", selection: $speed) {
+                        ForEach(TextPacingSettings.SubliminalSpeed.allCases) {
+                            Text($0.displayName).tag($0)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
         }
     }
 }

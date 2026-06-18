@@ -12,6 +12,7 @@ struct TextTrancePlayerView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var backgroundPulse = false
+    @State private var wordOpacity: Double = 1
 
     init(session: TextTranceSession) {
         _session = State(initialValue: session)
@@ -36,6 +37,10 @@ struct TextTrancePlayerView: View {
                     pivot: session.currentPivotIndex,
                     referenceCharacterCount: session.readerReferenceCharacterCount
                 )
+                .opacity(wordOpacity)
+                .onChange(of: session.currentWord) { _, _ in
+                    applyWordFade()
+                }
             } else if session.lightActive {
                 Text("…")
                     .font(.system(size: 40))
@@ -52,6 +57,23 @@ struct TextTrancePlayerView: View {
         .statusBarHidden()
         .onDisappear {
             if !session.isComplete { session.end() }
+        }
+    }
+
+    /// Snap to full opacity for every word, then fade breath/drift words out
+    /// across their hold so sentence-ends and ellipses "breathe".
+    private func applyWordFade() {
+        var reset = Transaction()
+        reset.disablesAnimations = true
+        withTransaction(reset) { wordOpacity = 1 }
+
+        switch session.currentFade {
+        case .none:
+            break
+        case .breath:
+            withAnimation(.easeIn(duration: session.currentDuration)) { wordOpacity = 0.05 }
+        case .drift:
+            withAnimation(.easeIn(duration: session.currentDuration)) { wordOpacity = 0 }
         }
     }
 
