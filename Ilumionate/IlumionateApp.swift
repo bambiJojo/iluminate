@@ -19,6 +19,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct IlumionateApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    init() {
+        UsageAnalytics.configure()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

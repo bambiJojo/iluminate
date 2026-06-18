@@ -323,6 +323,12 @@ extension ProfileSettingsView {
                     icon: "clock.badge.checkmark",
                     color: .bwAlpha
                 )
+                settingsToggle(
+                    title: "Anonymous Usage Analytics",
+                    binding: $analyticsEnabled,
+                    icon: "chart.bar.xaxis",
+                    color: .bwAlpha
+                )
                 settingsButton(
                     title: "Export Session Data",
                     icon: "square.and.arrow.up.circle"
@@ -338,6 +344,9 @@ extension ProfileSettingsView {
                     TranceHaptics.shared.heavy()
                     showClearDataAlert = true
                 }
+            }
+            .onChange(of: analyticsEnabled) { _, _ in
+                UsageAnalytics.shared.settingsToggled(key: "analyticsEnabled")
             }
         }
     }
