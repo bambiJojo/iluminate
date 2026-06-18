@@ -165,6 +165,7 @@ struct PhraseLibraryView: View {
         .navigationTitle("Phrase Library")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search phrases, phases, or sources")
+        .onAppear { UsageAnalytics.shared.screen(.phraseLibrary) }
     }
 
     private var summarySection: some View {

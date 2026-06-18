@@ -30,6 +30,7 @@ struct SessionLibraryView: View {
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
             loadSessions()
+            UsageAnalytics.shared.screen(.sessionLibrary)
         }
         .fullScreenCover(item: $selectedSession) { session in
             UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)

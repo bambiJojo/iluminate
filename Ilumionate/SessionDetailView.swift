@@ -77,6 +77,7 @@ struct SessionDetailView: View {
         .onAppear {
             refreshAudioFile()
             loadLightSession()
+            UsageAnalytics.shared.screen(.sessionDetail)
         }
         .onChange(of: AnalysisStateManager.shared.completedAnalyses.count) {
             refreshAudioFile()

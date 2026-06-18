@@ -152,6 +152,7 @@ struct LibraryFoldersView: View {
             }
         }
         .navigationTitle("Folders")
+        .onAppear { UsageAnalytics.shared.screen(.libraryFolders) }
         .alert("New Folder", isPresented: $showingNewFolder) {
             TextField("Folder name", text: $newFolderName)
             Button("Cancel", role: .cancel) {}

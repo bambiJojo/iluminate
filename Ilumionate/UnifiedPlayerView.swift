@@ -87,6 +87,7 @@ struct UnifiedPlayerView: View {
         }
         .onAppear { viewModel.onAppear() }
         .onAppear { controlsVisibility.registerInteraction() }
+        .onAppear { UsageAnalytics.shared.screen(.player) }
         .onDisappear { viewModel.onDisappear() }
         .onChange(of: controlsVisibility.isVisible) { _, visible in
             withAnimation(LiminalMotion.fade) { viewModel.showingControls = visible }

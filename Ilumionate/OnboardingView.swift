@@ -89,6 +89,7 @@ struct OnboardingView: View {
                 isAnimating = true
                 characterOffset = -20
             }
+            UsageAnalytics.shared.screen(.onboarding)
         }
         .fullScreenCover(isPresented: $showWelcomeSession) {
             if let welcomeSession = loadWelcomeSession() {

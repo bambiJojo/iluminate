@@ -34,6 +34,7 @@ struct LightScoreEditorView: View {
         .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle("Light Score")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { UsageAnalytics.shared.screen(.lightScoreEditor) }
     }
 
     // MARK: - Frequency Curve

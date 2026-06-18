@@ -95,9 +95,13 @@ struct ContentView: View {
             loadAudioFiles()
             checkForFirstLaunch()
             engine.userFrequencyMultiplier = userFrequencyMultiplierPref
+            UsageAnalytics.shared.screen(screen(for: selectedTab))
         }
         .onChange(of: userFrequencyMultiplierPref) { _, newValue in
             engine.userFrequencyMultiplier = newValue
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            UsageAnalytics.shared.screen(screen(for: newTab))
         }
         .fullScreenCover(item: $selectedSession) { session in
             UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
@@ -159,6 +163,15 @@ struct ContentView: View {
                     showingOnboarding = true
                 }
             }
+        }
+    }
+
+    private func screen(for tab: TranceTab) -> AnalyticsScreen {
+        switch tab {
+        case .home:    .home
+        case .library: .library
+        case .read:    .read
+        case .create:  .create
         }
     }
 }

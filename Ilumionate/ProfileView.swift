@@ -54,6 +54,7 @@ struct ProfileView: View {
             withAnimation(.easeOut(duration: 0.5).delay(0.15)) {
                 animateContent = true
             }
+            UsageAnalytics.shared.screen(.profile)
         }
     }
 

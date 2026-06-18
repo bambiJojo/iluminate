@@ -51,7 +51,10 @@ struct AnalyzerView: View {
             Button("Clear Queue", role: .destructive) { analysisManager.clearQueue() }
             Button("Cancel", role: .cancel) {}
         }
-        .onAppear { loadAudioFiles() }
+        .onAppear {
+            loadAudioFiles()
+            UsageAnalytics.shared.screen(.analysisQueue)
+        }
         .onChange(of: analysisManager.completedAnalyses.count) {
             loadAudioFiles()
         }

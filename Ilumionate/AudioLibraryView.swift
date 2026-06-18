@@ -278,6 +278,7 @@ struct AudioLibraryView: View {
             }
             .onAppear {
                 loadAudioFiles()
+                UsageAnalytics.shared.screen(.audioLibrary)
             }
             .confirmationDialog("Add to Sessions", isPresented: $showingAddSheet, titleVisibility: .visible) {
                 Button("Import from Files") {

@@ -75,6 +75,7 @@ struct LibraryCreatorsView: View {
             }
         }
         .navigationTitle("Creators")
+        .onAppear { UsageAnalytics.shared.screen(.libraryCreators) }
         .fullScreenCover(item: $syncPlayerItem) { item in
             UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
         }

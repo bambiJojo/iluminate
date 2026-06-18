@@ -56,7 +56,10 @@ struct StreamingBrowserView: View {
                     streamingManager.searchResults = []
                 }
             }
-            .onAppear { setupStreaming() }
+            .onAppear {
+                setupStreaming()
+                UsageAnalytics.shared.screen(.streamingBrowser)
+            }
             .sheet(isPresented: $showingSettings) {
                 StreamingSettingsView(manager: streamingManager)
             }

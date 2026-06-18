@@ -55,6 +55,7 @@ struct BrowseSessionsView: View {
         }
         .navigationTitle("Research Sessions")
         .navigationBarTitleDisplayMode(.large)
+        .onAppear { UsageAnalytics.shared.screen(.browseSessions) }
         .fullScreenCover(item: $selectedSession) { session in
             UnifiedPlayerView(
                 mode: .session(session: session, audioFile: nil),
