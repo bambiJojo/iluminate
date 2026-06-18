@@ -83,18 +83,27 @@ struct TextPacingSettings: Sendable {
     }
 
     let arc: ScriptArc
-    let speed: Speed
+    let speedMultiplier: Double
     let subliminalEnabled: Bool
     let subliminalSpeed: SubliminalSpeed
 
     init(arc: ScriptArc,
-         speed: Speed,
+         speedMultiplier: Double,
          subliminalEnabled: Bool = true,
          subliminalSpeed: SubliminalSpeed = .medium) {
         self.arc = arc
-        self.speed = speed
+        self.speedMultiplier = speedMultiplier
         self.subliminalEnabled = subliminalEnabled
         self.subliminalSpeed = subliminalSpeed
+    }
+
+    /// Convenience for the legacy three presets (setup anchors, tests).
+    init(arc: ScriptArc,
+         speed: Speed,
+         subliminalEnabled: Bool = true,
+         subliminalSpeed: SubliminalSpeed = .medium) {
+        self.init(arc: arc, speedMultiplier: speed.multiplier,
+                  subliminalEnabled: subliminalEnabled, subliminalSpeed: subliminalSpeed)
     }
 }
 
@@ -111,13 +120,23 @@ enum TextPacingEngine {
     static let breathHoldMultiplier: Double = 3.0
     static let driftHoldMultiplier:  Double = 4.5
 
+    /// Live speed slider bounds (multiplier on nominal WPM).
+    static let minSpeedMultiplier: Double = 0.5
+    static let maxSpeedMultiplier: Double = 2.0
+
+    /// Representative WPM for the slider readout. Per-segment WPM varies; this
+    /// is the nominal default-base rate scaled by the multiplier.
+    static func nominalWPM(forMultiplier multiplier: Double) -> Int {
+        Int((defaultBaseWPM * multiplier).rounded())
+    }
+
     static func schedule(for script: TranceScript,
                          settings: TextPacingSettings) -> [PacedWord] {
         // Pass 1: flatten to pending words (text, pause, authored flag, base duration).
         var pending: [Pending] = []
         for segment in script.segments {
             guard segmentPlays(segment, in: settings.arc) else { continue }
-            let baseDuration = 60.0 / effectiveWPM(for: segment, speed: settings.speed)
+            let baseDuration = 60.0 / effectiveWPM(for: segment, speedMultiplier: settings.speedMultiplier)
             for token in WordTokenizer.tokenize(segment.text) {
                 pending.append(Pending(text: token.text,
                                        pause: token.pause,
@@ -175,13 +194,13 @@ enum TextPacingEngine {
     }
 
     private static func effectiveWPM(for segment: TranceScriptSegment,
-                                     speed: TextPacingSettings.Speed) -> Double {
+                                     speedMultiplier: Double) -> Double {
         if let hint = segment.pacing?.baseWPM, hint > 0 {
-            return hint * speed.multiplier
+            return hint * speedMultiplier
         }
         let depth = segment.phase.tranceDepthEstimate            // 0...1
         let depthFactor = 1.0 - depth * (1.0 - deepeningFloor)   // [floor, 1]
-        return defaultBaseWPM * depthFactor * speed.multiplier
+        return defaultBaseWPM * depthFactor * speedMultiplier
     }
 
     static func holdMultiplier(_ pause: PauseKind) -> Double {

@@ -186,4 +186,41 @@ struct TextPacingEngineTests {
             cursor += word.duration
         }
     }
+
+    @Test func speedMultiplierScalesReadableDurationsInversely() {
+        let s = TranceScript(
+            schemaVersion: 1, id: "s", title: "S", theme: .relaxation,
+            supportedArcs: [.fullText], language: "en",
+            source: ScriptSource(kind: .bundled, generator: nil, reviewed: true),
+            segments: [TranceScriptSegment(phase: .induction, text: "alpha bravo charlie",
+                pacing: SegmentPacing(baseWPM: 120), arcs: nil, triggersHandoff: nil)])
+        let slow = TextPacingEngine.schedule(
+            for: s, settings: TextPacingSettings(arc: .fullText, speedMultiplier: 1.0,
+                                                 subliminalEnabled: false))
+        let fast = TextPacingEngine.schedule(
+            for: s, settings: TextPacingSettings(arc: .fullText, speedMultiplier: 2.0,
+                                                 subliminalEnabled: false))
+        // 2x multiplier => 2x WPM => half the duration per word.
+        #expect(abs(slow[0].duration - fast[0].duration * 2) < 0.0001)
+    }
+
+    @Test func wordSequenceIsInvariantAcrossSpeedAndSubliminal() {
+        let s = TranceScript(
+            schemaVersion: 1, id: "i", title: "I", theme: .relaxation,
+            supportedArcs: [.fullText], language: "en",
+            source: ScriptSource(kind: .bundled, generator: nil, reviewed: true),
+            segments: [TranceScriptSegment(phase: .induction, text: "go deeper now and rest",
+                pacing: SegmentPacing(baseWPM: 120), arcs: nil, triggersHandoff: nil)])
+        let a = TextPacingEngine.schedule(for: s,
+            settings: TextPacingSettings(arc: .fullText, speedMultiplier: 0.5, subliminalEnabled: true))
+        let b = TextPacingEngine.schedule(for: s,
+            settings: TextPacingSettings(arc: .fullText, speedMultiplier: 1.7, subliminalEnabled: false))
+        #expect(a.map(\.text) == b.map(\.text))
+        #expect(a.count == b.count)
+    }
+
+    @Test func nominalWPMMapsFromMultiplier() {
+        #expect(TextPacingEngine.nominalWPM(forMultiplier: 1.0) == 150)
+        #expect(TextPacingEngine.nominalWPM(forMultiplier: 2.0) == 300)
+    }
 }
