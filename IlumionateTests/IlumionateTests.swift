@@ -11,6 +11,9 @@ import Foundation
 
 // MARK: - Data Model Tests
 
+// Serialized because the PlaylistStore tests share the "playlists" UserDefaults
+// key; running them in parallel lets one test's cleanup wipe another's save.
+@Suite(.serialized)
 struct PlaylistModelTests {
 
     @Test func playlistCreation() {
@@ -85,16 +88,16 @@ struct PlaylistModelTests {
         #expect(decoded.items[0].duration == 120)
     }
 
-    @Test func playlistStoreSaveAndLoad() {
+    @Test func playlistStoreSaveAndLoad() throws {
         // Save
         let playlist = Playlist(name: "Persist Test")
         PlaylistStore.save([playlist])
 
         // Load
         let loaded = PlaylistStore.load()
-        #expect(loaded.count == 1)
-        #expect(loaded[0].name == "Persist Test")
-        #expect(loaded[0].id == playlist.id)
+        let first = try #require(loaded.count == 1 ? loaded.first : nil)
+        #expect(first.name == "Persist Test")
+        #expect(first.id == playlist.id)
 
         // Cleanup
         PlaylistStore.save([])
