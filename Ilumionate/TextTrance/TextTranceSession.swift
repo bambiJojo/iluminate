@@ -68,6 +68,7 @@ final class TextTranceSession {
 
     // Control state
     private(set) var currentWordIndex = 0
+    private(set) var isPaused = false
     var speedMultiplier: Double
 
     // Live, mutable copies of schedule-affecting settings.
@@ -81,15 +82,19 @@ final class TextTranceSession {
     private let light: (any LightLayerControlling)?
     private let audio: (any AudioLayerControlling)?
     private let sleep: @Sendable (Duration) async -> Void
+    private let now: @Sendable () -> TimeInterval
     private var schedule: [PacedWord] = []
     private var cancelled = false
     private var isRunning = false
+    private var resumeContinuation: CheckedContinuation<Void, Never>?
+    private var holdTask: Task<Void, Never>?
 
     init(script: TranceScript,
          settings: TextTranceSessionSettings,
          light: (any LightLayerControlling)?,
          audio: (any AudioLayerControlling)?,
-         sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
+         sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.script = script
         self.settings = settings
         self.speedMultiplier = settings.speedMultiplier
@@ -98,6 +103,7 @@ final class TextTranceSession {
         self.light = light
         self.audio = audio
         self.sleep = sleep
+        self.now = now
         // Sizing depends on word lengths, not durations; build at neutral speed.
         self.readerReferenceCharacterCount = TextTranceWordSizing.referenceCharacterCount(
             for: TextPacingEngine.schedule(
@@ -173,15 +179,58 @@ final class TextTranceSession {
         isComplete = !cancelled && !Task.isCancelled
     }
 
-    /// Hold the current word. (Pause/resume is added in a later step.)
-    private func holdCurrentWord(_ duration: TimeInterval) async {
-        await sleep(.seconds(duration))
+    /// Hold the current word, honoring pause. On pause mid-hold we keep the
+    /// remaining time and suspend until `resume()`.
+    private func holdCurrentWord(_ fullDuration: TimeInterval) async {
+        var remaining = fullDuration
+        while remaining > 0, !cancelled, !Task.isCancelled {
+            if isPaused {
+                await withCheckedContinuation { resumeContinuation = $0 }
+                continue
+            }
+            let start = now()
+            let holdDuration = Duration.seconds(remaining)
+            let task = Task { [sleep] in await sleep(holdDuration) }
+            holdTask = task
+            await task.value
+            holdTask = nil
+            if cancelled || Task.isCancelled { return }
+            if isPaused {
+                let elapsed = now() - start
+                remaining = max(0, remaining - elapsed)
+                continue
+            }
+            remaining = 0
+        }
+    }
+
+    /// Pause word advance and the binaural layer.
+    func pause() {
+        guard isReading, !isPaused, !isComplete else { return }
+        isPaused = true
+        holdTask?.cancel()                 // wake the in-flight hold promptly
+        if settings.binauralEnabled { audio?.stop() }
+    }
+
+    /// Resume word advance and the binaural layer.
+    func resume() {
+        guard isPaused, !isComplete else { return }
+        isPaused = false
+        if settings.binauralEnabled, isReading { audio?.start() }
+        resumeContinuation?.resume()
+        resumeContinuation = nil
     }
 
     /// Stop everything immediately (user tap-and-hold to end).
     func end() {
         guard !isComplete else { return }
         cancelled = true
+        holdTask?.cancel()
+        if isPaused {
+            isPaused = false
+            resumeContinuation?.resume()
+            resumeContinuation = nil
+        }
         if lightActive {
             light?.stop()
             lightActive = false

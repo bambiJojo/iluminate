@@ -157,4 +157,56 @@ struct TextTranceSessionTests {
         #expect(session.currentWord == "two")
         #expect(session.isComplete)
     }
+
+    @Test func pauseHoldsIndexThenResumeCompletes() async {
+        let audio = MockAudioLayer()
+        let controller = PacingSleepController()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: true,
+                beatFrequency: 10, postHandoffDuration: 0),
+            light: MockLightLayer(), audio: audio, sleep: controller.sleepClosure)
+
+        // Pause when the first word's hold begins (callCount == 1).
+        controller.onSleep = { call in if call == 1 { session.pause() } }
+
+        let task = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        #expect(session.currentWordIndex == 0)   // did not advance past word 0
+        #expect(audio.stopCount == 1)            // binaural paused
+        #expect(!session.isComplete)
+
+        controller.onSleep = { _ in }            // stop re-pausing
+        session.resume()
+        await task.value
+
+        #expect(session.isComplete)
+        #expect(audio.startCount == 2)           // started, then restarted on resume
+        #expect(session.currentWord == "two")
+    }
+
+    @Test func endWhilePausedTearsDownAndDoesNotComplete() async {
+        let audio = MockAudioLayer()
+        let controller = PacingSleepController()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .handoff, speedMultiplier: 1.0,
+                lightEnabled: true, binauralEnabled: true,
+                beatFrequency: 10, postHandoffDuration: 60),
+            light: MockLightLayer(), audio: audio, sleep: controller.sleepClosure)
+
+        controller.onSleep = { call in if call == 1 { session.pause() } }
+        let task = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        session.end()
+        await task.value
+
+        #expect(!session.isComplete)
+        #expect(audio.stopCount >= 1)
+    }
 }
