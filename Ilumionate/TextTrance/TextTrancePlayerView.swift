@@ -9,13 +9,18 @@ import SwiftUI
 
 struct TextTrancePlayerView: View {
     @State private var session: TextTranceSession
+    @State private var controlsVisibility = PlayerControlsVisibility()
+    @State private var showingSettings = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var backgroundPulse = false
     @State private var wordOpacity: Double = 1
+    private let startIndex: Int
 
-    init(session: TextTranceSession) {
+    init(session: TextTranceSession, startIndex: Int = 0) {
         _session = State(initialValue: session)
+        self.startIndex = startIndex
     }
 
     var body: some View {
@@ -31,37 +36,76 @@ struct TextTrancePlayerView: View {
                 .animation(.easeInOut(duration: 4).repeatForever(autoreverses: true),
                            value: backgroundPulse)
 
-            if session.isReading {
-                AnchoredWord(
-                    text: session.currentWord,
-                    pivot: session.currentPivotIndex,
-                    referenceCharacterCount: session.readerReferenceCharacterCount
-                )
-                .opacity(wordOpacity)
-                .onChange(of: session.currentWord) { _, _ in
-                    applyWordFade()
+            wordLayer
+
+            if controlsVisibility.isVisible {
+                VStack {
+                    Spacer()
+                    ReaderControlPanel(
+                        session: session,
+                        onSettings: { showingSettings = true },
+                        onEnd: { session.end(); dismiss() })
                 }
-            } else if session.lightActive {
-                Text("…")
-                    .font(.system(size: 40))
-                    .foregroundStyle(Color.textSecondary)
+                .transition(.opacity)
+            } else if session.isPaused {
+                pausedWhisper
             }
         }
         .contentShape(.rect)
         .gesture(endHoldGesture)
+        .simultaneousGesture(revealHideDrag)
+        .onTapGesture { controlsVisibility.registerInteraction() }
         .task {
             backgroundPulse = true
+            controlsVisibility.registerInteraction()
             UsageAnalytics.shared.textTranceStarted()
-            await session.begin()
+            await session.begin(from: startIndex)
             if session.isComplete {
                 UsageAnalytics.shared.textTranceCompleted()
                 dismiss()
             }
         }
-        .statusBarHidden()
+        .statusBarHidden(!controlsVisibility.isVisible)
+        .onChange(of: showingSettings) { _, open in
+            controlsVisibility.isDrawerOpen = open
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active, session.isReading, !session.isPaused {
+                session.pause()
+                controlsVisibility.registerInteraction()
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            ReaderSettingsDrawer(session: session)
+        }
         .onDisappear {
             if !session.isComplete { session.end() }
         }
+    }
+
+    @ViewBuilder
+    private var wordLayer: some View {
+        if session.isReading {
+            AnchoredWord(
+                text: session.currentWord,
+                pivot: session.currentPivotIndex,
+                referenceCharacterCount: session.readerReferenceCharacterCount
+            )
+            .opacity(session.isPaused ? 0.4 : wordOpacity)
+            .onChange(of: session.currentWord) { _, _ in applyWordFade() }
+        } else if session.lightActive {
+            Text("…")
+                .font(.system(size: 40))
+                .foregroundStyle(Color.textSecondary)
+        }
+    }
+
+    private var pausedWhisper: some View {
+        Text("Paused")
+            .font(TranceTypography.caption)
+            .foregroundStyle(Color.textSecondary.opacity(0.6))
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .padding(.bottom, TranceSpacing.statusBar)
     }
 
     /// Snap to full opacity for every word, then fade breath/drift words out
@@ -86,6 +130,17 @@ struct TextTrancePlayerView: View {
             .onEnded { _ in
                 session.end()
                 dismiss()
+            }
+    }
+
+    private var revealHideDrag: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onEnded { value in
+                if value.translation.height < -40 {
+                    controlsVisibility.registerInteraction()
+                } else if value.translation.height > 40 {
+                    controlsVisibility.hideNow()
+                }
             }
     }
 }
@@ -130,7 +185,7 @@ private struct AnchoredWord: View {
             pacing: SegmentPacing(baseWPM: 60), arcs: nil, triggersHandoff: nil)])
     let session = TextTranceSession(
         script: script,
-        settings: TextTranceSessionSettings(arc: .fullText, speed: .slow,
+        settings: TextTranceSessionSettings(arc: .fullText, speedMultiplier: 0.75,
             lightEnabled: false, binauralEnabled: false,
             beatFrequency: 10, postHandoffDuration: 0),
         light: nil, audio: nil)
