@@ -265,6 +265,31 @@ struct TextTranceSessionTests {
         #expect(audio.stopCount == 1)            // stopped at completion
     }
 
+    @Test func savesSnapshotOnPauseAndClearsOnCompletion() async {
+        let store = ReaderProgressStore(directory:
+            URL.temporaryDirectory.appending(path: "rp-\(UUID().uuidString)"))
+        let controller = PacingSleepController()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 0),
+            light: MockLightLayer(), audio: MockAudioLayer(),
+            sleep: controller.sleepClosure, progressStore: store, scriptContentHash: "h")
+
+        controller.onSleep = { call in if call == 1 { session.pause() } }
+        let task = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        #expect(store.resumeState(forScriptId: handoffScript().id) != nil)
+
+        controller.onSleep = { _ in }
+        session.resume()
+        await task.value
+        #expect(store.resumeState(forScriptId: handoffScript().id) == nil)   // cleared on completion
+    }
+
     @Test func setSpeedClampsToEngineBounds() async {
         let session = TextTranceSession(
             script: handoffScript(),

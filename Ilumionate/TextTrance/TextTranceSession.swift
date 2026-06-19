@@ -90,13 +90,17 @@ final class TextTranceSession {
     private var isRunning = false
     private var resumeContinuation: CheckedContinuation<Void, Never>?
     private var holdTask: Task<Void, Never>?
+    private let progressStore: ReaderProgressStore?
+    private let scriptContentHash: String
 
     init(script: TranceScript,
          settings: TextTranceSessionSettings,
          light: (any LightLayerControlling)?,
          audio: (any AudioLayerControlling)?,
          sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
-         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+         progressStore: ReaderProgressStore? = nil,
+         scriptContentHash: String = "") {
         self.script = script
         self.settings = settings
         self.speedMultiplier = settings.speedMultiplier
@@ -108,6 +112,8 @@ final class TextTranceSession {
         self.audio = audio
         self.sleep = sleep
         self.now = now
+        self.progressStore = progressStore
+        self.scriptContentHash = scriptContentHash
         // Sizing depends on word lengths, not durations; build at neutral speed.
         self.readerReferenceCharacterCount = TextTranceWordSizing.referenceCharacterCount(
             for: TextPacingEngine.schedule(
@@ -178,6 +184,31 @@ final class TextTranceSession {
 
         if binauralActive { audio?.stop() }
         isComplete = !cancelled && !Task.isCancelled
+        if isComplete { progressStore?.clear(scriptId: script.id) }
+    }
+
+    /// Snapshot the current position + live settings for resume-after-close.
+    private func currentSnapshot() -> ReaderResumeState {
+        ReaderResumeState(
+            scriptId: script.id,
+            wordIndex: currentWordIndex,
+            settings: PersistedReaderSettings(
+                arc: settings.arc,
+                speedMultiplier: speedMultiplier,
+                subliminalEnabled: subliminalEnabled,
+                subliminalSpeed: subliminalSpeed,
+                binauralEnabled: binauralActive,
+                lightEnabled: lightEnabledLive,
+                beatFrequency: settings.beatFrequency),
+            phase: .reading,
+            scriptContentHash: scriptContentHash,
+            savedAt: .now)
+    }
+
+    /// Persist the current position so the session can resume after close.
+    func persistProgress() {
+        guard !isComplete, isReading else { return }
+        progressStore?.save(currentSnapshot())
     }
 
     /// Sync the configured beat and start the binaural layer.
@@ -218,6 +249,7 @@ final class TextTranceSession {
         isPaused = true
         holdTask?.cancel()                 // wake the in-flight hold promptly
         if binauralActive { audio?.stop() }
+        persistProgress()
     }
 
     /// Resume word advance and the binaural layer.
@@ -266,6 +298,7 @@ final class TextTranceSession {
     /// Stop everything immediately (user tap-and-hold to end).
     func end() {
         guard !isComplete else { return }
+        if isReading, !isComplete { progressStore?.save(currentSnapshot()) }
         cancelled = true
         holdTask?.cancel()
         if isPaused {
