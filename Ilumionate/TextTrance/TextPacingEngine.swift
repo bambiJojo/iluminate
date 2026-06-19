@@ -63,7 +63,7 @@ struct TextPacingSettings: Sendable {
     }
 
     /// How fast subliminal words flash past. Lower = faster = less consciously legible.
-    enum SubliminalSpeed: String, CaseIterable, Sendable, Identifiable {
+    enum SubliminalSpeed: String, Codable, CaseIterable, Sendable, Identifiable {
         case gentle, medium, deep
         var id: String { rawValue }
         var flashDuration: TimeInterval {
