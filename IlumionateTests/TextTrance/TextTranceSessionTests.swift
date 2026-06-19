@@ -143,4 +143,18 @@ struct TextTranceSessionTests {
         #expect(light.startCount == 0)
         #expect(session.isComplete == false)
     }
+
+    @Test func beginFromStartsAtGivenIndex() async {
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 0),
+            light: MockLightLayer(), audio: MockAudioLayer(), sleep: noSleep)
+        // fullText schedule for "one two" => indices 0:"one", 1:"two".
+        await session.begin(from: 1)
+        #expect(session.currentWord == "two")
+        #expect(session.isComplete)
+    }
 }

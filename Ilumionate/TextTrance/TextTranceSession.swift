@@ -10,7 +10,7 @@ import Foundation
 /// Everything the player needs to run one session.
 struct TextTranceSessionSettings: Sendable {
     let arc: ScriptArc
-    let speed: TextPacingSettings.Speed
+    let speedMultiplier: Double
     let lightEnabled: Bool
     let binauralEnabled: Bool
     let beatFrequency: Double
@@ -19,7 +19,7 @@ struct TextTranceSessionSettings: Sendable {
     let subliminalSpeed: TextPacingSettings.SubliminalSpeed
 
     init(arc: ScriptArc,
-         speed: TextPacingSettings.Speed,
+         speedMultiplier: Double,
          lightEnabled: Bool,
          binauralEnabled: Bool,
          beatFrequency: Double,
@@ -27,13 +27,28 @@ struct TextTranceSessionSettings: Sendable {
          subliminalEnabled: Bool = true,
          subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium) {
         self.arc = arc
-        self.speed = speed
+        self.speedMultiplier = speedMultiplier
         self.lightEnabled = lightEnabled
         self.binauralEnabled = binauralEnabled
         self.beatFrequency = beatFrequency
         self.postHandoffDuration = postHandoffDuration
         self.subliminalEnabled = subliminalEnabled
         self.subliminalSpeed = subliminalSpeed
+    }
+
+    /// Convenience for the legacy three presets (tests, anchors).
+    init(arc: ScriptArc,
+         speed: TextPacingSettings.Speed,
+         lightEnabled: Bool,
+         binauralEnabled: Bool,
+         beatFrequency: Double,
+         postHandoffDuration: TimeInterval,
+         subliminalEnabled: Bool = true,
+         subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium) {
+        self.init(arc: arc, speedMultiplier: speed.multiplier,
+                  lightEnabled: lightEnabled, binauralEnabled: binauralEnabled,
+                  beatFrequency: beatFrequency, postHandoffDuration: postHandoffDuration,
+                  subliminalEnabled: subliminalEnabled, subliminalSpeed: subliminalSpeed)
     }
 }
 
@@ -51,6 +66,14 @@ final class TextTranceSession {
     private(set) var currentFade: FadeKind = .none
     private(set) var currentDuration: TimeInterval = 0
 
+    // Control state
+    private(set) var currentWordIndex = 0
+    var speedMultiplier: Double
+
+    // Live, mutable copies of schedule-affecting settings.
+    private(set) var subliminalEnabled: Bool
+    private(set) var subliminalSpeed: TextPacingSettings.SubliminalSpeed
+
     let script: TranceScript
     let settings: TextTranceSessionSettings
     let readerReferenceCharacterCount: Int
@@ -58,6 +81,7 @@ final class TextTranceSession {
     private let light: (any LightLayerControlling)?
     private let audio: (any AudioLayerControlling)?
     private let sleep: @Sendable (Duration) async -> Void
+    private var schedule: [PacedWord] = []
     private var cancelled = false
     private var isRunning = false
 
@@ -68,46 +92,68 @@ final class TextTranceSession {
          sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         self.script = script
         self.settings = settings
+        self.speedMultiplier = settings.speedMultiplier
+        self.subliminalEnabled = settings.subliminalEnabled
+        self.subliminalSpeed = settings.subliminalSpeed
+        self.light = light
+        self.audio = audio
+        self.sleep = sleep
+        // Sizing depends on word lengths, not durations; build at neutral speed.
         self.readerReferenceCharacterCount = TextTranceWordSizing.referenceCharacterCount(
             for: TextPacingEngine.schedule(
                 for: script,
                 settings: TextPacingSettings(arc: settings.arc,
-                                             speed: settings.speed,
+                                             speedMultiplier: 1.0,
                                              subliminalEnabled: settings.subliminalEnabled,
-                                             subliminalSpeed: settings.subliminalSpeed)
-            )
-        )
-        self.light = light
-        self.audio = audio
-        self.sleep = sleep
+                                             subliminalSpeed: settings.subliminalSpeed)))
     }
 
-    /// Run the full session to completion (or until `end()` cancels it).
-    func begin() async {
+    /// Base schedule at neutral speed; live speed is applied per-word at the hold site.
+    private func makeSchedule() -> [PacedWord] {
+        TextPacingEngine.schedule(
+            for: script,
+            settings: TextPacingSettings(arc: settings.arc,
+                                         speedMultiplier: 1.0,
+                                         subliminalEnabled: subliminalEnabled,
+                                         subliminalSpeed: subliminalSpeed))
+    }
+
+    /// Live-scaled hold: readable words scale inversely with speed; flashes are fixed.
+    private func scaledHold(for word: PacedWord) -> TimeInterval {
+        word.isSubliminal ? word.duration : word.duration / max(speedMultiplier, 0.0001)
+    }
+
+    private func render(_ word: PacedWord) {
+        currentWord = word.text
+        currentPivotIndex = word.pivotIndex
+        currentPhase = word.phase
+        currentFade = word.fade
+        currentDuration = scaledHold(for: word)
+    }
+
+    /// Run the session to completion (or until `end()` cancels it).
+    func begin() async { await begin(from: 0) }
+
+    func begin(from startIndex: Int) async {
         guard !cancelled, !isComplete, !isRunning else { return }
         isRunning = true
         defer { isRunning = false }
-
-        let pacing = TextPacingSettings(arc: settings.arc,
-                                        speed: settings.speed,
-                                        subliminalEnabled: settings.subliminalEnabled,
-                                        subliminalSpeed: settings.subliminalSpeed)
-        let schedule = TextPacingEngine.schedule(for: script, settings: pacing)
 
         if settings.binauralEnabled, let audio {
             audio.syncBeatFrequency(to: settings.beatFrequency)
             audio.start()
         }
 
+        schedule = makeSchedule()
+        currentWordIndex = min(max(startIndex, 0), schedule.count)
+
         isReading = true
-        for word in schedule {
-            guard !cancelled, !Task.isCancelled else { break }
-            currentWord = word.text
-            currentPivotIndex = word.pivotIndex
-            currentPhase = word.phase
-            currentFade = word.fade
-            currentDuration = word.duration
-            await sleep(.seconds(word.duration))
+        while currentWordIndex < schedule.count, !cancelled, !Task.isCancelled {
+            let word = schedule[currentWordIndex]
+            render(word)
+            await holdCurrentWord(scaledHold(for: word))
+            if cancelled || Task.isCancelled { break }
+            currentWordIndex += 1
         }
         isReading = false
 
@@ -125,6 +171,11 @@ final class TextTranceSession {
 
         if settings.binauralEnabled { audio?.stop() }
         isComplete = !cancelled && !Task.isCancelled
+    }
+
+    /// Hold the current word. (Pause/resume is added in a later step.)
+    private func holdCurrentWord(_ duration: TimeInterval) async {
+        await sleep(.seconds(duration))
     }
 
     /// Stop everything immediately (user tap-and-hold to end).
