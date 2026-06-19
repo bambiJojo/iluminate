@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		792B361C2FE4D88300487953 /* TelemetryDeck in Frameworks */ = {isa = PBXBuildFile; productRef = 792B361B2FE4D88300487953 /* TelemetryDeck */; };
 		798216E12FD3BC6F00FAD431 /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 798216E02FD3BC6F00FAD431 /* CorpusKit */; };
 		798216E32FD3BC8200FAD431 /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 798216E22FD3BC8200FAD431 /* CorpusKit */; };
 		798216E92FD3BCF700FAD431 /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 798216E82FD3BCF700FAD431 /* CorpusKit */; };
@@ -204,6 +205,7 @@
 			files = (
 				79D548392F4F723B00B3B07F /* WhisperKit in Frameworks */,
 				798216E12FD3BC6F00FAD431 /* CorpusKit in Frameworks */,
+				792B361C2FE4D88300487953 /* TelemetryDeck in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -314,6 +316,7 @@
 			packageProductDependencies = (
 				79D548382F4F723B00B3B07F /* WhisperKit */,
 				798216E02FD3BC6F00FAD431 /* CorpusKit */,
+				792B361B2FE4D88300487953 /* TelemetryDeck */,
 			);
 			productName = Ilumionate;
 			productReference = 795944032F38010900907305 /* Ilumionate.app */;
@@ -507,6 +510,7 @@
 			packageReferences = (
 				79D548362F4F6FF400B3B07F /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				79491DB82FD0A582005625A7 /* XCLocalSwiftPackageReference "Tools/CorpusGenerator" */,
+				792B361A2FE42B3400487953 /* XCRemoteSwiftPackageReference "SwiftSDK" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 795944042F38010900907305 /* Products */;
@@ -810,6 +814,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TELEMETRYDECK_APP_ID = "";
 			};
 			name = Debug;
 		};
@@ -842,6 +847,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TELEMETRYDECK_APP_ID = "";
 			};
 			name = Release;
 		};
@@ -1208,6 +1214,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		792B361A2FE42B3400487953 /* XCRemoteSwiftPackageReference "SwiftSDK" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/TelemetryDeck/SwiftSDK";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.14.1;
+			};
+		};
 		79D548362F4F6FF400B3B07F /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
@@ -1219,6 +1233,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		792B361B2FE4D88300487953 /* TelemetryDeck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 792B361A2FE42B3400487953 /* XCRemoteSwiftPackageReference "SwiftSDK" */;
+			productName = TelemetryDeck;
+		};
 		798216E02FD3BC6F00FAD431 /* CorpusKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 79491DB82FD0A582005625A7 /* XCLocalSwiftPackageReference "Tools/CorpusGenerator" */;

@@ -18,6 +18,7 @@ Ilumionate is an innovative light therapy app that uses photoentrainment to prom
 - **Improved Text Readability**: Enhanced UI with better contrast and readable text
 - **Enhanced Crash Prevention**: Robust error handling and memory management
 - **Performance Optimizations**: Smoother animations and reduced memory footprint
+- **Anonymous Usage Analytics**: This build includes anonymous, opt-out usage analytics (no personal data, no content, no tracking) to help us learn which features are useful. You can turn it off any time in **Settings ▸ Privacy & Data ▸ Anonymous Usage Analytics**.
 
 ### 🧠 AI-Powered Features
 - **Content Analysis**: Automatic analysis of audio content (hypnosis, meditation, music)

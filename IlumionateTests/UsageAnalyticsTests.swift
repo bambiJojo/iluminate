@@ -55,6 +55,20 @@ struct UsageAnalyticsTests {
         #expect(captured.isEmpty)
     }
 
+    @Test
+    func missingTelemetryDeckAppIDLeavesDefaultEmitterSafe() {
+        UsageAnalytics.configure(appID: "")
+        let analytics = UsageAnalytics(defaults: makeDefaults())
+        analytics.screen(.home)
+    }
+
+    @Test
+    func unresolvedTelemetryDeckBuildSettingLeavesDefaultEmitterSafe() {
+        UsageAnalytics.configure(appID: "$(TELEMETRYDECK_APP_ID)")
+        let analytics = UsageAnalytics(defaults: makeDefaults())
+        analytics.screen(.home)
+    }
+
     // MARK: - Typed emission
 
     @Test

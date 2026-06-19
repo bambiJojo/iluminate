@@ -24,16 +24,17 @@ final class UsageAnalytics {
 
     static let shared = UsageAnalytics()
     static let optOutKey = "analyticsEnabled"
+    private static var isTelemetryDeckConfigured = false
 
     private let defaults: UserDefaults
-    private let emit: (AnalyticsEvent) -> Void
+    private let emit: @MainActor (AnalyticsEvent) -> Void
 
     /// - Parameters:
     ///   - defaults: storage for the opt-out flag (injected in tests).
     ///   - emit: event sink (defaults to TelemetryDeck; a spy in tests).
     init(
         defaults: UserDefaults = .standard,
-        emit: @escaping (AnalyticsEvent) -> Void = UsageAnalytics.telemetryDeckEmit
+        emit: @MainActor @escaping (AnalyticsEvent) -> Void = UsageAnalytics.telemetryDeckEmit
     ) {
         self.defaults = defaults
         self.emit = emit
@@ -49,9 +50,15 @@ final class UsageAnalytics {
 
     /// Call once at app launch.
     static func configure() {
+        configure(appID: appID)
+    }
+
+    static func configure(appID: String) {
         #if canImport(TelemetryDeck)
-        guard !appID.isEmpty else { return }
+        isTelemetryDeckConfigured = false
+        guard let appID = normalizedAppID(appID) else { return }
         TelemetryDeck.initialize(config: .init(appID: appID))
+        isTelemetryDeckConfigured = true
         #endif
     }
 
@@ -59,8 +66,15 @@ final class UsageAnalytics {
         (Bundle.main.object(forInfoDictionaryKey: "TelemetryDeckAppID") as? String) ?? ""
     }
 
+    private static func normalizedAppID(_ rawValue: String) -> String? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("$(") else { return nil }
+        return trimmed
+    }
+
     private static func telemetryDeckEmit(_ event: AnalyticsEvent) {
         #if canImport(TelemetryDeck)
+        guard isTelemetryDeckConfigured else { return }
         TelemetryDeck.signal(event.name, parameters: event.parameters)
         #endif
     }
