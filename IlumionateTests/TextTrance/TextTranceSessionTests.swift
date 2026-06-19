@@ -209,4 +209,73 @@ struct TextTranceSessionTests {
         #expect(!session.isComplete)
         #expect(audio.stopCount >= 1)
     }
+
+    @Test func togglingSubliminalKeepsIndexAndCurrentWord() async {
+        let controller = PacingSleepController()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 0,
+                subliminalEnabled: false),
+            light: MockLightLayer(), audio: MockAudioLayer(), sleep: controller.sleepClosure)
+
+        controller.onSleep = { call in if call == 1 { session.pause() } }
+        let task = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        let wordBefore = session.currentWord
+        let indexBefore = session.currentWordIndex
+        session.setSubliminal(enabled: true, speed: .deep)   // regenerates schedule
+        #expect(session.currentWordIndex == indexBefore)
+        #expect(session.currentWord == wordBefore)
+
+        controller.onSleep = { _ in }
+        session.resume()
+        await task.value
+        #expect(session.isComplete)
+    }
+
+    @Test func setBinauralEnabledWhilePausedAppliesOnResume() async {
+        let audio = MockAudioLayer()
+        let controller = PacingSleepController()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 0),
+            light: MockLightLayer(), audio: audio, sleep: controller.sleepClosure)
+
+        controller.onSleep = { call in if call == 1 { session.pause() } }
+        let task = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        session.setBinaural(enabled: true)
+        #expect(session.binauralActive)
+        #expect(audio.startCount == 0)           // not started while paused
+
+        controller.onSleep = { _ in }
+        session.resume()
+        await task.value
+
+        #expect(audio.startCount == 1)           // started on resume
+        #expect(audio.lastBeatFrequency == 10)
+        #expect(audio.stopCount == 1)            // stopped at completion
+    }
+
+    @Test func setSpeedClampsToEngineBounds() async {
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 0),
+            light: MockLightLayer(), audio: MockAudioLayer(), sleep: noSleep)
+        session.setSpeed(multiplier: 99)
+        #expect(session.speedMultiplier == TextPacingEngine.maxSpeedMultiplier)
+        session.setSpeed(multiplier: 0.01)
+        #expect(session.speedMultiplier == TextPacingEngine.minSpeedMultiplier)
+    }
 }

@@ -74,6 +74,8 @@ final class TextTranceSession {
     // Live, mutable copies of schedule-affecting settings.
     private(set) var subliminalEnabled: Bool
     private(set) var subliminalSpeed: TextPacingSettings.SubliminalSpeed
+    private(set) var binauralActive: Bool
+    private(set) var lightEnabledLive: Bool
 
     let script: TranceScript
     let settings: TextTranceSessionSettings
@@ -100,6 +102,8 @@ final class TextTranceSession {
         self.speedMultiplier = settings.speedMultiplier
         self.subliminalEnabled = settings.subliminalEnabled
         self.subliminalSpeed = settings.subliminalSpeed
+        self.binauralActive = settings.binauralEnabled
+        self.lightEnabledLive = settings.lightEnabled
         self.light = light
         self.audio = audio
         self.sleep = sleep
@@ -145,10 +149,7 @@ final class TextTranceSession {
         isRunning = true
         defer { isRunning = false }
 
-        if settings.binauralEnabled, let audio {
-            audio.syncBeatFrequency(to: settings.beatFrequency)
-            audio.start()
-        }
+        if binauralActive { startBinaural() }
 
         schedule = makeSchedule()
         currentWordIndex = min(max(startIndex, 0), schedule.count)
@@ -164,7 +165,7 @@ final class TextTranceSession {
         isReading = false
 
         if settings.arc == .handoff, !cancelled, !Task.isCancelled {
-            if settings.lightEnabled, let light {
+            if lightEnabledLive, let light {
                 light.start()
                 lightActive = true
             }
@@ -175,8 +176,15 @@ final class TextTranceSession {
             }
         }
 
-        if settings.binauralEnabled { audio?.stop() }
+        if binauralActive { audio?.stop() }
         isComplete = !cancelled && !Task.isCancelled
+    }
+
+    /// Sync the configured beat and start the binaural layer.
+    private func startBinaural() {
+        guard let audio else { return }
+        audio.syncBeatFrequency(to: settings.beatFrequency)
+        audio.start()
     }
 
     /// Hold the current word, honoring pause. On pause mid-hold we keep the
@@ -209,16 +217,50 @@ final class TextTranceSession {
         guard isReading, !isPaused, !isComplete else { return }
         isPaused = true
         holdTask?.cancel()                 // wake the in-flight hold promptly
-        if settings.binauralEnabled { audio?.stop() }
+        if binauralActive { audio?.stop() }
     }
 
     /// Resume word advance and the binaural layer.
     func resume() {
         guard isPaused, !isComplete else { return }
         isPaused = false
-        if settings.binauralEnabled, isReading { audio?.start() }
+        if binauralActive, isReading { startBinaural() }
         resumeContinuation?.resume()
         resumeContinuation = nil
+    }
+
+    /// Toggle subliminal flashing mid-session. Regenerates the base schedule
+    /// (word sequence is invariant) and keeps the current index/word.
+    func setSubliminal(enabled: Bool, speed: TextPacingSettings.SubliminalSpeed) {
+        subliminalEnabled = enabled
+        subliminalSpeed = speed
+        let index = currentWordIndex
+        schedule = makeSchedule()
+        currentWordIndex = min(index, max(schedule.count - 1, 0))
+        if currentWordIndex < schedule.count { render(schedule[currentWordIndex]) }
+    }
+
+    /// Toggle the binaural layer live. Starts only while actively reading.
+    func setBinaural(enabled: Bool) {
+        guard enabled != binauralActive else { return }
+        binauralActive = enabled
+        if enabled {
+            if isReading, !isPaused { startBinaural() }
+        } else {
+            audio?.stop()
+        }
+    }
+
+    /// Toggle the post-handoff light tail (applied when the tail begins).
+    func setLightEnabled(_ enabled: Bool) {
+        lightEnabledLive = enabled
+    }
+
+    /// Clamp + apply a live speed multiplier and re-render the current word.
+    func setSpeed(multiplier: Double) {
+        speedMultiplier = min(max(multiplier, TextPacingEngine.minSpeedMultiplier),
+                              TextPacingEngine.maxSpeedMultiplier)
+        if currentWordIndex < schedule.count { render(schedule[currentWordIndex]) }
     }
 
     /// Stop everything immediately (user tap-and-hold to end).
@@ -235,7 +277,7 @@ final class TextTranceSession {
             light?.stop()
             lightActive = false
         }
-        if settings.binauralEnabled { audio?.stop() }
+        if binauralActive { audio?.stop() }
         isReading = false
     }
 }
