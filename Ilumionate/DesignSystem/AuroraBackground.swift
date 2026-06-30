@@ -35,6 +35,7 @@ struct AuroraBackground: View {
             }
         }
         .background(Color.voidDeep.ignoresSafeArea())
+        .accessibilityHidden(true)
     }
 
     private var blobColors: [Color] {

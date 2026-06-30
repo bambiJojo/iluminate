@@ -15,7 +15,7 @@ import FoundationModels
 /// Science-grounded system prompt for the Foundation Models session.
 /// Accurate brainwave targets and hypnosis phase structure dramatically
 /// improve classification accuracy and session quality downstream.
-enum AVESystemPrompt {
+nonisolated enum AVESystemPrompt {
 
     /// Compact fallback used when the full prompt would exceed the context window.
     /// Covers only the fields the structured-output schema requires.

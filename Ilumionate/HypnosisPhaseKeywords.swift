@@ -13,7 +13,7 @@
 
 import Foundation
 
-enum HypnosisPhaseKeywords {
+nonisolated enum HypnosisPhaseKeywords {
 
     struct Keyword: Sendable {
         let phrase: String

@@ -398,12 +398,7 @@ private struct AnalyzerLibraryIntelligenceSection: View {
     }
 
     private var lightSyncReadyCount: Int {
-        let sessionsURL = URL.documentsDirectory.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
-        return files.filter { file in
-            let base = file.displayName
-            let url = sessionsURL.appending(path: "\(base)_session.json")
-            return FileManager.default.fileExists(atPath: url.path)
-        }.count
+        GeneratedSessionStore.shared.readyCount(for: files)
     }
 
     private var unanalyzedCount: Int { files.count - analyzedCount }

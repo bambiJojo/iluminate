@@ -21,7 +21,8 @@ struct AnalysisQualityScore: Sendable {
     /// Fraction of expected phases that are present in the result (0.0–1.0).
     let phasePresenceScore: Double
 
-    /// 1.0 if all detected phases appear in canonical forward order; 0.0 if any backward jump.
+    /// 1.0 if detected phase spans are chronological and non-overlapping.
+    /// Sustained returns to an earlier structural phase are valid hypnosis structure.
     let phaseOrderScore: Double
 
     /// 1.0 if `suggestedFrequencyRange` overlaps the expected band; 0.0 otherwise.
@@ -55,11 +56,6 @@ struct EvaluationCase: Sendable {
 /// Computes an `AnalysisQualityScore` given a ground-truth case and pipeline outputs.
 struct AnalysisEvaluator {
 
-    private static let canonicalOrder: [HypnosisMetadata.Phase] = [
-        .preTalk, .induction, .deepening, .therapy,
-        .suggestions, .conditioning, .emergence
-    ]
-
     func score(
         evalCase: EvaluationCase,
         result: AnalysisResult,
@@ -90,13 +86,17 @@ struct AnalysisEvaluator {
 
     private func scorePhaseOrder(result: AnalysisResult) -> Double {
         guard let meta = result.hypnosisMetadata, !meta.phases.isEmpty else { return 1.0 }
-        let detectedPhases = meta.phases.map(\.phase)
-        var lastIndex = -1
-        for phase in detectedPhases {
-            if let idx = Self.canonicalOrder.firstIndex(of: phase) {
-                if idx < lastIndex { return 0.0 }
-                lastIndex = idx
+        var previousEnd = -Double.infinity
+        for segment in meta.phases {
+            guard
+                segment.startTime.isFinite,
+                segment.endTime.isFinite,
+                segment.startTime >= previousEnd - 0.001,
+                segment.endTime > segment.startTime
+            else {
+                return 0.0
             }
+            previousEnd = segment.endTime
         }
         return 1.0
     }

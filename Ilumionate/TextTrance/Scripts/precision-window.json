@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "precision-window",
+  "title": "Precision Window",
+  "theme": "focus",
+  "supportedArcs": ["fullText"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "summary": "A focused, eyes-open session for preparing a clean work interval with relaxed precision.",
+  "segments": [
+    {
+      "phase": "induction",
+      "text": "Let attention gather at the center of the screen. This is a precision window: small, clear, and calm. The rest of the room can remain available without becoming important. Breath continues. Shoulders stay loose. The words arrive one at a time, and each one gives the mind a simple place to return. You do not have to fight distraction. Fighting uses the same energy you need for focus. Instead, notice the movement away and return to the window. Return is the repetition. Return is the training. Every return makes the channel cleaner. The eyes read. The body settles. The mind comes back to center.",
+      "pacing": { "baseWPM": 162 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Imagine adjusting a lens until the picture becomes sharp. At first, there may be blur. Then the edges begin to separate. A line becomes clear. A shape becomes clear. The important part of the task comes forward. You can allow that same adjustment inside attention. The lens turns slowly. Noise softens. The next action sharpens. You do not need total certainty. You need enough clarity to begin. Enough clarity is useful. Enough clarity is kind. Enough clarity lets the mind stop circling and start making contact. The precision window becomes brighter because everything outside it becomes a little less demanding.",
+      "pacing": { "baseWPM": 136 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Now choose the shape of the next work interval. It can be short. It can be specific. It can be measured by effort rather than perfection. During the interval, the task in front is the task that matters. If another task appears, it can be written down and released. If a worry appears, it can be named and released. If the mind asks for the whole map, give it the next turn instead. A focused mind does not need to carry every road at once. It follows the visible road cleanly. One step. One line. One decision. One small completion that leads to the next.",
+      "pacing": { "baseWPM": 132 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let the body support precision without tension. The face can stay relaxed. The hands can stay easy. The breath can stay low and regular. This matters because tension pretends to be concentration, but it spends energy without adding accuracy. Real focus can feel steady, almost quiet. It knows when to narrow and when to pause. It knows that a brief pause can protect the quality of the next action. You can work with this rhythm: narrow, act, pause, return. Narrow, act, pause, return. The rhythm is simple enough to remember and flexible enough to use.",
+      "pacing": { "baseWPM": 128 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let these focus cues settle. I choose the window. I return without criticism. I keep the next action visible. I protect the work from unnecessary noise. I can be precise without becoming tense. I can be calm without becoming dull. When the interval begins, the first minute is for starting, not judging. The next minute is for continuing. The final minute is for closing the loop and noticing what moved. This is how a useful work session is built: not by force, but by clean contact repeated long enough to become momentum.",
+      "pacing": { "baseWPM": 132 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Decide now how you will handle interruption. If the interruption is urgent, you can pause cleanly and write the restart point. If it is not urgent, you can let it wait outside the window. If it comes from inside the mind, you can name it briefly and return. This plan removes argument from the moment. You already know what to do. Protect the window, protect the restart, and keep the next action visible. At the end of the interval, close it deliberately. Save the work. Note the next step. Let completion train the mind to trust focused time. Even a short protected window can change the day because it proves that attention can be directed, recovered, and completed.",
+      "pacing": { "baseWPM": 130 }
+    },
+    {
+      "phase": "emergence",
+      "text": "Let the precision window remain available as the room returns fully. Notice the next task and give it a short name. Let the body feel steady, awake, and ready. Count upward: one, centered; two, organized; three, clear; four, engaged; five, begin the next useful action.",
+      "pacing": { "baseWPM": 160 }
+    }
+  ]
+}

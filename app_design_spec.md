@@ -1,6 +1,15 @@
 # Trance — SwiftUI Design Specification
 ## Pink Light Mode
 
+> ⚠️ **PARTIALLY SUPERSEDED (audit 2026-06-19).** §1.1 Color Palette ("Pink Light Mode"),
+> §2.3/§5 navigation (5-tab Home/Library/Machine/Store/Profile), and §3.1 Home Dashboard
+> composition no longer reflect the shipping app. The codebase intentionally adopted the
+> **Liminal dark theme** (void/aurora, dark-only) and a **4-tab** IA (Home/Library/Read/Create)
+> per `docs/superpowers/specs/2026-06-13-liminal-ui-overhaul-design.md`, which is authoritative
+> for palette, navigation, and home layout. The component specs (§2.1–§2.10), spacing/typography/
+> radii (§1.2–§1.4), and animation/accessibility sections remain valid. See
+> `docs/superpowers/spec-audit-2026-06-19.md`.
+
 > Complete implementation guide: tokens, components, layouts, animations, and navigation.
 
 ---

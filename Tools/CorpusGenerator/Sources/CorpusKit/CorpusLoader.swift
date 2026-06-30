@@ -14,7 +14,11 @@ public enum CorpusLoader {
     ///   <repo>/Tools/CorpusGenerator/Sources/CorpusKit/CorpusLoader.swift
     /// so the repo root is five parents up.
     public static var corpusRoot: URL {
-        URL(filePath: #filePath)            // .../Sources/CorpusKit/CorpusLoader.swift
+        if let configuredRoot = ProcessInfo.processInfo.environment["ILUMIONATE_CORPUS_ROOT"],
+           configuredRoot.isEmpty == false {
+            return URL(filePath: configuredRoot, directoryHint: .isDirectory)
+        }
+        return URL(filePath: #filePath)     // .../Sources/CorpusKit/CorpusLoader.swift
             .deletingLastPathComponent()    // .../Sources/CorpusKit
             .deletingLastPathComponent()    // .../Sources
             .deletingLastPathComponent()    // .../CorpusGenerator
@@ -26,7 +30,9 @@ public enum CorpusLoader {
     public static func load(subdirectory: String) throws -> [CorpusCase] {
         let dir = corpusRoot.appending(path: subdirectory)
         let fm = FileManager.default
-        guard fm.fileExists(atPath: dir.path) else { return [] }
+        guard fm.fileExists(atPath: dir.path) else {
+            throw CorpusLoadError.directoryMissing(dir)
+        }
 
         let urls = try fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "json" }
@@ -44,9 +50,12 @@ public enum CorpusLoader {
     }
 
     public enum CorpusLoadError: Error, CustomStringConvertible {
+        case directoryMissing(URL)
         case decodeFailed(file: String, underlying: Error)
         public var description: String {
             switch self {
+            case let .directoryMissing(url):
+                return "Corpus directory is missing: \(url.path())"
             case let .decodeFailed(file, underlying):
                 return "Failed to decode corpus file \(file): \(underlying)"
             }

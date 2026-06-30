@@ -16,9 +16,10 @@ struct ReadingSourceDirectoryView: View {
     @State private var searchText = ""
     @State private var showingAddSource = false
     @State private var browserDestination: BrowserDestination?
-    @State private var pendingAdultURL: URL?
+    @State private var pendingAdultDestination: BrowserDestination?
     @State private var importingScriptID: String?
     @State private var importErrorText: String?
+    @State private var importedScriptTitle: String?
 
     @AppStorage("readingSourceAdultConfirmed") private var adultConfirmed = false
 
@@ -62,17 +63,18 @@ struct ReadingSourceDirectoryView: View {
                 url: destination.url,
                 suggestedTitle: destination.suggestedTitle,
                 theme: destination.theme,
-                onImported: onImported
+                allowsImport: destination.allowsImport,
+                onImported: handleImportedScript
             )
         }
-        .alert("Adult content", isPresented: adultGatePresented, presenting: pendingAdultURL) { url in
+        .alert("Adult content", isPresented: adultGatePresented, presenting: pendingAdultDestination) { destination in
             Button("Continue", role: .destructive) {
                 adultConfirmed = true
-                pendingAdultURL = nil
-                browserDestination = BrowserDestination(url: url)
+                pendingAdultDestination = nil
+                browserDestination = destination
             }
             Button("Cancel", role: .cancel) {
-                pendingAdultURL = nil
+                pendingAdultDestination = nil
             }
         } message: { _ in
             Text("This source links to adult (18+) material. Continue?")
@@ -134,6 +136,12 @@ struct ReadingSourceDirectoryView: View {
     private var scriptsContent: some View {
         VStack(alignment: .leading, spacing: TranceSpacing.card) {
             scriptFilters
+            if let importedScriptTitle {
+                ImportResultMessage(
+                    title: "Script imported",
+                    message: "\(importedScriptTitle) is now available in Text Trance."
+                )
+            }
             if let importErrorText {
                 EmptyDirectoryMessage(
                     title: "Import failed",
@@ -242,9 +250,17 @@ struct ReadingSourceDirectoryView: View {
         TranceHaptics.shared.light()
         switch openAction(for: source, adultConfirmed: adultConfirmed) {
         case .browse(let url):
-            browserDestination = BrowserDestination(url: url, suggestedTitle: source.title)
+            browserDestination = BrowserDestination(
+                url: url,
+                suggestedTitle: source.title,
+                allowsImport: source.canImport
+            )
         case .confirmAdult(let url):
-            pendingAdultURL = url
+            pendingAdultDestination = BrowserDestination(
+                url: url,
+                suggestedTitle: source.title,
+                allowsImport: source.canImport
+            )
         }
     }
 
@@ -252,9 +268,19 @@ struct ReadingSourceDirectoryView: View {
         TranceHaptics.shared.light()
         switch openAction(for: entry, adultConfirmed: adultConfirmed) {
         case .browse(let url):
-            browserDestination = BrowserDestination(url: url, suggestedTitle: entry.title, theme: entry.theme)
+            browserDestination = BrowserDestination(
+                url: url,
+                suggestedTitle: entry.title,
+                theme: entry.theme,
+                allowsImport: entry.canImport
+            )
         case .confirmAdult(let url):
-            pendingAdultURL = url
+            pendingAdultDestination = BrowserDestination(
+                url: url,
+                suggestedTitle: entry.title,
+                theme: entry.theme,
+                allowsImport: entry.canImport
+            )
         }
     }
 
@@ -262,17 +288,24 @@ struct ReadingSourceDirectoryView: View {
         guard importingScriptID == nil else { return }
 
         if entry.contentRating == .adultOnly && adultConfirmed == false {
-            pendingAdultURL = entry.url
+            pendingAdultDestination = BrowserDestination(
+                url: entry.url,
+                suggestedTitle: entry.title,
+                theme: entry.theme,
+                allowsImport: entry.canImport
+            )
             return
         }
 
         guard entry.canImport else {
             importErrorText = "This source can only be opened as a website."
+            importedScriptTitle = nil
             return
         }
 
         importingScriptID = entry.id
         importErrorText = nil
+        importedScriptTitle = nil
         Task {
             do {
                 let script = try await WebReadableTextImporter().importScript(
@@ -282,7 +315,7 @@ struct ReadingSourceDirectoryView: View {
                 )
                 await MainActor.run {
                     importingScriptID = nil
-                    onImported?(script)
+                    handleImportedScript(script)
                 }
             } catch {
                 await MainActor.run {
@@ -295,13 +328,29 @@ struct ReadingSourceDirectoryView: View {
 
     private var adultGatePresented: Binding<Bool> {
         Binding(
-            get: { pendingAdultURL != nil },
-            set: { if !$0 { pendingAdultURL = nil } }
+            get: { pendingAdultDestination != nil },
+            set: { if !$0 { pendingAdultDestination = nil } }
         )
     }
 
     private func deleteSource(_ source: ReadingSource) {
         store.deleteCustomSource(id: source.id)
+    }
+
+    private func handleImportedScript(_ script: TranceScript) {
+        if let onImported {
+            onImported(script)
+            return
+        }
+
+        do {
+            try ImportedTranceScriptStore.shared.save(script)
+            importErrorText = nil
+            importedScriptTitle = script.title
+        } catch {
+            importErrorText = error.localizedDescription
+            importedScriptTitle = nil
+        }
     }
 }
 
@@ -324,11 +373,16 @@ private struct BrowserDestination: Identifiable {
     let url: URL
     let suggestedTitle: String?
     let theme: ScriptTheme
+    let allowsImport: Bool
 
-    init(url: URL, suggestedTitle: String? = nil, theme: ScriptTheme = .focus) {
+    init(url: URL,
+         suggestedTitle: String? = nil,
+         theme: ScriptTheme = .focus,
+         allowsImport: Bool = true) {
         self.url = url
         self.suggestedTitle = suggestedTitle
         self.theme = theme
+        self.allowsImport = allowsImport
     }
 }
 
@@ -650,6 +704,32 @@ private struct EmptyDirectoryMessage: View {
     }
 }
 
+private struct ImportResultMessage: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        GlassCard {
+            HStack(alignment: .top, spacing: TranceSpacing.list) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.auroraTeal)
+                    .font(.system(size: 20, weight: .semibold))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                    Text(title)
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(.textPrimary)
+                    Text(message)
+                        .font(TranceTypography.body)
+                        .foregroundStyle(.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
 private struct ImportPolicyBadge: View {
     let policy: ReadingSourceImportPolicy
 
@@ -665,8 +745,8 @@ private struct ImportPolicyBadge: View {
     private var title: String {
         switch policy {
         case .linkOnly:            return "Link"
-        case .userInitiatedImport: return "Import Later"
-        case .catalogPlanned:      return "Catalog Later"
+        case .userInitiatedImport: return "Import"
+        case .catalogPlanned:      return "Catalog"
         }
     }
 

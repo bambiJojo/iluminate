@@ -41,6 +41,21 @@ struct AnalysisPipelineTests {
 
     // MARK: - Error Propagation
 
+    @Test func cancel_reachesTranscriberAndContentAnalyzer() async {
+        let transcriber = MockAudioTranscriber()
+        let analyzer = MockContentAnalyzer()
+        let pipeline = AnalysisPipeline(
+            transcriber: transcriber,
+            analyzer: analyzer,
+            generator: MockSessionGenerator()
+        )
+
+        await pipeline.cancel()
+
+        #expect(transcriber.cancelCallCount == 1)
+        #expect(analyzer.cancelCallCount == 1)
+    }
+
     @Test func transcriptionFailure_throws() async throws {
         let transcriber = MockAudioTranscriber()
         transcriber.resultToReturn = .failure(AnalyzerError.noAudioData)

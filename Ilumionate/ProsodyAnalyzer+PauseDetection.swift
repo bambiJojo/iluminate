@@ -13,7 +13,7 @@ extension ProsodyAnalyzer {
     // MARK: - Pause Detection
 
     /// Context needed for pause detection, bundled to reduce parameter count.
-    struct PauseDetectionContext: Sendable {
+    nonisolated struct PauseDetectionContext: Sendable {
         let segments: [AudioTranscriptionSegment]
         let volumeCurve: [Double]
         let windowDuration: TimeInterval

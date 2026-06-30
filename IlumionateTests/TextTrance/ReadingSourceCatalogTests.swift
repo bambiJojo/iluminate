@@ -10,7 +10,10 @@ struct ReadingSourceCatalogTests {
 
     // MARK: Gate logic
 
-    private static func makeSource(rating: ReadingSourceContentRating) -> ReadingSource {
+    private static func makeSource(
+        rating: ReadingSourceContentRating,
+        importPolicy: ReadingSourceImportPolicy = .linkOnly
+    ) -> ReadingSource {
         ReadingSource(
             id: "test-\(rating.rawValue)",
             title: "Test",
@@ -20,7 +23,7 @@ struct ReadingSourceCatalogTests {
             licenseKind: .thirdPartyTerms,
             licenseNote: "",
             contentNote: "",
-            importPolicy: .linkOnly,
+            importPolicy: importPolicy,
             contentRating: rating,
             isCurated: true,
             addedDate: nil
@@ -47,6 +50,16 @@ struct ReadingSourceCatalogTests {
         let source = Self.makeSource(rating: .mixed)
         #expect(openAction(for: source, adultConfirmed: false) == .browse(source.url))
         #expect(openAction(for: source, adultConfirmed: true) == .browse(source.url))
+    }
+
+    @Test(arguments: [
+        (ReadingSourceImportPolicy.linkOnly, false),
+        (.userInitiatedImport, true),
+        (.catalogPlanned, true)
+    ])
+    func importPermissionMatchesSourcePolicy(policy: ReadingSourceImportPolicy, expected: Bool) {
+        let source = Self.makeSource(rating: .general, importPolicy: policy)
+        #expect(source.canImport == expected)
     }
 
     // MARK: New adult directories
@@ -93,7 +106,7 @@ struct ReadingSourceCatalogTests {
             uniqueKeysWithValues: ReadingSourceCatalog.curatedSources.map { ($0.id, $0) }
         )
 
-        #expect(byID["spirals-nightclub"]?.url.absoluteString == "http://www.spiralsnightclub.com/")
+        #expect(byID["spirals-nightclub"]?.url.absoluteString == "https://www.spiralsnightclub.com/")
         #expect(byID["literotica-mc"]?.url.absoluteString == "https://www.literotica.com/c/mind-control")
         #expect(byID["hypnohub"]?.url.absoluteString == "https://hypnohub.net/index.php?page=post&s=list&tags=story")
     }

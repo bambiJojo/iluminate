@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Corpus Knowledge
 
-struct CorpusPhaseKnowledge: Sendable {
+nonisolated struct CorpusPhaseKnowledge: Sendable {
     var keywordWeights: [HypnosisMetadata.Phase: [String: Double]] = [:]
     var phaseTokens: [HypnosisMetadata.Phase: Set<String>] = [:]
     var phraseWeights: [HypnosisMetadata.Phase: [String: Double]] = [:]
@@ -23,71 +23,59 @@ struct CorpusPhaseKnowledge: Sendable {
     static let empty = CorpusPhaseKnowledge()
 }
 
-final class CorpusPhaseKnowledgeCache: @unchecked Sendable {
+nonisolated final class CorpusPhaseKnowledgeCache: @unchecked Sendable {
     static let shared = CorpusPhaseKnowledgeCache()
 
-    private struct KnowledgeSignature: Equatable {
-        let datasetPath: String?
-        let datasetModificationDate: Date
-        let datasetFileSize: Int64
-        let scriptSignature: String?
+    private let condition = NSCondition()
+    private let loader: @Sendable () -> CorpusPhaseKnowledge
+    private var cachedKnowledge: CorpusPhaseKnowledge?
+    private var isLoading = false
+    private var generation = 0
+
+    init(
+        loader: @escaping @Sendable () -> CorpusPhaseKnowledge = CorpusPhaseKnowledgeCache.loadKnowledge
+    ) {
+        self.loader = loader
     }
-
-    private let lock = NSLock()
-    private var cachedKnowledge = CorpusPhaseKnowledge.empty
-    private var cachedSignature: KnowledgeSignature?
-    private var overrideKnowledge: CorpusPhaseKnowledge?
-
-    private init() {}
 
     func knowledge() -> CorpusPhaseKnowledge {
-        lock.lock()
-        defer { lock.unlock() }
-
-        if let overrideKnowledge {
-            return overrideKnowledge
+        condition.lock()
+        while isLoading {
+            condition.wait()
+        }
+        if let cachedKnowledge {
+            condition.unlock()
+            return cachedKnowledge
         }
 
-        let signature = knowledgeSignature()
-        if signature != cachedSignature {
-            cachedKnowledge = loadKnowledge()
-            cachedSignature = signature
+        isLoading = true
+        let loadingGeneration = generation
+        condition.unlock()
+
+        let loadedKnowledge = loader()
+
+        condition.lock()
+        if generation == loadingGeneration {
+            cachedKnowledge = loadedKnowledge
         }
-
-        return cachedKnowledge
+        isLoading = false
+        let result = cachedKnowledge ?? loadedKnowledge
+        condition.broadcast()
+        condition.unlock()
+        return result
     }
 
-    func setKnowledgeOverrideForTesting(_ knowledge: CorpusPhaseKnowledge?) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        overrideKnowledge = knowledge
-        if knowledge == nil {
-            cachedSignature = nil
-            cachedKnowledge = .empty
-        }
+    /// Clears the immutable snapshot after training data or script corpus files change.
+    /// The next reader performs one reload; ordinary reads do no filesystem work.
+    func invalidate() {
+        condition.lock()
+        cachedKnowledge = nil
+        generation += 1
+        condition.broadcast()
+        condition.unlock()
     }
 
-    private func knowledgeSignature() -> KnowledgeSignature {
-        let datasetIndexURL = TrainingCorpusLocation.defaultURL()
-            .appending(path: "AnalyzerDataset", directoryHint: .isDirectory)
-            .appending(path: "dataset.jsonl")
-
-        let datasetExists = FileManager.default.fileExists(atPath: datasetIndexURL.path())
-        let resourceValues = datasetExists
-            ? try? datasetIndexURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
-            : nil
-        let scriptCorpus = ScriptPhaseCorpus.loadDefault()
-
-        return KnowledgeSignature(
-            datasetPath: datasetExists ? datasetIndexURL.path() : nil,
-            datasetModificationDate: resourceValues?.contentModificationDate ?? .distantPast,
-            datasetFileSize: Int64(resourceValues?.fileSize ?? 0),
-            scriptSignature: ScriptPhaseCorpus.signature(for: scriptCorpus)
-        )
-    }
-
-    private func loadKnowledge() -> CorpusPhaseKnowledge {
+    private static func loadKnowledge() -> CorpusPhaseKnowledge {
         let dataset = try? AnalyzerOptimizationDataset.load()
         let scriptCorpus = ScriptPhaseCorpus.loadDefault()
         guard dataset != nil || !scriptCorpus.examples.isEmpty else {
@@ -97,7 +85,7 @@ final class CorpusPhaseKnowledgeCache: @unchecked Sendable {
     }
 }
 
-struct CorpusPhaseKnowledgeBuilder {
+nonisolated struct CorpusPhaseKnowledgeBuilder {
     private struct CachedTranscriptionPayload: Codable {
         let schemaVersion: Int
         let cachedAt: Date

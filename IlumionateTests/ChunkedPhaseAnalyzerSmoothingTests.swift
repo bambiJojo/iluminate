@@ -16,25 +16,45 @@ struct ChunkedEnforcePhaseOrderingTests {
     @Test func alreadyOrderedTimelineIsUnchanged() {
         let timeline: [HypnosisMetadata.Phase?] = [.preTalk, .induction, .deepening, .therapy]
         let result = ChunkedPhaseAnalyzer.enforcePhaseOrdering(timeline: timeline)
+        #expect(result == [.induction, .induction, .deepening, .suggestions])
+    }
+
+    @Test func sustainedBackwardTransitionIsPreserved() {
+        let timeline: [HypnosisMetadata.Phase?] = [.suggestions, .deepening]
+        let result = ChunkedPhaseAnalyzer.enforcePhaseOrdering(timeline: timeline)
         #expect(result == timeline)
     }
 
-    @Test func backwardJumpIsFixed() {
-        let timeline: [HypnosisMetadata.Phase?] = [.emergence, .preTalk]
-        let result = ChunkedPhaseAnalyzer.enforcePhaseOrdering(timeline: timeline)
-        #expect(result[1] == .emergence, "backward jump must be corrected to .emergence")
-    }
-
     @Test func nilElementsArePreserved() {
-        let timeline: [HypnosisMetadata.Phase?] = [.induction, nil, .preTalk]
+        let timeline: [HypnosisMetadata.Phase?] = [.suggestions, nil, .deepening]
         let result = ChunkedPhaseAnalyzer.enforcePhaseOrdering(timeline: timeline)
         #expect(result[1] == nil)
-        #expect(result[2] == .induction)
+        #expect(result[2] == .deepening)
     }
 
     @Test func emptyReturnsEmpty() {
         let result = ChunkedPhaseAnalyzer.enforcePhaseOrdering(timeline: [])
         #expect(result.isEmpty)
+    }
+}
+
+// MARK: - Split classification assembly
+
+struct ChunkedSplitClassificationTests {
+
+    @Test func splitClassificationsPreserveBothHalfTimelines() {
+        let classifications = [
+            ChunkedPhaseAnalyzer.TimedClassification(start: 0, end: 45, phase: .induction),
+            ChunkedPhaseAnalyzer.TimedClassification(start: 45, end: 90, phase: .deepening)
+        ]
+
+        let timeline = ChunkedPhaseAnalyzer.assembleTimeline(
+            bucketCount: 90,
+            classifications: classifications
+        )
+
+        #expect(timeline[20] == .induction)
+        #expect(timeline[70] == .deepening)
     }
 }
 

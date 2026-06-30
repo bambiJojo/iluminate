@@ -227,6 +227,136 @@ struct AdvancedSessionStrategyTests {
     }
 }
 
+// MARK: - Confusion Technique Response
+
+@MainActor
+struct ConfusionTechniqueLightResponseTests {
+
+    private let generator = SessionGenerator()
+
+    @Test func overlayInheritsAndRestoresHostStateWithoutProsody() throws {
+        var moments = hostMoments()
+
+        generator.applyProsodicModulation(
+            moments: &moments,
+            analysis: analysis(confusionEvents: [(time: 30, strength: 0.75)]),
+            config: .default
+        )
+
+        let overlay = moments
+            .filter { $0.time >= 30 && $0.time <= 38 }
+            .sorted { $0.time < $1.time }
+        #expect(overlay.count == 4)
+        #expect(overlay.dropLast().allSatisfy { $0.waveform == .noiseModulatedSine })
+        #expect(overlay.allSatisfy { abs($0.frequency - 7.0) <= 0.45 })
+        #expect(overlay.allSatisfy { $0.intensity <= 0.40 })
+
+        let restored = try #require(overlay.last)
+        #expect(restored.time == 38)
+        #expect(restored.frequency == 7.0)
+        #expect(restored.intensity == 0.40)
+        #expect(restored.waveform == .softPulse)
+        #expect(restored.bilateral == true)
+        #expect(restored.color_temperature == 3000)
+    }
+
+    @Test func weakConfusionMarkerDoesNotCreateOverlay() {
+        var moments = hostMoments()
+
+        generator.applyProsodicModulation(
+            moments: &moments,
+            analysis: analysis(confusionEvents: [(time: 30, strength: 0.59)]),
+            config: .default
+        )
+
+        #expect(moments.count == 2)
+    }
+
+    @Test func nearbyConfusionDetectionsCoalesceIntoOneOverlay() {
+        var moments = hostMoments()
+
+        generator.applyProsodicModulation(
+            moments: &moments,
+            analysis: analysis(confusionEvents: [
+                (time: 30, strength: 0.75),
+                (time: 34, strength: 0.80)
+            ]),
+            config: .default
+        )
+
+        #expect(moments.count == 6)
+    }
+
+    @Test func legacyConfusionPhaseUsesDeepeningTargets() {
+        let config = SessionGenerator.GenerationConfig.default
+
+        #expect(
+            generator.targetFrequencyForPhase(.confusion, config: config)
+                == generator.targetFrequencyForPhase(.deepening, config: config)
+        )
+        #expect(generator.frequencyRangeForPhase(.confusion) == generator.frequencyRangeForPhase(.deepening))
+        #expect(LightScorePhaseTargeting.frequencyRange(for: .confusion) == LightScorePhaseTargeting.frequencyRange(for: .deepening))
+        #expect(LightScorePhaseTargeting.waveform(for: .confusion) == LightScorePhaseTargeting.waveform(for: .deepening))
+    }
+
+    private func hostMoments() -> [LightMoment] {
+        [
+            LightMoment(
+                time: 0,
+                frequency: 7.0,
+                intensity: 0.40,
+                waveform: .softPulse,
+                bilateral: true,
+                color_temperature: 3000
+            ),
+            LightMoment(
+                time: 100,
+                frequency: 7.0,
+                intensity: 0.40,
+                waveform: .softPulse,
+                bilateral: true,
+                color_temperature: 3000
+            )
+        ]
+    }
+
+    private func analysis(
+        confusionEvents: [(time: TimeInterval, strength: Double)]
+    ) -> AnalysisResult {
+        let techniques = confusionEvents.map { event in
+            HypnoticTechnique(
+                technique: "confusion_technique",
+                timestamp: event.time,
+                description: "Confusion technique",
+                suggestedLightSync: "bounded_host_modulation"
+            )
+        }
+        let markers = confusionEvents.map { event in
+            LinguisticMarker(
+                type: .confusionTechnique,
+                timestamp: event.time,
+                textSnippet: "the more you try",
+                strength: event.strength
+            )
+        }
+
+        return AnalysisResult(
+            mood: .meditative,
+            energyLevel: 0.2,
+            suggestedFrequencyRange: 5.0...8.0,
+            suggestedIntensity: 0.4,
+            keyMoments: [],
+            aiSummary: "Confusion technique fixture",
+            recommendedPreset: "Deepening",
+            contentType: .hypnosis,
+            techniqueDetection: TechniqueDetectionResult(
+                techniques: techniques,
+                markers: markers
+            )
+        )
+    }
+}
+
 // MARK: - Transcript Feature Analysis
 
 struct TranscriptFeatureAnalysisTests {

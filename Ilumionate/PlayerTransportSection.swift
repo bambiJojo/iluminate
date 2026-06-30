@@ -53,6 +53,7 @@ struct PlayerTransportSection: View {
                 playPauseIcon
             }
             .buttonStyle(PlayPauseButtonStyle())
+            .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
 
             // Next track (playlist) or skip forward 15s (audio)
             if viewModel.mode.hasTrackNavigation {

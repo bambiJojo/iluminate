@@ -40,6 +40,8 @@ enum AppSettingsManager {
         static let displayBrightness = "displayBrightness"
         static let keepScreenOn = "keepScreenOn"
         static let analyticsEnabled = "analyticsEnabled"
+        static let analyticsConsentGranted = "analyticsConsentGranted"
+        static let analyticsConsentAnswered = "analyticsConsentAnswered"
 
         static let analysisPrefPrefix = "analysisPref_"
         static let streamingTrackPrefix = "StreamingTrack_"
@@ -164,7 +166,9 @@ enum AppSettingsManager {
             Key.audioQualityRaw,
             Key.displayBrightness,
             Key.keepScreenOn,
-            Key.analyticsEnabled
+            Key.analyticsEnabled,
+            Key.analyticsConsentGranted,
+            Key.analyticsConsentAnswered
         ]
         retiredKeys.forEach(defaults.removeObject(forKey:))
 

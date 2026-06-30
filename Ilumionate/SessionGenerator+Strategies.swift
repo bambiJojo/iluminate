@@ -465,8 +465,7 @@ extension SessionGenerator {
         switch phase {
         case .preTalk, .induction: fraction = 0.75   // upper alpha
         case .fractionation:fraction = 0.55   // light re-alert + re-drop cycling
-        case .deepening:    fraction = 0.35   // mid alpha-theta
-        case .confusion:    fraction = 0.18   // low theta, destabilizing but not deepest
+        case .deepening, .confusion: fraction = 0.35   // confusion is a deepening modifier
         case .therapy:      fraction = 0.10   // deep theta floor
         case .suggestions:  fraction = 0.25   // lower theta (active commands need slight uplift)
         case .eroticSuggestions: fraction = 0.35 // slightly lifted low-theta for rhythmic drive
@@ -501,14 +500,12 @@ extension SessionGenerator {
         switch phase {
         case .preTalk, .induction:
             contourShift = -0.65 * segmentProgress
-        case .deepening:
+        case .deepening, .confusion:
             contourShift = -0.85 * segmentProgress
         case .therapy, .suggestions, .conditioning:
             contourShift = sin(segmentProgress * .pi * 2.0) * 0.22
         case .fractionation:
             contourShift = sin(segmentProgress * .pi * 3.0) * 0.75
-        case .confusion:
-            contourShift = sin(segmentProgress * .pi * 5.0) * 0.45
         case .emergence:
             contourShift = 1.25 * segmentProgress
         case .eroticSuggestions, .brainwashing:
@@ -545,11 +542,11 @@ extension SessionGenerator {
 
     func intensityContour(for phase: HypnosisMetadata.Phase, progress: Double) -> Double {
         switch phase {
-        case .induction, .deepening:
+        case .induction, .deepening, .confusion:
             return 1.0 - progress * 0.08
         case .therapy, .suggestions, .conditioning, .brainwashing:
             return 0.96 + sin(progress * .pi * 2.0) * 0.04
-        case .fractionation, .confusion:
+        case .fractionation:
             return 0.95 + sin(progress * .pi * 3.0) * 0.08
         case .emergence:
             return 0.95 + progress * 0.10
@@ -562,8 +559,7 @@ extension SessionGenerator {
         switch phase {
         case .preTalk, .induction: return 0.30
         case .fractionation: return 0.45
-        case .deepening: return 0.58
-        case .confusion: return 0.62
+        case .deepening, .confusion: return 0.58
         case .therapy, .suggestions: return 0.72
         case .eroticSuggestions: return 0.78
         case .brainwashing: return 0.82
@@ -622,8 +618,7 @@ extension SessionGenerator {
         switch phase {
         case .preTalk, .induction: return 8.0...12.0
         case .fractionation:return 6.5...9.5
-        case .deepening:    return 5.0...8.0
-        case .confusion:    return 4.5...6.5
+        case .deepening, .confusion: return 5.0...8.0
         case .therapy:      return 4.5...6.5
         case .suggestions:  return 5.0...7.0
         case .eroticSuggestions: return 3.5...5.5
@@ -638,8 +633,7 @@ extension SessionGenerator {
         switch phase {
         case .preTalk, .induction: return 0.45
         case .fractionation: return 0.41
-        case .deepening:   return 0.38
-        case .confusion:   return 0.35
+        case .deepening, .confusion: return 0.38
         case .therapy:     return 0.32
         case .suggestions: return 0.34
         case .eroticSuggestions: return 0.33
@@ -654,8 +648,7 @@ extension SessionGenerator {
         switch phase {
         case .preTalk, .induction: return 4000
         case .fractionation: return 3400
-        case .deepening:   return 3000
-        case .confusion:   return 2550
+        case .deepening, .confusion: return 3000
         case .therapy:     return 2400
         case .suggestions: return 2600
         case .eroticSuggestions: return 2250
@@ -671,8 +664,7 @@ extension SessionGenerator {
         case .preTalk:      return .sine
         case .induction:    return .sine
         case .fractionation:return .softPulse
-        case .deepening:    return .softPulse
-        case .confusion:    return .noiseModulatedSine
+        case .deepening, .confusion: return .softPulse
         case .therapy:      return .noiseModulatedSine
         case .suggestions:  return .softPulse
         case .eroticSuggestions: return .softPulse

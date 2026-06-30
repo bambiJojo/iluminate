@@ -82,14 +82,7 @@ extension AudioLibraryView {
         try? FileManager.default.removeItem(at: file.url)
 
         // Delete the generated session if it exists
-        let documentsURL = URL.documentsDirectory
-        let sessionsURL = documentsURL.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
-        let baseName = file.filename
-            .replacing(".mp3", with: "")
-            .replacing(".m4a", with: "")
-            .replacing(".wav", with: "")
-        let sessionFile = sessionsURL.appending(path: "\(baseName)_session.json")
-        try? FileManager.default.removeItem(at: sessionFile)
+        GeneratedSessionStore.shared.delete(for: file)
 
         // Remove from list
         audioFiles.removeAll { $0.id == file.id }
@@ -229,6 +222,7 @@ extension AudioLibraryView {
         guard let url = URL(string: audioURLInput.trimmingCharacters(in: .whitespacesAndNewlines)),
               url.scheme == "http" || url.scheme == "https" else {
             downloadError = "Please enter a valid http:// or https:// URL."
+            UsageAnalytics.shared.errorOccurred(.audioURLInvalid)
             return
         }
 
@@ -256,11 +250,13 @@ extension AudioLibraryView {
                     }
                 }
             } catch let urlError as URLError where urlError.code == .badServerResponse {
+                UsageAnalytics.shared.errorOccurred(.audioURLServerRejected)
                 await MainActor.run {
                     isDownloadingURL = false
                     downloadError = "The server returned an error. Please check the URL and try again."
                 }
             } catch {
+                UsageAnalytics.shared.errorOccurred(.audioURLDownloadFailed)
                 await MainActor.run {
                     isDownloadingURL = false
                     downloadError = "Download failed: \(error.localizedDescription)"

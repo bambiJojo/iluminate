@@ -108,8 +108,7 @@ public enum TrancePhase: String, Codable, Sendable, CaseIterable {
         case .preTalk: return 0.22
         case .induction: return 0.22
         case .fractionation: return 0.42
-        case .deepening: return 0.62
-        case .confusion: return 0.74
+        case .deepening, .confusion: return 0.62
         case .therapy: return 0.84
         case .suggestions: return 0.72
         case .eroticSuggestions: return 0.78

@@ -160,14 +160,8 @@ struct StreamingBrowserView: View {
     }
 
     private func saveGeneratedSession(_ session: LightSession, for audioFile: AudioFile) {
-        let sessionsDir = URL.documentsDirectory.appending(path: "GeneratedSessions")
-        try? FileManager.default.createDirectory(at: sessionsDir, withIntermediateDirectories: true)
-
-        let sessionURL = sessionsDir.appending(path: "\(audioFile.id).json")
         do {
-            let data = try JSONEncoder().encode(session)
-            try data.write(to: sessionURL)
-            Log.streaming.info("💾 Saved generated session: \(sessionURL.lastPathComponent)")
+            try GeneratedSessionStore.shared.save(session, for: audioFile)
         } catch {
             Log.streaming.info("❌ Failed to save session: \(error)")
         }

@@ -83,7 +83,7 @@ enum ChunkPhaseConfidence: String, Codable, Sendable {
 // MARK: - Analyzer
 
 /// Foundation Models-backed hypnosis phase classifier.
-struct ChunkedPhaseAnalyzer {
+nonisolated struct ChunkedPhaseAnalyzer {
 
     let config: AnalyzerConfig.ChunkedAnalyzer
     let corpusLearning: AnalyzerConfig.CorpusLearning
@@ -138,8 +138,8 @@ struct ChunkedPhaseAnalyzer {
                 duration: duration,
                 onProgress: onProgress
             )
-            timeline = Self.enforcePhaseOrdering(timeline: timeline)
             timeline = Self.collapseShortRuns(timeline, minRun: max(20, Int(duration * 0.035)))
+            timeline = Self.enforcePhaseOrdering(timeline: timeline)
             let segments = Self.consolidatePhaseSegments(timeline: timeline, duration: duration)
             let distinctCount = Set(segments.map(\.phase)).count
             guard distinctCount >= 2 else {
@@ -183,6 +183,12 @@ struct ChunkedPhaseAnalyzer {
         let positionPct: Int
     }
 
+    struct TimedClassification: Sendable, Equatable {
+        let start: Double
+        let end: Double
+        let phase: HypnosisMetadata.Phase
+    }
+
     struct ChunkRequest: Sendable {
         let text: String
         let startTime: Double
@@ -208,7 +214,9 @@ extension ChunkedPhaseAnalyzer {
         let jobs = buildJobs(from: wordTimestamps, duration: duration)
         let (evenIdxs, oddIdxs) = Self.evenOddIndices(count: jobs.count)
         var results = [HypnosisMetadata.Phase?](repeating: nil, count: jobs.count)
+        var classificationsByJob = [[TimedClassification]](repeating: [], count: jobs.count)
 
+        try Task.checkCancellation()
         let knowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
         let instructions = effectiveSystemInstructions(knowledge: knowledge)
         let fewShotSeedExamples = deduplicatedFewShotExamples(from: config.fewShotExamples + knowledge.fewShotExamples)
@@ -218,8 +226,12 @@ extension ChunkedPhaseAnalyzer {
             knowledge: knowledge, corpusLearning: corpusLearning,
             fewShotSeedExamples: fewShotSeedExamples
         )
-        for (idx, phase) in evenPairs { results[idx] = phase }
+        for (idx, classifications) in evenPairs {
+            classificationsByJob[idx] = classifications
+            results[idx] = classifications.last?.phase
+        }
         await onProgress?(0.5)
+        try Task.checkCancellation()
 
         let oddPairs = try await Self.runPass(
             jobs: oddIdxs.map { jobs[$0] }, previousResults: results,
@@ -227,10 +239,17 @@ extension ChunkedPhaseAnalyzer {
             knowledge: knowledge, corpusLearning: corpusLearning,
             fewShotSeedExamples: fewShotSeedExamples
         )
-        for (idx, phase) in oddPairs { results[idx] = phase }
+        for (idx, classifications) in oddPairs {
+            classificationsByJob[idx] = classifications
+            results[idx] = classifications.last?.phase
+        }
         await onProgress?(1.0)
+        try Task.checkCancellation()
 
-        return Self.assembleTimeline(bucketCount: max(1, Int(ceil(duration))), jobs: jobs, results: results)
+        return Self.assembleTimeline(
+            bucketCount: max(1, Int(ceil(duration))),
+            classifications: classificationsByJob.flatMap { $0 }
+        )
     }
 
     func buildJobs(from wordTimestamps: [WordTimestamp], duration: Double) -> [ChunkJob] {
@@ -600,12 +619,18 @@ extension ChunkedPhaseAnalyzer {
         knowledge: CorpusPhaseKnowledge,
         corpusLearning: AnalyzerConfig.CorpusLearning = .init(),
         fewShotSeedExamples: [AnalyzerConfig.ChunkedAnalyzer.FewShotExample]
-    ) async throws -> [(Int, HypnosisMetadata.Phase?)] {
-        try await withThrowingTaskGroup(of: (Int, HypnosisMetadata.Phase?).self) { group in
+    ) async throws -> [(Int, [TimedClassification])] {
+        try await withThrowingTaskGroup(of: (Int, [TimedClassification]).self) { group in
             for job in jobs {
                 let prev = job.index > 0 ? previousResults?[job.index - 1] ?? nil : nil
                 group.addTask {
-                    if job.text.trimmingCharacters(in: .whitespaces).isEmpty { return (job.index, prev) }
+                    try Task.checkCancellation()
+                    if job.text.trimmingCharacters(in: .whitespaces).isEmpty {
+                        let classifications = prev.map {
+                            [TimedClassification(start: job.start, end: job.end, phase: $0)]
+                        } ?? []
+                        return (job.index, classifications)
+                    }
                     let request = ChunkRequest(
                         text: job.text, startTime: job.start, endTime: job.end,
                         sessionPositionPct: job.positionPct, totalDuration: totalDuration,
@@ -624,15 +649,15 @@ extension ChunkedPhaseAnalyzer {
                             baseExamples: fewShotSeedExamples
                         )
                     )
-                    let phase = try await Self.classifySingleChunk(
+                    let classifications = try await Self.classifySingleChunk(
                         request: request,
                         previousPhase: prev,
                         model: model
                     )
-                    return (job.index, phase)
+                    return (job.index, classifications)
                 }
             }
-            var pairs: [(Int, HypnosisMetadata.Phase?)] = []
+            var pairs: [(Int, [TimedClassification])] = []
             for try await pair in group { pairs.append(pair) }
             return pairs
         }
@@ -640,14 +665,14 @@ extension ChunkedPhaseAnalyzer {
 
     static func assembleTimeline(
         bucketCount: Int,
-        jobs: [ChunkJob],
-        results: [HypnosisMetadata.Phase?]
+        classifications: [TimedClassification]
     ) -> [HypnosisMetadata.Phase?] {
         var timeline = [HypnosisMetadata.Phase?](repeating: nil, count: bucketCount)
-        for job in jobs {
-            let start = max(0, min(Int(job.start), bucketCount - 1))
-            let end   = max(0, min(Int(ceil(job.end)), bucketCount))
-            for idx in start..<end { timeline[idx] = results[job.index] }
+        for classification in classifications {
+            let start = max(0, min(Int(classification.start), bucketCount - 1))
+            let end = max(0, min(Int(ceil(classification.end)), bucketCount))
+            guard start < end else { continue }
+            for idx in start..<end { timeline[idx] = classification.phase }
         }
         return timeline
     }
@@ -657,7 +682,8 @@ extension ChunkedPhaseAnalyzer {
         request: ChunkRequest,
         previousPhase: HypnosisMetadata.Phase?,
         model: SystemLanguageModel
-    ) async throws -> HypnosisMetadata.Phase? {
+    ) async throws -> [TimedClassification] {
+        try Task.checkCancellation()
         let positionHint = buildPositionHint(pct: request.sessionPositionPct)
         let previousHint = previousPhase.map { "The previous segment was: \($0.rawValue)." } ?? ""
         let fewShotText = renderFewShotExamples(request.fewShotExamples)
@@ -676,13 +702,23 @@ extension ChunkedPhaseAnalyzer {
         let session = LanguageModelSession(model: model, instructions: request.systemInstructions)
         do {
             let response = try await session.respond(to: prompt, generating: ChunkPhaseClassification.self)
-            return response.content.normalizedPhase
+            return [
+                TimedClassification(
+                    start: request.startTime,
+                    end: request.endTime,
+                    phase: response.content.normalizedPhase
+                )
+            ]
         } catch LanguageModelSession.GenerationError.exceededContextWindowSize {
             return try await splitAndClassify(request: request, previousPhase: previousPhase, model: model)
         } catch LanguageModelSession.GenerationError.guardrailViolation {
-            return previousPhase
+            return previousPhase.map {
+                [TimedClassification(start: request.startTime, end: request.endTime, phase: $0)]
+            } ?? []
         } catch LanguageModelSession.GenerationError.refusal {
-            return previousPhase
+            return previousPhase.map {
+                [TimedClassification(start: request.startTime, end: request.endTime, phase: $0)]
+            } ?? []
         }
     }
 
@@ -690,9 +726,14 @@ extension ChunkedPhaseAnalyzer {
         request: ChunkRequest,
         previousPhase: HypnosisMetadata.Phase?,
         model: SystemLanguageModel
-    ) async throws -> HypnosisMetadata.Phase? {
+    ) async throws -> [TimedClassification] {
         let midTime = (request.startTime + request.endTime) / 2.0
         let words = request.text.components(separatedBy: " ")
+        guard words.count >= 2, request.endTime - request.startTime >= 1 else {
+            return previousPhase.map {
+                [TimedClassification(start: request.startTime, end: request.endTime, phase: $0)]
+            } ?? []
+        }
         let midIdx = words.count / 2
         let midPct = Int((midTime / request.totalDuration) * 100.0)
         let first = ChunkRequest(
@@ -711,10 +752,18 @@ extension ChunkedPhaseAnalyzer {
             corpusHints: request.corpusHints,
             fewShotExamples: request.fewShotExamples
         )
-        async let phase1 = classifySingleChunk(request: first, previousPhase: previousPhase, model: model)
-        async let phase2 = classifySingleChunk(request: second, previousPhase: previousPhase, model: model)
-        let (result1, result2) = try await (phase1, phase2)
-        return result2 ?? result1
+        let firstResults = try await classifySingleChunk(
+            request: first,
+            previousPhase: previousPhase,
+            model: model
+        )
+        try Task.checkCancellation()
+        let secondResults = try await classifySingleChunk(
+            request: second,
+            previousPhase: firstResults.last?.phase ?? previousPhase,
+            model: model
+        )
+        return firstResults + secondResults
     }
 }
 

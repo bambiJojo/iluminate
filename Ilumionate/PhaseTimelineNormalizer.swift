@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct PhaseTimelineNormalizer: Sendable {
+nonisolated struct PhaseTimelineNormalizer: Sendable {
 
     private let minimumSegmentDuration: TimeInterval = 0.75
     private let gapThreshold: TimeInterval = 4.0

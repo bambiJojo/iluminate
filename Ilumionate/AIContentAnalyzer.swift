@@ -23,6 +23,7 @@ final class AIContentAnalyzer {
 
     private let aiManager = AIAnalysisManager()
     private var currentTask: Task<AnalysisResult, Error>?
+    private var analysisGeneration = 0
 
     // MARK: - Initialization
 
@@ -55,6 +56,8 @@ final class AIContentAnalyzer {
         audioFile: AudioFile
     ) async throws -> AnalysisResult {
         currentTask?.cancel()
+        analysisGeneration += 1
+        let generation = analysisGeneration
 
         isAnalyzing = true
         progress = 0.0
@@ -63,9 +66,15 @@ final class AIContentAnalyzer {
             : "Using built-in phase analysis..."
 
         let task = Task {
+            var completed = false
             defer {
-                self.isAnalyzing = false
-                self.statusMessage = "Analysis complete"
+                if self.analysisGeneration == generation {
+                    self.currentTask = nil
+                    self.isAnalyzing = false
+                    self.statusMessage = Task.isCancelled
+                        ? "Analysis cancelled"
+                        : (completed ? "Analysis complete" : "Analysis failed")
+                }
             }
 
             let progressHandler: @Sendable (AIAnalysisManager.ProgressInfo) async -> Void = { info in
@@ -75,11 +84,13 @@ final class AIContentAnalyzer {
                 }
             }
 
-            return try await aiManager.analyzeContent(
+            let result = try await aiManager.analyzeContent(
                 transcription: transcription,
                 audioFile: audioFile,
                 onProgress: progressHandler
             )
+            completed = true
+            return result
         }
         currentTask = task
 
@@ -96,15 +107,23 @@ final class AIContentAnalyzer {
         }
 
         currentTask?.cancel()
+        analysisGeneration += 1
+        let generation = analysisGeneration
 
         isAnalyzing = true
         progress = 0.0
         statusMessage = "Analyzing audio characteristics..."
 
         let task = Task {
+            var completed = false
             defer {
-                self.isAnalyzing = false
-                self.statusMessage = "Analysis complete"
+                if self.analysisGeneration == generation {
+                    self.currentTask = nil
+                    self.isAnalyzing = false
+                    self.statusMessage = Task.isCancelled
+                        ? "Analysis cancelled"
+                        : (completed ? "Analysis complete" : "Analysis failed")
+                }
             }
 
             let progressHandler: @Sendable (AIAnalysisManager.ProgressInfo) async -> Void = { info in
@@ -114,15 +133,27 @@ final class AIContentAnalyzer {
                 }
             }
 
-            return try await aiManager.analyzeWithoutTranscription(
+            let result = try await aiManager.analyzeWithoutTranscription(
                 audioFile: audioFile,
                 audioFeatures: audioFeatures,
                 onProgress: progressHandler
             )
+            completed = true
+            return result
         }
         currentTask = task
 
         return try await task.value
+    }
+
+    func cancelAnalysis() async {
+        analysisGeneration += 1
+        currentTask?.cancel()
+        currentTask = nil
+        await aiManager.cancelAnalysis()
+        isAnalyzing = false
+        progress = 0
+        statusMessage = "Analysis cancelled"
     }
 }
 

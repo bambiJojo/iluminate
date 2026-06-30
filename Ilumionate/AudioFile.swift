@@ -8,7 +8,7 @@
 import Foundation
 
 /// Multi-dimensional rating system for hypno audio
-struct DetailedRating: Codable, Sendable, Equatable {
+nonisolated struct DetailedRating: Codable, Sendable, Equatable {
     var effectiveness: Int // How effective was the session? (1-5)
     var relaxation: Int // How relaxing was it? (1-5)
     var voiceQuality: Int // Voice quality/delivery (1-5)
@@ -29,7 +29,7 @@ struct DetailedRating: Codable, Sendable, Equatable {
 }
 
 /// Represents an audio file that can be used for session generation
-struct AudioFile: Identifiable, Codable, Sendable {
+nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     let id: UUID
     var filename: String
     let duration: TimeInterval
@@ -139,8 +139,8 @@ extension AudioFile: Hashable {
 }
 
 /// Results from AI audio analysis
-struct AnalysisResult: Codable, Sendable {
-    enum Mood: String, Codable, Sendable {
+nonisolated struct AnalysisResult: Codable, Sendable {
+    nonisolated enum Mood: String, Codable, Sendable {
         case relaxing
         case energizing
         case neutral
@@ -201,7 +201,7 @@ struct AnalysisResult: Codable, Sendable {
 }
 
 /// Represents a significant moment in the audio
-struct KeyMoment: Codable, Identifiable, Sendable {
+nonisolated struct KeyMoment: Codable, Identifiable, Sendable {
     let id: UUID
     let time: TimeInterval
     let description: String
@@ -218,10 +218,10 @@ struct KeyMoment: Codable, Identifiable, Sendable {
 // MARK: - Hypnosis-Specific Metadata
 
 /// Detailed hypnosis session analysis
-struct HypnosisMetadata: Codable, Sendable {
+nonisolated struct HypnosisMetadata: Codable, Sendable {
     typealias Phase = TrancePhase
 
-    enum ConfidenceLevel: String, Codable, Sendable {
+    nonisolated enum ConfidenceLevel: String, Codable, Sendable {
         case high
         case medium
         case low
@@ -235,7 +235,7 @@ struct HypnosisMetadata: Codable, Sendable {
         }
     }
 
-    enum InductionStyle: String, Codable, Sendable {
+    nonisolated enum InductionStyle: String, Codable, Sendable {
         case progressive
         case authoritarian
         case permissive
@@ -245,7 +245,7 @@ struct HypnosisMetadata: Codable, Sendable {
         case conversational
     }
 
-    enum TranceDeph: String, Codable, Sendable {
+    nonisolated enum TranceDeph: String, Codable, Sendable {
         case light
         case medium
         case deep
@@ -261,7 +261,7 @@ struct HypnosisMetadata: Codable, Sendable {
 }
 
 /// A phase segment within a hypnosis session
-struct PhaseSegment: Codable, Identifiable, Sendable {
+nonisolated struct PhaseSegment: Codable, Identifiable, Sendable {
     let id: UUID
     let phase: HypnosisMetadata.Phase
     let startTime: TimeInterval
@@ -293,8 +293,8 @@ struct PhaseSegment: Codable, Identifiable, Sendable {
 }
 
 /// Linguistic markers detected in hypnotic language
-struct LinguisticMarker: Codable, Identifiable, Sendable {
-    enum MarkerType: String, Codable, Sendable {
+nonisolated struct LinguisticMarker: Codable, Identifiable, Sendable {
+    nonisolated enum MarkerType: String, Codable, Sendable {
         // Phase 0 - Pre-Talk markers
         case normalization
         case expectationSetting
@@ -369,7 +369,7 @@ struct LinguisticMarker: Codable, Identifiable, Sendable {
 }
 
 /// Detected hypnotic technique with timing
-struct HypnoticTechnique: Codable, Identifiable, Sendable {
+nonisolated struct HypnoticTechnique: Codable, Identifiable, Sendable {
     let id: UUID
     let technique: String // e.g., "arm levitation", "eye catalepsy"
     let timestamp: TimeInterval
@@ -389,7 +389,7 @@ struct HypnoticTechnique: Codable, Identifiable, Sendable {
 // MARK: - Prosodic Profile
 
 /// How a pause in the audio should be categorized for light response decisions.
-enum PauseCategory: String, Codable, Sendable {
+nonisolated enum PauseCategory: String, Codable, Sendable {
     /// Normal speech breathing pause (1–3 s) — maintain current light state.
     case natural
     /// Intentional therapeutic pause (3–8 s) — gentle frequency dip.
@@ -401,7 +401,7 @@ enum PauseCategory: String, Codable, Sendable {
 }
 
 /// A detected pause in the audio timeline with surrounding context.
-struct DetectedPause: Codable, Sendable, Identifiable {
+nonisolated struct DetectedPause: Codable, Sendable, Identifiable {
     let id: UUID
     let startTime: TimeInterval
     let duration: TimeInterval
@@ -424,7 +424,7 @@ struct DetectedPause: Codable, Sendable, Identifiable {
 /// Audio-level prosodic features extracted from the raw audio signal and
 /// WhisperKit transcript timing. All curves are sampled at `windowDuration`
 /// intervals aligned to the start of the audio.
-struct ProsodicProfile: Codable, Sendable {
+nonisolated struct ProsodicProfile: Codable, Sendable {
     /// Duration of each analysis window in seconds (typically 3.0).
     let windowDuration: TimeInterval
 
@@ -504,7 +504,7 @@ struct ProsodicProfile: Codable, Sendable {
 // MARK: - Temporal Analysis
 
 /// Analysis of how content evolves over time
-struct TemporalAnalysis: Codable, Sendable {
+nonisolated struct TemporalAnalysis: Codable, Sendable {
     let tranceDepthCurve: [Double] // sampled at regular intervals (0.0-1.0)
     let receptivityLevels: [Double] // suggestion receptivity at intervals
     let emotionalArc: [String] // emotional descriptors at intervals
@@ -518,7 +518,7 @@ struct TemporalAnalysis: Codable, Sendable {
 // MARK: - Voice Characteristics
 
 /// Analysis of vocal delivery and prosody
-struct VoiceCharacteristics: Codable, Sendable {
+nonisolated struct VoiceCharacteristics: Codable, Sendable {
     let averagePace: Double? // words per minute
     let paceVariation: Double? // variance in speaking rate
     let pausePatterns: [TimeInterval] // significant pauses
@@ -529,7 +529,7 @@ struct VoiceCharacteristics: Codable, Sendable {
 // MARK: - Classification Confidence
 
 /// Confidence metrics for AI classification
-struct ClassificationConfidence: Codable, Sendable {
+nonisolated struct ClassificationConfidence: Codable, Sendable {
     let overallConfidence: Double // 0.0-1.0
     let isDefinitelyHypnosis: Bool
     let ambiguousSegments: [TimeInterval] // timestamps needing review

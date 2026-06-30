@@ -329,17 +329,18 @@ struct FolderDetailView: View {
         }
         .navigationTitle(name)
         .fullScreenCover(item: $syncPlayerItem) { item in
-            UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
+            UnifiedPlayerView(
+                mode: .audioLight(audioFile: item.audioFile),
+                engine: engine,
+                initialLightSession: item.lightSession
+            )
         }
     }
 
     private func playWithLights(_ file: AudioFile) {
-        Task {
-            let sessionsDir = URL.documentsDirectory.appending(path: "GeneratedSessions")
-            let sessionURL = sessionsDir.appending(path: "\(file.id).json")
-            if let session = try? LightScoreReader.loadSession(from: sessionURL) {
-                await MainActor.run { syncPlayerItem = SyncPlayerItem(audioFile: file, lightSession: session) }
-            }
-        }
+        syncPlayerItem = SyncPlayerItem(
+            audioFile: file,
+            lightSession: GeneratedSessionStore.shared.load(for: file)
+        )
     }
 }

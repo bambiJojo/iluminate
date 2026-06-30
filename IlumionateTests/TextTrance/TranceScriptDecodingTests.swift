@@ -16,6 +16,7 @@ struct TranceScriptDecodingTests {
       "supportedArcs": ["fullText", "handoff"],
       "language": "en",
       "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+      "summary": "A compact test script.",
       "segments": [
         { "phase": "induction",  "text": "Allow your eyes to rest.", "pacing": { "baseWPM": 140 } },
         { "phase": "deepening",  "text": "Deeper and deeper." },
@@ -34,6 +35,7 @@ struct TranceScriptDecodingTests {
         #expect(script.theme == .relaxation)
         #expect(script.supportedArcs == [.fullText, .handoff])
         #expect(script.source.reviewed == true)
+        #expect(script.summary == "A compact test script.")
         #expect(script.segments.count == 4)
         #expect(script.segments[0].phase == .induction)
         #expect(script.segments[0].pacing?.baseWPM == 140)

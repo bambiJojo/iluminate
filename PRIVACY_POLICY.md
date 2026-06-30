@@ -1,16 +1,16 @@
-# Ilumionate Privacy Policy
+# LumeSync / Ilumionate Privacy Policy
 
 **Effective Date**: March 5, 2026
-**Last Updated**: March 5, 2026
+**Last Updated**: June 30, 2026
 
 ## Overview
 
-Ilumionate ("we", "our", or "us") is committed to protecting your privacy. This privacy policy explains how we collect, use, and protect information when you use the Ilumionate app.
+LumeSync / Ilumionate ("we", "our", or "us") is committed to protecting your privacy. This privacy policy explains how we collect, use, and protect information when you use the app.
 
 ## Information We Collect
 
 ### Data Processed Locally
-All core app functionality occurs entirely on your device. We do not transmit personal data to external servers.
+Core app functionality occurs on your device. We do not upload your audio files, transcripts, generated sessions, playlists, or personal profile details to external servers.
 
 **Audio Files**:
 - Audio files you import remain on your device only
@@ -22,10 +22,12 @@ All core app functionality occurs entirely on your device. We do not transmit pe
 - Playlist data and session history stored in app's local storage
 - No session data transmitted to external servers
 
-**App Usage Data** (Optional):
-- Anonymous app performance metrics (if you opt-in)
-- Crash reports to help improve stability (if you opt-in)
-- No personal identifiers included in any analytics
+**App Usage Data**:
+- Privacy-preserving, non-linked product interaction analytics are sent to TelemetryDeck only if you choose to enable Anonymous Usage Analytics
+- Examples include screen views, feature usage, completion buckets, and non-content error categories
+- Analytics do not include audio contents, transcripts, generated session text, imported document contents, or reading-source URLs
+- Analytics are not used for advertising or cross-app tracking
+- Anonymous Usage Analytics can be changed anytime in Settings
 
 ### Data Not Collected
 We do NOT collect:
@@ -58,10 +60,12 @@ We do NOT collect:
 
 **We do not share, sell, or transmit any personal data to third parties.**
 
-All data processing occurs on your device using:
+Core data processing occurs on your device using:
 - Apple's on-device machine learning frameworks
 - Local file storage
 - Local audio processing
+
+Limited, non-linked product interaction analytics may be transmitted to TelemetryDeck only when Anonymous Usage Analytics is enabled, solely to understand app functionality and stability. This data is not used for advertising or tracking.
 
 ## Data Security
 
@@ -73,7 +77,7 @@ All data processing occurs on your device using:
 ### Local Storage
 - All app data stored using iOS secure storage mechanisms
 - Data protected by your device's passcode and encryption
-- No cloud storage or external database connections
+- No cloud storage or external database connections for your audio, transcript, playlist, or session content
 
 ## Children's Privacy
 
@@ -86,8 +90,8 @@ Ilumionate is not intended for children under 13. We do not knowingly collect in
 - Delete data by removing the app or clearing app storage
 - No account creation required - no external data to manage
 
-### Opt-Out Options
-- Anonymous analytics can be disabled in Settings
+### Consent Controls
+- Anonymous analytics are optional and can be enabled or disabled in Settings
 - All permissions can be revoked in iOS Settings
 - App functions fully without optional permissions
 
@@ -110,8 +114,7 @@ We may update this privacy policy from time to time. Changes will be communicate
 ## Contact Information
 
 For questions about this privacy policy or your data:
-- Contact: [Your contact information]
-- Email: [Your email]
+- Email: support@ilumionate.app
 
 ## Compliance
 
@@ -130,11 +133,11 @@ This privacy policy complies with:
 
 ### Data Encryption
 - iOS standard encryption for all local data
-- No custom encryption needed as no data transmitted
+- Standard HTTPS/TLS for limited analytics transmission
 - Secure enclave utilization for sensitive operations
 
 ---
 
-**Summary**: Ilumionate processes all data locally on your device. We do not collect, transmit, or store any personal data externally. Your privacy is protected by design.
+**Summary**: LumeSync / Ilumionate processes audio, transcripts, playlists, and session content locally on your device. Limited, non-linked product interaction analytics are optional and may be sent for app functionality and stability only when enabled.
 
 *This policy is effective as of March 5, 2026 and applies to all users of the Ilumionate application.*

@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var showingAudioLibrary = false
     @State private var showingSessionPlayer = false
     @State private var showingOnboarding = false
+    @State private var showingAnalyticsConsentPrompt = false
     @State private var showingResumedPlayer = false
     @State private var isLoading = true
     @State private var showingAnalysisQueue = false
@@ -94,6 +95,7 @@ struct ContentView: View {
             loadSessions()
             loadAudioFiles()
             checkForFirstLaunch()
+            checkForAnalyticsConsentPrompt()
             engine.userFrequencyMultiplier = userFrequencyMultiplierPref
             UsageAnalytics.shared.screen(screen(for: selectedTab))
         }
@@ -123,6 +125,16 @@ struct ContentView: View {
             NavigationStack {
                 AnalyzerView()
             }
+        }
+        .alert("Help Improve LumeSync", isPresented: $showingAnalyticsConsentPrompt) {
+            Button("Not Now", role: .cancel) {
+                UsageAnalytics.shared.setEnabled(false)
+            }
+            Button("Share Anonymous Analytics") {
+                UsageAnalytics.shared.setEnabled(true)
+            }
+        } message: {
+            Text("Share anonymous usage analytics so we can understand what works, find problems, and improve the app. This never includes audio, transcripts, generated session text, imported documents, or reading-source URLs.")
         }
         .preferredColorScheme(.dark)
     }
@@ -162,6 +174,18 @@ struct ContentView: View {
                 await MainActor.run {
                     showingOnboarding = true
                 }
+            }
+        }
+    }
+
+    private func checkForAnalyticsConsentPrompt() {
+        let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+        guard hasCompletedOnboarding, !UsageAnalytics.shared.hasAnsweredConsent else { return }
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            await MainActor.run {
+                showingAnalyticsConsentPrompt = true
             }
         }
     }

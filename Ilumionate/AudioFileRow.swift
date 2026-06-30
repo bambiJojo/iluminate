@@ -45,7 +45,7 @@ struct AudioFileRow: View {
 
     var body: some View {
         HStack(spacing: TranceSpacing.list) {
-            // Waveform thumbnail / selection button
+            // Waveform thumbnail doubles as the play / selection control.
             Button {
                 TranceHaptics.shared.medium()
                 if isSelectionMode {
@@ -55,7 +55,6 @@ struct AudioFileRow: View {
                 }
             } label: {
                 ZStack {
-                    // Gradient background tinted by content type
                     RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
                         .fill(
                             LinearGradient(
@@ -65,7 +64,6 @@ struct AudioFileRow: View {
                             )
                         )
 
-                    // Mini waveform (hidden while spinning or selected)
                     if !isSelectionMode {
                         WaveformView(
                             samples: waveformSamples,
@@ -76,7 +74,6 @@ struct AudioFileRow: View {
                         .opacity(isAnalyzing ? 0.25 : 0.8)
                     }
 
-                    // Overlay: spinner / checkmark / play icon
                     if isAnalyzing {
                         ProgressView()
                             .controlSize(.small)
@@ -94,86 +91,29 @@ struct AudioFileRow: View {
                 .frame(width: 52, height: 52)
                 .clipShape(RoundedRectangle(cornerRadius: TranceRadius.thumbnail))
             }
+            .buttonStyle(.plain)
 
-            // File info
+            // Title + a single, compact metadata line.
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(file.displayName)
-                        .font(TranceTypography.body)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.textPrimary)
-                        .lineLimit(2)
+                Text(file.displayName)
+                    .font(TranceTypography.body)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.textPrimary)
+                    .lineLimit(1)
 
-                    Spacer()
-
-                    // Rating Stars
-                    if !isSelectionMode && file.isAnalyzed {
-                        HStack(spacing: 2) {
-                            ForEach(1...5, id: \.self) { star in
-                                Button {
-                                    onUpdateRating(star == file.userRating ? 0 : star)
-                                } label: {
-                                    Image(systemName: star <= file.userRating ? "star.fill" : "star")
-                                        .font(.caption2)
-                                        .foregroundStyle(star <= file.userRating ? Color.roseGold : Color.textLight)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    // Playlist Add Button
-                    if !isSelectionMode {
-                        Button {
-                            TranceHaptics.shared.light()
-                            onAddToPlaylist()
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.roseGold)
-                        }
-                    }
-                }
-
-                // Metadata row with heart, duration, and badges
-                HStack(spacing: TranceSpacing.list) {
-                    // Heart icon next to duration
-                    if !isSelectionMode {
-                        Image(systemName: file.favorite ? "heart.fill" : "heart")
-                            .font(.caption)
-                            .foregroundStyle(file.favorite ? .roseGold : .textLight)
+                HStack(spacing: TranceSpacing.inner) {
+                    if !isSelectionMode && file.favorite {
+                        Image(systemName: "heart.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.roseGold)
                     }
 
                     Text(file.durationFormatted)
                         .font(TranceTypography.caption)
                         .foregroundStyle(.textSecondary)
 
-                    // Analysis status badges
-                    HStack(spacing: TranceSpacing.icon) {
-                        if file.isAnalyzed {
-                            Image(systemName: "sparkles")
-                                .font(.caption)
-                                .foregroundStyle(.phaseInduction)
-                        }
-
-                        if hasGeneratedSession {
-                            Image(systemName: "lightbulb.fill")
-                                .font(.caption)
-                                .foregroundStyle(.roseGold)
-                        }
-
-                        if isAnalyzing {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .tint(.roseGold)
-                        }
-                    }
-                }
-
-                // Enhanced Content Badges (without file size)
-                if let result = file.analysisResult {
-                    HStack(spacing: TranceSpacing.inner) {
-                        // Content Type Badge
+                    // One badge — the content type — as the primary "analyzed" signal.
+                    if let result = file.analysisResult {
                         HStack(spacing: 4) {
                             Image(systemName: contentTypeIcon(result.contentType))
                                 .font(.system(size: 10))
@@ -185,77 +125,35 @@ struct AudioFileRow: View {
                         .background(contentTypeColor(result.contentType).opacity(0.15))
                         .foregroundStyle(contentTypeColor(result.contentType))
                         .clipShape(Capsule())
-
-                        // Trance Depth Badge (for hypnosis)
-                        if result.contentType.isHypnosisLike,
-                           let depth = result.hypnosisMetadata?.estimatedTranceDeph {
-                            HStack(spacing: 2) {
-                                Image(systemName: tranceDepthIcon(depth))
-                                    .font(.system(size: 10))
-                                Text(depth.rawValue.capitalized)
-                            }
-                            .font(TranceTypography.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(tranceDepthColor(depth).opacity(0.15))
-                            .foregroundStyle(tranceDepthColor(depth))
-                            .clipShape(Capsule())
-                        }
-
-                        // AI Confidence Indicator
-                        if let confidence = result.classificationConfidence?.overallConfidence {
-                            HStack(spacing: 2) {
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 10))
-                                Text("\(Int(confidence * 100))%")
-                            }
-                            .font(TranceTypography.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(confidenceColor(confidence).opacity(0.15))
-                            .foregroundStyle(confidenceColor(confidence))
-                            .clipShape(Capsule())
-                        }
-
-                        Spacer()
                     }
-                }
 
+                    if hasGeneratedSession {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.roseGold)
+                    }
+
+                    if isAnalyzing {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .tint(.roseGold)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+            }
+
+            // Affordance: analyzed files open a detail screen.
+            if !isSelectionMode && file.isAnalyzed {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.textLight)
             }
         }
-        .contentShape(Rectangle())
-        .swipeActions(edge: .leading) {
+        .contentShape(.rect)
+        .contextMenu {
             if !isSelectionMode {
-                // Delete action (swipe from left)
-                Button(role: .destructive) {
-                    TranceHaptics.shared.medium()
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "trash.fill")
-                }
-                .tint(.red)
-            }
-        }
-        .swipeActions(edge: .trailing) {
-            if !isSelectionMode {
-                // Favorite action (swipe from right)
-                Button {
-                    TranceHaptics.shared.light()
-                    onToggleFavorite()
-                } label: {
-                    Label(file.favorite ? "Unfavorite" : "Favorite",
-                          systemImage: file.favorite ? "heart.slash.fill" : "heart.fill")
-                }
-                .tint(file.favorite ? .gray : .roseGold)
-
-                // Rename action (swipe from right)
-                Button {
-                    TranceHaptics.shared.light()
-                    onRename()
-                } label: {
-                    Label("Rename", systemImage: "pencil")
-                }
-                .tint(.blue)
+                rowMenu
             }
         }
         .task {
@@ -268,19 +166,71 @@ struct AudioFileRow: View {
         }
     }
 
+    // MARK: - Secondary Actions (context menu)
+
+    /// All per-file actions live here. Long-press (or tap-and-hold) reveals them.
+    /// A context menu works inside the LazyVStack list, unlike `.swipeActions`
+    /// which only functions inside a `List`.
+    @ViewBuilder
+    private var rowMenu: some View {
+        Button {
+            onPlay()
+        } label: {
+            Label("Play", systemImage: "play.fill")
+        }
+
+        Button {
+            onToggleFavorite()
+        } label: {
+            Label(file.favorite ? "Remove Favorite" : "Add Favorite",
+                  systemImage: file.favorite ? "heart.slash" : "heart")
+        }
+
+        if file.isAnalyzed {
+            Menu {
+                ForEach(1...5, id: \.self) { star in
+                    Button {
+                        onUpdateRating(star)
+                    } label: {
+                        Label("\(star) Star\(star > 1 ? "s" : "")",
+                              systemImage: star <= file.userRating ? "star.fill" : "star")
+                    }
+                }
+                if file.userRating > 0 {
+                    Button(role: .destructive) {
+                        onUpdateRating(0)
+                    } label: {
+                        Label("Clear Rating", systemImage: "xmark")
+                    }
+                }
+            } label: {
+                Label("Rate", systemImage: "star")
+            }
+        }
+
+        Button {
+            onAddToPlaylist()
+        } label: {
+            Label("Add to Playlist", systemImage: "text.badge.plus")
+        }
+
+        Button {
+            onRename()
+        } label: {
+            Label("Rename", systemImage: "pencil")
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            onDelete()
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+    }
+
     private func checkForGeneratedSession() async {
-        let fileManager = FileManager.default
-        let documentsURL = URL.documentsDirectory
-        let sessionsURL = documentsURL.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
-
-        let baseName = file.filename
-            .replacing(".mp3", with: "")
-            .replacing(".m4a", with: "")
-            .replacing(".wav", with: "")
-        let filename = "\(baseName)_session.json"
-        let fileURL = sessionsURL.appending(path: filename)
-
-        hasGeneratedSession = fileManager.fileExists(atPath: fileURL.path)
+        hasGeneratedSession = GeneratedSessionStore.shared.exists(for: file)
     }
 
     // MARK: - Helper Functions for Enhanced Display
@@ -312,43 +262,6 @@ struct AudioFileRow: View {
         case .asmr:            return .warmAccent
         case .sleepHypnosis:   return .bwDelta
         case .unknown:         return .roseGold
-        }
-    }
-
-    private func tranceDepthIcon(_ depth: HypnosisMetadata.TranceDeph) -> String {
-        switch depth {
-        case .light: return "circle"
-        case .medium: return "circle.fill"
-        case .deep: return "circles.hexagongrid.fill"
-        case .somnambulism: return "brain"
-        }
-    }
-
-    private func tranceDepthColor(_ depth: HypnosisMetadata.TranceDeph) -> Color {
-        switch depth {
-        case .light: return .cyan
-        case .medium: return .blue
-        case .deep: return .indigo
-        case .somnambulism: return .purple
-        }
-    }
-
-    private func confidenceColor(_ confidence: Double) -> Color {
-        switch confidence {
-        case 0.8...1.0: return .green
-        case 0.6..<0.8: return .yellow
-        default: return .orange
-        }
-    }
-
-    private func ratingIndicator(_ icon: String, value: Int, color: Color) -> some View {
-        HStack(spacing: 1) {
-            Image(systemName: icon)
-                .font(.system(size: 8))
-                .foregroundStyle(color)
-            Text("\(value)")
-                .font(.system(size: 8, weight: .medium))
-                .foregroundStyle(color)
         }
     }
 }

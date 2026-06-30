@@ -6,9 +6,43 @@
   "supportedArcs": ["handoff"],
   "language": "en",
   "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "summary": "A bedtime handoff that uses shoreline imagery to settle attention before the screen yields to the light and sound tail.",
   "segments": [
-    { "phase": "induction", "text": "Let each word arrive like a small, slow wave on a quiet shore. You do not have to hold any of them. They simply come, and go, and ease you down.", "pacing": { "baseWPM": 130 } },
-    { "phase": "deepening", "text": "Warmer. Softer. Heavier with every line. The sand holds you. The tide breathes for you. Lower, and slower, and further from the day.", "pacing": { "baseWPM": 95 } },
-    { "phase": "deepening", "text": "And now you no longer need the words at all. Let your eyes close, and let the tide carry you the rest of the way down into sleep.", "pacing": { "baseWPM": 80 }, "triggersHandoff": true }
+    {
+      "phase": "induction",
+      "text": "Let each word arrive like a small wave touching the edge of the shore. It comes in quietly. It leaves quietly. You do not have to hold it. You do not have to remember it. The rhythm is enough. The day can stand farther back from you now. Its conversations, decisions, and unfinished pieces can remain on the other side of the beach, where they belong until morning. Here there is only the dark water, the soft sand, and the steady arrival of the next word. Breath moves in like the tide. Breath moves out like the tide. The body begins to understand that nothing more is required tonight.",
+      "pacing": { "baseWPM": 128 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Feel the sand supporting your weight. Not asking. Not judging. Simply holding. The feet can loosen. The calves can loosen. The knees, hips, belly, and chest can all release into the same patient support. Across the shoulders, a slow warmth spreads, as if the last light of evening is leaving the sky and taking the strain with it. Farther out, the water darkens. Farther in, the body softens. Every line gives you permission to do less. The mind may still offer small thoughts, the way the sea leaves shells behind, but you do not need to pick them up. Let them remain where they are. The tide will know what to do.",
+      "pacing": { "baseWPM": 96 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Now the waves become slower. Wider. There is more space between them. In that space, you can drift below the surface of ordinary thinking. Down into warmth. Down into quiet. Down into the part of night that does not need language. A slow count can move with the water. Ten, the day is behind you. Nine, the body grows heavier. Eight, the breath grows smoother. Seven, the shore grows dimmer. Six, the mind loosens its grip. Five, you are halfway into sleep. Four, deeper than before. Three, safe enough to let go. Two, almost carried. One, carried.",
+      "pacing": { "baseWPM": 84 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Far above the water, the last color leaves the sky. Far below the surface, everything moves slowly. You can imagine each remaining thought becoming a small light on a boat far out at sea. One light moves away. Then another. You do not have to follow them. You do not have to call them back. The shore is quiet enough without them. The blanket is warm enough. The breath is slow enough. The body can stop preparing for anything else tonight. Let the muscles behind the eyes rest. Let the mouth rest. Let the hands rest. Let the whole nervous system learn the shape of bedtime again: less effort, fewer questions, more distance from the day, more trust in the night.",
+      "pacing": { "baseWPM": 80 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Sleep can come in its own way. You do not have to reach for it. You only make room. The body knows how to sleep. The mind knows how to fade. The night knows how to gather you in small layers. If wakeful thoughts pass by, they can become distant lights on the water, seen for a moment and then allowed to move on. Nothing has to be solved in the dark. You can trust the deeper mind to sort what is useful and set aside what is not. Rest is productive in its own quiet language. Rest repairs. Rest resets. Rest prepares the morning without needing you to supervise it.",
+      "pacing": { "baseWPM": 82 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let these words become softer now. I can release the day. I can let the night hold me. I can drift without effort. I can sleep before every thought is finished. I can wake later with more space, more steadiness, and more ease. There is no need to check for sleep. Checking belongs to wakefulness. You can give up checking. You can give up measuring. You can let the rhythm continue underneath awareness, wave after wave, breath after breath, until even the idea of listening becomes too much work to keep.",
+      "pacing": { "baseWPM": 78 }
+    },
+    {
+      "phase": "transitional",
+      "text": "And now the words can end. Let your eyes close, and let the tide carry you the rest of the way down. Nothing else needs to happen on purpose. The light and sound can continue softly in the background while you drift into sleep.",
+      "pacing": { "baseWPM": 72 },
+      "triggersHandoff": true
+    }
   ]
 }

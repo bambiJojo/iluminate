@@ -28,14 +28,12 @@ enum LightScorePhaseTargeting {
         switch phase {
         case .preTalk, .induction:
             contourShift = -0.65 * progress
-        case .deepening:
+        case .deepening, .confusion:
             contourShift = -0.85 * progress
         case .therapy, .suggestions, .conditioning:
             contourShift = sin(progress * .pi * 2.0) * 0.22
         case .fractionation:
             contourShift = sin(progress * .pi * 3.0) * 0.75
-        case .confusion:
-            contourShift = sin(progress * .pi * 5.0) * 0.45
         case .emergence:
             contourShift = 1.25 * progress
         case .eroticSuggestions, .brainwashing:
@@ -60,8 +58,7 @@ enum LightScorePhaseTargeting {
         switch phase {
         case .preTalk, .induction: base = 0.45
         case .fractionation: base = 0.41
-        case .deepening: base = 0.38
-        case .confusion: base = 0.35
+        case .deepening, .confusion: base = 0.38
         case .therapy: base = 0.32
         case .suggestions: base = 0.34
         case .eroticSuggestions: base = 0.33
@@ -90,9 +87,9 @@ enum LightScorePhaseTargeting {
         switch phase {
         case .preTalk, .induction, .emergence, .transitional:
             return .sine
-        case .fractionation, .deepening, .suggestions, .eroticSuggestions, .conditioning:
+        case .fractionation, .deepening, .confusion, .suggestions, .eroticSuggestions, .conditioning:
             return .softPulse
-        case .confusion, .therapy, .brainwashing:
+        case .therapy, .brainwashing:
             return .noiseModulatedSine
         }
     }
@@ -101,8 +98,7 @@ enum LightScorePhaseTargeting {
         switch phase {
         case .preTalk, .induction: return 4000
         case .fractionation: return 3400
-        case .deepening: return 3000
-        case .confusion: return 2550
+        case .deepening, .confusion: return 3000
         case .therapy: return 2400
         case .suggestions: return 2600
         case .eroticSuggestions: return 2250
@@ -127,8 +123,7 @@ enum LightScorePhaseTargeting {
         switch phase {
         case .preTalk, .induction: return 8.0...12.0
         case .fractionation: return 6.5...9.5
-        case .deepening: return 5.0...8.0
-        case .confusion: return 4.5...6.5
+        case .deepening, .confusion: return 5.0...8.0
         case .therapy: return 4.5...6.5
         case .suggestions: return 5.0...7.0
         case .eroticSuggestions: return 3.5...5.5
@@ -143,8 +138,7 @@ enum LightScorePhaseTargeting {
         switch phase {
         case .preTalk, .induction: return 0.30
         case .fractionation: return 0.45
-        case .deepening: return 0.58
-        case .confusion: return 0.62
+        case .deepening, .confusion: return 0.58
         case .therapy, .suggestions: return 0.72
         case .eroticSuggestions: return 0.78
         case .brainwashing: return 0.82
@@ -160,8 +154,7 @@ enum LightScorePhaseTargeting {
         switch phase {
         case .preTalk, .induction: fraction = 0.75
         case .fractionation: fraction = 0.55
-        case .deepening: fraction = 0.35
-        case .confusion: fraction = 0.18
+        case .deepening, .confusion: fraction = 0.35
         case .therapy: fraction = 0.10
         case .suggestions: fraction = 0.25
         case .eroticSuggestions: fraction = 0.35

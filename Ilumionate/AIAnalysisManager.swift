@@ -64,23 +64,25 @@ actor AIAnalysisManager {
 
         let prompt = buildTranscriptionPrompt(transcription: transcription, audioFile: audioFile)
 
-        // Build word timestamps once — shared by both phase analyzers
+        // Build word timestamps once — shared by both phase analyzers. Some
+        // imported transcripts carry full text without timed segments, so give
+        // the phase pipeline a synthetic full-duration segment in that case.
+        let phaseTranscription = phaseReadyTranscription(transcription)
         let wordTimestamps = HypnosisPhaseAnalyzer()
-            .approximateWordTimestamps(from: transcription.segments)
+            .approximateWordTimestamps(from: phaseTranscription.segments)
 
         await onProgress(ProgressInfo(progress: 0.4, message: "Analyzing phases and content in parallel..."))
 
         // Phase detection runs first — it's synchronous (keyword pipeline) or uses a
         // separate Foundation Models session (ChunkedPhaseAnalyzer), so it doesn't
         // block the main AI classification call.
-        let detectedPhases: [PhaseSegment]? = await runPhaseAnalysis(
+        let detectedPhases: [PhaseSegment]? = try await runPhaseAnalysis(
             wordTimestamps: wordTimestamps,
-            segments: transcription.segments,
-            duration: audioFile.duration,
+            transcription: phaseTranscription,
             onProgress: onProgress
         )
 
-        guard let aiResponse = await fetchAIResponse(
+        guard let aiResponse = try await fetchAIResponse(
             session: lmSession, prompt: prompt,
             transcription: transcription, audioFile: audioFile
         ) else {
@@ -104,12 +106,14 @@ actor AIAnalysisManager {
         prompt: String,
         transcription: AudioTranscriptionResult,
         audioFile: AudioFile
-    ) async -> AIAnalysisResponse? {
+    ) async throws -> AIAnalysisResponse? {
         let task = Task<AIAnalysisResponse, Error> {
             do {
                 return try await session.respond(
                     to: prompt, generating: AIAnalysisResponse.self
                 ).content
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 Log.analysis.info("⚠️ AI attempt 1 failed (\(type(of: error))) — retrying with minimal prompt")
             }
@@ -127,6 +131,9 @@ actor AIAnalysisManager {
             let response = try await task.value
             currentTask = nil
             return response
+        } catch is CancellationError {
+            currentTask = nil
+            throw CancellationError()
         } catch {
             Log.analysis.info("❌ All AI attempts exhausted (\(type(of: error))) — using keyword fallback")
             currentTask = nil
@@ -142,6 +149,27 @@ actor AIAnalysisManager {
         if let meta = result.hypnosisMetadata {
             Log.analysis.info("🧠 Hypnosis phases: \(meta.phases.count)")
         }
+    }
+
+    private func phaseReadyTranscription(
+        _ transcription: AudioTranscriptionResult
+    ) -> AudioTranscriptionResult {
+        guard transcription.segments.isEmpty, transcription.fullText.isEmpty == false else {
+            return transcription
+        }
+        return AudioTranscriptionResult(
+            fullText: transcription.fullText,
+            segments: [
+                AudioTranscriptionSegment(
+                    text: transcription.fullText,
+                    timestamp: 0,
+                    duration: transcription.duration,
+                    confidence: 1.0
+                )
+            ],
+            duration: transcription.duration,
+            detectedLanguage: transcription.locale
+        )
     }
 
     func analyzeWithoutTranscription(
@@ -210,22 +238,16 @@ actor AIAnalysisManager {
     /// UI doesn't freeze during long recordings.
     private func runPhaseAnalysis(
         wordTimestamps: [WordTimestamp],
-        segments: [AudioTranscriptionSegment],
-        duration: TimeInterval,
+        transcription: AudioTranscriptionResult,
         onProgress: @escaping @Sendable (ProgressInfo) async -> Void
-    ) async -> [PhaseSegment]? {
+    ) async throws -> [PhaseSegment]? {
+        try Task.checkCancellation()
         let keywordAnalyzer = HypnosisPhaseAnalyzer()
-        let transcription = AudioTranscriptionResult(
-            fullText: segments.map(\.text).joined(separator: " "),
-            segments: segments,
-            duration: duration,
-            detectedLanguage: Locale.current.language.languageCode?.identifier ?? "en"
-        )
         let textTechniqueEvidence = TechniqueDetector().detect(
             wordTimestamps: wordTimestamps,
-            segments: segments,
+            segments: transcription.segments,
             prosodic: nil,
-            duration: duration
+            duration: transcription.duration
         )
 
         // Scale ChunkedPhaseAnalyzer's 0–1 fraction into the 0.40–0.70 window
@@ -238,9 +260,10 @@ actor AIAnalysisManager {
 
         if let aiPhases = await ChunkedPhaseAnalyzer.analyze(
             wordTimestamps: wordTimestamps,
-            duration: duration,
+            duration: transcription.duration,
             onProgress: chunkProgressHandler
         ), !aiPhases.isEmpty {
+            try Task.checkCancellation()
             await onProgress(ProgressInfo(progress: 0.70, message: "Comparing phase models…"))
 
             let keywordPhases = keywordAnalyzer.analyze(
@@ -268,12 +291,14 @@ actor AIAnalysisManager {
 
         // Keyword fallback is instant — jump straight to 0.70
         await onProgress(ProgressInfo(progress: 0.70, message: "Using keyword phase analysis…"))
+        try Task.checkCancellation()
 
         let keywordPhases = keywordAnalyzer.analyze(
             wordTimestamps: wordTimestamps,
             transcription: transcription,
             techniqueDetection: textTechniqueEvidence
         )
+        try Task.checkCancellation()
         if !keywordPhases.isEmpty {
             Log.analysis.info("🔑 Keyword fallback: \(keywordPhases.count) phase segments")
             return keywordAnalyzer.attachLinguisticMarkers(

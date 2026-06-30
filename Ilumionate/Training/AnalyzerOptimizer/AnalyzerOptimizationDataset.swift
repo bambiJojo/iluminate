@@ -8,7 +8,7 @@
 import Foundation
 import CryptoKit
 
-struct AnalyzerOptimizationDatasetIssue: Codable, Identifiable, Hashable, Sendable {
+nonisolated struct AnalyzerOptimizationDatasetIssue: Codable, Identifiable, Hashable, Sendable {
     enum Severity: String, Codable, Sendable {
         case warning
         case error
@@ -35,7 +35,7 @@ struct AnalyzerOptimizationDatasetIssue: Codable, Identifiable, Hashable, Sendab
     }
 }
 
-struct AnalyzerOptimizationDataset: Sendable {
+nonisolated struct AnalyzerOptimizationDataset: Sendable {
     struct Example: Identifiable, Sendable {
         let example: AnalyzerTrainingExample
         let audioURL: URL

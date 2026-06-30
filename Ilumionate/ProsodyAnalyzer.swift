@@ -25,9 +25,9 @@ import Foundation
 
 // MARK: - Configuration
 
-extension ProsodyAnalyzer {
+nonisolated extension ProsodyAnalyzer {
 
-    struct Config: Sendable {
+    nonisolated struct Config: Sendable {
         /// Duration of each analysis window in seconds.
         var windowDuration: TimeInterval = 3.0
 
@@ -48,11 +48,29 @@ extension ProsodyAnalyzer {
 
         /// Maximum F0 frequency for pitch detection (Hz). Above this is unlikely voice.
         var maxPitchHz: Double = 400.0
+
+        nonisolated init(
+            windowDuration: TimeInterval = 3.0,
+            silenceThreshold: Float = 0.008,
+            minPauseDuration: TimeInterval = 1.0,
+            deliberatePauseMin: TimeInterval = 3.0,
+            extendedPauseMin: TimeInterval = 5.0,
+            minPitchHz: Double = 70.0,
+            maxPitchHz: Double = 400.0
+        ) {
+            self.windowDuration = windowDuration
+            self.silenceThreshold = silenceThreshold
+            self.minPauseDuration = minPauseDuration
+            self.deliberatePauseMin = deliberatePauseMin
+            self.extendedPauseMin = extendedPauseMin
+            self.minPitchHz = minPitchHz
+            self.maxPitchHz = maxPitchHz
+        }
     }
 
     /// Context for pitch estimation, bundled to reduce parameter count.
     /// Not Sendable — holds raw pointers valid only within `analyze()`.
-    struct PitchEstimationContext {
+    nonisolated struct PitchEstimationContext {
         let samples: UnsafePointer<Float>
         let length: Int
         let sampleRate: Double
@@ -67,10 +85,10 @@ extension ProsodyAnalyzer {
 /// This analyzer operates purely on the audio signal and WhisperKit timestamps —
 /// no AI model is required. It produces a `ProsodicProfile` that captures how
 /// the speaker's delivery changes over time: pace, volume, pitch, and pauses.
-struct ProsodyAnalyzer: Sendable {
+nonisolated struct ProsodyAnalyzer: Sendable {
 
     /// Context for per-window curve computation, bundled to reduce parameter count.
-    struct WindowAnalysisContext {
+    nonisolated struct WindowAnalysisContext {
         let channelData: UnsafePointer<UnsafeMutablePointer<Float>>
         let channelCount: Int
         let frameCount: Int
@@ -81,7 +99,7 @@ struct ProsodyAnalyzer: Sendable {
     }
 
     /// Per-window analysis results.
-    struct WindowCurves {
+    nonisolated struct WindowCurves {
         var volume: [Double]
         var pitch: [Double]
         var speechRate: [Double]
@@ -122,8 +140,7 @@ struct ProsodyAnalyzer: Sendable {
             return emptyProfile(windowDuration: config.windowDuration, totalDuration: totalDuration)
         }
 
-        let wordTimestamps = HypnosisPhaseAnalyzer()
-            .approximateWordTimestamps(from: segments)
+        let wordTimestamps = HypnosisPhaseAnalyzer.approximateWordTimestamps(from: segments)
 
         let windowContext = WindowAnalysisContext(
             channelData: channelData,
@@ -309,7 +326,7 @@ extension ProsodyAnalyzer: ProsodyAnalyzingService {}
 
 // MARK: - AnalyzerConfig Bridge
 
-extension ProsodyAnalyzer.Config {
+nonisolated extension ProsodyAnalyzer.Config {
     /// Creates a `ProsodyAnalyzer.Config` from the centralized `AnalyzerConfig.Prosody`.
     /// `silenceThreshold`, `minPitchHz`, and `maxPitchHz` are hardware/physiology
     /// constants that are not tuned by the optimizer.

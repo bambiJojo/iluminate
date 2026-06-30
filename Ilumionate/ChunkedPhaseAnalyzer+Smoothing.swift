@@ -12,7 +12,7 @@ import Foundation
 // MARK: - Phase Run Helper
 
 /// Contiguous run of a single phase in the second-resolution timeline.
-struct PhaseRun {
+nonisolated struct PhaseRun {
     var phase: HypnosisMetadata.Phase?
     var start: Int
     var end: Int
@@ -20,11 +20,11 @@ struct PhaseRun {
 
 // MARK: - Smoothing Extension
 
-extension ChunkedPhaseAnalyzer {
+nonisolated extension ChunkedPhaseAnalyzer {
 
     // MARK: - Ordered Phases
 
-    /// Canonical hypnosis phase order used to enforce monotonic progression.
+    /// Canonical hypnosis phase order used for scoring and prompt context.
     static let orderedPhases: [HypnosisMetadata.Phase] = HypnosisMetadata.Phase.orderedHypnosisPhases
 
     // MARK: - Phase Ordering Enforcement
@@ -32,24 +32,7 @@ extension ChunkedPhaseAnalyzer {
     static func enforcePhaseOrdering(
         timeline: [HypnosisMetadata.Phase?]
     ) -> [HypnosisMetadata.Phase?] {
-        var result = timeline
-        var highestIndex = 0
-
-        for idx in 0..<result.count {
-            guard let phase = result[idx] else { continue }
-            let canonicalPhase = phase.labelingPhase
-            if canonicalPhase != phase {
-                result[idx] = canonicalPhase
-            }
-            guard let phaseIndex = orderedPhases.firstIndex(of: canonicalPhase) else { continue }
-
-            if phaseIndex >= highestIndex {
-                highestIndex = phaseIndex
-            } else {
-                result[idx] = orderedPhases[highestIndex]
-            }
-        }
-        return result
+        timeline.map { $0?.labelingPhase }
     }
 
     // MARK: - Short Run Collapsing

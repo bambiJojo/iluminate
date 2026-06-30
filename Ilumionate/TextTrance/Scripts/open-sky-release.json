@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "open-sky-release",
+  "title": "Open Sky Release",
+  "theme": "relaxation",
+  "supportedArcs": ["fullText"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "summary": "An eyes-open relaxation session using open-sky imagery, tension release, and a grounded return.",
+  "segments": [
+    {
+      "phase": "induction",
+      "text": "Let the words become a clear path across a wide open sky. You do not need to hold the whole sky in attention. You only notice the next small cloud, the next line, the next breath. The gaze can be easy and awake. The body can stay comfortable and still. With each sentence, imagine more space around the head and shoulders. Space above the thoughts. Space around the chest. Space between one concern and the next. Nothing is pushed away. Everything simply has more room. When there is more room, the mind does not have to press so tightly against itself. Reading becomes a way of opening. Word by word, the sky gets wider.",
+      "pacing": { "baseWPM": 144 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Now let the first layer of effort drift out into that space. The effort in the forehead. The effort in the mouth. The effort behind the shoulders. Each one can loosen without needing a reason. A breeze moves through the sky and carries away what the body no longer needs to hold. You might notice one small muscle releasing, then another. You might notice that the breath has more room at the top, more room at the bottom, more room in the middle. This is not escape. It is relief. Relief is the body remembering that it can stop bracing when the moment is safe enough.",
+      "pacing": { "baseWPM": 100 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Let the open sky become steady. Clouds can cross it and the sky remains. Sounds can happen and the sky remains. Thoughts can appear and the sky remains. You are learning the difference between weather and space. Weather changes. Space allows. The mind can have weather without becoming the weather. The body can have sensation without becoming a problem to solve. Notice how much can be allowed when attention is not gripping so tightly. A thought may come. Let it pass. A feeling may move. Let it pass. The next word arrives. Let it pass. The sky remains open behind it all.",
+      "pacing": { "baseWPM": 92 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "From this open place, release can become practical. You can release what is finished. You can release the extra argument around what is unfinished. You can release the habit of rehearsing every possible outcome before taking the next reasonable step. Open space does not mean doing nothing. It means doing one thing with less internal crowding. You can bring a wider mind to a narrow task. You can bring a softer breath to a difficult moment. You can let the body stay spacious while the day continues. This kind of relaxation travels well because it is not fragile. It is simple and repeatable.",
+      "pacing": { "baseWPM": 92 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let a few anchor phrases settle into that wide space. I have room. I can let the weather change. I can act without bracing. I can make space before I answer. I can release the extra weight and keep the useful lesson. The sky does not need to decide what every cloud means. It gives each cloud enough room to move. In the same way, you can give your thoughts enough room to move through. Some will matter later. Some will not. For now, the next breath is enough, the next word is enough, and this open steadiness is enough.",
+      "pacing": { "baseWPM": 90 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Notice how release can be selective. You do not have to release care. You do not have to release standards. You release the extra grip around them. Care can remain while urgency softens. Standards can remain while self-criticism quiets. Direction can remain while the body stops bracing. This is the useful middle path: open enough to breathe, clear enough to choose, steady enough to continue. The wide sky makes room for that balance. When the next moment asks something of you, answer from space first. Space gives the answer room to be wiser, slower, and more accurate.",
+      "pacing": { "baseWPM": 90 }
+    },
+    {
+      "phase": "emergence",
+      "text": "Begin to bring the open space back with you. Let the room become distinct again. Let the body feel both relaxed and awake. There is space around the thoughts and steadiness underneath them. Count upward: one, returning; two, clearer; three, refreshed; four, present; five, ready to continue with more room inside.",
+      "pacing": { "baseWPM": 132 }
+    }
+  ]
+}

@@ -26,6 +26,9 @@ Tools/CorpusGenerator/.build/
 # Git worktrees
 .worktrees/
 
+# Local Xcode wrapper used to avoid iCloud/FileProvider project-open hangs
+/XcodeOpen.nosync/
+
 # Local nested repos/tools; keep out of parent repo tracking
 /catigorizer/
 /lightMapCreationTool/

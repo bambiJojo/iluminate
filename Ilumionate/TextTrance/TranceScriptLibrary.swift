@@ -11,6 +11,7 @@ import os
 enum TranceScriptLibrary {
 
     static let currentSchemaVersion = 1
+    private static let bundledScriptsSubdirectory = "TextTrance/Scripts"
 
     enum LibraryError: LocalizedError {
         case unsupportedSchemaVersion(Int)
@@ -79,8 +80,22 @@ enum TranceScriptLibrary {
     /// Discover bundled scripts shipped in the app bundle. Non-script JSON
     /// (e.g. light-session files) simply fails decoding and is excluded.
     static func bundled(in bundle: Bundle = .main) -> [TranceScript] {
+        let scripts = bundledJSONScripts(in: bundle, subdirectory: bundledScriptsSubdirectory)
+        if scripts.isEmpty == false { return scripts }
+
+        // Legacy fallback for older project layouts that copied JSON files to
+        // the bundle root.
+        return bundledJSONScripts(in: bundle, subdirectory: nil)
+    }
+
+    private static func bundledJSONScripts(
+        in bundle: Bundle,
+        subdirectory: String?
+    ) -> [TranceScript] {
         guard let urls = bundle.urls(
-            forResourcesWithExtension: "json", subdirectory: nil) else { return [] }
+            forResourcesWithExtension: "json", subdirectory: subdirectory
+        ) else { return [] }
+
         return urls
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .compactMap { url in try? parse(Data(contentsOf: url)) }

@@ -9,6 +9,7 @@ import Foundation
 import os
 import QuartzCore
 import Observation
+import UIKit
 
 /// Lightweight proxy that breaks the CADisplayLink → LightEngine retain cycle.
 /// CADisplayLink strongly retains its target, so we give it this proxy which
@@ -154,13 +155,13 @@ final class LightEngine {
     /// In normal use the phase accumulator tracks this directly each frame.
     /// Call `rampTo(_:duration:curve:)` for a smooth programmatic transition.
     var targetFrequency: Double = 10.0 {
-        didSet { targetFrequency = max(0.1, min(targetFrequency, 100.0)) }
+        didSet { targetFrequency = LightSafety.clampFlashHz(targetFrequency) }
     }
 
     /// Smoothly transition to a new frequency over a given duration.
     /// Use this for protocol-driven frequency changes — never hard-jump.
     func rampTo(_ frequency: Double, duration: Double? = nil, curve: RampCurve? = nil) {
-        let target = max(0.1, min(frequency, 100.0))
+        let target = LightSafety.clampFlashHz(frequency)
         targetFrequency = target
         guard isRunning else { return }
         activeRamp = FrequencyRamp(
@@ -388,8 +389,23 @@ final class LightEngine {
         applySessionState()
         advanceFrequency(deltaTime: deltaTime)
 
-        // Phase accumulation — scaled by user frequency multiplier
-        phase += currentFrequency * userFrequencyMultiplier * deltaTime
+        // Reduce Motion: hold a steady "on" brightness (the maximum/mid level)
+        // instead of advancing the oscillator, so the light never strobes for
+        // motion-sensitive users. Checked every frame, so a mid-session toggle
+        // of the system setting is respected.
+        if UIAccessibility.isReduceMotionEnabled {
+            let steady = max(0.0, min(1.0, maximumBrightness))
+            brightness = steady
+            brightnessLeft = steady
+            brightnessRight = steady
+            return
+        }
+
+        // Phase accumulation — scaled by user frequency multiplier.
+        // Clamp at the engine input boundary so no path (session JSON, ramps,
+        // sliders) can drive the flash rate above the seizure-safety cap.
+        let safeFrequency = LightSafety.clampFlashHz(currentFrequency * userFrequencyMultiplier)
+        phase += safeFrequency * deltaTime
         if phase >= 1000.0 { phase -= 1000.0 }
 
         let (leftOut, rightOut) = evaluateOscillator()

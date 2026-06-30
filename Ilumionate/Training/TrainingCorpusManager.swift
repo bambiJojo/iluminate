@@ -371,6 +371,7 @@ actor TrainingCorpusStore {
             in: analyzerAudioDirectory,
             keeping: expectedAudioFilenames
         )
+        CorpusPhaseKnowledgeCache.shared.invalidate()
     }
 
     private func ensureDirectories() throws {

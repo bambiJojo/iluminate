@@ -41,17 +41,23 @@ struct FlashGridBackground: View {
     let controller: FlashController
     let colorTemperature: Int
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         let baseColor = Color.fromKelvin(colorTemperature)
+        // Reduce Motion: render a steady "on" field instead of the strobing
+        // left/right opacities so motion-sensitive users never see a flash.
+        let leftOpacity = reduceMotion ? controller.intensity : controller.leftOpacity
+        let rightOpacity = reduceMotion ? controller.intensity : controller.rightOpacity
         HStack(spacing: 0) {
             Rectangle()
                 .fill(baseColor)
-                .opacity(controller.leftOpacity)
+                .opacity(leftOpacity)
                 .ignoresSafeArea()
             if controller.bilateralMode {
                 Rectangle()
                     .fill(baseColor)
-                    .opacity(controller.rightOpacity)
+                    .opacity(rightOpacity)
                     .ignoresSafeArea()
             }
         }

@@ -19,7 +19,7 @@ import Foundation
 // MARK: - Technique Detection Result
 
 /// Combined output of technique and marker detection for a single audio file.
-struct TechniqueDetectionResult: Codable, Sendable {
+nonisolated struct TechniqueDetectionResult: Codable, Sendable {
     let techniques: [HypnoticTechnique]
     let markers: [LinguisticMarker]
 
@@ -33,7 +33,7 @@ struct TechniqueDetectionResult: Codable, Sendable {
 
 /// Detects hypnotic techniques and linguistic markers from word timestamps,
 /// transcript segments, and prosodic data.
-struct TechniqueDetector: Sendable {
+nonisolated struct TechniqueDetector: Sendable {
 
     let config: AnalyzerConfig.TechniqueDetection
 

@@ -103,11 +103,12 @@ final class AnalysisPipeline {
 
     // MARK: - Cancel
 
-    /// Cancels any in-flight transcription and prosody extraction.
+    /// Cancels every in-flight pipeline stage.
     func cancel() async {
         prosodyTask?.cancel()
         prosodyTask = nil
         await transcriber.cancelTranscription()
+        await analyzer.cancelAnalysis()
     }
 
     // MARK: - Private

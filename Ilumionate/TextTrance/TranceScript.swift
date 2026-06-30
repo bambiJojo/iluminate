@@ -80,5 +80,90 @@ struct TranceScript: Codable, Sendable, Identifiable {
     let supportedArcs: [ScriptArc]
     let language: String
     let source: ScriptSource
+    var summary: String? = nil
     let segments: [TranceScriptSegment]
+}
+
+struct TranceScriptMetrics: Equatable, Sendable {
+    let arc: ScriptArc
+    let wordCount: Int
+    let estimatedDuration: TimeInterval
+}
+
+extension TranceScript {
+    var librarySummary: String {
+        let trimmed = summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        return "\(theme.displayName) script with \(phaseSummary.lowercased()) pacing."
+    }
+
+    var arcSummary: String {
+        let supportsFullText = supportedArcs.contains(.fullText)
+        let supportsHandoff = supportedArcs.contains(.handoff)
+
+        switch (supportsFullText, supportsHandoff) {
+        case (true, true):   return "Read-through + handoff"
+        case (true, false):  return "Read-through"
+        case (false, true):  return "Handoff"
+        case (false, false): return "No arc"
+        }
+    }
+
+    var durationSummary: String {
+        let minutes = metricsByArc.map { Self.roundedMinutes($0.estimatedDuration) }
+        guard let min = minutes.min(), let max = minutes.max() else { return "No duration" }
+        if min == max { return Self.minuteText(min) }
+        return "\(min)-\(Self.minuteText(max))"
+    }
+
+    var wordCountSummary: String {
+        let counts = metricsByArc.map(\.wordCount)
+        guard let min = counts.min(), let max = counts.max() else { return "No words" }
+        if min == max { return "\(min.formatted(.number)) words" }
+        return "\(min.formatted(.number))-\(max.formatted(.number)) words"
+    }
+
+    var phaseSummary: String {
+        var seen: Set<String> = []
+        var names: [String] = []
+
+        for segment in segments {
+            let rawValue = segment.phase.rawValue
+            guard seen.contains(rawValue) == false else { continue }
+            seen.insert(rawValue)
+            names.append(segment.phase.displayName)
+        }
+
+        let visibleNames = names.prefix(4)
+        let suffix = names.count > visibleNames.count ? " +" : ""
+        return visibleNames.joined(separator: ", ") + suffix
+    }
+
+    func metrics(for arc: ScriptArc) -> TranceScriptMetrics {
+        let schedule = TextPacingEngine.schedule(
+            for: self,
+            settings: TextPacingSettings(
+                arc: arc,
+                speedMultiplier: 1.0,
+                subliminalEnabled: false
+            )
+        )
+        return TranceScriptMetrics(
+            arc: arc,
+            wordCount: schedule.count,
+            estimatedDuration: schedule.reduce(0) { $0 + $1.duration }
+        )
+    }
+
+    private var metricsByArc: [TranceScriptMetrics] {
+        supportedArcs.map { metrics(for: $0) }
+    }
+
+    private static func roundedMinutes(_ duration: TimeInterval) -> Int {
+        max(1, Int((duration / 60).rounded()))
+    }
+
+    private static func minuteText(_ minutes: Int) -> String {
+        minutes == 1 ? "1 min" : "\(minutes) min"
+    }
 }

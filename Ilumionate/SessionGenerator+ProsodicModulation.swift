@@ -28,16 +28,17 @@ extension SessionGenerator {
             modulateMomentsWithProsody(
                 &moments, prosody: prosody, config: config
             )
+        }
 
-            // 2. Insert technique-responsive moments
-            if let techniques = analysis.techniqueDetection {
-                insertTechniqueMoments(
-                    &moments,
-                    techniques: techniques,
-                    prosody: prosody,
-                    config: config
-                )
-            }
+        // 2. Technique timing comes from the transcript, so these overlays do
+        // not depend on raw-audio prosody being available.
+        if let techniques = analysis.techniqueDetection {
+            insertTechniqueMoments(
+                &moments,
+                techniques: techniques,
+                prosody: analysis.prosodicProfile,
+                config: config
+            )
         }
 
         // 3. Use transcript-relative pace and repetition shifts even when
@@ -162,13 +163,28 @@ extension SessionGenerator {
     private func insertTechniqueMoments(
         _ moments: inout [LightMoment],
         techniques: TechniqueDetectionResult,
-        prosody: ProsodicProfile,
+        prosody: ProsodicProfile?,
         config: GenerationConfig
     ) {
+        var lastConfusionTimestamp: TimeInterval?
+
         for technique in techniques.sortedTechniques {
+            let strength = techniqueStrength(technique, in: techniques)
+
+            if technique.technique == "confusion_technique" {
+                guard strength >= 0.60 else { continue }
+                if let lastConfusionTimestamp,
+                   technique.timestamp - lastConfusionTimestamp < 8.0 {
+                    continue
+                }
+                lastConfusionTimestamp = technique.timestamp
+            }
+
             let newMoments = momentsForTechnique(
                 technique, prosody: prosody,
-                existingMoments: moments, config: config
+                strength: strength,
+                existingMoments: moments,
+                config: config
             )
             moments.append(contentsOf: newMoments)
         }
@@ -177,7 +193,8 @@ extension SessionGenerator {
     /// Returns light moments for a single detected technique.
     private func momentsForTechnique(
         _ technique: HypnoticTechnique,
-        prosody: ProsodicProfile,
+        prosody: ProsodicProfile?,
+        strength: Double,
         existingMoments: [LightMoment],
         config: GenerationConfig
     ) -> [LightMoment] {
@@ -187,7 +204,7 @@ extension SessionGenerator {
 
         switch technique.technique {
         case "countdown":
-            let baseFreq = prosody.speechRate(at: time) < 100 ? 5.0 : 6.0
+            let baseFreq = (prosody?.speechRate(at: time) ?? 120) < 100 ? 5.0 : 6.0
             return [moment(time: time, freq: baseFreq, amp: 0.36 * mul,
                            waveform: .softPulse, colorTemp: 2800)]
 
@@ -217,7 +234,7 @@ extension SessionGenerator {
                            bilateral: true, bilateralTransition: 3.0)]
 
         case "repetition_pattern":
-            let rate = prosody.speechRate(at: time)
+            let rate = prosody?.speechRate(at: time) ?? 120
             let pulseFreq = max(4.0, min(8.0, rate / 20.0))
             return [moment(time: time, freq: pulseFreq, amp: 0.38 * mul,
                            waveform: .softPulse, colorTemp: 2800)]
@@ -230,9 +247,81 @@ extension SessionGenerator {
                        amp: 0.32 * mul, waveform: .softPulse, colorTemp: 2600)
             ]
 
+        case "confusion_technique":
+            return confusionOverlayMoments(
+                at: time,
+                strength: strength,
+                existingMoments: existingMoments,
+                config: config
+            )
+
         default:
             return []
         }
+    }
+
+    /// Confusion is a short technique inside the surrounding structural phase.
+    /// It perturbs that host state briefly, then restores the state that would
+    /// otherwise have been active; it never selects a separate frequency band.
+    private func confusionOverlayMoments(
+        at startTime: TimeInterval,
+        strength: Double,
+        existingMoments: [LightMoment],
+        config: GenerationConfig
+    ) -> [LightMoment] {
+        guard let sessionEnd = existingMoments.map(\.time).max(), startTime < sessionEnd else {
+            return []
+        }
+
+        let endTime = min(startTime + 8.0, sessionEnd)
+        let duration = endTime - startTime
+        guard duration >= 2.0 else { return [] }
+
+        let normalizedStrength = clamp(strength, lower: 0, upper: 1)
+        let rampDuration = min(2.0, duration * 0.25)
+        let points: [(progress: Double, frequencyShift: Double, intensityReduction: Double)] = [
+            (0.00,  0.25, 0.06),
+            (0.27, -0.45, 0.12),
+            (0.58,  0.22, 0.08),
+            (1.00,  0.00, 0.00)
+        ]
+
+        return points.map { point in
+            let time = startTime + duration * point.progress
+            let host = interpolatedHostMoment(at: time, in: existingMoments)
+            let isRestoration = point.progress == 1.0
+
+            return moment(
+                time: time,
+                freq: clamp(
+                    host.frequency + point.frequencyShift * normalizedStrength,
+                    lower: config.minFrequency,
+                    upper: config.maxFrequency
+                ),
+                amp: clamp(
+                    host.intensity * (1.0 - point.intensityReduction * normalizedStrength),
+                    lower: 0.05,
+                    upper: 1.0
+                ),
+                waveform: isRestoration ? host.waveform : .noiseModulatedSine,
+                ramp: rampDuration,
+                colorTemp: host.color_temperature,
+                bilateral: host.bilateral,
+                bilateralTransition: host.bilateral_transition_duration
+            )
+        }
+    }
+
+    private func techniqueStrength(
+        _ technique: HypnoticTechnique,
+        in detection: TechniqueDetectionResult
+    ) -> Double {
+        guard technique.technique == "confusion_technique" else { return 1.0 }
+
+        return detection.markers
+            .filter { $0.type == .confusionTechnique }
+            .min { abs($0.timestamp - technique.timestamp) < abs($1.timestamp - technique.timestamp) }?
+            .strength ?? 0.75
     }
 
     // MARK: - Adaptive Breath Oscillation
@@ -280,6 +369,44 @@ extension SessionGenerator {
         guard !moments.isEmpty else { return 7.0 }
         let nearest = moments.min { abs($0.time - time) < abs($1.time - time) }
         return nearest?.frequency ?? 7.0
+    }
+
+    private func interpolatedHostMoment(
+        at time: TimeInterval,
+        in moments: [LightMoment]
+    ) -> LightMoment {
+        let sorted = moments.sorted { $0.time < $1.time }
+        guard let first = sorted.first else {
+            return moment(time: time, freq: 7.0, amp: 0.35, waveform: .softPulse)
+        }
+        guard time > first.time else { return first }
+        guard let last = sorted.last, time < last.time else { return sorted.last ?? first }
+
+        guard let nextIndex = sorted.firstIndex(where: { $0.time >= time }), nextIndex > 0 else {
+            return first
+        }
+
+        let previous = sorted[nextIndex - 1]
+        let next = sorted[nextIndex]
+        let span = max(next.time - previous.time, 0.001)
+        let progress = clamp((time - previous.time) / span, lower: 0, upper: 1)
+        let colorTemperature: Double?
+        if let previousColor = previous.color_temperature,
+           let nextColor = next.color_temperature {
+            colorTemperature = previousColor + (nextColor - previousColor) * progress
+        } else {
+            colorTemperature = previous.color_temperature ?? next.color_temperature
+        }
+
+        return LightMoment(
+            time: time,
+            frequency: previous.frequency + (next.frequency - previous.frequency) * progress,
+            intensity: previous.intensity + (next.intensity - previous.intensity) * progress,
+            waveform: previous.waveform,
+            bilateral: previous.bilateral,
+            bilateral_transition_duration: previous.bilateral_transition_duration,
+            color_temperature: colorTemperature
+        )
     }
 
     /// Linear interpolation between two ranges.

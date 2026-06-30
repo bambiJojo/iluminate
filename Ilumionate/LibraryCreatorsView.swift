@@ -14,8 +14,6 @@ struct LibraryCreatorsView: View {
     let audioFiles: [AudioFile]
     @Bindable var engine: LightEngine
 
-    @State private var syncPlayerItem: SyncPlayerItem?
-
     /// All unique creator names, sorted. Files with no creator → "Unknown"
     private var creators: [(name: String, files: [AudioFile])] {
         let grouped = Dictionary(grouping: audioFiles) { file -> String in
@@ -76,9 +74,6 @@ struct LibraryCreatorsView: View {
         }
         .navigationTitle("Creators")
         .onAppear { UsageAnalytics.shared.screen(.libraryCreators) }
-        .fullScreenCover(item: $syncPlayerItem) { item in
-            UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
-        }
     }
 
     // MARK: - Empty State
@@ -173,17 +168,18 @@ struct CreatorDetailView: View {
         }
         .navigationTitle(creatorName)
         .fullScreenCover(item: $syncPlayerItem) { item in
-            UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
+            UnifiedPlayerView(
+                mode: .audioLight(audioFile: item.audioFile),
+                engine: engine,
+                initialLightSession: item.lightSession
+            )
         }
     }
 
     private func playWithLights(_ file: AudioFile) {
-        Task {
-            let sessionsDir = URL.documentsDirectory.appending(path: "GeneratedSessions")
-            let sessionURL = sessionsDir.appending(path: "\(file.id).json")
-            if let session = try? LightScoreReader.loadSession(from: sessionURL) {
-                await MainActor.run { syncPlayerItem = SyncPlayerItem(audioFile: file, lightSession: session) }
-            }
-        }
+        syncPlayerItem = SyncPlayerItem(
+            audioFile: file,
+            lightSession: GeneratedSessionStore.shared.load(for: file)
+        )
     }
 }

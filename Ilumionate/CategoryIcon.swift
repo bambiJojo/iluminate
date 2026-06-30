@@ -20,6 +20,7 @@ struct CategoryIcon: View {
         }) {
             VStack(spacing: TranceSpacing.icon) {
                 Text(emoji)
+                    .accessibilityHidden(true)
                     .font(.system(size: 22))
                     .frame(width: 52, height: 52)
                     .background(Color.bgCard)
@@ -37,6 +38,8 @@ struct CategoryIcon: View {
             }
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
         .scaleEffect(isPressed ? 0.95 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isPressed)
         .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in

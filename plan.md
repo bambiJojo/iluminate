@@ -15,6 +15,13 @@ A premium iOS light therapy (photoentrainment) app that synchronizes adaptive vi
 - 🔄 In progress / partial
 - ❌ Not started
 
+> 📋 **Audit note (2026-06-19):** A spec-vs-code audit found several status markers below are stale.
+> Verified-but-marked-❌: audio-file playback in player (`UnifiedPlayerViewModel.swift:422`) and
+> GeneratedSession persistence (`GeneratedSessionStore.swift`) are implemented. Marked-✅-but-absent:
+> `AudioRecorderView` does not exist. Nav is 4-tab (Home/Library/Read/Create), not the 5-tab set
+> noted below. Top real open item: `LightScorePlayer` external time-sync. Statuses left unchanged
+> pending production verification per project rules. Full detail: `docs/superpowers/spec-audit-2026-06-19.md`.
+
 ---
 
 ## FOUNDATION — Light Engine & Core System

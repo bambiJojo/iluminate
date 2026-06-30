@@ -11,6 +11,7 @@ struct SafariBrowserView: View {
     let url: URL
     let suggestedTitle: String?
     let theme: ScriptTheme
+    let allowsImport: Bool
     let onImported: ((TranceScript) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
@@ -28,10 +29,12 @@ struct SafariBrowserView: View {
     init(url: URL,
          suggestedTitle: String? = nil,
          theme: ScriptTheme = .focus,
+         allowsImport: Bool = true,
          onImported: ((TranceScript) -> Void)? = nil) {
         self.url = url
         self.suggestedTitle = suggestedTitle
         self.theme = theme
+        self.allowsImport = allowsImport
         self.onImported = onImported
     }
 
@@ -103,35 +106,36 @@ struct SafariBrowserView: View {
 
             Spacer(minLength: TranceSpacing.inner)
 
-            Button {
-                importCurrentPage()
-            } label: {
-                HStack(spacing: TranceSpacing.icon) {
-                    if isImporting {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "text.page.badge.magnifyingglass")
+            if allowsImport {
+                Button {
+                    importCurrentPage()
+                } label: {
+                    HStack(spacing: TranceSpacing.icon) {
+                        if isImporting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "text.page.badge.magnifyingglass")
+                        }
+                        Text(isImporting ? "Reading" : "Read")
                     }
-                    Text(isImporting ? "Reading" : "Read")
+                    .font(TranceTypography.body)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, TranceSpacing.inner)
+                    .frame(height: 42)
+                    .background(
+                        LinearGradient(
+                            colors: [.roseGold, .roseDeep],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: Capsule()
+                    )
                 }
-                .font(TranceTypography.body)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white)
-                .padding(.horizontal, TranceSpacing.inner)
-                .frame(height: 42)
-                .background(
-                    LinearGradient(
-                        colors: [.roseGold, .roseDeep],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: Capsule()
-                )
+                .disabled(isImporting || currentURL == nil)
+                .accessibilityLabel("Read current page")
             }
-            .disabled(isImporting || currentURL == nil || onImported == nil)
-            .opacity(onImported == nil ? 0.55 : 1)
-            .accessibilityLabel("Read current page")
         }
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.inner)
@@ -214,9 +218,18 @@ struct SafariBrowserView: View {
                     theme: theme
                 )
                 await MainActor.run {
-                    isImporting = false
-                    onImported?(script)
-                    dismiss()
+                    do {
+                        if let onImported {
+                            onImported(script)
+                        } else {
+                            try ImportedTranceScriptStore.shared.save(script)
+                        }
+                        isImporting = false
+                        dismiss()
+                    } catch {
+                        isImporting = false
+                        importErrorMessage = error.localizedDescription
+                    }
                 }
             } catch {
                 await MainActor.run {

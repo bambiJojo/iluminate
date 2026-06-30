@@ -33,7 +33,7 @@ struct ProfileSettingsView: View {
 
     // Privacy
     @AppStorage("listeningHistoryEnabled") var listeningHistoryEnabled = false
-    @AppStorage("analyticsEnabled") var analyticsEnabled = true
+    @AppStorage("analyticsConsentGranted") var analyticsEnabled = false
 
     // Analysis Preferences
     @State var prefs = AnalysisPreferences.shared
@@ -43,6 +43,9 @@ struct ProfileSettingsView: View {
     @State var showClearDataDone = false
     @State var showDeveloperOptions = false
     @State var showAbout = false
+    #if DEBUG
+    @State var showAnalyzerTraining = false
+    #endif
 
     @State var animateContent = false
 

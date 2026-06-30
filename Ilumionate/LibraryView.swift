@@ -364,11 +364,8 @@ private struct LibrarySessionsList: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
-                            Button("Play with Light Sync", systemImage: "play.fill") {
+                            Button("Play", systemImage: "play.fill") {
                                 onPlay(file)
-                            }
-                            Button("View Details", systemImage: "info.circle") {
-                                // NavigationLink handles this — no-op as context menu
                             }
                             Button("Analyze", systemImage: "waveform") {
                                 Task {
@@ -682,7 +679,11 @@ struct LibraryFavoritesView: View {
             favorites = new.filter { $0.favorite }.sorted { $0.filename < $1.filename }
         }
         .fullScreenCover(item: $syncPlayerItem) { item in
-            UnifiedPlayerView(mode: .audioLight(audioFile: item.audioFile), engine: engine)
+            UnifiedPlayerView(
+                mode: .audioLight(audioFile: item.audioFile),
+                engine: engine,
+                initialLightSession: item.lightSession
+            )
         }
         .sheet(item: $fileForPlaylist) { file in
             AddToPlaylistSheet(itemTitle: file.displayName) { playlist in
@@ -692,13 +693,10 @@ struct LibraryFavoritesView: View {
     }
 
     private func playWithLights(_ file: AudioFile) {
-        Task {
-            let sessionsDir = URL.documentsDirectory.appending(path: "GeneratedSessions")
-            let sessionURL = sessionsDir.appending(path: "\(file.id).json")
-            if let session = try? LightScoreReader.loadSession(from: sessionURL) {
-                await MainActor.run { syncPlayerItem = SyncPlayerItem(audioFile: file, lightSession: session) }
-            }
-        }
+        syncPlayerItem = SyncPlayerItem(
+            audioFile: file,
+            lightSession: GeneratedSessionStore.shared.load(for: file)
+        )
     }
 
     private func addFile(_ file: AudioFile, to playlist: Playlist) {

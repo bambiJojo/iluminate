@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "midnight-garden",
+  "title": "Midnight Garden",
+  "theme": "sleep",
+  "supportedArcs": ["handoff"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "summary": "A handoff-only sleep session that walks attention through a quiet garden and lets the screen yield to the night.",
+  "segments": [
+    {
+      "phase": "induction",
+      "text": "Let the words become stepping stones through a midnight garden. Each one appears softly, and each one is enough for now. The gate closes behind the day. Its noise remains outside. Inside the garden, the path is simple. Dark leaves rest on either side. The air is cool and still. You do not have to hurry down the path. You do not have to remember where it leads. The body only needs to follow the next word, the next breath, the next small release. The mind may still carry pieces of the day, but the garden has room for them to grow quiet.",
+      "pacing": { "baseWPM": 124 }
+    },
+    {
+      "phase": "deepening",
+      "text": "With every line, the path turns farther from ordinary thinking. A small fountain can be heard somewhere ahead, steady and soft. Water falls, gathers, and falls again. Breath enters, leaves, and enters again. The two rhythms begin to feel related. The shoulders loosen as if set down on a bench. The hands become quiet. The legs become heavy in a safe, comfortable way. A lantern glows beside the path, just bright enough for this moment and no brighter. The garden does not ask questions. It does not require progress. It only offers stillness, and the body can accept stillness one layer at a time.",
+      "pacing": { "baseWPM": 88 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Now imagine passing under an arch of dark branches. On one side of the arch is the part of the mind that plans and checks. On the other side is the deeper part that knows how to rest. You move through slowly. Planning can remain behind the arch. Checking can remain behind the arch. The deeper part does not need instructions. It already knows how to slow the body, soften the thoughts, and open the way toward sleep. Let each word carry you farther into that knowing. Less language. Less effort. Less need to supervise the night. More trust. More heaviness. More quiet.",
+      "pacing": { "baseWPM": 80 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Sleep can arrive like the garden darkening around you. Not sudden. Not forced. Gradual and kind. The body can stop asking whether sleep is here yet. Asking is a daytime habit. Tonight, you only make room. A thought may cross the path, and it can continue walking. A sound may happen, and it can become part of the garden. A feeling may move, and the ground can hold it. Nothing needs to become a problem. The deeper mind can sort what needs sorting in its own time. Your part is simpler: rest the body, follow the rhythm, and let the night do what night does.",
+      "pacing": { "baseWPM": 78 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let the final suggestions become very soft. I can release the day at the gate. I can let checking fade. I can trust the body to know sleep. I can drift before every thought is complete. I can wake later having been carried by rest. The garden path grows darker now. The fountain sounds farther away. The words themselves begin to feel less necessary. Each sentence can dissolve as soon as it has done its work. You do not have to keep any of this. You only let it guide you to the edge of sleep.",
+      "pacing": { "baseWPM": 74 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Somewhere in the garden, a door to morning is already closed for the night. You do not need to open it early. Plans can wait behind that door. Messages can wait. Decisions can wait. The body has a different task now, older and simpler than planning. It can lower the lights inside. It can loosen the grip on language. It can let warmth gather around the edges of awareness until the path, the fountain, and even the need to follow become softer than a dream. If you wake later, the garden can still be there. One breath can find the path again. One soft image can lead you back down. You do not need to check how deeply you have gone. The garden keeps the rhythm for you.",
+      "pacing": { "baseWPM": 72 }
+    },
+    {
+      "phase": "transitional",
+      "text": "Now the garden can continue without words. Let your eyes close, and let the remaining light or sound become distant, soft, and safe enough to fade beneath sleep.",
+      "pacing": { "baseWPM": 70 },
+      "triggersHandoff": true
+    }
+  ]
+}

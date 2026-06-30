@@ -36,6 +36,7 @@ struct OnboardingView: View {
         case questionnaire
         case personalizedResponse
         case warning
+        case analyticsConsent
         case completed
     }
     
@@ -69,6 +70,9 @@ struct OnboardingView: View {
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     case .warning:
                         warningPhase
+                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+                    case .analyticsConsent:
+                        analyticsConsentPhase
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     case .completed:
                         completedPhase
@@ -121,43 +125,48 @@ struct OnboardingView: View {
     }
     
     // MARK: - Navigation Footer
+    @ViewBuilder
     private var navigationFooter: some View {
-        HStack {
-            // Back Button
-            if currentPhase != .welcome && currentPhase != .completed {
-                Button(action: previousPhase) {
-                    Image(systemName: "arrow.left")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 50, height: 50)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
-                }
-            }
-            
-            Spacer()
-            
-            // Next / Continue Button
-            Button(action: nextPhase) {
-                HStack {
-                    Text(buttonTextForPhase(currentPhase))
-                        .font(TranceTypography.body)
-                        .fontWeight(.semibold)
-                    
-                    if currentPhase != .questionnaire {
-                        Image(systemName: "arrow.right")
+        if currentPhase == .analyticsConsent {
+            EmptyView()
+        } else {
+            HStack {
+                // Back Button
+                if currentPhase != .welcome && currentPhase != .completed {
+                    Button(action: previousPhase) {
+                        Image(systemName: "arrow.left")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 50, height: 50)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
                     }
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, (currentPhase == .questionnaire && selectedGoal == nil) ? 0 : 20)
-                .frame(width: (currentPhase == .questionnaire && selectedGoal == nil) ? 50 : nil, height: 50)
-                .background(Color.bwTheta)
-                .clipShape(Capsule())
-                .shadow(color: Color.bwTheta.opacity(0.3), radius: 10, x: 0, y: 5)
+
+                Spacer()
+
+                // Next / Continue Button
+                Button(action: nextPhase) {
+                    HStack {
+                        Text(buttonTextForPhase(currentPhase))
+                            .font(TranceTypography.body)
+                            .fontWeight(.semibold)
+
+                        if currentPhase != .questionnaire {
+                            Image(systemName: "arrow.right")
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, (currentPhase == .questionnaire && selectedGoal == nil) ? 0 : 20)
+                    .frame(width: (currentPhase == .questionnaire && selectedGoal == nil) ? 50 : nil, height: 50)
+                    .background(Color.roseGold)
+                    .clipShape(Capsule())
+                    .shadow(color: Color.roseGold.opacity(0.3), radius: 10, x: 0, y: 5)
+                }
+                .disabled(currentPhase == .questionnaire && selectedGoal == nil)
+                .opacity((currentPhase == .questionnaire && selectedGoal == nil) ? 0.5 : 1)
+                .animation(.easeInOut, value: selectedGoal)
             }
-            .disabled(currentPhase == .questionnaire && selectedGoal == nil)
-            .opacity((currentPhase == .questionnaire && selectedGoal == nil) ? 0.5 : 1)
-            .animation(.easeInOut, value: selectedGoal)
         }
     }
     
@@ -226,7 +235,7 @@ struct OnboardingView: View {
                         HStack(spacing: 16) {
                             Image(systemName: goal.icon)
                                 .font(.title2)
-                                .foregroundStyle(selectedGoal == goal ? .white : .bwTheta)
+                                .foregroundStyle(selectedGoal == goal ? .white : .roseGold)
                                 .frame(width: 30)
                             
                             Text(goal.rawValue)
@@ -244,7 +253,7 @@ struct OnboardingView: View {
                         .padding()
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(selectedGoal == goal ? Color.bwTheta : Color.white.opacity(0.1))
+                                .fill(selectedGoal == goal ? Color.roseGold : Color.white.opacity(0.1))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 16)
@@ -265,12 +274,12 @@ struct OnboardingView: View {
                 // Animated Icon specific to goal
                 ZStack {
                     Circle()
-                        .fill(Color.bwTheta.opacity(0.2))
+                        .fill(Color.roseGold.opacity(0.2))
                         .frame(width: 140, height: 140)
                     
                     Image(systemName: goal.icon)
                         .font(.system(size: 60))
-                        .foregroundStyle(.bwTheta)
+                        .foregroundStyle(.roseGold)
                         .scaleEffect(isAnimating ? 1.1 : 0.9)
                         .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
                 }
@@ -297,14 +306,14 @@ struct OnboardingView: View {
         VStack(spacing: 30) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 80))
-                .foregroundStyle(.roseDeep)
-                .shadow(color: .roseDeep.opacity(0.5), radius: 10, x: 0, y: 5)
+                .foregroundStyle(.roseGold)
+                .shadow(color: .roseGold.opacity(0.5), radius: 10, x: 0, y: 5)
                 .padding(.top, 20)
             
             VStack(spacing: 16) {
                 Text("Important Warning")
                     .font(TranceTypography.screenTitle)
-                    .foregroundStyle(.roseDeep)
+                    .foregroundStyle(.primary)
                 
                 Text("This app uses flashing lights and visual patterns as part of the brainwave entrainment process.")
                     .font(TranceTypography.body.bold())
@@ -320,8 +329,65 @@ struct OnboardingView: View {
             }
         }
     }
+
+    // 5. Analytics Consent Phase
+    private var analyticsConsentPhase: some View {
+        VStack(spacing: 28) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 68, weight: .light))
+                .foregroundStyle(Color.roseGold)
+                .shadow(color: .roseGold.opacity(0.35), radius: 12, x: 0, y: 6)
+                .padding(.top, 20)
+
+            VStack(spacing: 16) {
+                Text("Help improve LumeSync")
+                    .font(TranceTypography.screenTitle)
+                    .multilineTextAlignment(.center)
+
+                Text("Share anonymous app usage analytics so we can understand what works, find problems, and make the app better.")
+                    .font(TranceTypography.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                analyticsBullet("Includes screen views, feature usage, completion buckets, and non-content error categories.")
+                analyticsBullet("Never includes audio, transcripts, generated session text, imported documents, or reading-source URLs.")
+                analyticsBullet("You can change this anytime in Settings.")
+            }
+
+            VStack(spacing: 12) {
+                Button {
+                    chooseAnalyticsConsent(true)
+                } label: {
+                    Text("Share Anonymous Analytics")
+                        .font(TranceTypography.body.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Color.roseGold)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    chooseAnalyticsConsent(false)
+                } label: {
+                    Text("Not Now")
+                        .font(TranceTypography.body.weight(.semibold))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
     
-    // 5. Completed Phase
+    // 6. Completed Phase
     private var completedPhase: some View {
         VStack(spacing: 40) {
             ZStack {
@@ -362,7 +428,9 @@ struct OnboardingView: View {
         case .personalizedResponse:
             return LinearGradient(colors: [Color.bgSecondary, Color.lavender.opacity(0.2)], startPoint: .top, endPoint: .bottom)
         case .warning:
-            return LinearGradient(colors: [Color.bgPrimary, Color.roseDeep.opacity(0.1)], startPoint: .top, endPoint: .bottom)
+            return LinearGradient(colors: [Color.bgPrimary, Color.roseGold.opacity(0.1)], startPoint: .top, endPoint: .bottom)
+        case .analyticsConsent:
+            return LinearGradient(colors: [Color.bgPrimary, Color.roseGold.opacity(0.14)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .completed:
             return LinearGradient(colors: [Color.bgPrimary, Color.green.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
@@ -374,8 +442,14 @@ struct OnboardingView: View {
         case .questionnaire: return selectedGoal != nil ? "Continue" : ""
         case .personalizedResponse: return "Next"
         case .warning: return "I Understand & Accept"
+        case .analyticsConsent: return ""
         case .completed: return "Enter LumeSync"
         }
+    }
+
+    private func chooseAnalyticsConsent(_ enabled: Bool) {
+        UsageAnalytics.shared.setEnabled(enabled)
+        nextPhase()
     }
     
     private func nextPhase() {
@@ -403,7 +477,7 @@ struct OnboardingView: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "circle.fill")
                 .font(.system(size: 6))
-                .foregroundStyle(.roseDeep)
+                .foregroundStyle(.roseGold)
                 .padding(.top, 6)
             
             Text(text)
@@ -413,12 +487,27 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
         }
     }
+
+    private func analyticsBullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.roseGold)
+                .padding(.top, 2)
+
+            Text(text)
+                .font(TranceTypography.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+        }
+    }
     
     private func progressIndicator() -> some View {
         HStack(spacing: 8) {
             ForEach(1..<OnboardingPhase.allCases.count - 1, id: \.self) { index in
                 Capsule()
-                    .fill(currentPhase.rawValue >= index ? Color.bwTheta : Color.gray.opacity(0.3))
+                    .fill(currentPhase.rawValue >= index ? Color.roseGold : Color.textGhost.opacity(0.4))
                     .frame(width: currentPhase.rawValue == index ? 24 : 8, height: 8)
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: currentPhase)
             }

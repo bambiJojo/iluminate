@@ -135,15 +135,26 @@ enum WhisperModelBootstrap {
 
     nonisolated static func actionableFailureMessage(
         underlyingError: Error,
+        priorLocalModelError: Error? = nil,
         preferredVariant: String = preferredModelVariant,
         repositoryURL: URL = sharedRepositoryURL()
     ) -> String {
         let detail = underlyingError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let localMessage = "No local WhisperKit model is installed at \(repositoryURL.path)."
+        let priorFailureMessage: String
+        if let priorLocalModelError {
+            priorFailureMessage = """
+            A cached local WhisperKit model was found but failed to load, so the app cleared the cache and tried to download a fresh copy.
+            Cached model error: \(priorLocalModelError.localizedDescription)
+            """
+        } else {
+            priorFailureMessage = ""
+        }
 
         if isConnectivityFailure(detail) {
             return """
             \(localMessage)
+            \(priorFailureMessage)
             Automatic download of the \"\(preferredVariant)\" model from \(modelRepositoryID) failed because the app could not reach Hugging Face.
             Connect to the internet once and retry, or place a compatible WhisperKit model in that shared cache directory.
             Underlying error: \(detail)
@@ -152,6 +163,7 @@ enum WhisperModelBootstrap {
 
         return """
         \(localMessage)
+        \(priorFailureMessage)
         Automatic download of the \"\(preferredVariant)\" model from \(modelRepositoryID) failed.
         Underlying error: \(detail)
         """
@@ -339,6 +351,35 @@ actor WhisperManager {
 
         try fileManager.createDirectory(at: downloadBase, withIntermediateDirectories: true, attributes: nil)
 
+        if !forceDownload,
+           let installed = WhisperModelBootstrap.preferredInstallation(
+               preferredVariant: WhisperModelBootstrap.preferredModelVariant,
+               repositoryURL: repositoryURL,
+               fileManager: fileManager
+           ) {
+            do {
+                let whisper = try await makeWhisperKit(downloadBase: downloadBase)
+                whisper.modelFolder = installed.folderURL
+                try await whisper.loadModels()
+                return whisper
+            } catch {
+                Log.audio.info("⚠️ Cached WhisperKit model failed to load. Clearing cache and retrying download: \(error)")
+                try? fileManager.removeItem(at: repositoryURL)
+                return try await downloadAndLoadWhisperKit(
+                    downloadBase: downloadBase,
+                    repositoryURL: repositoryURL,
+                    priorLocalModelError: error
+                )
+            }
+        }
+
+        return try await downloadAndLoadWhisperKit(
+            downloadBase: downloadBase,
+            repositoryURL: repositoryURL
+        )
+    }
+
+    private func makeWhisperKit(downloadBase: URL) async throws -> WhisperKit {
         let whisper = try await WhisperKit(WhisperKitConfig(
             model: WhisperModelBootstrap.preferredModelVariant,
             downloadBase: downloadBase,
@@ -349,19 +390,16 @@ actor WhisperManager {
             load: false,
             download: false
         ))
+        return whisper
+    }
 
-        if !forceDownload,
-           let installed = WhisperModelBootstrap.preferredInstallation(
-               preferredVariant: WhisperModelBootstrap.preferredModelVariant,
-               repositoryURL: repositoryURL,
-               fileManager: fileManager
-           ) {
-            whisper.modelFolder = installed.folderURL
-            try await whisper.loadModels()
-            return whisper
-        }
-
+    private func downloadAndLoadWhisperKit(
+        downloadBase: URL,
+        repositoryURL: URL,
+        priorLocalModelError: Error? = nil
+    ) async throws -> WhisperKit {
         do {
+            let whisper = try await makeWhisperKit(downloadBase: downloadBase)
             let downloadedFolder = try await WhisperKit.download(
                 variant: WhisperModelBootstrap.preferredModelVariant,
                 downloadBase: downloadBase,
@@ -374,6 +412,7 @@ actor WhisperManager {
             throw AnalyzerError.whisperKitInitializationFailed(
                 WhisperModelBootstrap.actionableFailureMessage(
                     underlyingError: error,
+                    priorLocalModelError: priorLocalModelError,
                     preferredVariant: WhisperModelBootstrap.preferredModelVariant,
                     repositoryURL: repositoryURL
                 )
@@ -502,9 +541,9 @@ actor WhisperManager {
 
         // WhisperKit sets `language` to the ISO 639-1 code it detected (e.g. "en", "fr").
         // Fall back to the device locale language code when auto-detection is inconclusive.
-        let detectedLanguage = whisperResult.language
-            ?? Locale.current.language.languageCode?.identifier
-            ?? "en"
+        let detectedLanguage = whisperResult.language.isEmpty
+            ? (Locale.current.language.languageCode?.identifier ?? "en")
+            : whisperResult.language
 
         let result = AudioTranscriptionResult(
             fullText: whisperResult.text,

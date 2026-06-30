@@ -13,8 +13,12 @@ struct UnifiedPlayerView: View {
     @State private var controlsVisibility = PlayerControlsVisibility()
     @Environment(\.dismiss) private var dismiss
 
-    init(mode: PlayerMode, engine: LightEngine) {
-        _viewModel = State(initialValue: UnifiedPlayerViewModel(mode: mode, engine: engine))
+    init(mode: PlayerMode, engine: LightEngine, initialLightSession: LightSession? = nil) {
+        _viewModel = State(initialValue: UnifiedPlayerViewModel(
+            mode: mode,
+            engine: engine,
+            initialLightSession: initialLightSession
+        ))
     }
 
     init(viewModel: UnifiedPlayerViewModel) {
@@ -116,31 +120,14 @@ struct UnifiedPlayerView: View {
         .onChange(of: AnalysisStateManager.shared.completedAnalyses.count) {
             Task { await viewModel.checkForLightSession() }
         }
-        .alert("Flashing Lights Warning", isPresented: lightSyncWarningBinding) {
+        .alert("Flashing Lights Warning", isPresented: $viewModel.showingLightSyncWarning) {
             Button("I Understand", role: .none) {
-                if let session = viewModel.lightSession {
-                    viewModel.enableLightSync(session: session)
-                }
+                viewModel.acknowledgeLightSyncWarning()
             }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Light Sync uses rapidly flashing light patterns. If you have photosensitive epilepsy or are sensitive to flashing lights, do not enable this feature.")
         }
-    }
-
-    // MARK: - Light Sync Warning Binding
-
-    private var lightSyncWarningBinding: Binding<Bool> {
-        Binding(
-            get: {
-                if case .ready = viewModel.lightSyncStatus,
-                   !UserDefaults.standard.bool(forKey: "hasSeenLightSyncWarning") {
-                    return false // only shown when user taps the button
-                }
-                return false
-            },
-            set: { _ in }
-        )
     }
 
     // MARK: - Background Layer
@@ -341,7 +328,7 @@ struct UnifiedPlayerView: View {
         HStack {
             Toggle("Smart Transitions", isOn: smartTransitionsBinding)
             .font(.caption)
-            .tint(.blue)
+            .tint(.roseGold)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)

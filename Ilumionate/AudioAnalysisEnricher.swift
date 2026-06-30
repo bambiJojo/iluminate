@@ -17,7 +17,7 @@ import os
 /// detection. This type adds the audio-signal and transcript metrics that make
 /// the generated score track the creator's delivery instead of only the broad
 /// content type or file duration.
-struct AudioAnalysisEnricher: Sendable {
+nonisolated struct AudioAnalysisEnricher: Sendable {
 
     let prosodyAnalyzer: any ProsodyAnalyzingService
     let analyzerConfig: AnalyzerConfig

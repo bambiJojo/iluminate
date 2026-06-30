@@ -15,6 +15,7 @@ extension ProfileSettingsView {
 
     func settingsToggle(
         title: String,
+        description: String? = nil,
         binding: Binding<Bool>,
         icon: String,
         color: Color
@@ -24,9 +25,18 @@ extension ProfileSettingsView {
                 .font(.system(size: 16))
                 .foregroundStyle(color)
                 .frame(width: 24)
-            Text(title)
-                .font(TranceTypography.body)
-                .foregroundStyle(Color.textPrimary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(TranceTypography.body)
+                    .foregroundStyle(Color.textPrimary)
+
+                if let description {
+                    Text(description)
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Spacer()
             Toggle("", isOn: binding)
                 .toggleStyle(RoseToggleStyle())

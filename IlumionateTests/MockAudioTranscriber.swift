@@ -17,6 +17,7 @@ final class MockAudioTranscriber: AudioTranscribingService {
     var resultToReturn: Result<AudioTranscriptionResult, Error> =
         .success(AnalysisFixtures.basicTranscription)
     private(set) var callCount = 0
+    private(set) var cancelCallCount = 0
 
     func transcribe(audioFile: AudioFile) async throws -> AudioTranscriptionResult {
         callCount += 1
@@ -25,6 +26,6 @@ final class MockAudioTranscriber: AudioTranscribingService {
     }
 
     func cancelTranscription() async {
-        // no-op in tests
+        cancelCallCount += 1
     }
 }

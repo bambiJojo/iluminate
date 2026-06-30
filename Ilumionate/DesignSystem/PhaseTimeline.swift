@@ -32,6 +32,7 @@ struct PhaseTimeline: View {
             }
         }
         .frame(height: 6)
+        .accessibilityHidden(true)
     }
 
     private func strip(pulse: Double) -> some View {

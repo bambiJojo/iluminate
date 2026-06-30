@@ -40,6 +40,7 @@ enum TranceTab: String, CaseIterable {
 struct TranceTabBar: View {
     @Binding var selected: TranceTab
     @Namespace private var tabAnimation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
@@ -61,22 +62,26 @@ struct TranceTabBar: View {
         let isSelected = selected == tab
 
         Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+            if reduceMotion {
                 selected = tab
+            } else {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    selected = tab
+                }
             }
             TranceHaptics.shared.light()
         } label: {
             VStack(spacing: 2) {
                 Image(systemName: tab.sfSymbol)
                     .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
-                    .symbolEffect(.bounce, value: selected)
+                    .symbolEffect(.bounce, value: reduceMotion ? tab : selected)
 
                 Text(tab.title)
                     .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
             }
             .foregroundStyle(isSelected ? tabAccentColor : Color.textGhost)
-            .scaleEffect(isSelected ? 1.05 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.65), value: selected)
+            .scaleEffect(isSelected && !reduceMotion ? 1.05 : 1.0)
+            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.65), value: selected)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .background {
@@ -89,6 +94,8 @@ struct TranceTabBar: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(tab.title)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     // The tint for the active tab — `.roseGold` now resolves to the Liminal aurora teal

@@ -170,7 +170,7 @@ final class TextTranceSession {
         }
         isReading = false
 
-        if settings.arc == .handoff, !cancelled, !Task.isCancelled {
+        if settings.arc == .handoff, shouldRunHandoffTail, !cancelled, !Task.isCancelled {
             if lightEnabledLive, let light {
                 light.start()
                 lightActive = true
@@ -185,6 +185,10 @@ final class TextTranceSession {
         if binauralActive { audio?.stop() }
         isComplete = !cancelled && !Task.isCancelled
         if isComplete { progressStore?.clear(scriptId: script.id) }
+    }
+
+    private var shouldRunHandoffTail: Bool {
+        (lightEnabledLive && light != nil) || binauralActive
     }
 
     /// Snapshot the current position + live settings for resume-after-close.
@@ -231,7 +235,11 @@ final class TextTranceSession {
             let holdDuration = Duration.seconds(remaining)
             let task = Task { [sleep] in await sleep(holdDuration) }
             holdTask = task
-            await task.value
+            await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
             holdTask = nil
             if cancelled || Task.isCancelled { return }
             if isPaused {

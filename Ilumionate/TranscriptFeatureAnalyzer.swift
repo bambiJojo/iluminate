@@ -10,7 +10,7 @@ import Foundation
 /// Derives transcript-level features normalized against the current file rather
 /// than fixed thresholds, so fast and slow hypnotists can still be compared on
 /// relative change.
-struct TranscriptFeatureAnalyzer {
+nonisolated struct TranscriptFeatureAnalyzer: Sendable {
 
     private struct SectionSeed {
         let id: UUID

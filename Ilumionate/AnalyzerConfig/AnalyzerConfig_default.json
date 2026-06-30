@@ -180,7 +180,6 @@
       "induction":                  { "lower": 8.0,  "upper": 12.0 },
       "fractionation":              { "lower": 6.5,  "upper": 9.5  },
       "deepening":                  { "lower": 5.0,  "upper": 8.0  },
-      "confusion":                  { "lower": 4.5,  "upper": 6.5  },
       "therapy":                    { "lower": 4.5,  "upper": 6.5  },
       "suggestions":                { "lower": 5.0,  "upper": 7.0  },
       "erotic_suggestions":         { "lower": 3.5,  "upper": 5.5  },

@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum CorpusSourceProfile: String, CaseIterable, Codable, Identifiable, Sendable {
+nonisolated enum CorpusSourceProfile: String, CaseIterable, Codable, Identifiable, Sendable {
     case general
     case therapeutic
     case eroticConditioning
@@ -57,7 +57,7 @@ enum CorpusSourceProfile: String, CaseIterable, Codable, Identifiable, Sendable 
         }
     }
 
-    static func storedSelection(defaults: UserDefaults = .standard) -> CorpusSourceProfile? {
+    nonisolated static func storedSelection(defaults: UserDefaults = .standard) -> CorpusSourceProfile? {
         guard defaults.object(forKey: userDefaultsKey) != nil else { return nil }
         return CorpusSourceProfile(rawValue: defaults.string(forKey: userDefaultsKey) ?? "")
     }
@@ -85,7 +85,7 @@ enum CorpusSourceProfile: String, CaseIterable, Codable, Identifiable, Sendable 
     }
 }
 
-struct AnalyzerConfig: Codable, Sendable {
+nonisolated struct AnalyzerConfig: Codable, Sendable {
 
     var version: Int = 2
     var generation: Int = 0
@@ -102,7 +102,7 @@ struct AnalyzerConfig: Codable, Sendable {
 
     // MARK: - Keyword Pipeline
 
-    struct KeywordPipeline: Codable, Sendable {
+    nonisolated struct KeywordPipeline: Codable, Sendable {
         /// Phase name (raw value) → keyword → weight
         var weights: [String: [String: Double]]
         var contextWindowSeconds: Int
@@ -135,7 +135,7 @@ struct AnalyzerConfig: Codable, Sendable {
 
     // MARK: - Chunked Analyzer (Foundation Models)
 
-    struct ChunkedAnalyzer: Codable, Sendable {
+    nonisolated struct ChunkedAnalyzer: Codable, Sendable {
         var chunkDurationSeconds: Double
         var chunkOverlapSeconds: Double
         var minChunks: Int
@@ -143,7 +143,7 @@ struct AnalyzerConfig: Codable, Sendable {
         var systemInstructions: String
         var fewShotExamples: [FewShotExample]
 
-        struct FewShotExample: Codable, Sendable {
+        nonisolated struct FewShotExample: Codable, Sendable {
             var text: String
             var position: Double
             var correctPhase: String
@@ -153,7 +153,7 @@ struct AnalyzerConfig: Codable, Sendable {
 
     // MARK: - Prosody
 
-    struct Prosody: Codable, Sendable {
+    nonisolated struct Prosody: Codable, Sendable {
         var speechRateWindowSeconds: Double
         var pauseThresholdSeconds: Double
         var deliberatePauseMinSeconds: Double
@@ -162,14 +162,14 @@ struct AnalyzerConfig: Codable, Sendable {
 
     // MARK: - Technique Detection
 
-    struct TechniqueDetection: Codable, Sendable {
+    nonisolated struct TechniqueDetection: Codable, Sendable {
         var sensitivityThreshold: Double
         var minConfidence: Double
     }
 
     // MARK: - Hybrid Selection
 
-    struct HybridSelection: Codable, Sendable {
+    nonisolated struct HybridSelection: Codable, Sendable {
         var techniqueAlignmentWeight: Double = 0.12
         var chunkedClearWinMargin: Double = 0.05
         var chunkedCoverageWinMargin: Double = 0.015
@@ -189,7 +189,7 @@ struct AnalyzerConfig: Codable, Sendable {
 
     // MARK: - Corpus Learning
 
-    struct CorpusLearning: Codable, Sendable {
+    nonisolated struct CorpusLearning: Codable, Sendable {
         var learnedKeywordWeightMultiplier: Double = 1.0
         var learnedPhraseWeightMultiplier: Double = 1.0
         var transitionPriorMultiplier: Double = 1.0
@@ -274,7 +274,7 @@ struct AnalyzerConfig: Codable, Sendable {
 
     // MARK: - Boundary Refinement
 
-    struct BoundaryRefinement: Codable, Sendable {
+    nonisolated struct BoundaryRefinement: Codable, Sendable {
         var minimumSideDurationFactor: Double = 0.45
         var minimumSideDurationFloor: Double = 6.0
         var minimumSideDurationCeiling: Double = 10.0
@@ -295,14 +295,14 @@ struct AnalyzerConfig: Codable, Sendable {
 
     // MARK: - Session Generation
 
-    struct SessionGeneration: Codable, Sendable {
+    nonisolated struct SessionGeneration: Codable, Sendable {
         var frequencyBands: [String: FrequencyBand]
         /// Per-hypnosis-phase frequency bands keyed by `HypnosisMetadata.Phase.rawValue`.
         var phaseFrequencyBands: [String: FrequencyBand]
         var transitionSmoothingSeconds: Double
         var intensityCurve: String
 
-        struct FrequencyBand: Codable, Sendable {
+        nonisolated struct FrequencyBand: Codable, Sendable {
             var lower: Double
             var upper: Double
 
@@ -346,7 +346,7 @@ struct AnalyzerConfig: Codable, Sendable {
         self.sessionGeneration = sessionGeneration
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private nonisolated enum CodingKeys: String, CodingKey {
         case version
         case generation
         case fitness

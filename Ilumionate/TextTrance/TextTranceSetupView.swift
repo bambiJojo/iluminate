@@ -31,8 +31,11 @@ struct TextTranceSetupView: View {
     /// A resume snapshot only if it matches the current script text and is in range.
     private var validResume: ReaderResumeState? {
         guard let s = progressStore.resumeState(forScriptId: script.id),
-              s.scriptContentHash == contentHash,
-              s.wordIndex > 0 else { return nil }
+              script.supportedArcs.contains(s.settings.arc),
+              s.isUsable(
+                contentHash: contentHash,
+                scheduleCount: resumeScheduleCount(for: s.settings)
+              ) else { return nil }
         return s
     }
 
@@ -41,6 +44,7 @@ struct TextTranceSetupView: View {
             AuroraBackground()
             ScrollView {
                 VStack(spacing: TranceSpacing.cardMargin) {
+                    ScriptOverviewCard(script: script)
                     ArcCard(script: script, arc: $arc)
                     LayersCard(arc: arc, lightEnabled: $lightEnabled, binauralEnabled: $binauralEnabled)
                     SpeedCard(multiplier: $speedMultiplier)
@@ -103,6 +107,18 @@ struct TextTranceSetupView: View {
             scriptContentHash: contentHash)
     }
 
+    private func resumeScheduleCount(for settings: PersistedReaderSettings) -> Int {
+        TextPacingEngine.schedule(
+            for: script,
+            settings: TextPacingSettings(
+                arc: settings.arc,
+                speedMultiplier: 1.0,
+                subliminalEnabled: settings.subliminalEnabled,
+                subliminalSpeed: settings.subliminalSpeed
+            )
+        ).count
+    }
+
     /// Seed the editable controls from a resume snapshot before launching.
     private func applyResumeSettings(_ s: ReaderResumeState) {
         arc = s.settings.arc
@@ -128,6 +144,40 @@ private struct ArcCard: View {
     }
 }
 
+private struct ScriptOverviewCard: View {
+    let script: TranceScript
+
+    var body: some View {
+        LiminalCard(label: "Script") {
+            VStack(alignment: .leading, spacing: TranceSpacing.list) {
+                Text(script.librarySummary)
+                    .font(TranceTypography.body)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        SetupMetricPill(systemImage: "clock", text: script.durationSummary)
+                        SetupMetricPill(systemImage: "textformat", text: script.wordCountSummary)
+                        SetupMetricPill(systemImage: "arrow.triangle.branch", text: script.arcSummary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        SetupMetricPill(systemImage: "clock", text: script.durationSummary)
+                        SetupMetricPill(systemImage: "textformat", text: script.wordCountSummary)
+                        SetupMetricPill(systemImage: "arrow.triangle.branch", text: script.arcSummary)
+                    }
+                }
+
+                Text(script.phaseSummary)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textLight)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 private struct LayersCard: View {
     let arc: ScriptArc
     @Binding var lightEnabled: Bool
@@ -144,10 +194,21 @@ private struct LayersCard: View {
                 // Light runs only in the post-handoff tail in M1.
                 if arc == .handoff {
                     Toggle("Light pulse after handoff", isOn: $lightEnabled)
+                    Text(handoffStatusText)
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .tint(.auroraTeal)
         }
+    }
+
+    private var handoffStatusText: String {
+        if lightEnabled || binauralEnabled {
+            return "Enabled layers continue after the final reading line."
+        }
+        return "With both layers off, the session ends after the final reading line."
     }
 }
 
@@ -190,6 +251,20 @@ private struct SubliminalCard: View {
                 }
             }
         }
+    }
+}
+
+private struct SetupMetricPill: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: systemImage)
+            .font(TranceTypography.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.glassBorder.opacity(0.28), in: .capsule)
+            .foregroundStyle(Color.textSecondary)
     }
 }
 

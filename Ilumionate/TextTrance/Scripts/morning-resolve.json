@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "morning-resolve",
+  "title": "Morning Resolve",
+  "theme": "suggestion",
+  "supportedArcs": ["fullText"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "summary": "A self-suggestion session for starting a day with grounded resolve, clean priorities, and steady follow-through.",
+  "segments": [
+    {
+      "phase": "induction",
+      "text": "Let the first words of this session become a clean beginning. The day may already have many demands, but this moment can be simple. You are here. You are reading. You are breathing. That is enough to begin. Let the body become upright without becoming tense. Let the gaze become steady without becoming hard. Imagine a line of morning light moving across a quiet room. It does not rush. It does not argue with the dark. It simply arrives and reveals what is there. In the same way, attention can arrive gently and reveal the next useful priority.",
+      "pacing": { "baseWPM": 144 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Settle into that morning light. The breath becomes a little smoother. The shoulders become a little easier. The mind stops trying to hold the entire day at once. You can place the day in front of you like a table with only a few important objects on it. Some items belong there now. Some can wait. Some are not yours. The clearer the table becomes, the clearer your energy becomes. Resolve does not have to be forceful. It can be quiet alignment: knowing what matters, choosing the next step, and returning to that choice when noise appears.",
+      "pacing": { "baseWPM": 106 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let resolve become practical. Today, you can begin with the first honest step. You can make the step visible. You can make it small enough to start and meaningful enough to matter. If the mind tries to negotiate before beginning, you can thank it for trying to protect you and move anyway. If a delay appears, you can reduce the task. If a mistake appears, you can adjust without turning the whole day into a verdict. You do not need a perfect mood to keep a useful promise. You need a next action, a breath, and the willingness to continue.",
+      "pacing": { "baseWPM": 96 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Picture one priority for the day. See it clearly enough to name it. Not every detail. Just the priority. Notice how the body feels when that priority is simple. There may be energy. There may be resistance. Both can be present. Resolve is the part of you that stays oriented while sensations move through. You can say to yourself: this matters enough for one step. This matters enough for one clean block of time. This matters enough to return after interruption. The day does not need to be controlled all at once. It can be guided moment by moment.",
+      "pacing": { "baseWPM": 94 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let these statements become anchors. I start with what matters. I keep the next step visible. I return without drama. I can be steady and flexible. I can protect my attention without becoming rigid. I can notice progress when it happens. The mind learns from what you let count. Let small completions count. Let honest effort count. Let a clean restart count. When the day changes, you can update the plan without abandoning yourself. Resolve is not stiffness. Resolve is returning to the direction you chose with a body that can breathe.",
+      "pacing": { "baseWPM": 96 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Include one recovery plan for the day. If you lose the thread, you can pause and name the priority again. If energy dips, you can make the step smaller. If the schedule changes, you can protect the core intention even if the method changes. This keeps resolve from becoming brittle. You are not promising that the day will obey you. You are practicing the ability to meet the day, update the plan, and continue with self-respect. A useful day is built from many returns. Each return counts. Each restart can be clean. Each small completion can remind the mind that follow-through is already happening. By evening, the evidence may be modest and real: a step taken, a promise kept, a direction honored. Let that be enough evidence to continue tomorrow.",
+      "pacing": { "baseWPM": 96 }
+    },
+    {
+      "phase": "emergence",
+      "text": "Bring the morning resolve back into the room. Feel the body awake and grounded. Name the first step once more. Count upward: one, present; two, organized; three, clear; four, willing; five, ready to begin the day with steady follow-through.",
+      "pacing": { "baseWPM": 136 }
+    }
+  ]
+}

@@ -63,6 +63,27 @@ struct TextTranceSessionTests {
         #expect(session.isComplete)
     }
 
+    @Test func handoffWithNoEnabledTailLayerDoesNotWaitAfterReading() async {
+        let controller = PacingSleepController()
+        let script = handoffScript()
+        let session = TextTranceSession(
+            script: script,
+            settings: TextTranceSessionSettings(
+                arc: .handoff, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 60),
+            light: MockLightLayer(), audio: MockAudioLayer(), sleep: controller.sleepClosure)
+
+        await session.begin()
+
+        let readingWordCount = TextPacingEngine.schedule(
+            for: script,
+            settings: TextPacingSettings(arc: .handoff, speed: .natural)
+        ).count
+        #expect(controller.callCount == readingWordCount)
+        #expect(session.isComplete)
+    }
+
     @Test func disabledBinauralNeverStartsAudio() async {
         let light = MockLightLayer()
         let audio = MockAudioLayer()
@@ -302,5 +323,53 @@ struct TextTranceSessionTests {
         #expect(session.speedMultiplier == TextPacingEngine.maxSpeedMultiplier)
         session.setSpeed(multiplier: 0.01)
         #expect(session.speedMultiplier == TextPacingEngine.minSpeedMultiplier)
+    }
+
+    @Test func cancellationDuringWordHoldCancelsSleepPromptly() async {
+        let light = MockLightLayer()
+        let sleep = CancellableSleepProbe()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .handoff, speedMultiplier: 1.0,
+                lightEnabled: true, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 60),
+            light: light, audio: MockAudioLayer(), sleep: sleep.sleepClosure)
+
+        let task = Task { await session.begin() }
+        while !sleep.started { await Task.yield() }
+
+        task.cancel()
+        await task.value
+
+        #expect(sleep.wasCancelled)
+        #expect(light.startCount == 0)
+        #expect(!session.isComplete)
+    }
+}
+
+@MainActor
+private final class CancellableSleepProbe {
+    private(set) var started = false
+    private(set) var wasCancelled = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func sleep(_ duration: Duration) async {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+                self.started = true
+            }
+        } onCancel: {
+            Task { @MainActor in
+                self.wasCancelled = true
+                self.continuation?.resume()
+                self.continuation = nil
+            }
+        }
+    }
+
+    var sleepClosure: @Sendable (Duration) async -> Void {
+        { [self] duration in await self.sleep(duration) }
     }
 }

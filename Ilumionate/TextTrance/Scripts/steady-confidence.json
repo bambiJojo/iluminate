@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "steady-confidence",
+  "title": "Steady Confidence",
+  "theme": "suggestion",
+  "supportedArcs": ["fullText", "handoff"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "summary": "A grounded self-suggestion session for calm confidence, future pacing, and carrying steadiness into ordinary action.",
+  "segments": [
+    {
+      "phase": "induction",
+      "text": "Let your attention rest on the words as if they were stepping stones across quiet water. You only need the next one. Then the next one. Confidence does not have to be loud to be real. It can begin as steadiness in the body. A settled breath. A relaxed jaw. A little more room across the chest. A sense of being here, in this moment, without needing to prove anything. Let the pace slow the inner argument. Let the eyes take in the words while the rest of you settles into a balanced, grounded posture. There is no performance here. There is only practice: returning to the next clear word and letting it land.",
+      "pacing": { "baseWPM": 140 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Imagine standing with both feet on firm ground. Not rigid. Not braced. Firm in the way a tree is firm, flexible above and rooted below. Each breath moves down through the body like water finding roots. The ground does not ask whether you deserve support. It supports because support is what ground does. Let that image become a physical feeling. Weight through the feet. Space through the spine. Ease through the shoulders. The more supported the body feels, the less the mind has to compensate with tension. You can be calm and capable at the same time. You can be soft and strong at the same time.",
+      "pacing": { "baseWPM": 102 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Now let the useful suggestions begin to settle. I do not need to become someone else to act with confidence. I can bring steadiness to the person I already am. I can pause before responding. I can speak one clear sentence. I can take one clean step. I can let uncertainty be present without letting it lead. Confidence is not the absence of sensation. Confidence is the decision to stay connected to what matters while sensation moves through. A faster heartbeat can become energy. A quiet moment can become preparation. A mistake can become information. A success can become proof that practice is working.",
+      "pacing": { "baseWPM": 94 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Picture a specific future moment where you want this steadiness. See the room or the screen or the conversation. See yourself arriving with more space around your thoughts. Before the moment begins, you take one breath and feel the ground. The breath becomes an anchor. The ground becomes a reminder. Then you do the next honest thing. You do not rush to fill every silence. You do not shrink from being seen. You let your voice, your choice, or your action be simple enough to trust. Afterward, you notice what went well. You let the mind record progress instead of only scanning for flaws.",
+      "pacing": { "baseWPM": 92 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "These words can become a pattern you carry. Ground first. Breath second. Next step third. Ground first. Breath second. Next step third. This pattern can meet many situations because it is simple. It does not depend on mood. It does not depend on perfect certainty. It only asks you to return to the body, return to the breath, and choose the next useful action. Let that be enough. Let enough become familiar. Let familiar become natural.",
+      "pacing": { "baseWPM": 90 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let confidence become connected to preparation instead of pressure. You can prepare by making the first step visible. You can prepare by reducing the noise around the step. You can prepare by deciding how you will recover if the moment is imperfect. This makes confidence flexible. It can bend and continue. You can be learning and still be credible. You can be nervous and still be kind. You can be seen and still belong to yourself. The steadiness you practice here does not ask for perfection. It asks for contact: contact with the ground, contact with the breath, contact with the next honest action. That contact is enough to begin.",
+      "pacing": { "baseWPM": 90 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let the feeling become more specific now. Confidence can show up as making the call, opening the file, asking the question, taking the pause, or letting a silence remain unfilled. It can show up as repairing quickly instead of hiding. It can show up as receiving useful feedback without turning it into a story about your worth. Every ordinary expression of steadiness teaches the mind that confidence is something you do, not something you wait to feel.",
+      "pacing": { "baseWPM": 90 }
+    },
+    {
+      "phase": "emergence",
+      "text": "Begin to bring this steadiness back into ordinary awareness. Let the body feel present and supported. Let the mind become clear without losing calm. Think again of the next real action you want to take. Give it a simple beginning. Count upward now: one, grounded; two, steady; three, clear; four, ready; five, moving forward with calm confidence.",
+      "pacing": { "baseWPM": 132 },
+      "arcs": ["fullText"]
+    },
+    {
+      "phase": "transitional",
+      "text": "If this is a handoff session, let the last visible words become the anchor: ground first, breath second, next step third. Let your eyes close now, and allow the remaining layer to deepen that steady confidence without effort.",
+      "pacing": { "baseWPM": 82 },
+      "arcs": ["handoff"],
+      "triggersHandoff": true
+    }
+  ]
+}

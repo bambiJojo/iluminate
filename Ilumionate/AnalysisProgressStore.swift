@@ -23,7 +23,7 @@ import os
 // MARK: - Checkpoint Model
 
 /// Intermediate pipeline state for a single audio file.
-struct AnalysisCheckpoint: Codable, Sendable {
+nonisolated struct AnalysisCheckpoint: Codable, Sendable {
     let audioFile: AudioFile
     var transcription: AudioTranscriptionResult?
     var analysis: AnalysisResult?
@@ -64,8 +64,9 @@ actor AnalysisProgressStore {
             checkpoints[id] = checkpoint
         }
 
-        if !checkpoints.isEmpty {
-            Log.analysis.info("📂 Loaded \(self.checkpoints.count) analysis checkpoint(s) to resume")
+        let checkpointCount = checkpoints.count
+        if checkpointCount > 0 {
+            Log.analysis.info("📂 Loaded \(checkpointCount) analysis checkpoint(s) to resume")
         }
     }
 

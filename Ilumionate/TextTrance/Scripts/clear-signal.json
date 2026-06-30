@@ -6,10 +6,42 @@
   "supportedArcs": ["fullText"],
   "language": "en",
   "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "summary": "A read-through focus session for sharpening attention without pushing into eye-closed depth.",
   "segments": [
-    { "phase": "induction", "text": "Keep your attention on the single point where each word appears. One word. Then the next. The noise around the edges begins to fall away.", "pacing": { "baseWPM": 170 } },
-    { "phase": "deepening", "text": "Your focus narrows to a clean, bright line. Sharp. Steady. Everything that does not matter goes quiet, and what matters stands out clearly.", "pacing": { "baseWPM": 150 } },
-    { "phase": "suggestions", "text": "You hold this clarity easily. Your mind is a clear signal now, ready, precise, and fully here.", "pacing": { "baseWPM": 145 } },
-    { "phase": "emergence", "text": "Carry this sharpness forward as you lift your eyes, alert, focused, and ready to begin.", "pacing": { "baseWPM": 165 } }
+    {
+      "phase": "induction",
+      "text": "Bring your attention to this exact word. Then this one. Then this one. Focus does not have to arrive all at once. It can assemble itself from small accurate moments. Let the edges of the screen become quiet while the center becomes more important. You are not trying to block the world. You are choosing a signal and letting the signal become clear. Breath stays easy. Face relaxed. Shoulders steady. The gaze can be soft and precise at the same time. If your mind moves away, you do not need to criticize it. Simply notice the movement and return to the next word. Return is the skill. Return is the repetition that builds attention. Every return teaches the mind where to come back.",
+      "pacing": { "baseWPM": 168 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Now imagine a desk being cleared. One object is lifted away. Then another. A loose paper. A small noise. A half-finished thought. Nothing is thrown away. Everything is placed where it belongs for later. The surface becomes open. Clean. Usable. In the same way, your attention can set aside what is not needed for the next span of time. Not forever. Just not now. The important thing comes forward because space has been made for it. The line of attention becomes brighter. It runs from the word, through the eyes, into the mind, and down into the body as a steady readiness. Calm alertness. Quiet energy. A useful, awake stillness.",
+      "pacing": { "baseWPM": 145 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "You can work from this clear signal. One task can be enough. One next action can be enough. The mind does not need to carry the whole project at once. It can hold the next true step and do it well. When distraction appears, it becomes information, not failure. You notice it, name it lightly, and return. The return can be quick. The return can even feel satisfying, because each return strengthens the path. A clean breath. A clean choice. A clean beginning. You can let attention become narrow when precision is needed, then wider when perspective is needed. Narrow and wide. Detail and overview. Action and pause. The system knows how to shift.",
+      "pacing": { "baseWPM": 140 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let a few simple statements become anchors for the next work period. I choose the signal. I set down the noise. I begin with the next useful step. I finish the step I am in. I can be steady without being tense. I can be alert without being rushed. The body stays comfortable enough to support the mind. The mind stays quiet enough to support the work. If momentum grows, let it grow naturally. If resistance appears, make the task smaller until it can be started. One sentence. One file. One message. One clean movement forward. Focus is not pressure. Focus is contact with what matters now.",
+      "pacing": { "baseWPM": 142 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Now rehearse the next useful window of time. It does not need to be perfect. It only needs a beginning, a middle, and an honest finish. At the beginning, you choose one target and place it in front of the mind. In the middle, you return to it as many times as needed. At the finish, you notice what was completed and let that completion count. This is how attention becomes reliable. Not by refusing distraction forever, but by practicing clean recovery. The next time you sit down to work, the body can remember this posture: steady breath, relaxed face, quiet hands, clear signal. The work can become smaller than the worry around it. Smaller, simpler, reachable, and ready to start.",
+      "pacing": { "baseWPM": 138 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let one more cue settle in: protect the start. The start is where attention is most easily scattered, so the start can be made kind and narrow. Open the tool. Read the first line. Place the first mark. Write the first rough sentence. Once the start exists, momentum has something to hold. You can make beginnings clean enough that the rest of the work has a chance to follow.",
+      "pacing": { "baseWPM": 138 }
+    },
+    {
+      "phase": "emergence",
+      "text": "Let the signal remain while the room becomes fully present again. Notice the hands. Notice the breath. Notice the next thing you intend to do after this session. Give it a simple name. Hold that name for one more breath. In a moment, you can move directly into it with a clear head and a steady body. Count upward: one, present; two, organized; three, ready; four, focused; five, begin.",
+      "pacing": { "baseWPM": 164 }
+    }
   ]
 }

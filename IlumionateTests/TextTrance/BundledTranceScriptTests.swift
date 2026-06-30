@@ -6,6 +6,8 @@ import Foundation
 @testable import Ilumionate
 
 struct BundledTranceScriptTests {
+    private static let minimumBundledScriptCount = 10
+    private static let minimumScheduledWordsPerArc = 650
 
     /// Locate the source Scripts directory relative to this test file so the
     /// shipped JSON is validated regardless of test-bundle packaging.
@@ -30,7 +32,7 @@ struct BundledTranceScriptTests {
         sourceLocation: Testing.SourceLocation = #_sourceLocation
     ) -> [TranceScript] {
         let scripts = TranceScriptLibrary.loadAll(inDirectory: Self.scriptsDir)
-        #expect(scripts.count >= 3,
+        #expect(scripts.count >= Self.minimumBundledScriptCount,
                 "loadAll returned \(scripts.count) scripts — check scriptsDir resolution",
                 sourceLocation: sourceLocation)
         return scripts
@@ -39,12 +41,61 @@ struct BundledTranceScriptTests {
     @Test func everyBundledScriptParsesAndValidates() throws {
         let scripts = loadedScripts()
         let ids = Set(scripts.map(\.id))
-        #expect(ids.isSuperset(of: ["deep-drift", "shoreline-sleep", "clear-signal"]))
+        #expect(ids.isSuperset(of: [
+            "deep-drift",
+            "shoreline-sleep",
+            "clear-signal",
+            "steady-confidence",
+            "quiet-reset",
+            "open-sky-release",
+            "precision-window",
+            "midnight-garden",
+            "morning-resolve",
+            "calm-boundaries"
+        ]))
     }
 
     @Test func everyScriptIsHumanReviewed() {
         let scripts = loadedScripts()
         #expect(scripts.allSatisfy { $0.source.reviewed })
+    }
+
+    @Test func everyVisibleThemeHasABundledScript() {
+        let bundledThemes = Set(loadedScripts().map(\.theme))
+
+        for theme in ScriptTheme.allCases {
+            #expect(bundledThemes.contains(theme), "\(theme.displayName) has no bundled script")
+        }
+    }
+
+    @Test func everyVisibleThemeHasMultipleBundledScripts() {
+        let counts = Dictionary(grouping: loadedScripts(), by: \.theme)
+
+        for theme in ScriptTheme.allCases {
+            #expect(
+                (counts[theme]?.count ?? 0) >= 2,
+                "\(theme.displayName) needs at least two bundled scripts"
+            )
+        }
+    }
+
+    @Test func everyScriptHasLibrarySummary() {
+        for script in loadedScripts() {
+            let summary = script.summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            #expect(!summary.isEmpty, "\(script.id) has no summary")
+        }
+    }
+
+    @Test func eachSupportedArcIsSessionLength() {
+        for script in loadedScripts() {
+            for arc in script.supportedArcs {
+                let metrics = script.metrics(for: arc)
+                #expect(
+                    metrics.wordCount >= Self.minimumScheduledWordsPerArc,
+                    "\(script.id)/\(arc.rawValue) only has \(metrics.wordCount) scheduled words"
+                )
+            }
+        }
     }
 
     @Test func eachSupportedArcProducesANonEmptySchedule() {

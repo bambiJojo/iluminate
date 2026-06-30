@@ -60,4 +60,21 @@ struct TechniqueDetectorTests {
         #expect(result.markers.contains(where: { $0.type == .metaphoricalStory }))
         #expect(result.markers.contains(where: { $0.type == .utilizationOfResponse }))
     }
+
+    @Test func detectsConfusionAsTechniqueMarker() throws {
+        let detector = TechniqueDetector()
+        let words = makeWordTimestamps("the more you try the less you need to understand")
+
+        let result = detector.detect(
+            wordTimestamps: words,
+            segments: [],
+            prosodic: nil,
+            duration: 60
+        )
+
+        let technique = try #require(result.techniques.first { $0.technique == "confusion_technique" })
+        let marker = try #require(result.markers.first { $0.type == .confusionTechnique })
+        #expect(technique.timestamp == marker.timestamp)
+        #expect(marker.strength >= 0.60)
+    }
 }

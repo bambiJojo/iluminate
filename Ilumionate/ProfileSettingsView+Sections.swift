@@ -325,6 +325,7 @@ extension ProfileSettingsView {
                 )
                 settingsToggle(
                     title: "Anonymous Usage Analytics",
+                    description: "Helps improve app reliability and feature design. Never includes audio, transcripts, or session text.",
                     binding: $analyticsEnabled,
                     icon: "chart.bar.xaxis",
                     color: .bwAlpha
@@ -345,8 +346,8 @@ extension ProfileSettingsView {
                     showClearDataAlert = true
                 }
             }
-            .onChange(of: analyticsEnabled) { _, _ in
-                UsageAnalytics.shared.settingsToggled(key: "analyticsEnabled")
+            .onChange(of: analyticsEnabled) { _, enabled in
+                UsageAnalytics.shared.setEnabled(enabled)
             }
         }
     }
@@ -444,6 +445,18 @@ extension ProfileSettingsView {
                     TranceHaptics.shared.heavy()
                     UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
                 }
+                #if DEBUG
+                settingsButton(
+                    title: "Analyzer Training",
+                    icon: "waveform.badge.magnifyingglass"
+                ) {
+                    TranceHaptics.shared.light()
+                    showAnalyzerTraining = true
+                }
+                .sheet(isPresented: $showAnalyzerTraining) {
+                    CorpusManagerView()
+                }
+                #endif
             }
         }
     }

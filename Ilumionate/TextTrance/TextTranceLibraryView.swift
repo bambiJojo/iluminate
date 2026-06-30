@@ -4,6 +4,7 @@
 //  Script picker: theme filter + cards. Tapping a card pushes setup.
 
 import SwiftUI
+import os
 
 /// Typed navigation values for the Text Trance stack (avoids bare-String
 /// destination collisions as more destinations join this stack).
@@ -13,6 +14,7 @@ enum TextTranceDestination: Hashable {
 }
 
 struct TextTranceLibraryView: View {
+    @State private var importedStore = ImportedTranceScriptStore.shared
     @State private var scripts: [TranceScript] = []
     @State private var themeFilter: ScriptTheme?
     @State private var showingWebImport = false
@@ -22,7 +24,8 @@ struct TextTranceLibraryView: View {
         ZStack {
             AuroraBackground()
             ScrollView {
-                VStack(spacing: TranceSpacing.cardMargin) {
+                LazyVStack(spacing: TranceSpacing.cardMargin) {
+                    ScriptLibrarySummaryCard(scripts: scripts)
                     ThemeChipsRow(selection: $themeFilter)
                     Button {
                         TranceHaptics.shared.light()
@@ -32,17 +35,20 @@ struct TextTranceLibraryView: View {
                     }
                     .buttonStyle(.plain)
 
-                    ForEach(filteredScripts) { script in
-                        NavigationLink(value: TextTranceDestination.setup(scriptID: script.id)) {
-                            ScriptCard(script: script)
+                    if filteredScripts.isEmpty {
+                        EmptyScriptLibraryCard()
+                    } else {
+                        ForEach(filteredScripts) { script in
+                            NavigationLink(value: TextTranceDestination.setup(scriptID: script.id)) {
+                                ScriptCard(script: script)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                     NavigationLink(value: TextTranceDestination.readingSources) {
                         ReadingSourcesEntryCard()
                     }
                     .buttonStyle(.plain)
-                    GeneratePlaceholderCard()
                     // Clear the app's floating tab bar so the last card isn't cut off.
                     Color.clear.frame(height: TranceSpacing.tabBarClearance)
                 }
@@ -76,7 +82,7 @@ struct TextTranceLibraryView: View {
             }
         }
         .task {
-            if scripts.isEmpty { scripts = TranceScriptLibrary.bundled() }
+            if scripts.isEmpty { reloadScripts() }
         }
     }
 
@@ -93,8 +99,24 @@ struct TextTranceLibraryView: View {
     }
 
     private func insertImportedScript(_ script: TranceScript) {
+        do {
+            try importedStore.save(script)
+            reloadScripts()
+            return
+        } catch {
+            Log.ui.info("[TextTranceLibraryView] Import was not persisted: \(error.localizedDescription)")
+        }
+
         scripts.removeAll { $0.id == script.id }
         scripts.insert(script, at: 0)
+    }
+
+    private func reloadScripts() {
+        let importedScripts = importedStore.importedScripts
+        let importedIDs = Set(importedScripts.map(\.id))
+        scripts = importedScripts + TranceScriptLibrary.bundled().filter { script in
+            importedIDs.contains(script.id) == false
+        }
     }
 }
 
@@ -123,16 +145,42 @@ private struct ScriptCard: View {
     var body: some View {
         LiminalCard(label: nil) {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                Text(script.title)
-                    .font(TranceTypography.sectionTitle)
-                    .foregroundStyle(Color.textPrimary)
-                Text(script.theme.displayName)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                HStack(spacing: 6) {
-                    ForEach(script.supportedArcs) { arc in
-                        TagChip(text: arc.displayName)
+                HStack(alignment: .top, spacing: TranceSpacing.list) {
+                    ScriptThemeIcon(theme: script.theme)
+
+                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                        Text(script.title)
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text(script.theme.displayName)
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
                     }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+
+                Text(script.librarySummary)
+                    .font(TranceTypography.body)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 6) {
+                    MetricPill(systemImage: "clock", text: script.durationSummary)
+                    MetricPill(systemImage: "textformat", text: script.wordCountSummary)
+                }
+
+                Text(script.phaseSummary)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textLight)
+                    .lineLimit(2)
+
+                HStack(spacing: 6) {
+                    TagChip(text: script.arcSummary)
                     if script.source.kind == .importedWeb { TagChip(text: "Web") }
                     if script.source.reviewed { TagChip(text: "Reviewed") }
                 }
@@ -142,23 +190,75 @@ private struct ScriptCard: View {
     }
 }
 
-private struct GeneratePlaceholderCard: View {
+private struct ScriptLibrarySummaryCard: View {
+    let scripts: [TranceScript]
+
     var body: some View {
-        LiminalCard(label: nil) {
-            HStack {
-                Image(systemName: "sparkles")
-                VStack(alignment: .leading) {
-                    Text("Generate new script")
+        LiminalCard(label: "Script library") {
+            HStack(spacing: TranceSpacing.list) {
+                SummaryValue(value: scripts.count.formatted(.number), label: "sessions")
+                Divider()
+                    .frame(height: 32)
+                    .overlay(Color.glassBorder)
+                SummaryValue(value: themeCount.formatted(.number), label: "themes")
+                Divider()
+                    .frame(height: 32)
+                    .overlay(Color.glassBorder)
+                SummaryValue(value: durationRange, label: "read time")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var themeCount: Int {
+        Set(scripts.map(\.theme.rawValue)).count
+    }
+
+    private var durationRange: String {
+        let durations = scripts.flatMap { script in
+            script.supportedArcs.map { script.metrics(for: $0).estimatedDuration }
+        }
+        let minutes = durations.map { max(1, Int(($0 / 60).rounded())) }
+        guard let min = minutes.min(), let max = minutes.max() else { return "0 min" }
+        if min == max { return min == 1 ? "1 min" : "\(min) min" }
+        return "\(min)-\(max) min"
+    }
+}
+
+private struct SummaryValue: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(Color.textPrimary)
+            Text(label)
+                .font(TranceTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct EmptyScriptLibraryCard: View {
+    var body: some View {
+        GlassCard(label: nil) {
+            HStack(spacing: TranceSpacing.list) {
+                Image(systemName: "text.magnifyingglass")
+                    .foregroundStyle(Color.textSecondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("No scripts here")
                         .font(TranceTypography.sectionTitle)
-                    Text("Coming soon")
+                        .foregroundStyle(Color.textPrimary)
+                    Text("Import or reading sources can add one.")
                         .font(TranceTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
-                Spacer()
             }
-            .foregroundStyle(Color.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .opacity(0.6)
     }
 }
 
@@ -222,6 +322,35 @@ private struct TagChip: View {
     }
 }
 
+private struct MetricPill: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: systemImage)
+            .font(TranceTypography.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.glassBorder.opacity(0.28), in: .capsule)
+            .foregroundStyle(Color.textSecondary)
+    }
+}
+
+private struct ScriptThemeIcon: View {
+    let theme: ScriptTheme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(theme.accent.opacity(0.18))
+            .frame(width: 40, height: 40)
+            .overlay {
+                Image(systemName: theme.symbol)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(theme.accent)
+            }
+    }
+}
+
 private struct FilterChip: View {
     let title: String
     let isOn: Bool
@@ -236,6 +365,26 @@ private struct FilterChip: View {
             )
             .foregroundStyle(isOn ? Color.auroraTeal : Color.textSecondary)
             .buttonStyle(.plain)
+    }
+}
+
+private extension ScriptTheme {
+    var symbol: String {
+        switch self {
+        case .relaxation: return "wind"
+        case .sleep:      return "moon.zzz"
+        case .focus:      return "scope"
+        case .suggestion: return "sparkles"
+        }
+    }
+
+    var accent: Color {
+        switch self {
+        case .relaxation: return .auroraTeal
+        case .sleep:      return .bwDelta
+        case .focus:      return .bwBeta
+        case .suggestion: return .auroraPink
+        }
     }
 }
 

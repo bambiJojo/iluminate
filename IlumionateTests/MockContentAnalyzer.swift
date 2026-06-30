@@ -17,6 +17,7 @@ final class MockContentAnalyzer: ContentAnalyzingService {
 
     var analysisToReturn: AnalysisResult = AnalysisFixtures.hypnosisAnalysis
     private(set) var callCount = 0
+    private(set) var cancelCallCount = 0
 
     func analyzeContent(
         transcription: AudioTranscriptionResult,
@@ -36,5 +37,9 @@ final class MockContentAnalyzer: ContentAnalyzingService {
         callCount += 1
         progress = 1.0
         return analysisToReturn
+    }
+
+    func cancelAnalysis() async {
+        cancelCallCount += 1
     }
 }

@@ -8,13 +8,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Bundles AudioFile + LightSession for atomic `fullScreenCover(item:)` presentation.
-/// Using `item:` instead of `isPresented:` guarantees SwiftUI only renders the sheet
-/// when both values are non-nil — eliminating the blank-black-screen race condition.
+/// Bundles an audio file with its optional generated session for one player presentation.
 struct SyncPlayerItem: Identifiable {
     let id = UUID()
     let audioFile: AudioFile
-    let lightSession: LightSession
+    let lightSession: LightSession?
 }
 
 /// Displays and manages the user's audio file library with Trance design
@@ -91,6 +89,7 @@ struct AudioLibraryView: View {
     @State var showingDownloadError = false
     @State var showingBrowser = false
     @State var showingAddSheet = false
+    @State var showingFilters = false
     // TODO: Replace with actual playlist model
     @State var showingDeleteSelectedAlert = false
     @Environment(\.dismiss) private var dismiss
@@ -162,7 +161,7 @@ struct AudioLibraryView: View {
                 }
 
             }
-            .navigationTitle("Import Audio")
+            .navigationTitle("Audio")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if !audioFiles.isEmpty {
@@ -201,12 +200,16 @@ struct AudioLibraryView: View {
                             }
                         }
 
-                        // Add button — triggers action sheet
-                        Button("Add", systemImage: "plus") {
-                            TranceHaptics.shared.light()
-                            showingAddSheet = true
+                        // Add button — triggers action sheet.
+                        // Hidden while empty, where the inline import cards already
+                        // present the same options.
+                        if !audioFiles.isEmpty {
+                            Button("Add", systemImage: "plus") {
+                                TranceHaptics.shared.light()
+                                showingAddSheet = true
+                            }
+                            .tint(.roseGold)
                         }
-                        .tint(.roseGold)
                     }
                 }
             }
@@ -226,6 +229,9 @@ struct AudioLibraryView: View {
             }
             .sheet(isPresented: $showingQueueManagement) {
                 QueueManagementView(analysisManager: AnalysisStateManager.shared)
+            }
+            .sheet(isPresented: $showingFilters) {
+                filtersSheet
             }
             .alert("Delete \(selectedFiles.count) Files?", isPresented: $showingDeleteSelectedAlert) {
                 Button("Cancel", role: .cancel) { }

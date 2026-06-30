@@ -32,4 +32,22 @@ struct ReaderResumeStateTests {
         #expect(a == b)
         #expect(a != c)
     }
+
+    @Test func usabilityRequiresMatchingHashAndInRangeIndex() {
+        let state = ReaderResumeState(
+            scriptId: "abc",
+            wordIndex: 2,
+            settings: PersistedReaderSettings(
+                arc: .fullText, speedMultiplier: 1,
+                subliminalEnabled: true, subliminalSpeed: .medium,
+                binauralEnabled: false, lightEnabled: false, beatFrequency: 10),
+            phase: .reading,
+            scriptContentHash: "hash123",
+            savedAt: .now)
+
+        #expect(state.isUsable(contentHash: "hash123", scheduleCount: 3))
+        #expect(!state.isUsable(contentHash: "changed", scheduleCount: 3))
+        #expect(!state.isUsable(contentHash: "hash123", scheduleCount: 2))
+        #expect(!state.isUsable(contentHash: "hash123", scheduleCount: 0))
+    }
 }

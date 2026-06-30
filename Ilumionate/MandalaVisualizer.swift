@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct MandalaVisualizer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAnimating = false
     @State private var rotationAngle: Double = 0
     @State private var animationScale: CGFloat = 1.0
@@ -66,9 +67,11 @@ struct MandalaVisualizer: View {
                         .scaleEffect(animationScale)
                         .opacity(isAnimating ? 0.8 : 0.4)
                         .animation(
-                            .easeInOut(duration: animationDuration)
-                            .delay(Double(index) * 0.3)
-                            .repeatForever(autoreverses: true),
+                            reduceMotion
+                            ? nil
+                            : .easeInOut(duration: animationDuration)
+                                .delay(Double(index) * 0.3)
+                                .repeatForever(autoreverses: true),
                             value: isAnimating
                         )
                 }
@@ -140,6 +143,12 @@ struct MandalaVisualizer: View {
 
     private func startAnimations(reduced: Bool) {
         guard isVisible else { return }
+        // Honor the system Reduce Motion setting: keep the mandala in a static
+        // resting state instead of running the continuous breathing/rotation loops.
+        guard !reduceMotion else {
+            settleAnimations()
+            return
+        }
         let duration: Double = reduced ? 6.0 : 3.0
 
         withAnimation(

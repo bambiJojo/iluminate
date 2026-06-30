@@ -60,8 +60,7 @@ struct ReadingSource: Identifiable, Codable, Hashable, Sendable {
     var isCurated: Bool
     var addedDate: Date?
 
-    /// Reserved for the future M4 "import from web" milestone; unused in the link-only M1.
-    var canPlanImport: Bool {
+    var canImport: Bool {
         importPolicy == .userInitiatedImport || importPolicy == .catalogPlanned
     }
 }
@@ -197,7 +196,7 @@ enum ReadingSourceCatalog {
         ReadingSource(
             id: "spirals-nightclub",
             title: "Spirals Nightclub",
-            url: URL(string: "http://www.spiralsnightclub.com/")!,
+            url: URL(string: "https://www.spiralsnightclub.com/")!,
             category: .scriptDirectory,
             summary: "Erotic hypnosis community with free stories and scripts.",
             licenseKind: .thirdPartyTerms,

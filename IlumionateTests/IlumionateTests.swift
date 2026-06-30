@@ -914,6 +914,31 @@ struct WhisperModelBootstrapTests {
         #expect(message.contains("Connect to the internet once and retry"))
         #expect(message.contains("argmaxinc/whisperkit-coreml"))
     }
+
+    @Test func actionableFailureMessageIncludesPriorCachedModelFailure() {
+        let repositoryURL = URL(filePath: "/tmp/whisper-cache", directoryHint: .isDirectory)
+        let cachedModelError = NSError(
+            domain: "WhisperKit",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Model file not found at TextDecoder.mlmodelc"]
+        )
+        let downloadError = NSError(
+            domain: NSURLErrorDomain,
+            code: NSURLErrorCannotConnectToHost,
+            userInfo: [NSLocalizedDescriptionKey: "Could not connect to the server."]
+        )
+
+        let message = WhisperModelBootstrap.actionableFailureMessage(
+            underlyingError: downloadError,
+            priorLocalModelError: cachedModelError,
+            preferredVariant: "base",
+            repositoryURL: repositoryURL
+        )
+
+        #expect(message.contains("cached local WhisperKit model was found but failed to load"))
+        #expect(message.contains("Model file not found at TextDecoder.mlmodelc"))
+        #expect(message.contains("Connect to the internet once and retry"))
+    }
 }
 
 // MARK: - Step 1.2: Typed Frequency Schema Tests

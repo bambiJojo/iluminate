@@ -15,7 +15,7 @@ import UIKit
 import AppKit
 #endif
 
-struct ScriptPhaseCorpusIssue: Identifiable, Hashable, Sendable {
+nonisolated struct ScriptPhaseCorpusIssue: Identifiable, Hashable, Sendable {
     enum Severity: String, Hashable, Sendable {
         case warning
         case error
@@ -27,7 +27,7 @@ struct ScriptPhaseCorpusIssue: Identifiable, Hashable, Sendable {
     let message: String
 }
 
-struct ScriptPhaseExample: Identifiable, Hashable, Sendable {
+nonisolated struct ScriptPhaseExample: Identifiable, Hashable, Sendable {
     let id: UUID
     let phase: TrancePhase
     let title: String
@@ -61,7 +61,7 @@ struct ScriptPhaseExample: Identifiable, Hashable, Sendable {
     }
 }
 
-struct ScriptPhaseCorpus: Sendable {
+nonisolated struct ScriptPhaseCorpus: Sendable {
     let directories: [URL]
     let examples: [ScriptPhaseExample]
     let issues: [ScriptPhaseCorpusIssue]
@@ -500,7 +500,7 @@ struct ScriptPhaseTextEvidence: Sendable {
     let waymarkerMatches: [HypnosisWaymarkerMatch]
 }
 
-enum ScriptPhaseTextAnalyzer {
+nonisolated enum ScriptPhaseTextAnalyzer {
     static func evidence(in text: String) -> ScriptPhaseTextEvidence {
         let allTokens = tokens(in: text)
         let wordCounts = tokenFrequency(in: allTokens)

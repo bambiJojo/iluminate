@@ -171,7 +171,8 @@ struct GoldenDatasetTests {
         }
     }
 
-    /// Output sequence must never skip backward in the canonical ordering.
+    /// This fixture's ground-truth arc is forward-only, even though the analyzer
+    /// permits sustained returns to earlier phases in other session structures.
     @Test func classicHypnosisPhasesAreStrictlyForwardOrdered() {
         let canonical: [HypnosisMetadata.Phase] = [
             .preTalk, .induction, .deepening, .therapy, .suggestions, .conditioning, .emergence

@@ -40,7 +40,7 @@ struct KeywordPipelineEvaluationTests {
                        + CorpusLoader.load(subdirectory: "real"))
             .filter { !$0.truth.isEmpty }
 
-        try #require(!cases.isEmpty, "no truth-bearing corpus cases found")
+        try #require(cases.count >= 8, "expected the complete truth-bearing corpus; found \(cases.count) cases")
 
         var scores: [PhaseTimelineScore] = []
         for kase in cases {
@@ -108,9 +108,9 @@ struct KeywordPipelineEvaluationTests {
                 "Keyword pipeline scored \(score.overallScore) on '\(evalCase.name)' — expected ≥0.60")
     }
 
-    // MARK: - Phase ordering
+    // MARK: - Timeline structure
 
-    @Test func classicHypnosis_phasesAreForwardOrdered() {
+    @Test func classicHypnosis_phaseTimelineIsChronological() {
         let evalCase = EvaluationCorpus.classicHypnosis30min
         let phases   = analyzer.analyzeTranscription(evalCase.transcript)
         let analysis = buildAnalysisResult(evalCase: evalCase, phases: phases)
@@ -120,7 +120,7 @@ struct KeywordPipelineEvaluationTests {
             session: generator.generateSession(from: evalCase.audioFile, analysis: analysis)
         )
         #expect(score.phaseOrderScore == 1.0,
-                "Phase ordering score \(score.phaseOrderScore) — expected 1.0 (no backward jumps)")
+                "Timeline structure score \(score.phaseOrderScore) — expected chronological, non-overlapping spans")
     }
 
     // MARK: - Frequency band
@@ -156,27 +156,19 @@ struct KeywordPipelineEvaluationTests {
 @MainActor
 struct AIAnalysisPipelineEvaluationTests {
 
-    private let evaluator = AnalysisEvaluator()
-    private let generator = SessionGenerator()
-
     @Test(.enabled(if: ChunkedPhaseAnalyzer.isAvailable))
-    func classicHypnosis_aiPipelineScoresAboveKeywordBaseline() async throws {
-        let evalCase    = EvaluationCorpus.classicHypnosis30min
-        let mockAnalyzer = MockContentAnalyzer()
-        mockAnalyzer.analysisToReturn = buildAnalysisResult(
-            evalCase: evalCase, phases: []
-        )
-        let pipeline = AnalysisPipeline(
-            transcriber: MockAudioTranscriber(),
-            analyzer:    mockAnalyzer,
-            generator:   SessionGenerator()
-        )
+    func classicHypnosis_chunkedAnalyzerProducesUsableTimeline() async throws {
+        let evalCase = EvaluationCorpus.classicHypnosis30min
+        let timestamps = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
+            .approximateWordTimestamps(from: evalCase.transcript.segments)
 
-        let result  = try await pipeline.run(audioFile: evalCase.audioFile)
-        let score   = evaluator.score(evalCase: evalCase, result: result.analysis, session: result.session)
+        let phases = try #require(await ChunkedPhaseAnalyzer.analyze(
+            wordTimestamps: timestamps,
+            duration: evalCase.transcript.duration
+        ))
 
-        #expect(score.overallScore >= 0.60,
-                "AI pipeline scored \(score.overallScore) on '\(evalCase.name)' — expected ≥0.60")
+        #expect(phases.isEmpty == false)
+        #expect(Set(phases.map(\.phase)).count >= 2)
     }
 }
 

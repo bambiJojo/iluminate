@@ -6,11 +6,50 @@
   "supportedArcs": ["fullText", "handoff"],
   "language": "en",
   "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "summary": "A slow relaxation session that moves from screen fixation into body heaviness, quiet imagery, and a calm return or optional handoff.",
   "segments": [
-    { "phase": "induction", "text": "Allow your gaze to rest softly on each word as it arrives. There is nothing to do here but receive. Each word settles into you like a slow, warm breath.", "pacing": { "baseWPM": 150 } },
-    { "phase": "deepening", "text": "And with every word you take in, you sink a little further. Down, and down, and gently down. Heavier now. Calmer now. Carried.", "pacing": { "baseWPM": 110 } },
-    { "phase": "suggestions", "text": "Stillness is easy for you. Your mind grows quiet and clear, like water with no wind. You hold this calm long after the words are gone.", "pacing": { "baseWPM": 95 } },
-    { "phase": "emergence", "text": "In a moment you will lift gently back, bringing the calm with you, awake, clear, and rested.", "pacing": { "baseWPM": 135 }, "arcs": ["fullText"] },
-    { "phase": "transitional", "text": "And now, with the next slow breath, let your eyes drift softly closed, and simply keep drifting.", "pacing": { "baseWPM": 90 }, "arcs": ["handoff"], "triggersHandoff": true }
+    {
+      "phase": "induction",
+      "text": "Let your gaze settle on the place where the next word appears. Nothing needs to be forced. You can read one word, then the next, and let the rest of the room become less important. The screen becomes a single soft point of attention. Breath by breath, the muscles around your forehead smooth out. The jaw loosens. The tongue rests. The shoulders remember that they do not have to hold the day in place. Each word arrives, stays for a moment, and moves on. You do not need to chase it. You only receive it. If a thought passes through, let it pass through the same way a word passes through: noticed, accepted, released. The rhythm begins to do the work for you now. A simple rhythm. Seeing. Breathing. Settling. Seeing. Breathing. Settling. The more you allow the pace to carry you, the easier it becomes to soften into it.",
+      "pacing": { "baseWPM": 145 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Now let that softness move downward. Across the face. Through the throat. Into the chest and the slow, patient movement of breathing. There is a pleasant weight in the arms, not heavy in a strained way, but comfortably supported. The hands can be still. The legs can be still. The whole body can become a quiet place where attention rests. Imagine a wide, dark lake at night. The surface has been touched by wind all day, and now the wind is fading. Small ripples become smaller. Wider spaces open between them. The lake does not try to become still. It simply has less and less reason to move. In the same way, the mind has less and less reason to reach outward. Down one level, and another. From busy surface to quiet depth. From effort to ease. From holding to being held.",
+      "pacing": { "baseWPM": 108 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Let the spaces between sentences matter as much as the sentences. Let the pauses feel like warm rooms. In those pauses, the body can drop another small amount. There may be a sense of floating, or sinking, or simply staying here without needing to measure the experience. Any way it happens is the right way for this moment. You can let a slow count form in the background. Five, the outside world grows softer. Four, attention becomes simpler. Three, the body finds its own safe weight. Two, the mind becomes quieter than it was a few breaths ago. One, there is only this calm line of words and the easy depth beneath it. Deeper does not have to mean farther away. It can mean closer to the steady part of you that was already there.",
+      "pacing": { "baseWPM": 96 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "In this quiet, you can learn the feeling of release. The body learns that it can let go before it is exhausted. The mind learns that stillness can be useful, not empty. You can return to this state by remembering the first breath of this session: a breath that says nothing is required right now. Calm becomes familiar. Familiar becomes easy. Easy becomes available. When your day becomes crowded, some part of you can remember this lake, this rhythm, this simple permission to loosen one layer at a time. You do not have to solve everything before resting. Rest can be the place where clear choices begin. The nervous system can take a smoother path. The next breath can be enough. The next small release can be enough. A little calm can grow into more calm.",
+      "pacing": { "baseWPM": 92 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let these suggestions settle without effort. I can soften. I can pause. I can let one moment finish before beginning the next. I can carry quiet into motion. I can be awake and still. I can be rested and capable. The words may fade, but the pattern remains. Attention narrows, then opens. The body releases, then steadies. The mind quiets, then returns with more space around each thought. This is a useful kind of calm, grounded and practical. It belongs to you because your own attention created it. It can follow you after the session ends, gentle enough to keep, clear enough to use.",
+      "pacing": { "baseWPM": 94 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let the calm become ordinary enough to trust. It does not have to feel dramatic. A quieter jaw is enough. A slower breath is enough. One less layer of effort is enough. You can notice the difference between useful responsibility and unnecessary tightening. Useful responsibility has direction. Unnecessary tightening only repeats itself. Here, the body can learn that direction is possible without strain. The mind can learn that softness is not the same as giving up. Softness can be the way you conserve strength. Softness can make room for better timing, kinder choices, and a steadier return to what matters. The session keeps teaching this simple pattern: release first, then respond.",
+      "pacing": { "baseWPM": 92 }
+    },
+    {
+      "phase": "emergence",
+      "text": "Begin to let the surface of awareness brighten. Notice the room again without rushing toward it. Breath has a little more energy now. Fingers and toes may want to move. The body can keep its comfort while the mind becomes clear. Count upward in your own time: one, a little more present; two, a little more awake; three, steady and refreshed; four, carrying the calm with you; five, alert, oriented, and ready for whatever comes next.",
+      "pacing": { "baseWPM": 132 },
+      "arcs": ["fullText"]
+    },
+    {
+      "phase": "transitional",
+      "text": "If you chose the handoff, let this be the last line you need to read. With the next slow breath, let your eyes drift softly closed, and allow the light and sound layers to carry the quiet the rest of the way.",
+      "pacing": { "baseWPM": 84 },
+      "arcs": ["handoff"],
+      "triggersHandoff": true
+    }
   ]
 }

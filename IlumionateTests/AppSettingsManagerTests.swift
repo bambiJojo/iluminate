@@ -88,6 +88,8 @@ struct AppSettingsManagerTests {
         defaults.set(10, forKey: AppSettingsManager.Key.countdownDuration)
         defaults.set(true, forKey: AppSettingsManager.Key.listeningHistoryEnabled)
         defaults.set(true, forKey: AppSettingsManager.Key.analyticsEnabled)
+        defaults.set(true, forKey: AppSettingsManager.Key.analyticsConsentGranted)
+        defaults.set(true, forKey: AppSettingsManager.Key.analyticsConsentAnswered)
         defaults.set(0.7, forKey: AppSettingsManager.Key.defaultIntensity)
 
         AppSettingsManager.resetPreferences(
@@ -102,6 +104,8 @@ struct AppSettingsManagerTests {
         #expect(defaults.integer(forKey: AppSettingsManager.Key.countdownDuration) == 3)
         #expect(defaults.bool(forKey: AppSettingsManager.Key.listeningHistoryEnabled) == false)
         #expect(defaults.object(forKey: AppSettingsManager.Key.analyticsEnabled) == nil)
+        #expect(defaults.object(forKey: AppSettingsManager.Key.analyticsConsentGranted) == nil)
+        #expect(defaults.object(forKey: AppSettingsManager.Key.analyticsConsentAnswered) == nil)
         #expect(defaults.object(forKey: AppSettingsManager.Key.defaultIntensity) == nil)
     }
 

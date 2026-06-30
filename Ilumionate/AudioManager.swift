@@ -204,6 +204,7 @@ class AudioManager: NSObject {
 
         } catch {
             Log.audio.info("❌ Failed to import audio: \(error)")
+            UsageAnalytics.shared.errorOccurred(.audioFileImportFailed)
             // Clean up partial file if copy succeeded but metadata failed
             try? FileManager.default.removeItem(at: finalDestinationURL)
             return nil
@@ -301,6 +302,7 @@ class AudioManager: NSObject {
             )
 
             Log.audio.info("✅ Successfully downloaded audio: \(finalFilename) (Duration: \(durationSeconds)s)")
+            UsageAnalytics.shared.audioImported(source: .url)
             return audioFile
             
         } catch {

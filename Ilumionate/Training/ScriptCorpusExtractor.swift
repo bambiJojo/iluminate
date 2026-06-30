@@ -187,6 +187,8 @@ enum ScriptCorpusExtractor {
         try encoder.encode(report).write(to: manifestURL, options: .atomic)
         written.append(manifestURL)
 
+        CorpusPhaseKnowledgeCache.shared.invalidate()
+
         return written.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 }

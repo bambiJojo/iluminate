@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct CuratedHypnosisPhrasePrior: Sendable {
+nonisolated struct CuratedHypnosisPhrasePrior: Sendable {
     let phrase: String
     let phase: HypnosisMetadata.Phase
     let weight: Double
@@ -15,7 +15,7 @@ struct CuratedHypnosisPhrasePrior: Sendable {
     let sourceURL: String
 }
 
-enum CuratedHypnosisPhraseLibrary {
+nonisolated enum CuratedHypnosisPhraseLibrary {
     static let priors: [CuratedHypnosisPhrasePrior] = [
         CuratedHypnosisPhrasePrior(
             phrase: "close your eyes",
@@ -173,7 +173,7 @@ enum CuratedHypnosisPhraseLibrary {
     }
 }
 
-enum HypnosisWaymarkerLexicon {
+nonisolated enum HypnosisWaymarkerLexicon {
     struct Pattern: Sendable {
         let phrase: String
         let phase: HypnosisMetadata.Phase

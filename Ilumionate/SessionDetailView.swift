@@ -365,17 +365,7 @@ struct SessionDetailView: View {
     }
 
     private func loadLightSession() {
-        let sessionsURL = URL.documentsDirectory.appending(path: "GeneratedSessions")
-        let baseName = audioFile.filename
-            .replacing(".mp3", with: "")
-            .replacing(".m4a", with: "")
-            .replacing(".wav", with: "")
-            .replacing(".aac", with: "")
-        let fileURL = sessionsURL.appending(path: "\(baseName)_session.json")
-        if let data = try? Data(contentsOf: fileURL),
-           let session = try? JSONDecoder().decode(LightSession.self, from: data) {
-            lightSession = session
-        }
+        lightSession = GeneratedSessionStore.shared.load(for: audioFile)
     }
 
     private func insightRow(label: String, value: String, icon: String) -> some View {

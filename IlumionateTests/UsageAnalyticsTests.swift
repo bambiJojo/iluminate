@@ -5,6 +5,9 @@
 
 import Foundation
 import Testing
+#if canImport(TelemetryDeck)
+import TelemetryDeck
+#endif
 @testable import Ilumionate
 
 @MainActor
@@ -16,6 +19,13 @@ struct UsageAnalyticsTests {
         let suite = "UsageAnalyticsTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }
+
+    private func makeEnabledDefaults() -> UserDefaults {
+        let defaults = makeDefaults()
+        defaults.set(true, forKey: UsageAnalytics.consentAnsweredKey)
+        defaults.set(true, forKey: UsageAnalytics.preferenceKey)
         return defaults
     }
 
@@ -37,23 +47,69 @@ struct UsageAnalyticsTests {
         #expect(CompletionBucket(fraction: pair.fraction) == pair.expected)
     }
 
-    // MARK: - Opt-out gate
+    // MARK: - Consent gate
 
     @Test
-    func defaultsToEnabledWhenUnset() {
+    func defaultsToDisabledWhenUnset() {
         let analytics = UsageAnalytics(defaults: makeDefaults(), emit: { _ in })
-        #expect(analytics.isEnabled == true)
+        #expect(analytics.isEnabled == false)
     }
 
     @Test
-    func optOutSuppressesEmission() {
+    func disabledPreferenceSuppressesEmission() {
         let defaults = makeDefaults()
-        defaults.set(false, forKey: UsageAnalytics.optOutKey)
+        defaults.set(true, forKey: UsageAnalytics.consentAnsweredKey)
+        defaults.set(false, forKey: UsageAnalytics.preferenceKey)
         var captured: [AnalyticsEvent] = []
         let analytics = UsageAnalytics(defaults: defaults, emit: { captured.append($0) })
         analytics.screen(.home)
         #expect(captured.isEmpty)
     }
+
+    @Test
+    func legacyEnabledPreferenceDoesNotEmitBeforeConsent() {
+        let defaults = makeDefaults()
+        defaults.set(true, forKey: UsageAnalytics.legacyPreferenceKey)
+        var captured: [AnalyticsEvent] = []
+        let analytics = UsageAnalytics(defaults: defaults, emit: { captured.append($0) })
+
+        analytics.screen(.home)
+
+        #expect(analytics.hasAnsweredConsent == false)
+        #expect(analytics.isEnabled == false)
+        #expect(captured.isEmpty)
+    }
+
+    @Test
+    func changingPreferenceUpdatesEmissionGate() {
+        let defaults = makeDefaults()
+        var captured: [AnalyticsEvent] = []
+        let analytics = UsageAnalytics(defaults: defaults, emit: { captured.append($0) })
+
+        analytics.setEnabled(false)
+        analytics.screen(.home)
+        #expect(analytics.isEnabled == false)
+        #expect(captured.isEmpty)
+
+        analytics.setEnabled(true)
+        analytics.screen(.home)
+        #expect(analytics.hasAnsweredConsent)
+        #expect(analytics.isEnabled)
+        #expect(captured == [AnalyticsEvent("screen.home")])
+    }
+
+    #if canImport(TelemetryDeck)
+    @Test(arguments: [true, false])
+    func telemetryDeckConfigurationMatchesPreference(_ enabled: Bool) {
+        let config = UsageAnalytics.makeTelemetryDeckConfig(
+            appID: "1A7508D7-E62A-4429-9F51-D091C879D280",
+            analyticsEnabled: enabled
+        )
+
+        #expect(config.analyticsDisabled != enabled)
+        #expect(config.sessionStatsEnabled == enabled)
+    }
+    #endif
 
     @Test
     func missingTelemetryDeckAppIDLeavesDefaultEmitterSafe() {
@@ -74,7 +130,7 @@ struct UsageAnalyticsTests {
     @Test
     func enabledEmitsScreenEvent() {
         var captured: [AnalyticsEvent] = []
-        let analytics = UsageAnalytics(defaults: makeDefaults(), emit: { captured.append($0) })
+        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
         analytics.screen(.lightScoreEditor)
         #expect(captured == [AnalyticsEvent("screen.lightScoreEditor")])
     }
@@ -82,18 +138,52 @@ struct UsageAnalyticsTests {
     @Test
     func sessionStartedCarriesSourceAndCategory() {
         var captured: [AnalyticsEvent] = []
-        let analytics = UsageAnalytics(defaults: makeDefaults(), emit: { captured.append($0) })
+        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
         analytics.sessionStarted(source: .generated, category: "Sleep")
         #expect(captured == [AnalyticsEvent("session.started",
                                             ["source": "generated", "category": "Sleep"])])
     }
 
     @Test
-    func sessionCompletedEmitsBucket() {
+    func endingIncompleteSessionEmitsOnlyEndedEvent() {
         var captured: [AnalyticsEvent] = []
-        let analytics = UsageAnalytics(defaults: makeDefaults(), emit: { captured.append($0) })
-        analytics.sessionCompleted(fraction: 0.97)
-        #expect(captured == [AnalyticsEvent("session.completed",
-                                            ["completionBucket": "complete"])])
+        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
+        analytics.sessionEnded(fraction: 0.70)
+        #expect(captured == [AnalyticsEvent("session.ended",
+                                            ["completionBucket": "b50_75"])])
+    }
+
+    @Test
+    func endingCompletedSessionEmitsEndedAndCompletedEvents() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
+        analytics.sessionEnded(fraction: 0.97)
+        let parameters = ["completionBucket": "complete"]
+        #expect(captured == [
+            AnalyticsEvent("session.ended", parameters),
+            AnalyticsEvent("session.completed", parameters),
+        ])
+    }
+
+    @Test
+    func endingUnboundedSessionUsesNotApplicableBucket() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
+        analytics.sessionEnded(fraction: nil)
+        #expect(captured == [AnalyticsEvent("session.ended",
+                                            ["completionBucket": "notApplicable"])])
+    }
+
+    @Test
+    func errorUsesStableIdentifierWithoutUserContent() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
+        analytics.errorOccurred(.audioAnalysisFailed)
+        #expect(captured == [
+            AnalyticsEvent(
+                "Audio.Analysis.Failed",
+                kind: .error(.thrownException)
+            ),
+        ])
     }
 }

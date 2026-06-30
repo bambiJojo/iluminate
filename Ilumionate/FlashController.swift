@@ -125,8 +125,18 @@ final class FlashController: Sendable {
         let elapsed = link.targetTimestamp - startTime
         let dt = link.targetTimestamp - link.timestamp
 
-        // Primary waveform phase
-        let period = 1.0 / frequency
+        // Reduce Motion: hold a steady mid-brightness "on" state instead of
+        // pulsing, so the flash never strobes for motion-sensitive users.
+        if UIAccessibility.isReduceMotionEnabled {
+            leftOpacity = intensity
+            rightOpacity = intensity
+            return
+        }
+
+        // Primary waveform phase — clamp at the engine input boundary so no
+        // path (UI slider, generated session, JSON) can exceed the safety cap.
+        let safeFrequency = LightSafety.clampFlashHz(frequency)
+        let period = 1.0 / safeFrequency
         let phase = elapsed.truncatingRemainder(dividingBy: period) / period
         let amplitude = calculateAmplitude(phase: phase) * intensity
 

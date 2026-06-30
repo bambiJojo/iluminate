@@ -8,19 +8,25 @@
 import Foundation
 import os
 
-enum AnalyzerConfigLoader {
+nonisolated enum AnalyzerConfigLoader {
 
     static let documentsConfigURL: URL =
         URL.documentsDirectory.appending(path: "AnalyzerConfig.json")
 
+    private static let baseConfigCache = AnalyzerConfigCache()
+
     /// Loads the best available config: trained version from Documents,
     /// falling back to the bundled default.
     static func load() -> AnalyzerConfig {
+        applyRuntimePreferences(to: baseConfigCache.value(load: loadBaseConfigFromDisk))
+    }
+
+    private static func loadBaseConfigFromDisk() -> AnalyzerConfig {
         // 1. Try trained config in Documents
         if let data = try? Data(contentsOf: documentsConfigURL),
            let config = try? JSONDecoder().decode(AnalyzerConfig.self, from: data) {
             Log.analysis.info("📐 Loaded trained AnalyzerConfig (gen \(config.generation), fitness \(config.fitness))")
-            return applyRuntimePreferences(to: config)
+            return config
         }
 
         // 2. Fall back to bundled default
@@ -28,7 +34,7 @@ enum AnalyzerConfigLoader {
            let data = try? Data(contentsOf: url),
            let config = try? JSONDecoder().decode(AnalyzerConfig.self, from: data) {
             Log.analysis.info("📐 Loaded default AnalyzerConfig from bundle")
-            return applyRuntimePreferences(to: config)
+            return config
         }
 
         // 3. Last resort — should never happen in production
@@ -46,6 +52,9 @@ enum AnalyzerConfigLoader {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(config)
         try data.write(to: url, options: .atomic)
+        if url.standardizedFileURL == documentsConfigURL.standardizedFileURL {
+            baseConfigCache.update(config)
+        }
         Log.analysis.info("💾 Saved AnalyzerConfig (gen \(config.generation)) to \(url.path())")
     }
 
@@ -55,5 +64,35 @@ enum AnalyzerConfigLoader {
             config.corpusLearning.sourceProfile = sourceProfile
         }
         return config
+    }
+}
+
+private nonisolated final class AnalyzerConfigCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cachedConfig: AnalyzerConfig?
+
+    func value(load: () -> AnalyzerConfig) -> AnalyzerConfig {
+        lock.lock()
+        if let cachedConfig {
+            lock.unlock()
+            return cachedConfig
+        }
+        lock.unlock()
+
+        let loadedConfig = load()
+
+        lock.lock()
+        defer { lock.unlock() }
+        if let cachedConfig {
+            return cachedConfig
+        }
+        cachedConfig = loadedConfig
+        return loadedConfig
+    }
+
+    func update(_ config: AnalyzerConfig) {
+        lock.lock()
+        cachedConfig = config
+        lock.unlock()
     }
 }

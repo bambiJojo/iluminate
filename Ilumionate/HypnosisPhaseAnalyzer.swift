@@ -10,7 +10,7 @@
 //   1. Convert WhisperKit transcript segments to approximate word timestamps.
 //   2. Build a per-second hit map by scanning words against the keyword taxonomy.
 //   3. Resolve each second to its best-scoring phase using a ±5s context window.
-//   4. Enforce forward-only phase ordering (pre_talk → emergence).
+//   4. Normalize legacy phase labels while preserving supported phase returns.
 //   5. Majority-vote smooth the timeline to eliminate single-word spikes.
 //   6. Collapse short runs (<45s) to remove boundary oscillation.
 //   7. Consolidate into PhaseSegment spans.
@@ -23,7 +23,7 @@ import Foundation
 
 /// Keyword-based hypnosis phase analyzer.
 /// All methods are pure — the same input always produces the same output.
-struct HypnosisPhaseAnalyzer {
+nonisolated struct HypnosisPhaseAnalyzer: Sendable {
 
     struct PhaseEvidenceBreakdown: Identifiable, Sendable {
         var id: HypnosisMetadata.Phase { phase }
@@ -65,20 +65,56 @@ struct HypnosisPhaseAnalyzer {
     let hybridSelection: AnalyzerConfig.HybridSelection
     let corpusLearning: AnalyzerConfig.CorpusLearning
     let boundaryRefinement: AnalyzerConfig.BoundaryRefinement
+    private let corpusKnowledge: CorpusPhaseKnowledge
+    private let keywordTokensByPhase: [HypnosisMetadata.Phase: Set<String>]
+    private let keywordPhrasesByPhase: [HypnosisMetadata.Phase: Set<String>]
 
     /// Convenience entry point: loads the resolved config and optionally overrides
     /// just the keyword pipeline. Delegates to the canonical initializer so the
     /// property-assignment list lives in exactly one place.
-    init(config: AnalyzerConfig.KeywordPipeline? = nil) {
-        self.init(config: AnalyzerConfigLoader.load(), keywordPipelineOverride: config)
+    init(
+        config: AnalyzerConfig.KeywordPipeline? = nil,
+        corpusKnowledge: CorpusPhaseKnowledge? = nil
+    ) {
+        self.init(
+            config: AnalyzerConfigLoader.load(),
+            keywordPipelineOverride: config,
+            corpusKnowledge: corpusKnowledge
+        )
     }
 
     /// Canonical initializer — single source of truth for property assignment.
-    init(config: AnalyzerConfig, keywordPipelineOverride: AnalyzerConfig.KeywordPipeline? = nil) {
+    init(
+        config: AnalyzerConfig,
+        keywordPipelineOverride: AnalyzerConfig.KeywordPipeline? = nil,
+        corpusKnowledge: CorpusPhaseKnowledge? = nil
+    ) {
         self.config = keywordPipelineOverride ?? config.keywordPipeline
         self.hybridSelection = config.hybridSelection
         self.corpusLearning = config.corpusLearning
         self.boundaryRefinement = config.boundaryRefinement
+        let knowledge = corpusKnowledge ?? CorpusPhaseKnowledgeCache.shared.knowledge()
+        self.corpusKnowledge = knowledge
+        self.keywordTokensByPhase = Dictionary(uniqueKeysWithValues: HypnosisMetadata.Phase.allCases.map { phase in
+            (
+                phase,
+                Self.makeKeywordTokens(
+                    for: phase,
+                    knowledge: knowledge,
+                    corpusLearning: config.corpusLearning
+                )
+            )
+        })
+        self.keywordPhrasesByPhase = Dictionary(uniqueKeysWithValues: HypnosisMetadata.Phase.allCases.map { phase in
+            (
+                phase,
+                Self.makeKeywordPhrases(
+                    for: phase,
+                    knowledge: knowledge,
+                    corpusLearning: config.corpusLearning
+                )
+            )
+        })
     }
 
     // MARK: - Public Entry Point
@@ -104,7 +140,7 @@ struct HypnosisPhaseAnalyzer {
         duration: Double,
         techniqueDetection: TechniqueDetectionResult? = nil
     ) -> [PhaseSegment] {
-        guard !wordTimestamps.isEmpty else { return [] }
+        guard !wordTimestamps.isEmpty, Task.isCancelled == false else { return [] }
 
         let bucketCount = max(1, Int(ceil(duration)))
         var hitMap = buildHitMap(wordTimestamps: wordTimestamps, bucketCount: bucketCount)
@@ -113,18 +149,18 @@ struct HypnosisPhaseAnalyzer {
             bucketCount: bucketCount
         )
         mergeTechniqueEvidence(techniqueEvidence, into: &hitMap)
+        guard Task.isCancelled == false else { return [] }
         var timeline = resolveTimeline(hitMap: hitMap, bucketCount: bucketCount)
 
-        // Denoise BEFORE enforcing phase order. enforcePhaseOrdering is a monotonic
-        // ratchet: a single transient high-order blip (e.g. a 4s therapy spike) would
-        // otherwise advance the floor and overwrite every following lower-order second,
-        // erasing a long, correctly-detected phase such as deepening. Smoothing and
-        // short-run collapse remove those blips first so ordering acts on clean runs.
+        // Denoise before canonicalizing phase labels. Sustained returns to an earlier
+        // structural phase are valid (for example suggestions → deepening), while
+        // smoothing and short-run collapse remove transient classification spikes.
         timeline = majorityVoteSmooth(timeline: timeline, windowSize: config.smoothingWindowSize)
         timeline = collapseShortRuns(
             timeline,
             minRun: max(config.minimumPhaseDurationSeconds, Int(duration * config.collapseThresholdFraction))
         )
+        guard Task.isCancelled == false else { return [] }
         timeline = enforcePhaseOrdering(timeline: timeline)
 
         let phaseSegments = consolidatePhaseSegments(timeline: timeline, duration: duration)
@@ -156,7 +192,30 @@ struct HypnosisPhaseAnalyzer {
     func analyzeTranscription(
         _ transcription: AudioTranscriptionResult
     ) -> [PhaseSegment] {
-        analyze(segments: transcription.segments, duration: transcription.duration)
+        let preparedTranscription: AudioTranscriptionResult
+        if transcription.segments.isEmpty, transcription.fullText.isEmpty == false {
+            preparedTranscription = AudioTranscriptionResult(
+                fullText: transcription.fullText,
+                segments: [
+                    AudioTranscriptionSegment(
+                        text: transcription.fullText,
+                        timestamp: 0,
+                        duration: transcription.duration,
+                        confidence: 1.0
+                    )
+                ],
+                duration: transcription.duration,
+                detectedLanguage: transcription.locale
+            )
+        } else {
+            preparedTranscription = transcription
+        }
+
+        let wordTimestamps = approximateWordTimestamps(from: preparedTranscription.segments)
+        return analyze(
+            wordTimestamps: wordTimestamps,
+            transcription: preparedTranscription
+        )
     }
 
     func suggestPhaseTimeline(
@@ -234,8 +293,14 @@ struct HypnosisPhaseAnalyzer {
             return (adaptedChunked, true)
         }
 
-        let keywordScore = qualityScore(for: keywordPhases, transcription: transcription)
-        let chunkedScore = qualityScore(for: adaptedChunked, transcription: transcription)
+        let keywordScore = sourceSelectionQualityScore(
+            for: keywordPhases,
+            transcription: transcription
+        )
+        let chunkedScore = sourceSelectionQualityScore(
+            for: adaptedChunked,
+            transcription: transcription
+        )
         let techniqueEvidence = techniqueEvidenceMap(
             from: techniqueDetection,
             bucketCount: max(1, Int(ceil(transcription.duration)))
@@ -272,7 +337,10 @@ struct HypnosisPhaseAnalyzer {
             chunkedScore: chunkedSelectionScore,
             techniqueEvidence: techniqueEvidence
         ) {
-            let ensembleScore = qualityScore(for: ensembled, transcription: transcription)
+            let ensembleScore = sourceSelectionQualityScore(
+                for: ensembled,
+                transcription: transcription
+            )
             let ensembleTechniqueAlignment = techniqueAlignmentScore(
                 for: ensembled,
                 techniqueEvidence: techniqueEvidence,
@@ -693,6 +761,7 @@ struct HypnosisPhaseAnalyzer {
             .sorted { $0.phrase.count > $1.phrase.count }  // longest phrase first
 
         for wordIndex in 0..<wordTimestamps.count {
+            if wordIndex.isMultiple(of: 256), Task.isCancelled { return hitMap }
             let bucket = max(0, min(Int(wordTimestamps[wordIndex].startTime), bucketCount - 1))
             var matched = false
 
@@ -728,7 +797,6 @@ struct HypnosisPhaseAnalyzer {
     }
 
     private func effectiveWeightsForPhase(_ phase: HypnosisMetadata.Phase) -> [String: Double] {
-        let corpusKnowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
         let aliases: [HypnosisMetadata.Phase] = {
             switch phase {
             case .preTalk:
@@ -847,6 +915,7 @@ struct HypnosisPhaseAnalyzer {
         var timeline = [HypnosisMetadata.Phase?](repeating: nil, count: bucketCount)
 
         for secondIndex in 0..<bucketCount {
+            if secondIndex.isMultiple(of: 256), Task.isCancelled { return timeline }
             var scores = [HypnosisMetadata.Phase: Double]()
             let lo = max(0, secondIndex - contextRadius)
             let hi = min(bucketCount - 1, secondIndex + contextRadius)
@@ -912,29 +981,13 @@ struct HypnosisPhaseAnalyzer {
         .transitional: 0.0...100.0
     ]
 
-    /// Clamps any backward phase jump to the highest phase seen so far.
+    /// Canonicalizes technique/legacy labels without suppressing sustained returns
+    /// to an earlier structural phase. Short invalid oscillations are handled by the
+    /// smoothing and minimum-run passes that precede this method.
     func enforcePhaseOrdering(
         timeline: [HypnosisMetadata.Phase?]
     ) -> [HypnosisMetadata.Phase?] {
-        var result = timeline
-        var highestIndex = 0
-
-        for secondIndex in 0..<result.count {
-            guard let phase = result[secondIndex] else { continue }
-            let canonicalPhase = phase.labelingPhase
-            if canonicalPhase != phase {
-                result[secondIndex] = canonicalPhase
-            }
-            guard let phaseIndex = Self.orderedPhases.firstIndex(of: canonicalPhase) else { continue }
-
-            if phaseIndex >= highestIndex {
-                highestIndex = phaseIndex
-            } else {
-                result[secondIndex] = Self.orderedPhases[highestIndex]
-            }
-        }
-
-        return result
+        timeline.map { $0?.labelingPhase }
     }
 
     func enforcePhaseOrdering(
@@ -942,31 +995,16 @@ struct HypnosisPhaseAnalyzer {
     ) -> [PhaseSegment] {
         guard !phaseSegments.isEmpty else { return [] }
 
-        var highestIndex = 0
         let normalized = phaseSegments.map { segment -> PhaseSegment in
             let canonicalPhase = segment.phase.labelingPhase
-            guard
-                let phaseIndex = Self.orderedPhases.firstIndex(of: canonicalPhase)
-            else {
-                return segment
-            }
-
-            let resolvedPhase: HypnosisMetadata.Phase
-            if phaseIndex >= highestIndex {
-                highestIndex = phaseIndex
-                resolvedPhase = canonicalPhase
-            } else {
-                resolvedPhase = Self.orderedPhases[highestIndex]
-            }
-
-            guard resolvedPhase != segment.phase else { return segment }
+            guard canonicalPhase != segment.phase else { return segment }
             return PhaseSegment(
                 id: segment.id,
-                phase: resolvedPhase,
+                phase: canonicalPhase,
                 startTime: segment.startTime,
                 endTime: segment.endTime,
-                characteristics: resolvedPhase.displayName,
-                tranceDepthEstimate: resolvedPhase.tranceDepthEstimate,
+                characteristics: canonicalPhase.displayName,
+                tranceDepthEstimate: canonicalPhase.tranceDepthEstimate,
                 linguisticMarkers: segment.linguisticMarkers,
                 confidenceLevel: segment.confidenceLevel,
                 confidenceRationale: segment.confidenceRationale,
@@ -1294,13 +1332,19 @@ struct HypnosisPhaseAnalyzer {
         let primaryDistinctPhases = Set(primarySegments.map(\.phase)).count
         let proposalDistinctPhases = Set(proposalSegments.map(\.phase)).count
         let proposalHasBetterCoverage = proposalDistinctPhases > primaryDistinctPhases
+        let proposalAddsTerminalEmergence =
+            proposalSegments.last?.phase == .emergence &&
+            primarySegments.last?.phase != .emergence
         let proposalWinsClearly = proposalScore > primaryScore + 0.035
         let proposalWinsCoverageTie =
             proposalHasBetterCoverage &&
-            proposalScore >= primaryScore - 0.015 &&
+            proposalScore >= primaryScore - 0.05 &&
             primaryDistinctPhases < 4
+        let proposalRestoresEmergence =
+            proposalAddsTerminalEmergence &&
+            proposalScore >= primaryScore - 0.08
 
-        if proposalWinsClearly || proposalWinsCoverageTie {
+        if proposalWinsClearly || proposalWinsCoverageTie || proposalRestoresEmergence {
             return (proposalSegments, proposalAnalysis)
         }
 
@@ -1385,6 +1429,7 @@ struct HypnosisPhaseAnalyzer {
         var adjustedSegments = phaseSegments
 
         for boundaryIndex in 0..<(adjustedSegments.count - 1) {
+            if Task.isCancelled { return adjustedSegments }
             let leftSegment = adjustedSegments[boundaryIndex]
             let rightSegment = adjustedSegments[boundaryIndex + 1]
 
@@ -1440,6 +1485,7 @@ struct HypnosisPhaseAnalyzer {
             var bestScore = Double.leastNormalMagnitude
 
             for candidateBoundary in candidateBoundaries {
+                if Task.isCancelled { return adjustedSegments }
                 let leftMetrics = transcriptAnalyzer.sectionMetrics(
                     startTime: max(leftSegment.startTime, candidateBoundary - windowDuration),
                     endTime: candidateBoundary,
@@ -1671,7 +1717,6 @@ struct HypnosisPhaseAnalyzer {
         for phase: HypnosisMetadata.Phase,
         section: TranscriptSectionMetrics
     ) -> (score: Double, matchedPhrases: [String]) {
-        let corpusKnowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
         let associations = corpusKnowledge.phraseAssociations[phase] ?? []
         guard !associations.isEmpty else {
             return (0.0, [])
@@ -2087,30 +2132,60 @@ struct HypnosisPhaseAnalyzer {
             return partial + (segmentDuration < 18 ? segmentDuration : 0)
         } / totalDuration
         let durationBalance = clamp(1.0 - shortRunRatio, lower: 0.25, upper: 1.0)
-        let orderScore = orderedPhaseScore(for: phaseSegments)
-
-        return (transcriptSupport * 0.62)
-            + (distinctPhaseScore * 0.14)
-            + (durationBalance * 0.12)
-            + (orderScore * 0.12)
+        return (transcriptSupport * 0.70)
+            + (distinctPhaseScore * 0.15)
+            + (durationBalance * 0.15)
     }
 
-    private func orderedPhaseScore(for phaseSegments: [PhaseSegment]) -> Double {
-        var highestIndex = 0
-        var backwardJumpCount = 0
-
-        for segment in phaseSegments {
-            guard let phaseIndex = Self.orderedPhases.firstIndex(of: segment.phase) else { continue }
-            if phaseIndex < highestIndex {
-                backwardJumpCount += 1
-            } else {
-                highestIndex = phaseIndex
-            }
+    /// Compares analyzer sources primarily with independent transcript traits,
+    /// coverage, confidence, and stability. Semantic evidence remains a minority
+    /// signal so obvious label/content mismatches can still be rejected without
+    /// grading the keyword model solely against its own feature system.
+    private func sourceSelectionQualityScore(
+        for phaseSegments: [PhaseSegment],
+        transcription: AudioTranscriptionResult
+    ) -> Double {
+        guard phaseSegments.isEmpty == false else { return 0 }
+        let analysis = TranscriptFeatureAnalyzer().analyze(
+            transcription: transcription,
+            phases: phaseSegments
+        )
+        let totalDuration = max(
+            phaseSegments.reduce(0.0) { $0 + max(0, $1.endTime - $1.startTime) },
+            0.001
+        )
+        let traitSupport = phaseSegments.reduce(0.0) { partial, segment in
+            let midpoint = (segment.startTime + segment.endTime) / 2
+            guard let section = analysis.section(at: midpoint) else { return partial }
+            let segmentDuration = max(0, segment.endTime - segment.startTime)
+            return partial + phaseTraitAlignment(for: segment.phase, section: section) * segmentDuration
+        } / totalDuration
+        let semanticSupport = phaseSegments.reduce(0.0) { partial, segment in
+            let midpoint = (segment.startTime + segment.endTime) / 2
+            guard let section = analysis.section(at: midpoint) else { return partial }
+            let segmentDuration = max(0, segment.endTime - segment.startTime)
+            return partial + transcriptSupportScore(for: segment.phase, section: section) * segmentDuration
+        } / totalDuration
+        let confidence = phaseSegments.reduce(0.0) { partial, segment in
+            let segmentDuration = max(0, segment.endTime - segment.startTime)
+            return partial + segment.confidenceLevel.numericValue * segmentDuration
+        } / totalDuration
+        let coveredDuration = min(totalDuration, max(transcription.duration, 0.001))
+        let coverage = clamp(
+            coveredDuration / max(transcription.duration, 0.001),
+            lower: 0,
+            upper: 1
+        )
+        let shortRunDuration = phaseSegments.reduce(0.0) { partial, segment in
+            let duration = max(0, segment.endTime - segment.startTime)
+            return partial + (duration < 18 ? duration : 0)
         }
-
-        guard !phaseSegments.isEmpty else { return 0 }
-        let penalty = Double(backwardJumpCount) / Double(phaseSegments.count)
-        return clamp(1.0 - penalty, lower: 0.2, upper: 1.0)
+        let stability = clamp(1 - (shortRunDuration / totalDuration), lower: 0.25, upper: 1)
+        return (traitSupport * 0.35)
+            + (semanticSupport * 0.35)
+            + (confidence * 0.10)
+            + (coverage * 0.10)
+            + (stability * 0.10)
     }
 
     private func phaseTraitAlignment(
@@ -2325,7 +2400,14 @@ struct HypnosisPhaseAnalyzer {
     }
 
     private func phaseKeywordTokens(for phase: HypnosisMetadata.Phase) -> Set<String> {
-        let corpusKnowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
+        keywordTokensByPhase[phase] ?? []
+    }
+
+    private static func makeKeywordTokens(
+        for phase: HypnosisMetadata.Phase,
+        knowledge: CorpusPhaseKnowledge,
+        corpusLearning: AnalyzerConfig.CorpusLearning
+    ) -> Set<String> {
         let tokens = HypnosisPhaseKeywords.all
             .filter { $0.phase == phase }
             .flatMap { keyword in
@@ -2334,13 +2416,12 @@ struct HypnosisPhaseAnalyzer {
                     .map { String($0).lowercased() }
             }
             .filter { !$0.isEmpty }
-        let phraseTokens = (corpusKnowledge.phraseWeights[phase] ?? [:])
+        let phraseTokens = (knowledge.phraseWeights[phase] ?? [:])
             .keys
             .filter { phrase in
-                sourceMultiplier(
-                    for: phrase,
-                    phase: phase,
-                    in: corpusKnowledge.phraseSourcePacks
+                corpusLearning.sourceMultiplier(
+                    for: knowledge.phraseSourcePacks[phase]?[phrase] ?? [],
+                    phase: phase
                 ) > 0
             }
             .flatMap { phrase in
@@ -2348,12 +2429,11 @@ struct HypnosisPhaseAnalyzer {
                     .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "'" })
                     .map { String($0).lowercased() }
             }
-        let learnedTokens = (corpusKnowledge.phaseTokens[phase] ?? [])
+        let learnedTokens = (knowledge.phaseTokens[phase] ?? [])
             .filter { token in
-                sourceMultiplier(
-                    for: token,
-                    phase: phase,
-                    in: corpusKnowledge.keywordSourcePacks
+                corpusLearning.sourceMultiplier(
+                    for: knowledge.keywordSourcePacks[phase]?[token] ?? [],
+                    phase: phase
                 ) > 0
             }
         return Set(tokens)
@@ -2362,20 +2442,26 @@ struct HypnosisPhaseAnalyzer {
     }
 
     private func phaseKeywordPhrases(for phase: HypnosisMetadata.Phase) -> Set<String> {
-        let corpusKnowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
+        keywordPhrasesByPhase[phase] ?? []
+    }
+
+    private static func makeKeywordPhrases(
+        for phase: HypnosisMetadata.Phase,
+        knowledge: CorpusPhaseKnowledge,
+        corpusLearning: AnalyzerConfig.CorpusLearning
+    ) -> Set<String> {
         let configuredPhrases = HypnosisPhaseKeywords.all
             .filter { $0.phase == phase && $0.phrase.contains(" ") }
-            .map { normalizePhrase($0.phrase) }
-        let learnedPhrases = (corpusKnowledge.phraseWeights[phase] ?? [:])
+            .map { normalizedPhrase($0.phrase) }
+        let learnedPhrases = (knowledge.phraseWeights[phase] ?? [:])
             .keys
             .filter { phrase in
-                sourceMultiplier(
-                    for: phrase,
-                    phase: phase,
-                    in: corpusKnowledge.phraseSourcePacks
+                corpusLearning.sourceMultiplier(
+                    for: knowledge.phraseSourcePacks[phase]?[phrase] ?? [],
+                    phase: phase
                 ) > 0
             }
-            .map(normalizePhrase)
+            .map(normalizedPhrase)
         let waymarkerPhrases = HypnosisWaymarkerLexicon.phrases(for: phase)
         return Set(configuredPhrases)
             .union(learnedPhrases)
@@ -2393,6 +2479,10 @@ struct HypnosisPhaseAnalyzer {
     }
 
     private func normalizePhrase(_ phrase: String) -> String {
+        Self.normalizedPhrase(phrase)
+    }
+
+    private static func normalizedPhrase(_ phrase: String) -> String {
         phrase
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "'" })
@@ -2404,7 +2494,6 @@ struct HypnosisPhaseAnalyzer {
         from previousPhase: HypnosisMetadata.Phase,
         to nextPhase: HypnosisMetadata.Phase
     ) -> Double {
-        let corpusKnowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
         return (corpusKnowledge.transitionPriors[previousPhase]?[nextPhase] ?? 0.0)
             * corpusLearning.transitionPriorMultiplier
     }

@@ -19,6 +19,28 @@ enum PlaybackState: Equatable {
     case complete
 }
 
+struct PlaybackAnalyticsLifecycle: Equatable {
+    private(set) var hasStarted = false
+    private(set) var hasEnded = false
+
+    mutating func prepareForNewAttempt() {
+        hasStarted = false
+        hasEnded = false
+    }
+
+    mutating func markStarted() -> Bool {
+        guard !hasStarted else { return false }
+        hasStarted = true
+        return true
+    }
+
+    mutating func markEnded() -> Bool {
+        guard hasStarted, !hasEnded else { return false }
+        hasEnded = true
+        return true
+    }
+}
+
 // MARK: - Unified Player View Model
 
 @MainActor
@@ -46,12 +68,13 @@ final class UnifiedPlayerViewModel {
     private(set) var duration: TimeInterval = 0
     var showingControls = true
     var showingSafetyWarning = false
+    var showingLightSyncWarning = false
 
     // MARK: - Countdown Setting
 
     @ObservationIgnored
     private var countdownDuration: Int {
-        UserDefaults.standard.integer(forKey: "countdownDuration").clamped(options: [3, 7, 10])
+        userDefaults.integer(forKey: "countdownDuration").clamped(options: [3, 7, 10])
     }
 
     // MARK: - Session Mode State
@@ -97,28 +120,28 @@ final class UnifiedPlayerViewModel {
 
     @ObservationIgnored
     private var lastSessionId: String {
-        get { UserDefaults.standard.string(forKey: "lastSessionId") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "lastSessionId") }
+        get { userDefaults.string(forKey: "lastSessionId") ?? "" }
+        set { userDefaults.set(newValue, forKey: "lastSessionId") }
     }
 
     @ObservationIgnored
     private var lastSessionProgress: Double {
-        get { UserDefaults.standard.double(forKey: "lastSessionProgress") }
-        set { UserDefaults.standard.set(newValue, forKey: "lastSessionProgress") }
+        get { userDefaults.double(forKey: "lastSessionProgress") }
+        set { userDefaults.set(newValue, forKey: "lastSessionProgress") }
     }
 
     // MARK: - Safety Warnings
 
     @ObservationIgnored
     private var hasSeenFlashWarning: Bool {
-        get { UserDefaults.standard.bool(forKey: "hasSeenFlashWarning") }
-        set { UserDefaults.standard.set(newValue, forKey: "hasSeenFlashWarning") }
+        get { userDefaults.bool(forKey: "hasSeenFlashWarning") }
+        set { userDefaults.set(newValue, forKey: "hasSeenFlashWarning") }
     }
 
     @ObservationIgnored
     private var hasSeenLightSyncWarning: Bool {
-        get { UserDefaults.standard.bool(forKey: "hasSeenLightSyncWarning") }
-        set { UserDefaults.standard.set(newValue, forKey: "hasSeenLightSyncWarning") }
+        get { userDefaults.bool(forKey: "hasSeenLightSyncWarning") }
+        set { userDefaults.set(newValue, forKey: "hasSeenLightSyncWarning") }
     }
 
     // MARK: - Private
@@ -127,6 +150,8 @@ final class UnifiedPlayerViewModel {
     private var countdownTask: Task<Void, Never>?
     private var savedBrightness: CGFloat = 1.0
     private var hasStarted = false
+    private var analyticsLifecycle = PlaybackAnalyticsLifecycle()
+    @ObservationIgnored private let userDefaults: UserDefaults
 
     /// When true, `onDisappear` will not stop playback — used for mini-player dismiss.
     var dismissToMiniPlayer = false
@@ -136,10 +161,12 @@ final class UnifiedPlayerViewModel {
     init(
         mode: PlayerMode,
         engine: LightEngine,
+        initialLightSession: LightSession? = nil,
         nowPlaying: NowPlayingState = .shared,
         analysisManager: AnalysisStateManager = .shared,
         sessionHistory: SessionHistoryManager = .shared,
-        haptics: TranceHaptics = .shared
+        haptics: TranceHaptics = .shared,
+        userDefaults: UserDefaults = .standard
     ) {
         self.mode = mode
         self.engine = engine
@@ -147,6 +174,8 @@ final class UnifiedPlayerViewModel {
         self.analysisManager = analysisManager
         self.sessionHistory = sessionHistory
         self.haptics = haptics
+        self.userDefaults = userDefaults
+        self.lightSession = initialLightSession
 
         if case .flashMode(let freq, _, let colorTemp, _, _, _, _) = mode {
             flashFrequency = freq
@@ -275,7 +304,7 @@ final class UnifiedPlayerViewModel {
             if hasSeenLightSyncWarning {
                 enableLightSync(session: session)
             } else {
-                // The view should show the warning alert
+                showingLightSyncWarning = true
             }
         case .analyzing:
             break
@@ -294,6 +323,13 @@ final class UnifiedPlayerViewModel {
         hasSeenLightSyncWarning = true
         withAnimation(.easeInOut(duration: 0.4)) { lightSyncEnabled = true }
         audioLightSyncPlayer?.enableLightSync(lightSession: session)
+    }
+
+    func acknowledgeLightSyncWarning() {
+        if let lightSession {
+            enableLightSync(session: lightSession)
+        }
+        showingLightSyncWarning = false
     }
 
     var lightSyncStatus: LightSyncStatus {
@@ -485,7 +521,7 @@ final class UnifiedPlayerViewModel {
     // MARK: - Private: Countdown & Play
 
     private func startCountdownAndPlay() {
-        UsageAnalytics.shared.sessionStarted(source: sessionSource, category: sessionCategory)
+        analyticsLifecycle.prepareForNewAttempt()
 
         // Maximise screen brightness
         savedBrightness = UIScreen.main.brightness
@@ -532,6 +568,9 @@ final class UnifiedPlayerViewModel {
 
     private func beginPlayback() {
         playbackState = .playing
+        if analyticsLifecycle.markStarted() {
+            UsageAnalytics.shared.sessionStarted(source: sessionSource, category: sessionCategory)
+        }
 
         switch mode {
         case .session:
@@ -617,13 +656,11 @@ final class UnifiedPlayerViewModel {
         UIScreen.main.brightness = savedBrightness
         countdownValue = nil
         countdownMessage = nil
+        reportSessionEndedIfNeeded()
 
         switch mode {
         case .session:
             saveProgress()
-            if case .session(let session, _) = mode, session.duration_sec > 0 {
-                UsageAnalytics.shared.sessionCompleted(fraction: currentTime / session.duration_sec)
-            }
             lightScorePlayer?.stop()
             engine.detachSession()
             engine.stop()
@@ -646,6 +683,18 @@ final class UnifiedPlayerViewModel {
 
         playbackState = .idle
         nowPlaying.deactivate()
+    }
+
+    private func reportSessionEndedIfNeeded() {
+        guard analyticsLifecycle.markEnded() else { return }
+
+        let fraction: Double?
+        if case .session(let session, _) = mode, session.duration_sec > 0 {
+            fraction = playbackState == .complete ? 1 : currentTime / session.duration_sec
+        } else {
+            fraction = nil
+        }
+        UsageAnalytics.shared.sessionEnded(fraction: fraction)
     }
 
     // MARK: - Private: Timer
@@ -776,15 +825,7 @@ final class UnifiedPlayerViewModel {
 
     func checkForLightSession() async {
         guard lightSession == nil, case .audioLight(let file) = mode else { return }
-        let sessionsURL = URL.documentsDirectory.appending(path: "GeneratedSessions")
-        let baseName = file.filename
-            .replacing(".mp3", with: "").replacing(".m4a", with: "").replacing(".wav", with: "")
-        let fileURL = sessionsURL.appending(path: "\(baseName)_session.json")
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
-        if let data = try? Data(contentsOf: fileURL),
-           let session = try? JSONDecoder().decode(LightSession.self, from: data) {
-            lightSession = session
-        }
+        lightSession = GeneratedSessionStore.shared.load(for: file)
     }
 
     // MARK: - Private: Binaural

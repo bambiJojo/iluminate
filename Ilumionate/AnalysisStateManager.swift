@@ -386,31 +386,7 @@ class AnalysisStateManager {
 
     /// Save generated light session to documents directory
     private func saveGeneratedSession(_ session: LightSession, for audioFile: AudioFile) async throws {
-        let fileManager = FileManager.default
-        let documentsURL = URL.documentsDirectory
-        let sessionsURL = documentsURL.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
-
-        // Create directory if it doesn't exist
-        if !fileManager.fileExists(atPath: sessionsURL.path) {
-            try fileManager.createDirectory(at: sessionsURL, withIntermediateDirectories: true)
-        }
-
-        // Create filename from audio file
-        let baseName = audioFile.filename
-            .replacing(".mp3", with: "")
-            .replacing(".m4a", with: "")
-            .replacing(".wav", with: "")
-        let filename = "\(baseName)_session.json"
-        let fileURL = sessionsURL.appending(path: filename)
-
-        // Encode and save
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(session)
-        try data.write(to: fileURL)
-
-        Log.analysis.info("💾 Saved generated session: \(filename)")
-        Log.analysis.info("📍 Location: \(fileURL.path)")
+        try GeneratedSessionStore.shared.save(session, for: audioFile)
     }
 }
 
@@ -539,6 +515,9 @@ actor AnalysisCoordinator {
             Log.analysis.info("🛑 Analysis cancelled: \(audioFile.filename)")
         } catch {
             Log.analysis.info("❌ Analysis failed: \(audioFile.filename) - \(error)")
+            await MainActor.run {
+                UsageAnalytics.shared.errorOccurred(.audioAnalysisFailed)
+            }
         }
     }
 
@@ -570,35 +549,9 @@ actor AnalysisCoordinator {
     }
 
     private func saveLightSession(_ session: LightSession, for audioFile: AudioFile) async throws {
-        // File I/O with proper concurrency handling
-        try await Task(priority: .utility) {
-            let fileManager = FileManager.default
-            let documentsURL = URL.documentsDirectory
-            let sessionsURL = documentsURL.appending(path: "GeneratedSessions", directoryHint: .isDirectory)
-
-            // Create directory if needed
-            if !fileManager.fileExists(atPath: sessionsURL.path) {
-                try fileManager.createDirectory(at: sessionsURL, withIntermediateDirectories: true)
-            }
-
-            // Create filename
-            let baseName = audioFile.filename
-                .replacing(".mp3", with: "")
-                .replacing(".m4a", with: "")
-                .replacing(".wav", with: "")
-            let filename = "\(baseName)_session.json"
-            let fileURL = sessionsURL.appending(path: filename)
-
-            // Encode and save using a safe encoding context
-            let data = try await MainActor.run {
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                return try encoder.encode(session)
-            }
-            try data.write(to: fileURL)
-
-            Log.analysis.info("💾 Saved generated session: \(filename)")
-        }.value
+        try await MainActor.run {
+            try GeneratedSessionStore.shared.save(session, for: audioFile)
+        }
     }
 
     func cancelCurrentTask() async {
@@ -853,6 +806,7 @@ actor AnalysisCoordinator {
             Log.analysis.info("❌ Analysis failed: \(audioFile.filename) - \(msg)")
             // Keep checkpoint on transient errors; it will be retried on next launch.
             await MainActor.run {
+                UsageAnalytics.shared.errorOccurred(.audioAnalysisFailed)
                 analysisManager.currentAnalysis?.stage = .failed
                 analysisManager.currentAnalysis?.errorMessage = msg
                 analysisManager.removeFromQueue(audioFile: audioFile)

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "calm-boundaries",
+  "title": "Calm Boundaries",
+  "theme": "suggestion",
+  "supportedArcs": ["fullText", "handoff"],
+  "language": "en",
+  "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
+  "summary": "A grounded self-suggestion session for saying yes and no from a calm, centered place.",
+  "segments": [
+    {
+      "phase": "induction",
+      "text": "Let the words become a quiet line around the center of your attention. Inside this line, there is room to breathe. Inside this line, there is room to notice what is true for you. You do not have to decide anything yet. You only practice the feeling of having a center. The gaze rests on the next word. The breath moves at its own pace. The body begins to understand that a boundary can be calm. It does not have to be loud. It does not have to be defensive. It can be the simple knowledge of where your attention, time, and energy belong.",
+      "pacing": { "baseWPM": 138 }
+    },
+    {
+      "phase": "deepening",
+      "text": "Imagine standing inside a circle drawn in warm light. The circle is not a wall. It is a clear edge. You can see through it. You can connect across it. You can choose what crosses it. The body may recognize this as relief. The shoulders do not have to rise. The jaw does not have to brace. The breath does not have to become shallow. A calm boundary lets the nervous system stay available while the answer becomes clear. You can stand in the circle and listen inwardly. What is mine? What is not mine? What is a yes? What is a no? What needs more time?",
+      "pacing": { "baseWPM": 98 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let the suggestions settle gently. I can pause before answering. I can feel my body before agreeing. I can let a request be important without making it automatic. I can care about someone and still have limits. I can say yes from willingness and no from steadiness. A boundary is not rejection of another person. A boundary is truthful contact with reality. Time is real. Energy is real. Attention is real. When you honor what is real, your yes becomes cleaner and your no becomes kinder. This clarity can protect relationships instead of damaging them.",
+      "pacing": { "baseWPM": 92 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Picture a future moment when you want to respond from this centered place. See yourself taking one breath before speaking or typing. In that breath, the warm circle is there. You do not rush to remove someone else's discomfort. You do not rush to explain more than is needed. You choose a simple sentence. I can do this. I cannot do that. I need time to decide. That does not work for me. Thank you for understanding. The words can be plain. The tone can be calm. The body can remain connected to the ground.",
+      "pacing": { "baseWPM": 90 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let the deeper mind keep this pattern. Pause. Feel. Choose. Pause. Feel. Choose. If guilt appears, it can be noticed without becoming the decision maker. If urgency appears, it can be noticed without becoming the decision maker. If kindness appears, it can stay present while the boundary stays clear. You can be generous without disappearing. You can be firm without becoming harsh. You can be flexible without becoming available for everything. The center remains. The circle remains. The breath remains. From there, the next honest answer can come.",
+      "pacing": { "baseWPM": 90 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let calm boundaries include repair. If you answer too quickly, you can update the answer. If you overexplain, you can return to the simple truth. If someone misunderstands, you can clarify without abandoning the center. The practice is not to be flawless. The practice is to stay in contact with yourself while relating to others. That contact can be warm. It can be respectful. It can also be clear. Warmth and clarity can stand together inside the same breath. The more often you practice this, the less dramatic a boundary has to feel.",
+      "pacing": { "baseWPM": 90 }
+    },
+    {
+      "phase": "suggestions",
+      "text": "Let the center become easier to recognize. It may feel like a slower breath before an answer. It may feel like a little more weight through the feet. It may feel like fewer words and more truth. When you notice that center, you do not need to rush away from it. You can stay there long enough to choose. A calm boundary can be brief, complete, and kind. It can leave room for connection without giving away the whole room.",
+      "pacing": { "baseWPM": 90 }
+    },
+    {
+      "phase": "emergence",
+      "text": "Begin to return with the center still clear. Feel the room, the body, and the breath. The warm circle can come with you as a memory of calm choice. Count upward: one, centered; two, steady; three, clear; four, kind; five, ready to choose from a grounded place.",
+      "pacing": { "baseWPM": 132 },
+      "arcs": ["fullText"]
+    },
+    {
+      "phase": "transitional",
+      "text": "If this is the handoff, let the final visible cue be simple: pause, feel, choose. Let your eyes close now, and allow the remaining layer to deepen that calm center.",
+      "pacing": { "baseWPM": 82 },
+      "arcs": ["handoff"],
+      "triggersHandoff": true
+    }
+  ]
+}

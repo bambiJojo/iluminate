@@ -60,6 +60,7 @@ struct LumeOrb: View {
             .frame(width: size.diameter, height: size.diameter)
             .shadow(color: .auroraBlue.opacity(0.4), radius: size.glowRadius)
         }
+        .accessibilityHidden(true)
     }
 }
 

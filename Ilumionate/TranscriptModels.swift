@@ -10,7 +10,7 @@ import Foundation
 // MARK: - Transcript Feature Analysis
 
 /// File-relative transcript analytics used for normalized section scoring.
-struct TranscriptAnalysis: Codable, Sendable {
+nonisolated struct TranscriptAnalysis: Codable, Sendable {
     let overall: TranscriptSectionMetrics
     let sections: [TranscriptSectionMetrics]
     let timelineWindows: [TranscriptSectionMetrics]
@@ -60,7 +60,7 @@ struct TranscriptAnalysis: Codable, Sendable {
     }
 }
 
-struct TranscriptSectionMetrics: Codable, Identifiable, Sendable {
+nonisolated struct TranscriptSectionMetrics: Codable, Identifiable, Sendable {
     let id: UUID
     let phase: HypnosisMetadata.Phase?
     let startTime: TimeInterval
@@ -185,21 +185,21 @@ struct TranscriptSectionMetrics: Codable, Identifiable, Sendable {
     }
 }
 
-struct TranscriptWordStatistic: Codable, Sendable {
+nonisolated struct TranscriptWordStatistic: Codable, Sendable {
     let word: String
     let count: Int
     let share: Double
     let normalizedShareLift: Double
 }
 
-struct TranscriptPhraseStatistic: Codable, Sendable {
+nonisolated struct TranscriptPhraseStatistic: Codable, Sendable {
     let phrase: String
     let count: Int
     let share: Double
     let normalizedShareLift: Double
 }
 
-struct HypnosisWaymarkerMatch: Codable, Identifiable, Sendable {
+nonisolated struct HypnosisWaymarkerMatch: Codable, Identifiable, Sendable {
     let id: UUID
     let phrase: String
     let phase: HypnosisMetadata.Phase
@@ -221,13 +221,13 @@ struct HypnosisWaymarkerMatch: Codable, Identifiable, Sendable {
     }
 }
 
-enum HypnosisPhraseEvidenceOrigin: String, Codable, Sendable {
+nonisolated enum HypnosisPhraseEvidenceOrigin: String, Codable, Sendable {
     case curated
     case corpus
     case blended
 }
 
-struct HypnosisPhraseAssociation: Identifiable, Codable, Sendable {
+nonisolated struct HypnosisPhraseAssociation: Identifiable, Codable, Sendable {
     var id: String { "\(phase.rawValue)|\(phrase)" }
 
     let phrase: String

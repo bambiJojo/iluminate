@@ -55,12 +55,17 @@ protocol ContentAnalyzingService: AnyObject {
         audioFile: AudioFile,
         audioFeatures: AudioFeatures
     ) async throws -> AnalysisResult
+    func cancelAnalysis() async
+}
+
+extension ContentAnalyzingService {
+    func cancelAnalysis() async {}
 }
 
 /// Extracts prosodic features (speech rate, volume, pitch, pauses)
 /// directly from the raw audio signal combined with transcript timing.
 /// Not MainActor-isolated — runs on a background thread for performance.
-protocol ProsodyAnalyzingService: Sendable {
+nonisolated protocol ProsodyAnalyzingService: Sendable {
     func analyze(
         url: URL,
         segments: [AudioTranscriptionSegment],

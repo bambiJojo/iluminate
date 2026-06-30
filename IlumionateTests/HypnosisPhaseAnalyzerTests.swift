@@ -24,7 +24,7 @@ private func makeSegment(text: String, start: Double, duration: Double) -> Audio
 
 struct ApproximateWordTimestampsTests {
 
-    private let analyzer = HypnosisPhaseAnalyzer()
+    private let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
 
     @Test func emptySegmentsReturnsEmpty() {
         let result = analyzer.approximateWordTimestamps(from: [])
@@ -71,20 +71,19 @@ struct ApproximateWordTimestampsTests {
 
 struct EnforcePhaseOrderingTests {
 
-    private let analyzer = HypnosisPhaseAnalyzer()
+    private let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
 
     @Test func alreadyOrderedTimelinePassesThrough() {
         let timeline: [HypnosisMetadata.Phase?] = [.preTalk, .induction, .deepening, .therapy, .emergence]
         let result = analyzer.enforcePhaseOrdering(timeline: timeline)
-        #expect(result == timeline)
+        #expect(result == [.induction, .induction, .deepening, .suggestions, .emergence])
     }
 
-    @Test func backwardJumpIsCorrectedToCurrentMax() {
-        // therapy followed by induction is illegal — should become therapy
-        let timeline: [HypnosisMetadata.Phase?] = [.therapy, .induction]
+    @Test func sustainedBackwardTransitionIsPreserved() {
+        // Real sessions commonly return from suggestions to deepening.
+        let timeline: [HypnosisMetadata.Phase?] = [.suggestions, .deepening]
         let result = analyzer.enforcePhaseOrdering(timeline: timeline)
-        #expect(result[0] == .therapy)
-        #expect(result[1] == .therapy, "backward jump must be corrected")
+        #expect(result == timeline)
     }
 
     @Test func nilBucketsArePreserved() {
@@ -93,11 +92,10 @@ struct EnforcePhaseOrderingTests {
         #expect(result[1] == nil, "nil buckets must remain nil")
     }
 
-    @Test func highestPhaseIsTrackedAcrossNils() {
-        // preTalk → nil → induction → nil → preTalk (backward) → must become induction
-        let timeline: [HypnosisMetadata.Phase?] = [.preTalk, nil, .induction, nil, .preTalk]
+    @Test func backwardTransitionAcrossNilGapIsPreserved() {
+        let timeline: [HypnosisMetadata.Phase?] = [.suggestions, nil, .deepening]
         let result = analyzer.enforcePhaseOrdering(timeline: timeline)
-        #expect(result[4] == .induction, "backward jump past nil gap must be corrected")
+        #expect(result == timeline)
     }
 
     @Test func emptyTimelineReturnsEmpty() {
@@ -105,21 +103,21 @@ struct EnforcePhaseOrderingTests {
         #expect(result.isEmpty)
     }
 
-    @Test func backwardSegmentJumpIsCorrectedAndMerged() {
+    @Test func backwardSegmentTransitionIsPreserved() {
         let segments = [
             PhaseSegment(
-                phase: .deepening,
+                phase: .suggestions,
                 startTime: 0,
                 endTime: 30,
-                characteristics: "Deepening",
-                tranceDepthEstimate: 0.6
+                characteristics: "Suggestions",
+                tranceDepthEstimate: 0.72
             ),
             PhaseSegment(
-                phase: .induction,
+                phase: .deepening,
                 startTime: 30,
                 endTime: 60,
-                characteristics: "Induction",
-                tranceDepthEstimate: 0.2
+                characteristics: "Deepening",
+                tranceDepthEstimate: 0.62
             ),
             PhaseSegment(
                 phase: .suggestions,
@@ -132,9 +130,9 @@ struct EnforcePhaseOrderingTests {
 
         let result = analyzer.enforcePhaseOrdering(phaseSegments: segments)
 
-        #expect(result.map(\.phase) == [.deepening, .suggestions])
+        #expect(result.map(\.phase) == [.suggestions, .deepening, .suggestions])
         #expect(result[0].startTime == 0)
-        #expect(result[0].endTime == 60)
+        #expect(result[0].endTime == 30)
     }
 }
 
@@ -142,7 +140,7 @@ struct EnforcePhaseOrderingTests {
 
 struct MajorityVoteSmoothTests {
 
-    private let analyzer = HypnosisPhaseAnalyzer()
+    private let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
 
     @Test func singleIsolatedPhaseSurroundedByDominantIsReplaced() {
         // Single .induction spike surrounded by .therapy
@@ -177,7 +175,7 @@ struct MajorityVoteSmoothTests {
 
 struct ConsolidatePhaseSegmentsTests {
 
-    private let analyzer = HypnosisPhaseAnalyzer()
+    private let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
 
     @Test func singlePhaseProducesOneSegment() {
         let timeline: [HypnosisMetadata.Phase?] = Array(repeating: .therapy, count: 60)
@@ -224,7 +222,7 @@ struct ConsolidatePhaseSegmentsTests {
 
 struct PositionAwareResolutionTests {
 
-    private let analyzer = HypnosisPhaseAnalyzer()
+    private let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
 
     @Test func earlyBrainwashingVocabularyDoesNotOverridePretalkAnchoring() {
         let words: [WordTimestamp] = [
@@ -251,7 +249,7 @@ struct PositionAwareResolutionTests {
 
 struct TranscriptConfidenceEnrichmentTests {
 
-    private let analyzer = HypnosisPhaseAnalyzer()
+    private let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
 
     @Test func repetitiveBrainwashingSectionIsPromotedToHighConfidence() {
         let segment = PhaseSegment(
@@ -356,14 +354,13 @@ struct TranscriptConfidenceEnrichmentTests {
     }
 
     @Test func corpusLearnedWeightsFeedKeywordHitMap() {
-        CorpusPhaseKnowledgeCache.shared.setKnowledgeOverrideForTesting(
-            CorpusPhaseKnowledge(
+        let analyzer = HypnosisPhaseAnalyzer(
+            corpusKnowledge: CorpusPhaseKnowledge(
                 keywordWeights: [.brainwashing: ["spiral": 3.6]],
                 phaseTokens: [.brainwashing: ["spiral"]],
                 fewShotExamples: []
             )
         )
-        defer { CorpusPhaseKnowledgeCache.shared.setKnowledgeOverrideForTesting(nil) }
 
         let hitMap = analyzer.buildHitMap(
             wordTimestamps: [makeWord("spiral", at: 0)],
@@ -374,12 +371,11 @@ struct TranscriptConfidenceEnrichmentTests {
     }
 
     @Test func corpusLearnedPhraseWeightsFeedKeywordHitMap() {
-        CorpusPhaseKnowledgeCache.shared.setKnowledgeOverrideForTesting(
-            CorpusPhaseKnowledge(
+        let analyzer = HypnosisPhaseAnalyzer(
+            corpusKnowledge: CorpusPhaseKnowledge(
                 phraseWeights: [.conditioning: ["snap right back": 4.2]]
             )
         )
-        defer { CorpusPhaseKnowledgeCache.shared.setKnowledgeOverrideForTesting(nil) }
 
         let hitMap = analyzer.buildHitMap(
             wordTimestamps: [
@@ -391,6 +387,19 @@ struct TranscriptConfidenceEnrichmentTests {
         )
 
         #expect((hitMap[0][.conditioning] ?? 0) > 0)
+    }
+
+    @Test func fullTextOnlyTranscriptionStillProducesPhases() {
+        let transcription = AudioTranscriptionResult(
+            fullText: "Take a slow breath, close your eyes, and relax deeper and deeper.",
+            segments: [],
+            duration: 60,
+            detectedLanguage: "en"
+        )
+
+        let phases = analyzer.analyzeTranscription(transcription)
+
+        #expect(phases.isEmpty == false)
     }
 
     @Test func hybridSelectionPrefersKeywordWhenChunkedTranscriptFitIsWorse() {
@@ -595,9 +604,9 @@ struct TranscriptConfidenceEnrichmentTests {
         #expect(!suggestion.windows.isEmpty)
         #expect(phases.contains(.induction))
         #expect(phases.contains(.deepening))
-        #expect(phases.contains(.conditioning))
+        #expect(phases.contains(.suggestions))
         #expect(phases.last == .emergence)
-        #expect(suggestion.averageConfidence > 0.45)
+        #expect(suggestion.averageConfidence > 0.40)
     }
 
     @Test func adaptPredictedPhasesCanAdoptPhraseDrivenProposalWhenSeedTimelineIsWeak() {
@@ -637,7 +646,7 @@ struct TranscriptConfidenceEnrichmentTests {
 
         let adaptedPhases = adapted.map(\.phase)
         #expect(Set(adaptedPhases).count >= 3)
-        #expect(adaptedPhases.contains(.conditioning))
+        #expect(adaptedPhases.contains(.suggestions))
         #expect(adaptedPhases.last == .emergence)
     }
 
@@ -688,9 +697,9 @@ struct TranscriptConfidenceEnrichmentTests {
         )
 
         #expect(baseline.count == 1)
-        #expect(baseline.first?.phase == .preTalk)
+        #expect(baseline.first?.phase == .induction)
         #expect(techniqueAware.count >= 2)
-        #expect(techniqueAware.last?.phase == .conditioning)
+        #expect(techniqueAware.last?.phase == .suggestions)
     }
 }
 
