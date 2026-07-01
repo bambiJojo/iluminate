@@ -43,7 +43,12 @@ struct ReaderControlPanel: View {
             }
         }
         .padding(TranceSpacing.screen)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 24))
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: 28))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28)
+                .strokeBorder(Color.glassBorder, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 8)
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.bottom, TranceSpacing.statusBar)
     }

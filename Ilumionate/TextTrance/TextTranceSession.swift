@@ -71,6 +71,11 @@ final class TextTranceSession {
     private(set) var isPaused = false
     var speedMultiplier: Double
 
+    /// Reading progress by word position, 0…1. Drives the reader's progress line.
+    var progressFraction: Double {
+        schedule.isEmpty ? 0 : min(1, Double(currentWordIndex) / Double(schedule.count))
+    }
+
     // Live, mutable copies of schedule-affecting settings.
     private(set) var subliminalEnabled: Bool
     private(set) var subliminalSpeed: TextPacingSettings.SubliminalSpeed

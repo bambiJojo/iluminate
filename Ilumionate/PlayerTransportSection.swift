@@ -77,40 +77,33 @@ struct PlayerTransportSection: View {
         }
     }
 
-    @ViewBuilder
     private var playPauseIcon: some View {
-        if viewModel.useDarkChrome {
-            Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                .font(.system(size: 64))
+        // Unified premium play/pause: a solid teal aurora circle in every mode.
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [.roseGold, .roseDeep],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 80, height: 80)
+                .shadow(
+                    color: TranceShadow.button.color,
+                    radius: TranceShadow.button.radius,
+                    x: TranceShadow.button.x,
+                    y: TranceShadow.button.y
+                )
+
+            Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+                .font(.title)
                 .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))
-        } else {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.roseGold, .roseDeep],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-                    .shadow(
-                        color: TranceShadow.button.color,
-                        radius: TranceShadow.button.radius,
-                        x: TranceShadow.button.x,
-                        y: TranceShadow.button.y
-                    )
-
-                Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title)
-                    .foregroundStyle(.white)
-                    .contentTransition(.symbolEffect(.replace))
-                    .offset(x: viewModel.isPlaying ? 0 : 2)
-            }
-            .scaleEffect(viewModel.isPlaying ? 1.05 : 1.0)
-            .animation(.easeInOut(duration: 0.2), value: viewModel.isPlaying)
+                .offset(x: viewModel.isPlaying ? 0 : 2)
         }
+        .scaleEffect(viewModel.isPlaying ? 1.05 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.isPlaying)
     }
 }
 

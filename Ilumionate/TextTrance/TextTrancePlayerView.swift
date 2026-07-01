@@ -13,6 +13,7 @@ struct TextTrancePlayerView: View {
     @State private var showingSettings = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var backgroundPulse = false
     @State private var wordOpacity: Double = 1
@@ -27,14 +28,17 @@ struct TextTrancePlayerView: View {
         ZStack {
             Color.voidDeep.ignoresSafeArea()
 
-            // Subtle decorative pulse (NOT the entrainment light layer —
-            // FlashController only runs in the post-handoff tail in M1).
+            // Phase-aware atmosphere: the glow color follows the current reading
+            // phase (induction → teal, deepening → violet, …), crossfading slowly
+            // as phases blend. A slow breath is layered on top. (NOT the
+            // entrainment light layer — FlashController only runs post-handoff.)
             RadialGradient(
-                colors: [Color.auroraTeal.opacity(backgroundPulse ? 0.22 : 0.08), .clear],
-                center: .center, startRadius: 20, endRadius: 420)
+                colors: [phaseColor.opacity(backgroundPulse ? 0.24 : 0.10), .clear],
+                center: .center, startRadius: 20, endRadius: 440)
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 4).repeatForever(autoreverses: true),
                            value: backgroundPulse)
+                .animation(.easeInOut(duration: 2.5), value: session.currentPhase)
 
             wordLayer
 
@@ -50,6 +54,16 @@ struct TextTrancePlayerView: View {
             } else if session.isPaused {
                 pausedWhisper
             }
+
+            // Whisper-thin reading-progress line pinned to the bottom edge.
+            // Always faintly present; brightens while controls are visible.
+            ReaderProgressLine(fraction: session.progressFraction,
+                               color: phaseColor,
+                               prominent: controlsVisibility.isVisible)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .padding(.horizontal, TranceSpacing.screen)
+                .padding(.bottom, TranceSpacing.inner)
+                .allowsHitTesting(false)
         }
         .contentShape(.rect)
         .gesture(endHoldGesture)
@@ -92,6 +106,7 @@ struct TextTrancePlayerView: View {
                 referenceCharacterCount: session.readerReferenceCharacterCount
             )
             .opacity(session.isPaused ? 0.4 : wordOpacity)
+            .shadow(color: reduceMotion ? .clear : phaseColor.opacity(0.30), radius: 14)
             .onChange(of: session.currentWord) { _, _ in applyWordFade() }
         } else if session.lightActive {
             Text("…")
@@ -106,6 +121,19 @@ struct TextTrancePlayerView: View {
             .foregroundStyle(Color.textSecondary.opacity(0.6))
             .frame(maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, TranceSpacing.statusBar)
+    }
+
+    /// Atmosphere + word-glow color for the current reading phase.
+    private var phaseColor: Color {
+        switch session.currentPhase {
+        case .preTalk, .transitional:    return .phaseIntro
+        case .induction:                 return .phaseInduction
+        case .deepening:                 return .phaseDeepener
+        case .fractionation, .confusion: return .phaseFractionation
+        case .suggestions, .therapy, .eroticSuggestions, .conditioning, .brainwashing:
+            return .phaseSuggestion
+        case .emergence:                 return .phaseAwakening
+        }
     }
 
     /// Snap to full opacity for every word, then fade breath/drift words out
@@ -172,6 +200,29 @@ private struct AnchoredWord: View {
             .offset(x: layout.anchorOffset)
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
+    }
+}
+
+/// A whisper-thin reading-progress indicator. Faint by default; brightens
+/// while the controls are on screen.
+private struct ReaderProgressLine: View {
+    let fraction: Double
+    let color: Color
+    let prominent: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.textGhost.opacity(prominent ? 0.22 : 0.12))
+                Capsule()
+                    .fill(color.opacity(prominent ? 0.9 : 0.5))
+                    .frame(width: max(0, geo.size.width * fraction))
+            }
+        }
+        .frame(height: 2)
+        .animation(.easeInOut(duration: 0.3), value: prominent)
+        .animation(.linear(duration: 0.3), value: fraction)
     }
 }
 

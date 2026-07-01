@@ -217,9 +217,9 @@ struct UnifiedPlayerView: View {
 
             Spacer()
 
-            // Center visualizer (session mode)
-            if viewModel.mode.hasMandalaVisualizer {
-                MandalaVisualizer(size: 220, brightness: viewModel.engine.brightness, isPlaying: viewModel.isPlaying)
+            // Now-playing hero orb (session / audio / playlist modes)
+            if viewModel.mode.hasAudioScrubber {
+                PlayerHeroOrb(engine: viewModel.engine, isPlaying: viewModel.isPlaying)
                     .padding(.vertical, TranceSpacing.content)
                 Spacer()
             }
@@ -242,32 +242,18 @@ struct UnifiedPlayerView: View {
             // Transport controls (always)
             PlayerTransportSection(viewModel: viewModel)
 
-            // Light sync button (audio mode)
-            if viewModel.mode.hasLightSyncToggle {
-                PlayerLightSyncButton(viewModel: viewModel)
-            }
+            // Secondary controls — light sync, volume, light level — as a single
+            // row of expandable pills (replaces the stacked VOLUME/LIGHT cards).
+            PlayerSecondaryControls(viewModel: viewModel, engine: viewModel.engine)
 
             // Sync options (session with audio)
             if viewModel.mode.hasSyncOptions {
                 sessionSyncOptions
             }
 
-            // Volume (when applicable)
-            if viewModel.mode.hasVolumeControl {
-                PlayerVolumeSection(viewModel: viewModel)
-            }
-
             // Flash mode controls
             if viewModel.mode.hasBilateralToggle || viewModel.mode.hasBinauralToggle {
                 flashModeControls
-            }
-
-            // Brightness (session, audio with sync, playlist)
-            if viewModel.mode.hasBrightnessControl {
-                PlayerBrightnessSection(
-                    engine: viewModel.engine,
-                    labelColor: viewModel.labelColor
-                )
             }
 
             // Smart transitions (playlist)

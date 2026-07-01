@@ -49,6 +49,8 @@ struct ReaderSettingsDrawer: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.bgPrimary.ignoresSafeArea())
             .tint(.auroraTeal)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
