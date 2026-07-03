@@ -2,13 +2,15 @@
 //  PlayerTopBar.swift
 //  Ilumionate
 //
-//  Top bar for the unified player: close, title/subtitle, minimize.
+//  Top bar for the unified player: close, optional title/subtitle, minimize.
+//  Hero modes show the title under the orb (PlayerTitleBlock) instead.
 //
 
 import SwiftUI
 
 struct PlayerTopBar: View {
     let viewModel: UnifiedPlayerViewModel
+    var showsTitle = true
     let onClose: () -> Void
     let onMinimize: () -> Void
 
@@ -22,13 +24,8 @@ struct PlayerTopBar: View {
 
             Spacer()
 
-            VStack(spacing: 2) {
-                Text(viewModel.mode.title)
-                    .font(TranceTypography.trackTitle)
-                    .foregroundStyle(viewModel.labelColor)
-                    .lineLimit(1)
-
-                subtitle
+            if showsTitle {
+                PlayerTitleBlock(viewModel: viewModel)
             }
 
             Spacer()
@@ -41,35 +38,5 @@ struct PlayerTopBar: View {
         }
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.statusBar)
-    }
-
-    @ViewBuilder
-    private var subtitle: some View {
-        if viewModel.mode.hasPhaseIndicator {
-            PhasePill(phase: viewModel.currentPhase)
-        } else if viewModel.mode.hasFrequencyDisplay {
-            HStack(spacing: 6) {
-                Text("\(viewModel.flashFrequency, format: .number.precision(.fractionLength(1))) Hz")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(viewModel.secondaryLabelColor)
-                if case .flashMode(_, _, let colorTemp, _, _, _, _) = viewModel.mode {
-                    Text("·")
-                        .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.5))
-                    Text("\(colorTemp)K")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.fromKelvin(colorTemp))
-                }
-            }
-        } else if viewModel.mode.hasTrackNavigation {
-            Text("\(viewModel.currentTrackIndex + 1) of \(viewModel.trackCount) — \(viewModel.currentTrackName)")
-                .font(TranceTypography.caption)
-                .foregroundStyle(viewModel.secondaryLabelColor)
-                .lineLimit(1)
-        } else {
-            Text(viewModel.formatTime(viewModel.currentTime) + " / " + viewModel.formatTime(viewModel.duration))
-                .font(TranceTypography.caption)
-                .foregroundStyle(viewModel.secondaryLabelColor)
-                .monospacedDigit()
-        }
     }
 }

@@ -11,6 +11,8 @@ import SwiftUI
 struct UnifiedPlayerView: View {
     @State private var viewModel: UnifiedPlayerViewModel
     @State private var controlsVisibility = PlayerControlsVisibility()
+    @State private var showingOverflow = false
+    @State private var isScrubbing = false
     @Environment(\.dismiss) private var dismiss
 
     init(mode: PlayerMode, engine: LightEngine, initialLightSession: LightSession? = nil) {
@@ -23,20 +25,6 @@ struct UnifiedPlayerView: View {
 
     init(viewModel: UnifiedPlayerViewModel) {
         _viewModel = State(initialValue: viewModel)
-    }
-
-    private var volumeBinding: Binding<Double> {
-        Binding(
-            get: { Double(viewModel.volume) },
-            set: { viewModel.setVolume(Float($0)) }
-        )
-    }
-
-    private var smartTransitionsBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.smartTransitions },
-            set: { viewModel.smartTransitions = $0 }
-        )
     }
 
     var body: some View {
@@ -100,7 +88,10 @@ struct UnifiedPlayerView: View {
             if showing { controlsVisibility.registerInteraction() }
         }
         .onChange(of: viewModel.showingTrackList) { _, open in
-            controlsVisibility.isDrawerOpen = open
+            controlsVisibility.isDrawerOpen = open || showingOverflow
+        }
+        .onChange(of: showingOverflow) { _, open in
+            controlsVisibility.isDrawerOpen = open || viewModel.showingTrackList
         }
         .statusBarHidden(!viewModel.showingControls)
         .gesture(
@@ -116,6 +107,9 @@ struct UnifiedPlayerView: View {
         .preferredColorScheme(viewModel.useDarkChrome ? .dark : .light)
         .sheet(isPresented: $viewModel.showingTrackList) {
             PlayerTrackListSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showingOverflow) {
+            PlayerOverflowSheet(viewModel: viewModel)
         }
         .onChange(of: AnalysisStateManager.shared.completedAnalyses.count) {
             Task { await viewModel.checkForLightSession() }
@@ -200,11 +194,13 @@ struct UnifiedPlayerView: View {
 
     // MARK: - Controls Overlay
 
+    private var isHeroMode: Bool { viewModel.mode.hasAudioScrubber }
+
     private var controlsOverlay: some View {
         VStack(spacing: 0) {
-            // Top bar
             PlayerTopBar(
                 viewModel: viewModel,
+                showsTitle: !isHeroMode,
                 onClose: {
                     viewModel.stopAll()
                     dismiss()
@@ -217,14 +213,14 @@ struct UnifiedPlayerView: View {
 
             Spacer()
 
-            // Now-playing hero orb (session / audio / playlist modes)
-            if viewModel.mode.hasAudioScrubber {
+            // Now-playing hero: orb + title block (session / audio / playlist)
+            if isHeroMode {
                 PlayerHeroOrb(engine: viewModel.engine, isPlaying: viewModel.isPlaying)
                     .padding(.vertical, TranceSpacing.content)
+                PlayerTitleBlock(viewModel: viewModel)
                 Spacer()
             }
 
-            // Bottom controls panel
             bottomControls
         }
         .animation(.easeInOut(duration: 0.3), value: viewModel.showingControls)
@@ -234,109 +230,41 @@ struct UnifiedPlayerView: View {
 
     private var bottomControls: some View {
         VStack(spacing: TranceSpacing.cardMargin) {
-            // Scrubber (session, audio, playlist)
-            if viewModel.mode.hasAudioScrubber {
-                PlayerScrubberSection(viewModel: viewModel)
-            }
-
-            // Transport controls (always)
             PlayerTransportSection(viewModel: viewModel)
 
-            // Secondary controls — light sync, volume, light level — as a single
-            // row of expandable pills (replaces the stacked VOLUME/LIGHT cards).
-            PlayerSecondaryControls(viewModel: viewModel, engine: viewModel.engine)
+            PlayerSatelliteRow(
+                viewModel: viewModel,
+                engine: viewModel.engine,
+                showingOverflow: $showingOverflow
+            )
+            .opacity(isScrubbing ? 0 : 1)
 
-            // Sync options (session with audio)
-            if viewModel.mode.hasSyncOptions {
-                sessionSyncOptions
-            }
-
-            // Flash mode controls
-            if viewModel.mode.hasBilateralToggle || viewModel.mode.hasBinauralToggle {
-                flashModeControls
-            }
-
-            // Smart transitions (playlist)
-            if viewModel.mode.hasSmartTransitions {
-                smartTransitionsToggle
-            }
-
-            // Track list button (playlist)
-            if viewModel.mode.hasTrackList {
-                trackListButton
+            if isHeroMode {
+                scrubLine
             }
         }
         .padding(.bottom, TranceSpacing.statusBar)
     }
 
-    // MARK: - Flash Mode Controls
-
-    private var flashModeControls: some View {
-        HStack(spacing: 32) {
-            if viewModel.mode.hasBilateralToggle {
-                PlayerBilateralSection(viewModel: viewModel)
+    private var scrubLine: some View {
+        ScrubWhisperLine(
+            fraction: viewModel.progress,
+            prominent: true,
+            onScrub: { _ in
+                if !isScrubbing { isScrubbing = true }
+                controlsVisibility.registerInteraction()
+            },
+            onScrubEnd: { fraction in
+                viewModel.seekByProgress(fraction)
+                isScrubbing = false
             }
-            if viewModel.mode.hasBinauralToggle {
-                PlayerBinauralSection(viewModel: viewModel)
-            }
+        ) { fraction in
+            Text(viewModel.formatTime(fraction * viewModel.duration)
+                 + " / " + viewModel.formatTime(viewModel.duration))
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(viewModel.labelColor)
         }
         .padding(.horizontal, TranceSpacing.screen)
-    }
-
-    // MARK: - Session Sync Options
-
-    private var sessionSyncOptions: some View {
-        GlassCard(label: "SYNC OPTIONS") {
-            VStack(spacing: TranceSpacing.list) {
-                SyncToggle(isOn: $viewModel.isSyncEnabled)
-
-                HStack {
-                    Image(systemName: "speaker.wave.2.fill")
-                        .font(.caption)
-                        .foregroundStyle(viewModel.secondaryLabelColor)
-
-                    Slider(value: volumeBinding, in: 0.0...1.0)
-                    .tint(.roseGold)
-
-                    Text("\(Int(viewModel.volume * 100))%")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(viewModel.secondaryLabelColor)
-                        .frame(width: 32)
-                }
-            }
-        }
-        .padding(.horizontal, TranceSpacing.screen)
-    }
-
-    // MARK: - Smart Transitions Toggle
-
-    private var smartTransitionsToggle: some View {
-        HStack {
-            Toggle("Smart Transitions", isOn: smartTransitionsBinding)
-            .font(.caption)
-            .tint(.roseGold)
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .clipShape(.rect(cornerRadius: 12))
-        .padding(.horizontal, TranceSpacing.screen)
-    }
-
-    // MARK: - Track List Button
-
-    private var trackListButton: some View {
-        Button {
-            viewModel.showingTrackList = true
-        } label: {
-            Label("Track List", systemImage: "list.number")
-                .font(.caption)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial)
-                .clipShape(.rect(cornerRadius: 20))
-        }
-        .foregroundStyle(viewModel.labelColor)
     }
 }
 
