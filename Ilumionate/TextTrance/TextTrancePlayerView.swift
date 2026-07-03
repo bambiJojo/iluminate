@@ -45,7 +45,7 @@ struct TextTrancePlayerView: View {
             if controlsVisibility.isVisible {
                 VStack {
                     Spacer()
-                    ReaderControlPanel(
+                    ReaderControlCluster(
                         session: session,
                         onSettings: { showingSettings = true },
                         onEnd: { session.end(); dismiss() })
