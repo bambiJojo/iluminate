@@ -17,6 +17,8 @@ struct TextTrancePlayerView: View {
 
     @State private var backgroundPulse = false
     @State private var wordOpacity: Double = 1
+    @State private var isScrubbing = false
+    @State private var wasPausedBeforeScrub = false
     private let startIndex: Int
 
     init(session: TextTranceSession, startIndex: Int = 0) {
@@ -56,14 +58,32 @@ struct TextTrancePlayerView: View {
             }
 
             // Whisper-thin reading-progress line pinned to the bottom edge.
-            // Always faintly present; brightens while controls are visible.
-            ReaderProgressLine(fraction: session.progressFraction,
-                               color: phaseColor,
-                               prominent: controlsVisibility.isVisible)
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .padding(.horizontal, TranceSpacing.screen)
-                .padding(.bottom, TranceSpacing.inner)
-                .allowsHitTesting(false)
+            // Faint by default; brightens with controls; drag to scrub the script.
+            ScrubWhisperLine(
+                fraction: session.progressFraction,
+                tint: phaseColor,
+                prominent: controlsVisibility.isVisible,
+                interactive: session.isReading,
+                onScrub: { fraction in
+                    if !isScrubbing {
+                        isScrubbing = true
+                        wasPausedBeforeScrub = session.isPaused
+                        if !session.isPaused { session.pause() }
+                    }
+                    controlsVisibility.registerInteraction()
+                    session.seek(toWordIndex: wordIndex(for: fraction))
+                },
+                onScrubEnd: { fraction in
+                    session.seek(toWordIndex: wordIndex(for: fraction))
+                    if isScrubbing, !wasPausedBeforeScrub { session.resume() }
+                    isScrubbing = false
+                }
+            ) { fraction in
+                scrubReadout(for: fraction)
+            }
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .padding(.horizontal, TranceSpacing.screen)
+            .padding(.bottom, TranceSpacing.inner)
         }
         .contentShape(.rect)
         .gesture(endHoldGesture)
@@ -121,6 +141,27 @@ struct TextTrancePlayerView: View {
             .foregroundStyle(Color.textSecondary.opacity(0.6))
             .frame(maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, TranceSpacing.statusBar)
+    }
+
+    private func wordIndex(for fraction: Double) -> Int {
+        guard session.wordCount > 0 else { return 0 }
+        return Int((fraction * Double(session.wordCount - 1)).rounded())
+    }
+
+    @ViewBuilder
+    private func scrubReadout(for fraction: Double) -> some View {
+        let index = wordIndex(for: fraction)
+        VStack(spacing: TranceSpacing.micro) {
+            if let phase = session.phase(atWordIndex: index) {
+                Text(phase.displayName.uppercased())
+                    .font(TranceTypography.caption)
+                    .kerning(1.5)
+                    .foregroundStyle(phaseColor)
+            }
+            Text("word \(index + 1) / \(session.wordCount)")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(Color.textPrimary)
+        }
     }
 
     /// Atmosphere + word-glow color for the current reading phase.
@@ -200,29 +241,6 @@ private struct AnchoredWord: View {
             .offset(x: layout.anchorOffset)
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
-    }
-}
-
-/// A whisper-thin reading-progress indicator. Faint by default; brightens
-/// while the controls are on screen.
-private struct ReaderProgressLine: View {
-    let fraction: Double
-    let color: Color
-    let prominent: Bool
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.textGhost.opacity(prominent ? 0.22 : 0.12))
-                Capsule()
-                    .fill(color.opacity(prominent ? 0.9 : 0.5))
-                    .frame(width: max(0, geo.size.width * fraction))
-            }
-        }
-        .frame(height: 2)
-        .animation(.easeInOut(duration: 0.3), value: prominent)
-        .animation(.linear(duration: 0.3), value: fraction)
     }
 }
 
