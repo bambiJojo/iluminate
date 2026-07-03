@@ -106,14 +106,3 @@ struct PlayerTransportSection: View {
         .animation(.easeInOut(duration: 0.2), value: viewModel.isPlaying)
     }
 }
-
-// MARK: - Play/Pause Button Style
-
-/// Provides a spring-bounce press effect for the play/pause button.
-private struct PlayPauseButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.88 : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
-    }
-}
