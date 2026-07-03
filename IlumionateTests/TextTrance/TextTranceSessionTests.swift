@@ -346,6 +346,110 @@ struct TextTranceSessionTests {
         #expect(light.startCount == 0)
         #expect(!session.isComplete)
     }
+
+    // MARK: - Seek (scrubbing)
+
+    /// Two segments, distinct phases, subliminals off so word indices are
+    /// deterministic: 0-2 induction ("one two three"), 3-5 deepening ("four five six").
+    private func seekScript() -> TranceScript {
+        TranceScript(
+            schemaVersion: 1, id: "s", title: "S", theme: .relaxation,
+            supportedArcs: [.fullText], language: "en",
+            source: ScriptSource(kind: .bundled, generator: nil, reviewed: true),
+            segments: [
+                TranceScriptSegment(phase: .induction, text: "one two three",
+                    pacing: SegmentPacing(baseWPM: 600), arcs: nil, triggersHandoff: nil),
+                TranceScriptSegment(phase: .deepening, text: "four five six",
+                    pacing: SegmentPacing(baseWPM: 600), arcs: nil, triggersHandoff: nil)
+            ])
+    }
+
+    private func makeSeekSession(sleep: @escaping @Sendable (Duration) async -> Void)
+        -> TextTranceSession {
+        TextTranceSession(
+            script: seekScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 0,
+                subliminalEnabled: false),
+            light: MockLightLayer(), audio: MockAudioLayer(), sleep: sleep)
+    }
+
+    @Test func seekBeforeBeginIsNoOp() {
+        let session = makeSeekSession(sleep: noSleep)
+        session.seek(toWordIndex: 3)
+        #expect(session.currentWordIndex == 0)
+        #expect(session.currentWord.isEmpty)
+        #expect(session.wordCount == 0)
+    }
+
+    @Test func seekClampsAndRendersWhilePausedAndStaysPaused() async {
+        let controller = PacingSleepController()
+        let session = makeSeekSession(sleep: controller.sleepClosure)
+        controller.onSleep = { count in
+            if count == 1 { session.pause() }
+        }
+        let run = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        #expect(session.wordCount == 6)
+        #expect(session.phase(atWordIndex: 1) == .induction)
+        #expect(session.phase(atWordIndex: 4) == .deepening)
+        #expect(session.phase(atWordIndex: 99) == nil)
+
+        session.seek(toWordIndex: 999)
+        #expect(session.currentWordIndex == 5)
+        #expect(session.currentWord == "six")
+        #expect(session.isPaused)                 // seek never unpauses
+
+        session.seek(toWordIndex: -3)
+        #expect(session.currentWordIndex == 0)
+        #expect(session.currentWord == "one")
+
+        session.end()
+        await run.value
+    }
+
+    @Test func resumeAfterPausedSeekContinuesFromNewIndex() async {
+        let controller = PacingSleepController()
+        let session = makeSeekSession(sleep: controller.sleepClosure)
+        controller.onSleep = { count in
+            if count == 1 { session.pause() }
+        }
+        let run = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        session.seek(toWordIndex: 4)              // "five"
+        session.resume()
+        await run.value
+
+        #expect(session.isComplete)
+        #expect(session.currentWord == "six")     // played 4, 5 then finished
+        // Holds: word 0 (interrupted) + words 4 and 5 = 3 sleep calls total.
+        #expect(controller.callCount == 3)
+    }
+
+    @Test func seekWhilePlayingJumpsWithoutReplayingSkippedWords() async {
+        let controller = PacingSleepController()
+        let session = makeSeekSession(sleep: controller.sleepClosure)
+        controller.onSleep = { count in
+            if count == 1 { session.seek(toWordIndex: 4) }
+        }
+        await session.begin()
+
+        #expect(session.isComplete)
+        #expect(session.currentWord == "six")
+        #expect(controller.callCount == 3)        // word 0 + words 4, 5
+    }
+
+    @Test func seekAfterCompletionIsNoOp() async {
+        let session = makeSeekSession(sleep: noSleep)
+        await session.begin()
+        let finalWord = session.currentWord
+        session.seek(toWordIndex: 0)
+        #expect(session.currentWord == finalWord)
+    }
 }
 
 @MainActor

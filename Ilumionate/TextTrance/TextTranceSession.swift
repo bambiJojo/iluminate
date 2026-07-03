@@ -76,6 +76,25 @@ final class TextTranceSession {
         schedule.isEmpty ? 0 : min(1, Double(currentWordIndex) / Double(schedule.count))
     }
 
+    /// Total scheduled words (0 before `begin()` builds the schedule).
+    var wordCount: Int { schedule.count }
+
+    /// Phase of the scheduled word at `index`; nil out of range or pre-begin.
+    func phase(atWordIndex index: Int) -> TrancePhase? {
+        schedule.indices.contains(index) ? schedule[index].phase : nil
+    }
+
+    /// Reposition the word cursor (scrubbing). Renders the target word
+    /// immediately; the playback loop continues from the new index. Pause
+    /// state is left untouched — a paused session stays paused.
+    func seek(toWordIndex index: Int) {
+        guard isReading, !isComplete, !cancelled, !schedule.isEmpty else { return }
+        currentWordIndex = min(max(index, 0), schedule.count - 1)
+        render(schedule[currentWordIndex])
+        seekRequested = true
+        holdTask?.cancel()          // break any in-flight hold promptly
+    }
+
     // Live, mutable copies of schedule-affecting settings.
     private(set) var subliminalEnabled: Bool
     private(set) var subliminalSpeed: TextPacingSettings.SubliminalSpeed
@@ -91,6 +110,7 @@ final class TextTranceSession {
     private let sleep: @Sendable (Duration) async -> Void
     private let now: @Sendable () -> TimeInterval
     private var schedule: [PacedWord] = []
+    private var seekRequested = false
     private var cancelled = false
     private var isRunning = false
     private var resumeContinuation: CheckedContinuation<Void, Never>?
@@ -171,6 +191,10 @@ final class TextTranceSession {
             render(word)
             await holdCurrentWord(scaledHold(for: word))
             if cancelled || Task.isCancelled { break }
+            if seekRequested {       // loop re-enters at the seeked index
+                seekRequested = false
+                continue
+            }
             currentWordIndex += 1
         }
         isReading = false
@@ -232,6 +256,7 @@ final class TextTranceSession {
     private func holdCurrentWord(_ fullDuration: TimeInterval) async {
         var remaining = fullDuration
         while remaining > 0, !cancelled, !Task.isCancelled {
+            if seekRequested { return }
             if isPaused {
                 await withCheckedContinuation { resumeContinuation = $0 }
                 continue
@@ -247,6 +272,7 @@ final class TextTranceSession {
             }
             holdTask = nil
             if cancelled || Task.isCancelled { return }
+            if seekRequested { return }
             if isPaused {
                 let elapsed = now() - start
                 remaining = max(0, remaining - elapsed)
