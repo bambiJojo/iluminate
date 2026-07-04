@@ -171,14 +171,11 @@ struct StreamingBrowserView: View {
 
 
     private func loadAudioFiles() -> [AudioFile] {
-        guard let data = UserDefaults.standard.data(forKey: "audioFiles"),
-              let files = try? JSONDecoder().decode([AudioFile].self, from: data) else { return [] }
-        return files
+        AudioLibraryStore.loadRepairingStoredFiles()
     }
 
     private func saveAudioFiles(_ files: [AudioFile]) {
-        let data = try? JSONEncoder().encode(files)
-        UserDefaults.standard.set(data, forKey: "audioFiles")
+        AudioLibraryStore.save(files)
     }
 }
 
@@ -567,20 +564,8 @@ struct PlaylistRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: TranceSpacing.list) {
-                AsyncImage(url: playlist.artworkURL) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(playlist.service.color.opacity(0.3))
-                        .overlay(
-                            Image(systemName: "music.note.list")
-                                .foregroundStyle(.white)
-                        )
-                }
-                .frame(width: 60, height: 60)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                StreamingArtworkTile(url: playlist.artworkURL,
+                                     accentColor: playlist.service.color)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(playlist.name)
@@ -604,7 +589,13 @@ struct PlaylistRow: View {
 
                 Spacer()
             }
-            .padding(.vertical, TranceSpacing.inner)
+            .padding(TranceSpacing.list)
+            .background(Color.bgCard)
+            .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
+            .overlay(
+                RoundedRectangle(cornerRadius: TranceRadius.glassCard)
+                    .strokeBorder(Color.glassBorder, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
