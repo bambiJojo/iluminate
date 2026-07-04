@@ -2,7 +2,8 @@
 //  PlaylistLibraryView.swift
 //  Ilumionate
 //
-//  Browse, manage, and launch playlists
+//  Browse, manage, and launch playlists — bento layout on the void:
+//  featured hero card + 2-up glass grid, artwork derived from content types.
 //
 
 import SwiftUI
@@ -13,6 +14,7 @@ struct PlaylistLibraryView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var playlists: [Playlist] = []
+    @State private var availableAudioFiles: [AudioFile] = []
     @State private var showingEditor = false
     @State private var editingPlaylist: Playlist?
     @State private var playingPlaylist: Playlist?
@@ -21,12 +23,12 @@ struct PlaylistLibraryView: View {
         NavigationStack {
             ZStack {
                 Color.bgPrimary.ignoresSafeArea()
-                
+
                 Group {
                     if playlists.isEmpty {
-                        enhancedEmptyPlaylistsView
+                        emptyState
                     } else {
-                        enhancedPlaylistsView
+                        bentoLayout
                     }
                 }
             }
@@ -40,7 +42,7 @@ struct PlaylistLibraryView: View {
                             .symbolRenderingMode(.hierarchical)
                             .font(.system(size: 32))
                             .foregroundStyle(
-                                LinearGradient(colors: [.roseGold, .blush],
+                                LinearGradient(colors: [.roseGold, .roseDeep],
                                                startPoint: .topLeading, endPoint: .bottomTrailing)
                             )
                     }
@@ -49,6 +51,7 @@ struct PlaylistLibraryView: View {
             }
             .onAppear {
                 playlists = PlaylistStore.load()
+                loadAudioFiles()
             }
             .sheet(isPresented: $showingEditor) {
                 if var playlist = editingPlaylist {
@@ -92,8 +95,8 @@ struct PlaylistLibraryView: View {
         PlaylistStore.save(playlists)
     }
 
-    private func deletePlaylists(at offsets: IndexSet) {
-        playlists.remove(atOffsets: offsets)
+    private func deletePlaylist(_ playlist: Playlist) {
+        playlists.removeAll { $0.id == playlist.id }
         PlaylistStore.save(playlists)
     }
 
@@ -102,13 +105,137 @@ struct PlaylistLibraryView: View {
         playingPlaylist = playlist
     }
 
-    // MARK: - View Components
+    private func loadAudioFiles() {
+        guard let data = UserDefaults.standard.data(forKey: "audioFiles"),
+              let files = try? JSONDecoder().decode([AudioFile].self, from: data) else { return }
+        availableAudioFiles = files
+    }
 
-    private var enhancedEmptyPlaylistsView: some View {
+    /// Content types driving a playlist's generated artwork. Falls back to the
+    /// whole-session analysis type when item lookups come up empty.
+    private func artworkTypes(for playlist: Playlist) -> [AudioContentType] {
+        let itemTypes = playlist.items.map { item in
+            availableAudioFiles.first { $0.id == item.audioFileId }?.analysisResult?.contentType
+        }
+        let types = PlaylistArtwork.distinctTypes(from: itemTypes)
+        if types.isEmpty, let analyzed = playlist.wholeSessionAnalysis?.contentType, analyzed != .unknown {
+            return [analyzed]
+        }
+        return types
+    }
+
+    // MARK: - Bento Layout
+
+    private var heroPlaylist: Playlist? {
+        playlists.first { !$0.isEmpty } ?? playlists.first
+    }
+
+    private var gridPlaylists: [Playlist] {
+        playlists.filter { $0.id != heroPlaylist?.id }
+    }
+
+    private var bentoLayout: some View {
+        ScrollView {
+            LazyVStack(spacing: TranceSpacing.card) {
+                statsHeader
+
+                if let hero = heroPlaylist {
+                    PlaylistHeroCard(
+                        playlist: hero,
+                        types: artworkTypes(for: hero),
+                        onPlay: {
+                            TranceHaptics.shared.medium()
+                            playPlaylist(hero)
+                        },
+                        onEdit: {
+                            TranceHaptics.shared.light()
+                            editPlaylist(hero)
+                        }
+                    )
+                    .contextMenu { contextActions(for: hero) }
+                }
+
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: TranceSpacing.list),
+                              GridItem(.flexible(), spacing: TranceSpacing.list)],
+                    spacing: TranceSpacing.list
+                ) {
+                    ForEach(gridPlaylists) { playlist in
+                        PlaylistGridTile(
+                            playlist: playlist,
+                            types: artworkTypes(for: playlist),
+                            onPlay: {
+                                TranceHaptics.shared.medium()
+                                playPlaylist(playlist)
+                            },
+                            onEdit: {
+                                TranceHaptics.shared.light()
+                                editPlaylist(playlist)
+                            }
+                        )
+                        .contextMenu { contextActions(for: playlist) }
+                    }
+                }
+
+                Spacer(minLength: TranceSpacing.tabBarClearance)
+            }
+            .padding(.horizontal, TranceSpacing.screen)
+            .padding(.vertical, TranceSpacing.list)
+        }
+        .scrollContentBackground(.hidden)
+    }
+
+    @ViewBuilder
+    private func contextActions(for playlist: Playlist) -> some View {
+        if !playlist.isEmpty {
+            Button("Play", systemImage: "play.fill") { playPlaylist(playlist) }
+        }
+        Button("Edit", systemImage: "pencil") { editPlaylist(playlist) }
+        Button("Delete", systemImage: "trash", role: .destructive) {
+            TranceHaptics.shared.medium()
+            deletePlaylist(playlist)
+        }
+    }
+
+    // MARK: - Stats Header
+
+    private var statsHeader: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Playlists")
+                    .font(TranceTypography.screenTitle)
+                    .foregroundStyle(.textPrimary)
+
+                let totalTracks = playlists.reduce(0) { $0 + $1.itemCount }
+                Text("\(playlists.count) playlists · \(totalTracks) tracks")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(.textSecondary)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                let totalDuration = playlists.reduce(0.0) { $0 + $1.totalDuration }
+                let hours = Int(totalDuration) / 3600
+                let minutes = Int(totalDuration) % 3600 / 60
+
+                Text("\(hours)h \(minutes)m")
+                    .font(TranceTypography.sectionTitle)
+                    .foregroundStyle(.roseGold)
+
+                Text("Total time")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(.textLight)
+            }
+        }
+        .padding(.vertical, TranceSpacing.inner)
+    }
+
+    // MARK: - Empty State
+
+    private var emptyState: some View {
         VStack(spacing: TranceSpacing.screen) {
-            // Enhanced Master Orb inspired playlist icon
             ZStack {
-                // Outer breathing ring
                 Circle()
                     .stroke(
                         AngularGradient(
@@ -124,7 +251,6 @@ struct PlaylistLibraryView: View {
                     )
                     .frame(width: 140, height: 140)
 
-                // Inner pulsing background
                 Circle()
                     .fill(
                         RadialGradient(
@@ -140,198 +266,58 @@ struct PlaylistLibraryView: View {
                     )
                     .frame(width: 120, height: 120)
 
-                // Central playlist icons with staggered animation
-                ZStack {
-                    ForEach(0..<3, id: \.self) { index in
-                        Image(systemName: ["music.note.list", "waveform", "sparkles"][index])
-                            .font(.system(size: CGFloat([40, 32, 24][index]), weight: .light))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [
-                                        Color.bwGamma,
-                                        Color.roseDeep
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .offset(
-                                x: CGFloat([0, 20, -15][index]),
-                                y: CGFloat([0, -10, 15][index])
-                            )
-                            .opacity(1.0 - Double(index) * 0.25)
-                    }
-                }
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 44, weight: .ultraLight))
+                    .foregroundStyle(
+                        LinearGradient(colors: [.roseGold, .roseDeep],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
             }
 
-            // Enhanced typography section
-            VStack(spacing: TranceSpacing.card) {
+            VStack(spacing: TranceSpacing.list) {
                 Text("Your Playlist Library")
                     .font(TranceTypography.screenTitle)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.textPrimary)
 
-                VStack(spacing: TranceSpacing.list) {
-                    Text("Create curated journeys from your")
-                        .font(TranceTypography.body)
-                        .foregroundStyle(.secondary)
-
-                    Text("audio sessions and light experiences")
-                        .font(TranceTypography.body)
-                        .foregroundStyle(Color.bwGamma)
-                        .fontWeight(.semibold)
-                }
-                .multilineTextAlignment(.center)
+                Text("Sequence sessions and light experiences into curated journeys")
+                    .font(TranceTypography.body)
+                    .foregroundStyle(.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, TranceSpacing.screen)
             }
 
-            // Enhanced create button
-            VStack(spacing: TranceSpacing.card) {
-                Button {
-                    TranceHaptics.shared.medium()
-                    createNewPlaylist()
-                } label: {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.2))
-                                .frame(width: 32, height: 32)
-
-                            Image(systemName: "plus.circle.fill")
-                                .symbolRenderingMode(.hierarchical)
-                                .font(.title2)
-                                .foregroundStyle(.white)
-                        }
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Create Your First Playlist")
-                                .font(TranceTypography.body)
-                                .foregroundStyle(.white)
-
-                            Text("Sequence sessions for deeper journeys")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "arrow.right")
-                            .symbolRenderingMode(.hierarchical)
-                            .font(.title3)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .padding(.horizontal, TranceSpacing.cardMargin)
+            Button {
+                TranceHaptics.shared.medium()
+                createNewPlaylist()
+            } label: {
+                Label("Create Your First Playlist", systemImage: "plus.circle.fill")
+                    .font(TranceTypography.body)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.voidPrimary)
+                    .padding(.horizontal, TranceSpacing.content)
                     .padding(.vertical, TranceSpacing.card)
-                }
-                .buttonStyle(GlassButtonStyle())
-                .padding(.horizontal, TranceSpacing.cardMargin)
-
-                // Helpful tips
-                HStack(spacing: TranceSpacing.list) {
-                    Image(systemName: "lightbulb.fill")
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(Color.roseDeep)
-                        .font(.caption)
-
-                    Text("Playlists can crossfade between sessions for seamless experiences")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, TranceSpacing.cardMargin)
+                    .background(
+                        LinearGradient(colors: [.roseGold, .roseDeep],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
             }
+            .buttonStyle(.plain)
+
+            HStack(spacing: TranceSpacing.inner) {
+                Image(systemName: "lightbulb.fill")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.roseGold)
+                    .font(.caption)
+
+                Text("Playlists can crossfade between sessions for seamless experiences")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(.textLight)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, TranceSpacing.screen)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var enhancedPlaylistsView: some View {
-        ScrollView {
-            LazyVStack(spacing: TranceSpacing.card) {
-                // Header section with stats
-                playlistStatsHeader
-                    .padding(.horizontal, TranceSpacing.card)
-                    .padding(.top, TranceSpacing.list)
-
-                // Enhanced playlist cards
-                ForEach(playlists) { playlist in
-                    EnhancedPlaylistCard(
-                        playlist: playlist,
-                        onPlay: {
-                            TranceHaptics.shared.medium()
-                            playPlaylist(playlist)
-                        },
-                        onEdit: {
-                            TranceHaptics.shared.light()
-                            editPlaylist(playlist)
-                        },
-                        onDelete: {
-                            TranceHaptics.shared.medium()
-                            if let index = playlists.firstIndex(where: { $0.id == playlist.id }) {
-                                deletePlaylists(at: IndexSet(integer: index))
-                            }
-                        }
-                    )
-                    .padding(.horizontal, TranceSpacing.card)
-                }
-
-                // Bottom spacing for tab bar clearance
-                Spacer(minLength: TranceSpacing.tabBarClearance)
-            }
-            .padding(.vertical, TranceSpacing.list)
-        }
-        .scrollContentBackground(.hidden)
-    }
-
-    // MARK: - Playlist Stats Header
-
-    private var playlistStatsHeader: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Your Collection")
-                    .font(TranceTypography.sectionTitle)
-                    .foregroundStyle(.primary)
-
-                HStack(spacing: 16) {
-                    Label("\(playlists.count) playlists", systemImage: "music.note.list")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(.secondary)
-
-                    let totalTracks = playlists.reduce(0) { $0 + $1.itemCount }
-                    if totalTracks > 0 {
-                        Label("\(totalTracks) tracks", systemImage: "waveform")
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.roseDeep)
-                    }
-                }
-            }
-
-            Spacer()
-
-            // Quick stats with beautiful styling
-            VStack(alignment: .trailing, spacing: 2) {
-                let totalDuration = playlists.reduce(0.0) { $0 + $1.totalDuration }
-                let hours = Int(totalDuration) / 3600
-                let minutes = Int(totalDuration) % 3600 / 60
-
-                Text("\(hours)h \(minutes)m")
-                    .font(TranceTypography.sectionTitle)
-                    .foregroundStyle(Color.bwGamma)
-
-                Text("Total time")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(.horizontal, TranceSpacing.card)
-        .padding(.vertical, TranceSpacing.card)
-        .background(
-            RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                .fill(Color.white.opacity(0.8))
-                .shadow(
-                    color: Color.roseGold.opacity(0.3),
-                    radius: 8,
-                    x: 0,
-                    y: 4
-                )
-        )
     }
 }
 
@@ -357,10 +343,10 @@ struct AddToPlaylistSheet: View {
                             .foregroundStyle(Color.roseGold)
                         Text("No Playlists Yet")
                             .font(TranceTypography.sectionTitle)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(.textPrimary)
                         Text("Create a playlist first from the Playlists tab")
                             .font(TranceTypography.body)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.textSecondary)
                             .multilineTextAlignment(.center)
                     }
                     .padding(TranceSpacing.screen)
@@ -390,10 +376,10 @@ struct AddToPlaylistSheet: View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(playlist.name)
                                                 .font(TranceTypography.body)
-                                                .foregroundStyle(.primary)
+                                                .foregroundStyle(.textPrimary)
                                             Text("\(playlist.itemCount) tracks")
                                                 .font(TranceTypography.caption)
-                                                .foregroundStyle(.secondary)
+                                                .foregroundStyle(.textSecondary)
                                         }
 
                                         Spacer()
@@ -409,11 +395,12 @@ struct AddToPlaylistSheet: View {
                                     }
                                 }
                                 .buttonStyle(.plain)
+                                .listRowBackground(Color.bgCard)
                             }
                         } header: {
                             Text("Add \"\(itemTitle)\" to")
                                 .font(TranceTypography.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.textSecondary)
                         }
                     }
                     .listStyle(.insetGrouped)
@@ -431,82 +418,5 @@ struct AddToPlaylistSheet: View {
                 playlists = PlaylistStore.load()
             }
         }
-    }
-}
-
-// MARK: - Enhanced Playlist Card
-
-struct EnhancedPlaylistCard: View {
-    let playlist: Playlist
-    var onPlay: () -> Void
-    var onEdit: () -> Void
-    var onDelete: () -> Void
-
-    @State private var showingDeleteAlert = false
-
-    var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 16) {
-                // Playlist info
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(playlist.name)
-                        .font(TranceTypography.sectionTitle)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    HStack(spacing: 12) {
-                        Label("\(playlist.itemCount) tracks", systemImage: "music.note")
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(.secondary)
-
-                        Label(playlist.totalDurationFormatted, systemImage: "clock")
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(.secondary)
-
-                        if playlist.smartTransitions {
-                            Label("Crossfade", systemImage: "arrow.trianglehead.merge")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(Color.roseDeep)
-                        }
-                    }
-                }
-
-                Spacer()
-
-                // Play button
-                if !playlist.isEmpty {
-                    Button {
-                        onPlay()
-                    } label: {
-                        Image(systemName: "play.circle.fill")
-                            .symbolRenderingMode(.hierarchical)
-                            .font(.title)
-                            .foregroundStyle(Color.bwGamma)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            // Action buttons
-            HStack(spacing: 10) {
-                Button("Edit") {
-                    onEdit()
-                }
-                .buttonStyle(GlassButtonStyle())
-                .frame(maxWidth: .infinity)
-
-                if !playlist.isEmpty {
-                    Button("Play") {
-                        onPlay()
-                    }
-                    .buttonStyle(GlassButtonStyle())
-                    .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, TranceSpacing.list)
-        .background(Color.white.opacity(0.7))
-        .cornerRadius(TranceRadius.thumbnail)
     }
 }
