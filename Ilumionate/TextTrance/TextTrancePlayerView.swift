@@ -52,6 +52,8 @@ struct TextTrancePlayerView: View {
                         onSettings: { showingSettings = true },
                         onEnd: { session.end(); dismiss() })
                 }
+                .opacity(isScrubbing ? 0 : 1)       // clear the stage for the scrub readout
+                .animation(.easeInOut(duration: 0.2), value: isScrubbing)
                 .transition(.opacity)
             } else if session.isPaused {
                 pausedWhisper
