@@ -24,6 +24,7 @@ struct PlaylistEditorView: View {
     @State private var storedAudioFiles: [AudioFile] = []
     @State private var isQuickAnalyzing = false
     @State private var quickAnalysisAlert: PlaylistEditorAlert?
+    @State private var wholeJourneySession: LightSession?
     @FocusState private var nameFieldFocused: Bool
 
     var body: some View {
@@ -70,6 +71,14 @@ struct PlaylistEditorView: View {
                 if !playlist.items.isEmpty {
                     Section {
                         wholeSessionAnalysisRow
+
+                        if let analysis = playlist.wholeSessionAnalysis,
+                           analysis.isCurrent(for: playlist),
+                           let session = wholeJourneySession {
+                            TranceFlowStrip(session: session, phases: analysis.phases)
+                                .padding(.vertical, 4)
+                                .listRowSeparator(.hidden)
+                        }
                     }
                     .listRowBackground(Color.bgCard)
                 }
@@ -126,7 +135,10 @@ struct PlaylistEditorView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
-            .onAppear { loadAvailableFiles() }
+            .onAppear {
+                loadAvailableFiles()
+                wholeJourneySession = PlaylistGeneratedSessionStore.shared.load(for: playlist)
+            }
         }
     }
 
@@ -286,6 +298,7 @@ struct PlaylistEditorView: View {
                 )
             try PlaylistGeneratedSessionStore.shared.save(session, for: playlist)
             playlist.wholeSessionAnalysis = result.summary
+            wholeJourneySession = session
             TranceHaptics.shared.medium()
             quickAnalysisAlert = PlaylistEditorAlert(
                 title: "Whole Journey Ready",
