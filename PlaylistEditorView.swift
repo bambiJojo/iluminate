@@ -21,6 +21,9 @@ struct PlaylistEditorView: View {
 
     @State private var showingSessionPicker = false
     @State private var availableAudioFiles: [AudioFile] = []
+    @State private var storedAudioFiles: [AudioFile] = []
+    @State private var isQuickAnalyzing = false
+    @State private var quickAnalysisAlert: PlaylistEditorAlert?
     @FocusState private var nameFieldFocused: Bool
 
     var body: some View {
@@ -64,15 +67,22 @@ struct PlaylistEditorView: View {
                 }
                 .listRowBackground(Color.bgCard)
 
+                if !playlist.items.isEmpty {
+                    Section {
+                        wholeSessionAnalysisRow
+                    }
+                    .listRowBackground(Color.bgCard)
+                }
+
                 // ── Tracks section ─────────────────────────────────────────
                 Section {
                     if playlist.items.isEmpty {
                         emptyTracksState
-                            .listRowBackground(Color.bgCard)
+                        .listRowBackground(Color.bgCard)
                             .listRowSeparator(.hidden)
                     } else {
                         ForEach(playlist.items) { item in
-                            TrackRow(item: item, audioFiles: availableAudioFiles)
+                            TrackRow(item: item, audioFiles: storedAudioFiles)
                                 .listRowBackground(Color.bgCard)
                                 .listRowSeparator(.hidden)
                         }
@@ -109,6 +119,13 @@ struct PlaylistEditorView: View {
                     }
                 )
             }
+            .alert(item: $quickAnalysisAlert) { alert in
+                Alert(
+                    title: Text(alert.title),
+                    message: Text(alert.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
             .onAppear { loadAvailableFiles() }
         }
     }
@@ -140,99 +157,147 @@ struct PlaylistEditorView: View {
         .padding(.vertical, TranceSpacing.content)
     }
 
-    // Gradient artwork — shows up to 4 content-type quadrants
+    // Gradient artwork — constraint-based mosaic shared with the library tab
     private var artworkView: some View {
-        GeometryReader { geo in
-            let size = geo.size
-            let types = dominantContentTypes
-            let count = min(types.count, 4)
-
-            ZStack {
-                if count == 0 {
-                    // Empty state — placeholder gradient
-                    LinearGradient(
-                        colors: [Color.roseGold, Color.bwTheta, Color.bwDelta],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    )
-                    Image(systemName: "music.note.list")
-                        .font(.system(size: 56, weight: .ultraLight))
-                        .foregroundColor(.white.opacity(0.6))
-                } else if count == 1 {
-                    contentTypeGradient(for: types[0])
-                    Image(systemName: contentTypeIcon(for: types[0]))
-                        .font(.system(size: 56, weight: .ultraLight))
-                        .foregroundColor(.white.opacity(0.7))
-                } else {
-                    // 2–4: quadrant grid
-                    let half = size.width / 2
-                    let positions: [(CGFloat, CGFloat)] = [(0, 0), (half, 0), (0, half), (half, half)]
-                    ForEach(0..<count, id: \.self) { idx in
-                        let pos = positions[idx]
-                        contentTypeGradient(for: types[idx])
-                            .frame(width: half, height: half)
-                            .position(x: pos.0 + half / 2, y: pos.1 + half / 2)
-                    }
-                }
-            }
-            .frame(width: size.width, height: size.height)
-        }
-        .background(Color.bgSecondary)
+        PlaylistArtworkView(types: dominantContentTypes,
+                            cornerRadius: TranceRadius.pattern,
+                            iconSize: 56)
     }
 
     private var dominantContentTypes: [AnalysisResult.ContentType] {
         // Collect unique content types from playlist items
         let allFiles = playlist.items.compactMap { item -> AudioFile? in
-            availableAudioFiles.first { $0.id == item.audioFileId }
+            storedAudioFiles.first { $0.id == item.audioFileId }
         }
-        var seen = Set<String>()
-        return allFiles.compactMap { file -> AnalysisResult.ContentType? in
-            guard let type = file.analysisResult?.contentType,
-                  type != .unknown,
-                  seen.insert(type.rawValue).inserted else { return nil }
-            return type
-        }
+        return PlaylistArtwork.distinctTypes(from: allFiles.map { $0.analysisResult?.contentType })
     }
 
     private var artworkTopColor: Color {
-        guard let first = dominantContentTypes.first else { return .roseGold }
-        return contentTypeColor(for: first)
+        PlaylistArtwork.dominantColor(for: dominantContentTypes)
     }
 
-    private func contentTypeColor(for type: AnalysisResult.ContentType) -> Color {
-        switch type {
-        case .hypnosis:        return .bwDelta
-        case .meditation:      return .bwAlpha
-        case .music:           return .bwBeta
-        case .guidedImagery:   return .bwTheta
-        case .affirmations:    return .warmAccent
-        case .eroticHypnosis:  return .roseDeep
-        case .brainwave:       return .bwGamma
-        case .asmr:            return .warmAccent
-        case .sleepHypnosis:   return .bwDelta
-        case .unknown:         return .roseGold
+    // MARK: - Whole Session Analysis
+
+    private var wholeSessionAnalysisRow: some View {
+        HStack(spacing: TranceSpacing.list) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.bwTheta.opacity(0.16))
+                    .frame(width: 36, height: 36)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.bwTheta)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Whole Journey")
+                    .font(TranceTypography.body)
+                    .foregroundColor(.textPrimary)
+                Text(wholeSessionAnalysisStatusText)
+                    .font(TranceTypography.caption)
+                    .foregroundColor(.textLight)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            Button {
+                Task { @MainActor in
+                    quickAnalyzePlaylist()
+                }
+            } label: {
+                if isQuickAnalyzing {
+                    ProgressView()
+                        .tint(.roseGold)
+                } else {
+                    Label(wholeSessionAnalysisButtonTitle, systemImage: "waveform.path.ecg")
+                        .font(TranceTypography.caption)
+                        .fontWeight(.semibold)
+                }
+            }
+            .foregroundColor(.roseGold)
+            .buttonStyle(.bordered)
+            .disabled(!canQuickAnalyzePlaylist || isQuickAnalyzing)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var wholeSessionAnalysisStatusText: String {
+        if !missingAudioFileNames.isEmpty {
+            return "\(missingAudioFileNames.count) session unavailable"
+        }
+        if !missingAnalysisNames.isEmpty {
+            return "Needs \(missingAnalysisNames.count) analyzed session\(missingAnalysisNames.count == 1 ? "" : "s")"
+        }
+        guard let analysis = playlist.wholeSessionAnalysis else {
+            return "Not built yet"
+        }
+        if analysis.isCurrent(for: playlist) {
+            return analysis.phaseSummary.isEmpty ? "Ready" : "Ready: \(analysis.phaseSummary)"
+        }
+        return "Playlist changed; refresh needed"
+    }
+
+    private var wholeSessionAnalysisButtonTitle: String {
+        guard let analysis = playlist.wholeSessionAnalysis else { return "Analyze" }
+        return analysis.isCurrent(for: playlist) ? "Refresh" : "Update"
+    }
+
+    private var canQuickAnalyzePlaylist: Bool {
+        missingAudioFileNames.isEmpty && missingAnalysisNames.isEmpty
+    }
+
+    private var missingAudioFileNames: [String] {
+        playlist.items.compactMap { item in
+            storedAudioFiles.contains(where: { $0.id == item.audioFileId }) ? nil : item.displayName
         }
     }
 
-    private func contentTypeGradient(for type: AnalysisResult.ContentType) -> some View {
-        let color = contentTypeColor(for: type)
-        return LinearGradient(
-            colors: [color, color.opacity(0.65)],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
+    private var missingAnalysisNames: [String] {
+        playlist.items.compactMap { item in
+            guard let file = storedAudioFiles.first(where: { $0.id == item.audioFileId }) else { return nil }
+            return file.analysisResult == nil ? item.displayName : nil
+        }
     }
 
-    private func contentTypeIcon(for type: AnalysisResult.ContentType) -> String {
-        switch type {
-        case .hypnosis:        return "brain.head.profile"
-        case .meditation:      return "leaf"
-        case .music:           return "music.note"
-        case .guidedImagery:   return "figure.mind.and.body"
-        case .affirmations:    return "quote.bubble"
-        case .eroticHypnosis:  return "flame"
-        case .brainwave:       return "waveform.path.ecg"
-        case .asmr:            return "ear"
-        case .sleepHypnosis:   return "moon.zzz"
-        case .unknown:         return "waveform"
+    private func quickAnalyzePlaylist() {
+        loadAvailableFiles()
+        guard canQuickAnalyzePlaylist else {
+            quickAnalysisAlert = PlaylistEditorAlert(
+                title: "Whole Journey",
+                message: wholeSessionAnalysisStatusText
+            )
+            return
+        }
+
+        isQuickAnalyzing = true
+        defer { isQuickAnalyzing = false }
+
+        do {
+            let result = try PlaylistWholeSessionAnalyzer().build(
+                playlist: playlist,
+                audioFiles: storedAudioFiles
+            )
+            let session = SessionGenerator(config: AnalyzerConfigLoader.load().sessionGeneration)
+                .generateSession(
+                    from: result.virtualAudioFile,
+                    analysis: result.analysis,
+                    config: AnalysisPreferences.shared.generationConfig
+                )
+            try PlaylistGeneratedSessionStore.shared.save(session, for: playlist)
+            playlist.wholeSessionAnalysis = result.summary
+            TranceHaptics.shared.medium()
+            quickAnalysisAlert = PlaylistEditorAlert(
+                title: "Whole Journey Ready",
+                message: result.summary.phaseSummary.isEmpty
+                    ? "Built one light score across the playlist."
+                    : "Built one light score across: \(result.summary.phaseSummary)"
+            )
+        } catch {
+            quickAnalysisAlert = PlaylistEditorAlert(
+                title: "Could Not Analyze Playlist",
+                message: error.localizedDescription
+            )
         }
     }
 
@@ -359,6 +424,7 @@ struct PlaylistEditorView: View {
     private func loadAvailableFiles() {
         guard let data = UserDefaults.standard.data(forKey: "audioFiles"),
               let files = try? JSONDecoder().decode([AudioFile].self, from: data) else { return }
+        storedAudioFiles = files
         availableAudioFiles = files.filter { hasGeneratedSession(for: $0) }
     }
 
@@ -379,6 +445,12 @@ struct PlaylistEditorView: View {
     }
 }
 
+private struct PlaylistEditorAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
 // MARK: - TrackRow
 
 private struct TrackRow: View {
@@ -393,47 +465,9 @@ private struct TrackRow: View {
         audioFile?.analysisResult?.contentType ?? .unknown
     }
 
-    private var contentTypeColor: Color {
-        switch contentType {
-        case .hypnosis:        return .bwDelta
-        case .meditation:      return .bwAlpha
-        case .music:           return .bwBeta
-        case .guidedImagery:   return .bwTheta
-        case .affirmations:    return .warmAccent
-        case .eroticHypnosis:  return .roseDeep
-        case .brainwave:       return .bwGamma
-        case .asmr:            return .warmAccent
-        case .sleepHypnosis:   return .bwDelta
-        case .unknown:         return .roseGold
-        }
-    }
-
-    private var contentTypeIcon: String {
-        switch contentType {
-        case .hypnosis:        return "brain.head.profile"
-        case .meditation:      return "leaf"
-        case .music:           return "music.note"
-        case .guidedImagery:   return "figure.mind.and.body"
-        case .affirmations:    return "quote.bubble"
-        case .eroticHypnosis:  return "flame"
-        case .brainwave:       return "waveform.path.ecg"
-        case .asmr:            return "ear"
-        case .sleepHypnosis:   return "moon.zzz"
-        case .unknown:         return "waveform"
-        }
-    }
-
     var body: some View {
         HStack(spacing: TranceSpacing.list) {
-            // Content type icon badge
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(contentTypeColor.opacity(0.18))
-                    .frame(width: 44, height: 44)
-                Image(systemName: contentTypeIcon)
-                    .font(.system(size: 18))
-                    .foregroundColor(contentTypeColor)
-            }
+            SessionGlowDot(contentType: contentType, size: 44)
 
             // Title + metadata
             VStack(alignment: .leading, spacing: 3) {
@@ -674,40 +708,10 @@ private struct PickerSessionRow: View {
     let isSelected: Bool
     let onTap: () -> Void
 
-    private var contentTypeColor: Color {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:     return .bwDelta
-        case .meditation:   return .bwAlpha
-        case .music:        return .bwBeta
-        case .guidedImagery: return .bwTheta
-        case .affirmations: return .warmAccent
-        default:            return .roseGold
-        }
-    }
-
-    private var contentTypeIcon: String {
-        switch file.analysisResult?.contentType {
-        case .hypnosis:     return "brain.head.profile"
-        case .meditation:   return "leaf"
-        case .music:        return "music.note"
-        case .guidedImagery: return "figure.mind.and.body"
-        case .affirmations: return "quote.bubble"
-        default:            return "waveform"
-        }
-    }
-
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: TranceSpacing.list) {
-                // Content type badge
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(contentTypeColor.opacity(0.18))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: contentTypeIcon)
-                        .font(.system(size: 18))
-                        .foregroundColor(contentTypeColor)
-                }
+                SessionGlowDot(contentType: file.analysisResult?.contentType, size: 44)
 
                 // Info
                 VStack(alignment: .leading, spacing: 3) {
