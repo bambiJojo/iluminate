@@ -55,6 +55,15 @@ Rebuild everything on existing tokens — **no new hardcoded colors**:
 - **Sessions list:** glass-backed track rows with content-type badge, title, `creator · duration` meta, and drag handle. Native `.onMove` / `.onDelete` preserved. `Add` pill in the section header (aurora tint).
 - Re-theme `SessionPickerView` (search field, filter chips, rows, floating "Add N Sessions" button) to tokens — mostly a color swap; it is already structurally sound.
 
+## Surface 2b — Trance Flow card (playlist editor)
+
+Approved addition (2026-07-04): a read-only analysis card in the editor between the artwork header and the sessions list, answering "does this sequence form a coherent trance arc?"
+
+- **Data source:** the already-generated light-score JSONs (`GeneratedSessions/*.json`) for each playlist item, loaded via the existing `LightScoreReader`. No new AI calls; tracks without a generated score render as a flat gap with a "not analyzed" hint.
+- **Analysis (`TranceFlowAnalyzer`, pure + TDD'd):** concatenate per-track `LightMoment` timelines along the playlist duration; derive the frequency trajectory and intensity envelope; classify the arc heuristically (e.g. descent into θ/δ returning upward at the end = "Smooth descent"); flag adjacent-track frequency jumps above a threshold.
+- **Display:** SwiftUI `Canvas` strip — frequency curve against α/θ/δ band guides, intensity underlay, dashed track boundaries, per-track chips, an arc-classification chip, and a warning callout for flagged transitions (which nudges toward Smart Transitions).
+- **v1 guardrails:** display only — no auto-reordering suggestions, no per-row mini-sparklines.
+
 ## Surface 3 — Streaming Featured Playlists (`StreamingBrowserView` → `PlaylistRow`, `CategoryCard`)
 
 - **Artwork (the bug fix):** replace the 2-arg `AsyncImage` with the **phase-based** `AsyncImage(url:) { phase in … }`:
