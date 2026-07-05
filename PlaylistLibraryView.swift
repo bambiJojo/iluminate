@@ -15,7 +15,6 @@ struct PlaylistLibraryView: View {
 
     @State private var playlists: [Playlist] = []
     @State private var availableAudioFiles: [AudioFile] = []
-    @State private var showingEditor = false
     @State private var editingPlaylist: Playlist?
     @State private var playingPlaylist: Playlist?
 
@@ -53,20 +52,16 @@ struct PlaylistLibraryView: View {
                 playlists = PlaylistStore.load()
                 loadAudioFiles()
             }
-            .sheet(isPresented: $showingEditor) {
-                if var playlist = editingPlaylist {
-                    let isNew = !playlists.contains(where: { $0.id == playlist.id })
-                    PlaylistEditorView(
-                        playlist: Binding(
-                            get: { playlist },
-                            set: { playlist = $0 }
-                        ),
-                        isNew: isNew,
-                        onSave: { saved in
-                            savePlaylist(saved)
-                        }
-                    )
-                }
+            .sheet(item: $editingPlaylist) { item in
+                // item-based presentation can never present blank; the editor
+                // owns its draft, so nothing writes back mid-presentation.
+                PlaylistEditorView(
+                    playlist: item,
+                    isNew: !playlists.contains(where: { $0.id == item.id }),
+                    onSave: { saved in
+                        savePlaylist(saved)
+                    }
+                )
             }
             .fullScreenCover(item: $playingPlaylist) { playlist in
                 UnifiedPlayerView(mode: .playlist(playlist: playlist), engine: engine)
@@ -78,12 +73,10 @@ struct PlaylistLibraryView: View {
 
     private func createNewPlaylist() {
         editingPlaylist = Playlist(name: "")
-        showingEditor = true
     }
 
     private func editPlaylist(_ playlist: Playlist) {
         editingPlaylist = playlist
-        showingEditor = true
     }
 
     private func savePlaylist(_ playlist: Playlist) {

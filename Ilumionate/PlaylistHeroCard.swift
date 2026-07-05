@@ -54,8 +54,10 @@ struct PlaylistHeroCard: View {
                     .strokeBorder(Color.glassBorder, lineWidth: 1)
             )
             .overlay(alignment: .topTrailing) {
-                PlaylistPlayButton(size: 44, action: onPlay)
-                    .padding(TranceSpacing.list)
+                if !playlist.isEmpty {
+                    PlaylistPlayButton(size: 44, action: onPlay)
+                        .padding(TranceSpacing.list)
+                }
             }
             .shadow(color: PlaylistArtwork.dominantColor(for: types).opacity(0.3),
                     radius: 16, x: 0, y: 8)

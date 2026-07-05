@@ -13,9 +13,18 @@ import SwiftUI
 
 struct PlaylistEditorView: View {
 
-    @Binding var playlist: Playlist
-    var isNew: Bool
-    var onSave: (Playlist) -> Void
+    // The editor owns a draft copy: edits never write back into the presenting
+    // view's state mid-presentation (which re-triggered sheet(item:) and made
+    // Cancel/Done taps un-dismissable). Changes leave only through onSave.
+    @State private var playlist: Playlist
+    let isNew: Bool
+    let onSave: (Playlist) -> Void
+
+    init(playlist: Playlist, isNew: Bool, onSave: @escaping (Playlist) -> Void) {
+        _playlist = State(initialValue: playlist)
+        self.isNew = isNew
+        self.onSave = onSave
+    }
 
     @Environment(\.dismiss) private var dismiss
 
