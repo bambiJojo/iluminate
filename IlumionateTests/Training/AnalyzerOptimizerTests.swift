@@ -756,6 +756,50 @@ struct AnalyzerOptimizerTests {
     }
 
     @Test
+    func analyzerConfigLoaderRejectsLowFitnessPublishedConfigs() {
+        func makeConfig(fitness: Double) -> AnalyzerConfig {
+            AnalyzerConfig(
+                fitness: fitness,
+                keywordPipeline: .init(
+                    weights: ["pre_talk": ["welcome": 1.0]],
+                    contextWindowSeconds: 5,
+                    smoothingWindowSize: 5,
+                    minimumPhaseDurationSeconds: 20,
+                    collapseThresholdFraction: 0.035
+                ),
+                chunkedAnalyzer: .init(
+                    chunkDurationSeconds: 15.0,
+                    chunkOverlapSeconds: 5.0,
+                    minChunks: 6,
+                    maxChunks: 60,
+                    systemInstructions: "demo",
+                    fewShotExamples: []
+                ),
+                prosody: .init(
+                    speechRateWindowSeconds: 3.0,
+                    pauseThresholdSeconds: 1.0,
+                    deliberatePauseMinSeconds: 3.0,
+                    musicOnlyPauseMinSeconds: 5.0
+                ),
+                techniqueDetection: .init(
+                    sensitivityThreshold: 0.6,
+                    minConfidence: 0.3
+                ),
+                sessionGeneration: .init(
+                    frequencyBands: ["hypnosis": .init(lower: 0.5, upper: 10.0)],
+                    phaseFrequencyBands: [:],
+                    transitionSmoothingSeconds: 2.0,
+                    intensityCurve: "gentle"
+                )
+            )
+        }
+
+        #expect(!AnalyzerConfigLoader.isUsablePublishedConfig(makeConfig(fitness: 0.09039203848599565)))
+        #expect(AnalyzerConfigLoader.isUsablePublishedConfig(makeConfig(fitness: 0.30)))
+        #expect(AnalyzerConfigLoader.isUsablePublishedConfig(makeConfig(fitness: 0.72)))
+    }
+
+    @Test
     func mutationEngineExploresExpandedRuntimeSearchSpaceWithinSafeBounds() {
         let base = AnalyzerConfig(
             keywordPipeline: .init(

@@ -42,12 +42,12 @@ class AnalysisStateManager {
     /// Production singleton — uses the live ML-backed implementations.
     private init(
         progressStore: AnalysisProgressStore = .shared,
-        preferences: AnalysisPreferences = .shared
+        preferences: AnalysisPreferences? = nil
     ) {
         self.audioAnalyzer = AudioAnalyzer()
         self.aiAnalyzer = AIContentAnalyzer()
         self.progressStore = progressStore
-        self.preferences = preferences
+        self.preferences = preferences ?? .shared
         loadCachedResults()
         Task { await resumeInterruptedAnalyses() }
     }
@@ -58,12 +58,12 @@ class AnalysisStateManager {
         transcriber: any AudioTranscribingService,
         analyzer: any ContentAnalyzingService,
         progressStore: AnalysisProgressStore = .shared,
-        preferences: AnalysisPreferences = .shared
+        preferences: AnalysisPreferences? = nil
     ) {
         self.audioAnalyzer = transcriber
         self.aiAnalyzer = analyzer
         self.progressStore = progressStore
-        self.preferences = preferences
+        self.preferences = preferences ?? .shared
         loadCachedResults()
     }
 
@@ -278,6 +278,29 @@ class AnalysisStateManager {
         saveCachedResults()
     }
 
+    /// Builds a transcription result from a saved transcript so re-analysis can
+    /// use improved analyzer logic without paying the Whisper cost again.
+    nonisolated static func reusableTranscriptionResult(for audioFile: AudioFile) -> AudioTranscriptionResult? {
+        guard let text = audioFile.transcription else { return nil }
+
+        let sanitized = AudioTranscriptionResult.sanitizedTranscriptText(text)
+        guard !sanitized.isEmpty else { return nil }
+
+        return AudioTranscriptionResult(
+            fullText: sanitized,
+            segments: [
+                AudioTranscriptionSegment(
+                    text: sanitized,
+                    timestamp: 0,
+                    duration: max(audioFile.duration, 1),
+                    confidence: 0.85
+                )
+            ],
+            duration: audioFile.duration,
+            detectedLanguage: "en"
+        )
+    }
+
     /// URL of the on-disk analysis cache. Internal so tests can verify the path.
     static var cacheURL: URL {
         URL.documentsDirectory.appending(path: "AnalysisCache.json")
@@ -476,8 +499,14 @@ actor AnalysisCoordinator {
             // Use background task registration for iOS background processing
             try await performanceOptimizer.withBackgroundTask(name: "AudioAnalysis-\(audioFile.filename)") {
                 // Stage 1: Transcription
-                let transcriptionResult = try await audioAnalyzer.transcribe(audioFile: audioFile)
-                try Task.checkCancellation()
+                let transcriptionResult: AudioTranscriptionResult
+                if let reusable = AnalysisStateManager.reusableTranscriptionResult(for: audioFile) {
+                    Log.analysis.info("⏭️ Reusing saved transcript for \(audioFile.filename)")
+                    transcriptionResult = reusable
+                } else {
+                    transcriptionResult = try await audioAnalyzer.transcribe(audioFile: audioFile)
+                    try Task.checkCancellation()
+                }
 
                 // Stage 2: AI Analysis
                 let analysisResult = try await aiAnalyzer.analyzeContent(
@@ -715,6 +744,14 @@ actor AnalysisCoordinator {
                 if let saved = checkpoint?.transcription {
                     Log.analysis.info("⏭️ Skipping transcription (checkpoint found) for \(audioFile.filename)")
                     transcriptionResult = saved
+                    await MainActor.run {
+                        analysisManager.currentAnalysis?.stage = .analyzing
+                        analysisManager.currentAnalysis?.progress = 0.4
+                    }
+                } else if let reusable = AnalysisStateManager.reusableTranscriptionResult(for: audioFile) {
+                    Log.analysis.info("⏭️ Reusing saved transcript for \(audioFile.filename)")
+                    transcriptionResult = reusable
+                    await AnalysisProgressStore.shared.saveTranscription(transcriptionResult, for: audioFile)
                     await MainActor.run {
                         analysisManager.currentAnalysis?.stage = .analyzing
                         analysisManager.currentAnalysis?.progress = 0.4

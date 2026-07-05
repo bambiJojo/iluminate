@@ -199,6 +199,12 @@ nonisolated struct ChunkedPhaseAnalyzer {
         let corpusHints: String
         let fewShotExamples: [AnalyzerConfig.ChunkedAnalyzer.FewShotExample]
     }
+
+    typealias ChunkClassifier = @Sendable (
+        ChunkRequest,
+        HypnosisMetadata.Phase?,
+        SystemLanguageModel
+    ) async throws -> [TimedClassification]
 }
 
 // MARK: - Classification Pipeline
@@ -215,6 +221,13 @@ extension ChunkedPhaseAnalyzer {
         let (evenIdxs, oddIdxs) = Self.evenOddIndices(count: jobs.count)
         var results = [HypnosisMetadata.Phase?](repeating: nil, count: jobs.count)
         var classificationsByJob = [[TimedClassification]](repeating: [], count: jobs.count)
+        var completedJobCount = 0
+        let totalJobCount = max(1, jobs.count)
+
+        func reportCompletedJob() async {
+            completedJobCount += 1
+            await onProgress?(Double(completedJobCount) / Double(totalJobCount))
+        }
 
         try Task.checkCancellation()
         let knowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
@@ -224,26 +237,31 @@ extension ChunkedPhaseAnalyzer {
             jobs: evenIdxs.map { jobs[$0] }, previousResults: nil,
             totalDuration: duration, model: model, systemInstructions: instructions,
             knowledge: knowledge, corpusLearning: corpusLearning,
-            fewShotSeedExamples: fewShotSeedExamples
+            fewShotSeedExamples: fewShotSeedExamples,
+            maxConcurrentRequests: config.maxConcurrentRequests,
+            onCompletedJob: reportCompletedJob
         )
         for (idx, classifications) in evenPairs {
             classificationsByJob[idx] = classifications
             results[idx] = classifications.last?.phase
         }
-        await onProgress?(0.5)
         try Task.checkCancellation()
 
         let oddPairs = try await Self.runPass(
             jobs: oddIdxs.map { jobs[$0] }, previousResults: results,
             totalDuration: duration, model: model, systemInstructions: instructions,
             knowledge: knowledge, corpusLearning: corpusLearning,
-            fewShotSeedExamples: fewShotSeedExamples
+            fewShotSeedExamples: fewShotSeedExamples,
+            maxConcurrentRequests: config.maxConcurrentRequests,
+            onCompletedJob: reportCompletedJob
         )
         for (idx, classifications) in oddPairs {
             classificationsByJob[idx] = classifications
             results[idx] = classifications.last?.phase
         }
-        await onProgress?(1.0)
+        if jobs.isEmpty {
+            await onProgress?(1.0)
+        }
         try Task.checkCancellation()
 
         return Self.assembleTimeline(
@@ -618,10 +636,25 @@ extension ChunkedPhaseAnalyzer {
         systemInstructions: String,
         knowledge: CorpusPhaseKnowledge,
         corpusLearning: AnalyzerConfig.CorpusLearning = .init(),
-        fewShotSeedExamples: [AnalyzerConfig.ChunkedAnalyzer.FewShotExample]
+        fewShotSeedExamples: [AnalyzerConfig.ChunkedAnalyzer.FewShotExample],
+        maxConcurrentRequests: Int = 2,
+        onCompletedJob: (() async -> Void)? = nil,
+        classify: @escaping ChunkClassifier = { request, previousPhase, model in
+            try await Self.classifySingleChunk(
+                request: request,
+                previousPhase: previousPhase,
+                model: model
+            )
+        }
     ) async throws -> [(Int, [TimedClassification])] {
         try await withThrowingTaskGroup(of: (Int, [TimedClassification]).self) { group in
-            for job in jobs {
+            var nextJobIndex = 0
+            let requestLimit = max(1, min(maxConcurrentRequests, jobs.count))
+
+            func enqueueNextJob() {
+                guard nextJobIndex < jobs.count else { return }
+                let job = jobs[nextJobIndex]
+                nextJobIndex += 1
                 let prev = job.index > 0 ? previousResults?[job.index - 1] ?? nil : nil
                 group.addTask {
                     try Task.checkCancellation()
@@ -657,8 +690,19 @@ extension ChunkedPhaseAnalyzer {
                     return (job.index, classifications)
                 }
             }
+
+            for _ in 0..<requestLimit {
+                enqueueNextJob()
+            }
+
             var pairs: [(Int, [TimedClassification])] = []
-            for try await pair in group { pairs.append(pair) }
+            while let pair = try await group.next() {
+                pairs.append(pair)
+                if let onCompletedJob {
+                    await onCompletedJob()
+                }
+                enqueueNextJob()
+            }
             return pairs
         }
     }

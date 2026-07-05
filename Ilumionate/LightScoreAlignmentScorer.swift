@@ -132,7 +132,11 @@ struct LightScoreAlignmentScorer: Sendable {
     }
 
     private func pauseResponseScore(session: LightSession, analysis: AnalysisResult) -> Double {
-        let responsivePauses = analysis.prosodicProfile?.pauses.filter { $0.category != .natural } ?? []
+        let responsivePauses = scoreableResponsivePauses(
+            analysis.prosodicProfile?.pauses.filter { $0.category != .natural } ?? [],
+            session: session,
+            analysis: analysis
+        )
         guard !responsivePauses.isEmpty else { return 1.0 }
 
         let moments = session.light_score
@@ -158,6 +162,47 @@ struct LightScoreAlignmentScorer: Sendable {
         }
 
         return scores.reduce(0, +) / Double(scores.count)
+    }
+
+    private func scoreableResponsivePauses(
+        _ pauses: [DetectedPause],
+        session: LightSession,
+        analysis: AnalysisResult
+    ) -> [DetectedPause] {
+        let sorted = pauses
+            .filter { $0.startTime >= 0 && $0.startTime <= session.duration_sec }
+            .sorted { $0.startTime < $1.startTime }
+        guard !sorted.isEmpty else { return [] }
+
+        let denseLongForm = session.duration_sec >= 600
+            || sorted.count > max(30, Int(session.duration_sec / 10.0))
+        guard denseLongForm else { return sorted }
+
+        let hasPhases = analysis.hypnosisMetadata?.phases.isEmpty == false
+        let minimumSpacing = longFormMinimumSpacing(
+            duration: session.duration_sec,
+            hasPhases: hasPhases
+        )
+        let pauseSpacing = max(14.0, minimumSpacing * 1.25)
+        let structuralSpacing = max(8.0, minimumSpacing * 0.75)
+        let structuralTimes = phaseScoringTimes(
+            analysis: analysis,
+            duration: session.duration_sec
+        )
+
+        var scoreable: [DetectedPause] = []
+        var lastPauseTime = -Double.infinity
+        for pause in sorted {
+            guard pause.startTime - lastPauseTime >= pauseSpacing else { continue }
+            guard !structuralTimes.contains(where: { abs($0 - pause.startTime) < structuralSpacing }) else {
+                continue
+            }
+
+            scoreable.append(pause)
+            lastPauseTime = pause.startTime
+        }
+
+        return scoreable.isEmpty ? sorted : scoreable
     }
 
     private func scoreAgainstSuggestedRange(session: LightSession, analysis: AnalysisResult) -> Double {
@@ -190,6 +235,39 @@ struct LightScoreAlignmentScorer: Sendable {
         }
 
         return coreMoments.isEmpty ? session.light_score : coreMoments
+    }
+
+    private func longFormMinimumSpacing(
+        duration: TimeInterval,
+        hasPhases: Bool
+    ) -> TimeInterval {
+        let divisor = hasPhases ? 140.0 : 120.0
+        return clamp(duration / divisor, lower: 10.0, upper: 22.0)
+    }
+
+    private func phaseScoringTimes(
+        analysis: AnalysisResult,
+        duration: TimeInterval
+    ) -> [TimeInterval] {
+        var times: [TimeInterval] = [0, duration]
+
+        for phase in analysis.hypnosisMetadata?.phases ?? [] {
+            times.append(clamp(phase.startTime, lower: 0, upper: duration))
+            times.append(clamp(phase.endTime, lower: 0, upper: duration))
+            times.append(contentsOf: phaseSamples(for: phase).map {
+                clamp($0.time, lower: 0, upper: duration)
+            })
+        }
+
+        return times.sorted().reduce(into: []) { result, time in
+            guard let last = result.last else {
+                result.append(time)
+                return
+            }
+            if abs(time - last) > 0.50 {
+                result.append(time)
+            }
+        }
     }
 
     // MARK: - Sampling

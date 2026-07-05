@@ -44,6 +44,9 @@ struct SessionDetailView: View {
                         if let lightSession {
                             lightScorePreviewSection(lightSession)
                         }
+                        if analysis?.expertAnalysis != nil {
+                            expertAnalysisSection
+                        }
                         analysisInsightsSection
                     } else {
                         // Generic session-arc preview when there is no analyzed
@@ -270,6 +273,87 @@ struct SessionDetailView: View {
 
     // MARK: - Analysis Insights
 
+    private var expertAnalysisSection: some View {
+        Group {
+            if let expert = analysis?.expertAnalysis {
+                LiminalCard(label: "Expert Analysis") {
+                    VStack(alignment: .leading, spacing: TranceSpacing.list) {
+                        HStack(alignment: .center, spacing: TranceSpacing.list) {
+                            ZStack {
+                                Circle()
+                                    .fill(expertVerdictColor(expert.verdict).opacity(0.18))
+                                    .frame(width: 48, height: 48)
+                                Image(systemName: expertVerdictIcon(expert.verdict))
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundStyle(expertVerdictColor(expert.verdict))
+                            }
+
+                            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                                Text(expert.verdict.displayName)
+                                    .font(TranceTypography.body.weight(.semibold))
+                                    .foregroundStyle(Color.textPrimary)
+                                Text("\(expert.qualityScore, format: .percent.precision(.fractionLength(0))) analyzer quality")
+                                    .font(TranceTypography.caption)
+                                    .foregroundStyle(Color.textSecondary)
+                            }
+
+                            Spacer()
+                        }
+
+                        Text(expert.summary)
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+
+                        if !expert.findings.isEmpty {
+                            VStack(alignment: .leading, spacing: TranceSpacing.inner) {
+                                Text("Evidence")
+                                    .font(TranceTypography.caption.weight(.semibold))
+                                    .foregroundStyle(Color.textPrimary)
+                                ForEach(expert.findings.prefix(4)) { finding in
+                                    expertFindingRow(finding)
+                                }
+                            }
+                        }
+
+                        if !expert.improvementActions.isEmpty {
+                            VStack(alignment: .leading, spacing: TranceSpacing.inner) {
+                                Text("Improve The Analyzer")
+                                    .font(TranceTypography.caption.weight(.semibold))
+                                    .foregroundStyle(Color.textPrimary)
+                                ForEach(expert.improvementActions.prefix(3)) { action in
+                                    expertActionRow(action)
+                                }
+                            }
+                        }
+
+                        if !expert.reviewMoments.isEmpty {
+                            VStack(alignment: .leading, spacing: TranceSpacing.inner) {
+                                Text("Review Moments")
+                                    .font(TranceTypography.caption.weight(.semibold))
+                                    .foregroundStyle(Color.textPrimary)
+                                ForEach(expert.reviewMoments.prefix(4)) { moment in
+                                    HStack(spacing: TranceSpacing.inner) {
+                                        Text(formatTime(moment.time))
+                                            .font(TranceTypography.caption.monospacedDigit())
+                                            .foregroundStyle(Color.auroraTeal)
+                                            .frame(width: 48, alignment: .leading)
+                                        Text(moment.phase?.displayName ?? "Gap")
+                                            .font(TranceTypography.caption.weight(.medium))
+                                            .foregroundStyle(Color.textPrimary)
+                                        Text(moment.reason)
+                                            .font(TranceTypography.caption)
+                                            .foregroundStyle(Color.textSecondary)
+                                            .lineLimit(2)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var analysisInsightsSection: some View {
         LiminalCard(label: "AI Insights") {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
@@ -314,6 +398,7 @@ struct SessionDetailView: View {
 
                 GlowButton(title: "Analyze Now", systemImage: "sparkles") {
                     Task {
+                        AnalysisStateManager.shared.evictCachedResult(for: audioFile)
                         await AnalysisStateManager.shared.queueForAnalysis(audioFile)
                     }
                 }
@@ -329,6 +414,7 @@ struct SessionDetailView: View {
                 Button {
                     TranceHaptics.shared.light()
                     Task {
+                        AnalysisStateManager.shared.evictCachedResult(for: audioFile)
                         await AnalysisStateManager.shared.queueForAnalysis(audioFile)
                     }
                 } label: {
@@ -385,6 +471,42 @@ struct SessionDetailView: View {
         }
     }
 
+    private func expertFindingRow(_ finding: ExpertAnalysis.Finding) -> some View {
+        HStack(alignment: .top, spacing: TranceSpacing.inner) {
+            Image(systemName: expertSeverityIcon(finding.severity))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(expertSeverityColor(finding.severity))
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(finding.title)
+                    .font(TranceTypography.caption.weight(.medium))
+                    .foregroundStyle(Color.textPrimary)
+                Text(finding.detail)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(3)
+            }
+        }
+    }
+
+    private func expertActionRow(_ action: ExpertAnalysis.ImprovementAction) -> some View {
+        HStack(alignment: .top, spacing: TranceSpacing.inner) {
+            Text("P\(action.priority)")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Color.auroraTeal)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(action.title)
+                    .font(TranceTypography.caption.weight(.medium))
+                    .foregroundStyle(Color.textPrimary)
+                Text(action.detail)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(3)
+            }
+        }
+    }
+
     private func formatTimeRange(_ start: TimeInterval, _ end: TimeInterval) -> String {
         "\(formatTime(start)) – \(formatTime(end))"
     }
@@ -422,6 +544,38 @@ struct SessionDetailView: View {
         case .guidedImagery: return "figure.mind.and.body"
         case .affirmations:  return "quote.bubble"
         default:             return "waveform"
+        }
+    }
+
+    private func expertVerdictIcon(_ verdict: ExpertAnalysis.Verdict) -> String {
+        switch verdict {
+        case .productionReady: return "checkmark.seal.fill"
+        case .reviewRecommended: return "exclamationmark.triangle.fill"
+        case .needsRelabeling: return "xmark.octagon.fill"
+        }
+    }
+
+    private func expertVerdictColor(_ verdict: ExpertAnalysis.Verdict) -> Color {
+        switch verdict {
+        case .productionReady: return .auroraTeal
+        case .reviewRecommended: return .warmAccent
+        case .needsRelabeling: return .roseDeep
+        }
+    }
+
+    private func expertSeverityIcon(_ severity: ExpertAnalysis.Severity) -> String {
+        switch severity {
+        case .info: return "info.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .critical: return "xmark.octagon.fill"
+        }
+    }
+
+    private func expertSeverityColor(_ severity: ExpertAnalysis.Severity) -> Color {
+        switch severity {
+        case .info: return .auroraTeal
+        case .warning: return .warmAccent
+        case .critical: return .roseDeep
         }
     }
 

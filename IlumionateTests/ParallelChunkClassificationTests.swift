@@ -12,6 +12,7 @@
 
 import Testing
 import Foundation
+import FoundationModels
 @testable import Ilumionate
 
 // MARK: - evenOddIndices structural tests
@@ -97,5 +98,64 @@ struct EvenOddIndicesTests {
         let (even, odd) = ChunkedPhaseAnalyzer.evenOddIndices(count: 60)
         #expect(even.count == 30, "60 chunks → 30 even, got \(even.count)")
         #expect(odd.count  == 30, "60 chunks → 30 odd,  got \(odd.count)")
+    }
+
+    @Test func runPassBoundsConcurrentClassificationsAndReportsEachChunk() async throws {
+        let jobs = (0..<6).map { index in
+            ChunkedPhaseAnalyzer.ChunkJob(
+                index: index,
+                start: Double(index * 15),
+                end: Double(index * 15 + 15),
+                text: "relax deeper",
+                positionPct: index * 10
+            )
+        }
+        let probe = ChunkClassificationProbe()
+        var progressEvents: [Double] = []
+
+        _ = try await ChunkedPhaseAnalyzer.runPass(
+            jobs: jobs,
+            previousResults: nil,
+            totalDuration: 90,
+            model: SystemLanguageModel.default,
+            systemInstructions: "Test",
+            knowledge: CorpusPhaseKnowledge(),
+            fewShotSeedExamples: [],
+            maxConcurrentRequests: 2,
+            onCompletedJob: {
+                progressEvents.append(Double(progressEvents.count + 1) / Double(jobs.count))
+            },
+            classify: { request, _, _ in
+                await probe.started()
+                try await Task.sleep(for: .milliseconds(20))
+                await probe.finished()
+                return [
+                    ChunkedPhaseAnalyzer.TimedClassification(
+                        start: request.startTime,
+                        end: request.endTime,
+                        phase: .induction
+                    )
+                ]
+            }
+        )
+
+        let maxActive = await probe.maxActive
+        #expect(maxActive <= 2, "Expected at most 2 concurrent classifications, saw \(maxActive)")
+        #expect(progressEvents.count == jobs.count)
+        #expect(progressEvents.last == 1.0)
+    }
+}
+
+private actor ChunkClassificationProbe {
+    private var activeCount = 0
+    private(set) var maxActive = 0
+
+    func started() {
+        activeCount += 1
+        maxActive = max(maxActive, activeCount)
+    }
+
+    func finished() {
+        activeCount -= 1
     }
 }

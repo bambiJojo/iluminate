@@ -166,6 +166,7 @@ nonisolated struct AnalysisResult: Codable, Sendable {
     let temporalAnalysis: TemporalAnalysis?
     var voiceCharacteristics: VoiceCharacteristics?
     let classificationConfidence: ClassificationConfidence?
+    let expertAnalysis: ExpertAnalysis?
     var prosodicProfile: ProsodicProfile?
     var techniqueDetection: TechniqueDetectionResult?
     var transcriptAnalysis: TranscriptAnalysis?
@@ -178,6 +179,7 @@ nonisolated struct AnalysisResult: Codable, Sendable {
          temporalAnalysis: TemporalAnalysis? = nil,
          voiceCharacteristics: VoiceCharacteristics? = nil,
          classificationConfidence: ClassificationConfidence? = nil,
+         expertAnalysis: ExpertAnalysis? = nil,
          prosodicProfile: ProsodicProfile? = nil,
          techniqueDetection: TechniqueDetectionResult? = nil,
          transcriptAnalysis: TranscriptAnalysis? = nil) {
@@ -194,10 +196,84 @@ nonisolated struct AnalysisResult: Codable, Sendable {
         self.temporalAnalysis = temporalAnalysis
         self.voiceCharacteristics = voiceCharacteristics
         self.classificationConfidence = classificationConfidence
+        self.expertAnalysis = expertAnalysis
         self.prosodicProfile = prosodicProfile
         self.techniqueDetection = techniqueDetection
         self.transcriptAnalysis = transcriptAnalysis
     }
+}
+
+/// Expert-level diagnostics explaining how trustworthy the analyzer output is
+/// and where future analyzer or label-review work should focus.
+nonisolated struct ExpertAnalysis: Codable, Sendable {
+    nonisolated enum Verdict: String, Codable, Sendable {
+        case productionReady
+        case reviewRecommended
+        case needsRelabeling
+
+        var displayName: String {
+            switch self {
+            case .productionReady: return "Production Ready"
+            case .reviewRecommended: return "Review Recommended"
+            case .needsRelabeling: return "Needs Relabeling"
+            }
+        }
+    }
+
+    nonisolated enum Severity: String, Codable, Sendable {
+        case info
+        case warning
+        case critical
+    }
+
+    nonisolated struct Finding: Codable, Identifiable, Sendable {
+        let id: UUID
+        let title: String
+        let detail: String
+        let severity: Severity
+
+        init(id: UUID = UUID(), title: String, detail: String, severity: Severity) {
+            self.id = id
+            self.title = title
+            self.detail = detail
+            self.severity = severity
+        }
+    }
+
+    nonisolated struct ImprovementAction: Codable, Identifiable, Sendable {
+        let id: UUID
+        let priority: Int
+        let title: String
+        let detail: String
+
+        init(id: UUID = UUID(), priority: Int, title: String, detail: String) {
+            self.id = id
+            self.priority = priority
+            self.title = title
+            self.detail = detail
+        }
+    }
+
+    nonisolated struct ReviewMoment: Codable, Identifiable, Sendable {
+        let id: UUID
+        let time: TimeInterval
+        let phase: HypnosisMetadata.Phase?
+        let reason: String
+
+        init(id: UUID = UUID(), time: TimeInterval, phase: HypnosisMetadata.Phase?, reason: String) {
+            self.id = id
+            self.time = time
+            self.phase = phase
+            self.reason = reason
+        }
+    }
+
+    let qualityScore: Double
+    let verdict: Verdict
+    let summary: String
+    let findings: [Finding]
+    let improvementActions: [ImprovementAction]
+    let reviewMoments: [ReviewMoment]
 }
 
 /// Represents a significant moment in the audio

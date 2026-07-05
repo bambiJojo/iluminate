@@ -164,7 +164,11 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         timeline = enforcePhaseOrdering(timeline: timeline)
 
         let phaseSegments = consolidatePhaseSegments(timeline: timeline, duration: duration)
-        return phaseSegments
+        return repairOpeningActivePhase(
+            phaseSegments,
+            wordTimestamps: wordTimestamps,
+            duration: duration
+        )
     }
 
     func analyze(
@@ -260,9 +264,25 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             transcription: transcription,
             transcriptAnalyzer: transcriptAnalyzer
         )
-        return enrichSegmentsWithTranscriptConfidence(
+        let repairedSegments = repairUnsupportedPhaseAssignments(
             selected.segments,
-            transcriptAnalysis: selected.analysis
+            transcription: transcription,
+            transcriptAnalyzer: transcriptAnalyzer
+        )
+        let terminalRepairedSegments = restoreTerminalEmergenceCue(
+            repairedSegments,
+            transcription: transcription
+        )
+        let orderedSegments = preventSuggestionRegressionAfterConditioning(
+            terminalRepairedSegments
+        )
+        let repairedAnalysis = transcriptAnalyzer.analyze(
+            transcription: transcription,
+            phases: orderedSegments
+        )
+        return enrichSegmentsWithTranscriptConfidence(
+            orderedSegments,
+            transcriptAnalysis: repairedAnalysis
         )
     }
 
@@ -960,7 +980,14 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         }
 
         let normalizedDistance = min(distance / 35.0, 1.0)
-        return 1.0 - (normalizedDistance * 0.78)
+        let maximumPenalty: Double
+        switch phase {
+        case .brainwashing, .eroticSuggestions, .conditioning, .emergence:
+            maximumPenalty = 0.94
+        default:
+            maximumPenalty = 0.78
+        }
+        return 1.0 - (normalizedDistance * maximumPenalty)
     }
 
     // MARK: - Phase Ordering
@@ -1189,19 +1216,36 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             return PhaseSuggestionTimeline(windows: [], segments: [])
         }
 
-        let rawSegments = suggestedSegments(from: decodedWindows)
+        let rawSegments = normalizeAdjacentBoundaries(
+            suggestedSegments(from: decodedWindows),
+            duration: transcription.duration
+        )
         let orderedSegments = enforcePhaseOrdering(phaseSegments: rawSegments)
-        let refinedSegments = refinePhaseBoundaries(
-            orderedSegments,
-            transcription: transcription,
-            transcriptAnalyzer: transcriptAnalyzer
+        let refinedSegments = normalizeAdjacentBoundaries(
+            refinePhaseBoundaries(
+                orderedSegments,
+                transcription: transcription,
+                transcriptAnalyzer: transcriptAnalyzer
+            ),
+            duration: transcription.duration
+        )
+        let cueSplitSegments = splitSegmentsOnDirectTextCues(
+            refinedSegments,
+            transcription: transcription
+        )
+        let terminalRepairedSegments = restoreTerminalEmergenceCue(
+            cueSplitSegments,
+            transcription: transcription
+        )
+        let activeTailOrderedSegments = preventSuggestionRegressionAfterConditioning(
+            terminalRepairedSegments
         )
         let analysis = transcriptAnalyzer.analyze(
             transcription: transcription,
-            phases: refinedSegments
+            phases: activeTailOrderedSegments
         )
         let enrichedSegments = enrichSegmentsWithTranscriptConfidence(
-            refinedSegments,
+            activeTailOrderedSegments,
             transcriptAnalysis: analysis
         )
 
@@ -1306,34 +1350,38 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             transcription: transcription,
             phases: primarySegments
         )
-        guard !proposalSegments.isEmpty else {
+        let normalizedProposalSegments = normalizeAdjacentBoundaries(
+            proposalSegments,
+            duration: transcription.duration
+        )
+        guard !normalizedProposalSegments.isEmpty else {
             return (primarySegments, primaryAnalysis)
         }
 
         // A proposal with overlapping spans is structurally invalid (a timeline
         // cannot be in two phases at once). It must never win over the primary on
         // an intrinsic quality score — reject it outright and keep the primary.
-        guard Self.segmentsAreNonOverlapping(proposalSegments) else {
+        guard Self.segmentsAreNonOverlapping(normalizedProposalSegments) else {
             return (primarySegments, primaryAnalysis)
         }
 
         let proposalAnalysis = transcriptAnalyzer.analyze(
             transcription: transcription,
-            phases: proposalSegments
+            phases: normalizedProposalSegments
         )
         let primaryScore = intrinsicQualityScore(
             for: primarySegments,
             transcriptAnalysis: primaryAnalysis
         )
         let proposalScore = intrinsicQualityScore(
-            for: proposalSegments,
+            for: normalizedProposalSegments,
             transcriptAnalysis: proposalAnalysis
         )
         let primaryDistinctPhases = Set(primarySegments.map(\.phase)).count
-        let proposalDistinctPhases = Set(proposalSegments.map(\.phase)).count
+        let proposalDistinctPhases = Set(normalizedProposalSegments.map(\.phase)).count
         let proposalHasBetterCoverage = proposalDistinctPhases > primaryDistinctPhases
         let proposalAddsTerminalEmergence =
-            proposalSegments.last?.phase == .emergence &&
+            normalizedProposalSegments.last?.phase == .emergence &&
             primarySegments.last?.phase != .emergence
         let proposalWinsClearly = proposalScore > primaryScore + 0.035
         let proposalWinsCoverageTie =
@@ -1345,7 +1393,7 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             proposalScore >= primaryScore - 0.08
 
         if proposalWinsClearly || proposalWinsCoverageTie || proposalRestoresEmergence {
-            return (proposalSegments, proposalAnalysis)
+            return (normalizedProposalSegments, proposalAnalysis)
         }
 
         return (primarySegments, primaryAnalysis)
@@ -1389,6 +1437,791 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
 
         merged.append(current)
         return merged
+    }
+
+    private func normalizeAdjacentBoundaries(
+        _ phaseSegments: [PhaseSegment],
+        duration: TimeInterval? = nil
+    ) -> [PhaseSegment] {
+        var adjusted = phaseSegments
+            .filter { $0.endTime > $0.startTime }
+            .sorted { lhs, rhs in
+                if abs(lhs.startTime - rhs.startTime) < 0.001 {
+                    return lhs.endTime < rhs.endTime
+                }
+                return lhs.startTime < rhs.startTime
+            }
+        guard !adjusted.isEmpty else { return [] }
+
+        if let duration {
+            adjusted[0] = copySegment(
+                adjusted[0],
+                startTime: 0,
+                endTime: adjusted[0].endTime
+            )
+            let lastIndex = adjusted.count - 1
+            adjusted[lastIndex] = copySegment(
+                adjusted[lastIndex],
+                startTime: adjusted[lastIndex].startTime,
+                endTime: max(adjusted[lastIndex].startTime, duration)
+            )
+        }
+
+        guard adjusted.count >= 2 else { return adjusted }
+
+        for index in 0..<(adjusted.count - 1) {
+            let left = adjusted[index]
+            let right = adjusted[index + 1]
+            let midpointBoundary = (left.endTime + right.startTime) / 2.0
+            let lowerBound = left.startTime + 0.001
+            let upperBound = right.endTime - 0.001
+            let boundary = min(max(midpointBoundary, lowerBound), upperBound)
+
+            adjusted[index] = copySegment(
+                left,
+                startTime: left.startTime,
+                endTime: boundary
+            )
+            adjusted[index + 1] = copySegment(
+                right,
+                startTime: boundary,
+                endTime: right.endTime
+            )
+        }
+
+        return mergeAdjacentPhaseSegments(
+            adjusted.filter { $0.endTime > $0.startTime + 0.001 }
+        )
+    }
+
+    private func repairOpeningActivePhase(
+        _ phaseSegments: [PhaseSegment],
+        wordTimestamps: [WordTimestamp],
+        duration: TimeInterval
+    ) -> [PhaseSegment] {
+        guard
+            duration > 0,
+            var firstSegment = phaseSegments.first,
+            firstSegment.startTime <= 0.001,
+            isImpossibleOpeningActivePhase(firstSegment.phase)
+        else {
+            return phaseSegments
+        }
+
+        let anchorStart = duration * (Self.positionAnchorRange(for: firstSegment.phase).lowerBound / 100.0)
+        let minimumOpeningDuration = min(max(duration * 0.08, 8.0), 30.0)
+        guard anchorStart >= minimumOpeningDuration else { return phaseSegments }
+
+        let structuralPhase = openingStructuralPhase(
+            wordTimestamps: wordTimestamps,
+            duration: duration
+        )
+        var repaired = phaseSegments
+        if firstSegment.endTime > anchorStart + 4.0 {
+            let openingSegment = copySegment(
+                firstSegment,
+                phase: structuralPhase,
+                startTime: firstSegment.startTime,
+                endTime: anchorStart
+            )
+            firstSegment = copySegment(
+                firstSegment,
+                startTime: anchorStart,
+                endTime: firstSegment.endTime
+            )
+            repaired[0] = openingSegment
+            repaired.insert(firstSegment, at: 1)
+        } else {
+            repaired[0] = copySegment(firstSegment, phase: structuralPhase)
+        }
+
+        return mergeAdjacentPhaseSegments(repaired)
+    }
+
+    private func isImpossibleOpeningActivePhase(_ phase: HypnosisMetadata.Phase) -> Bool {
+        switch phase {
+        case .brainwashing, .conditioning, .emergence:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func openingStructuralPhase(
+        wordTimestamps: [WordTimestamp],
+        duration: TimeInterval
+    ) -> HypnosisMetadata.Phase {
+        let openingCutoff = min(max(duration * 0.18, 10.0), 35.0)
+        let tokens = wordTimestamps
+            .filter { $0.startTime <= openingCutoff }
+            .flatMap { normalizedTokens(in: $0.word) }
+        let tokenSet = Set(tokens)
+        let normalizedText = " \(tokens.joined(separator: " ")) "
+        let preTalkWords = [
+            "welcome", "today", "session", "comfortable", "comfortably",
+            "ready", "begin", "settle", "before", "explain", "process"
+        ]
+        let preTalkPhrases = [
+            "get comfortable", "settle in", "this session", "before we begin"
+        ]
+        if !tokenSet.isDisjoint(with: preTalkWords)
+            || preTalkPhrases.contains(where: { normalizedText.contains(" \($0) ") }) {
+            return .preTalk
+        }
+
+        return .induction
+    }
+
+    private func restoreTerminalEmergenceCue(
+        _ phaseSegments: [PhaseSegment],
+        transcription: AudioTranscriptionResult
+    ) -> [PhaseSegment] {
+        guard !phaseSegments.isEmpty, transcription.duration > 0 else {
+            return phaseSegments
+        }
+        let normalizedSegments = normalizeAdjacentBoundaries(
+            phaseSegments,
+            duration: transcription.duration
+        )
+        guard normalizedSegments.last?.phase != .emergence else {
+            return normalizedSegments
+        }
+
+        let tailWindow = min(max(45.0, transcription.duration * 0.25), 180.0)
+        let tailStart = max(transcription.duration * 0.58, transcription.duration - tailWindow)
+        let sortedTranscriptSegments = transcription.segments.sorted { $0.timestamp < $1.timestamp }
+        guard
+            let cueSegment = sortedTranscriptSegments.first(where: {
+                $0.timestamp >= tailStart && hasDirectEmergenceCue(in: $0.text)
+            })
+        else {
+            return normalizedSegments
+        }
+
+        let cueStart = max(0.0, min(cueSegment.timestamp, transcription.duration))
+        guard transcription.duration - cueStart >= 4.0 else { return normalizedSegments }
+
+        var repaired: [PhaseSegment] = []
+        var insertedEmergence = false
+        for segment in normalizedSegments {
+            if insertedEmergence {
+                repaired.append(copySegment(segment, phase: .emergence))
+                continue
+            }
+
+            if cueStart <= segment.startTime + 0.001 {
+                repaired.append(copySegment(segment, phase: .emergence))
+                insertedEmergence = true
+                continue
+            }
+
+            if cueStart >= segment.endTime - 0.001 {
+                repaired.append(segment)
+                continue
+            }
+
+            if cueStart > segment.startTime + 4.0 {
+                repaired.append(
+                    copySegment(
+                        segment,
+                        startTime: segment.startTime,
+                        endTime: cueStart
+                    )
+                )
+            }
+            repaired.append(
+                copySegment(
+                    segment,
+                    phase: .emergence,
+                    startTime: max(segment.startTime, cueStart),
+                    endTime: segment.endTime
+                )
+            )
+            insertedEmergence = true
+        }
+
+        guard insertedEmergence else { return normalizedSegments }
+        return mergeAdjacentPhaseSegments(repaired)
+    }
+
+    private func preventSuggestionRegressionAfterConditioning(
+        _ phaseSegments: [PhaseSegment]
+    ) -> [PhaseSegment] {
+        var seenConditioning = false
+        let repaired = phaseSegments.map { segment -> PhaseSegment in
+            if segment.phase == .conditioning {
+                seenConditioning = true
+                return segment
+            }
+            if segment.phase == .emergence {
+                return segment
+            }
+            guard
+                seenConditioning,
+                segment.phase == .suggestions
+            else {
+                return segment
+            }
+
+            return copySegment(segment, phase: .conditioning)
+        }
+
+        return mergeAdjacentPhaseSegments(repaired)
+    }
+
+    private func repairUnsupportedPhaseAssignments(
+        _ phaseSegments: [PhaseSegment],
+        transcription: AudioTranscriptionResult,
+        transcriptAnalyzer: TranscriptFeatureAnalyzer
+    ) -> [PhaseSegment] {
+        guard !phaseSegments.isEmpty else { return [] }
+        let analysis = transcriptAnalyzer.analyze(
+            transcription: transcription,
+            phases: phaseSegments
+        )
+        let repaired = phaseSegments.map { segment -> PhaseSegment in
+            let midpoint = (segment.startTime + segment.endTime) / 2.0
+            guard let section = analysis.section(at: midpoint) else { return segment }
+            let segmentText = text(
+                in: segment,
+                transcription: transcription
+            )
+
+            let currentEvidence = configuredPhaseEvidenceScore(
+                for: segment.phase,
+                section: section,
+                transcriptText: segmentText
+            )
+            let candidates = repairCandidatePhases(for: segment.phase)
+            let best = candidates
+                .map { phase in
+                    (
+                        phase: phase,
+                        score: configuredPhaseEvidenceScore(
+                            for: phase,
+                            section: section,
+                            transcriptText: segmentText
+                        )
+                    )
+                }
+                .max { lhs, rhs in
+                    if abs(lhs.score - rhs.score) < 0.0001 {
+                        return phaseOrderIndex(lhs.phase) > phaseOrderIndex(rhs.phase)
+                    }
+                    return lhs.score < rhs.score
+                }
+
+            guard
+                let best,
+                best.phase != segment.phase,
+                shouldRepairPhase(
+                    from: segment.phase,
+                    to: best.phase,
+                    currentEvidence: currentEvidence,
+                    candidateEvidence: best.score
+                )
+            else {
+                return segment
+            }
+
+            return copySegment(segment, phase: best.phase)
+        }
+
+        let cueSplitSegments = splitSegmentsOnDirectTextCues(
+            mergeAdjacentPhaseSegments(repaired),
+            transcription: transcription
+        )
+        return mergeAdjacentPhaseSegments(
+            suppressUnsupportedActiveIslands(
+                cueSplitSegments,
+                transcription: transcription
+            )
+        )
+    }
+
+    private func suppressUnsupportedActiveIslands(
+        _ phaseSegments: [PhaseSegment],
+        transcription: AudioTranscriptionResult
+    ) -> [PhaseSegment] {
+        phaseSegments.enumerated().map { index, segment in
+            let canonicalPhase = segment.phase.labelingPhase
+            let segmentText = text(in: segment, transcription: transcription)
+            if [.induction, .deepening, .therapy].contains(canonicalPhase),
+               let activeReplacement = activePhaseReplacement(
+                    for: canonicalPhase,
+                    segmentText: segmentText
+               ) {
+                return copySegment(segment, phase: activeReplacement)
+            }
+
+            guard [.suggestions, .brainwashing, .emergence].contains(canonicalPhase) else {
+                return segment
+            }
+
+            let currentTextEvidence = configuredTextEvidenceScore(
+                for: canonicalPhase,
+                transcriptText: segmentText
+            )
+            let lacksRequiredSuggestionCue =
+                canonicalPhase == .suggestions &&
+                !hasDirectSuggestionCue(in: segmentText)
+            guard currentTextEvidence < 0.24 || lacksRequiredSuggestionCue else { return segment }
+
+            let fallbackCandidates: [HypnosisMetadata.Phase]
+            switch canonicalPhase {
+            case .suggestions:
+                fallbackCandidates = [.therapy, .deepening, .induction]
+            case .brainwashing:
+                fallbackCandidates = [.suggestions, .conditioning, .therapy, .deepening]
+            case .emergence:
+                fallbackCandidates = [.conditioning, .therapy, .deepening, .induction]
+            default:
+                fallbackCandidates = []
+            }
+
+            let bestTextCandidate = fallbackCandidates
+                .map {
+                    (
+                        phase: $0,
+                        score: configuredTextEvidenceScore(
+                            for: $0,
+                            transcriptText: segmentText
+                        )
+                    )
+                }
+                .max { $0.score < $1.score }
+            if let bestTextCandidate, bestTextCandidate.score >= 0.28 {
+                return copySegment(segment, phase: bestTextCandidate.phase)
+            }
+
+            let neighboringPhases = [
+                index > 0 ? phaseSegments[index - 1].phase.labelingPhase : nil,
+                index + 1 < phaseSegments.count ? phaseSegments[index + 1].phase.labelingPhase : nil
+            ].compactMap { $0 }
+            if let neighbor = neighboringPhases.first(where: {
+                [.induction, .deepening, .therapy].contains($0)
+            }) {
+                return copySegment(segment, phase: neighbor)
+            }
+
+            return segment
+        }
+    }
+
+    private func splitSegmentsOnDirectTextCues(
+        _ phaseSegments: [PhaseSegment],
+        transcription: AudioTranscriptionResult
+    ) -> [PhaseSegment] {
+        guard transcription.segments.count >= 2 else { return phaseSegments }
+
+        return phaseSegments.flatMap { segment -> [PhaseSegment] in
+            let duration = segment.endTime - segment.startTime
+            guard duration >= 36 else { return [segment] }
+
+            let overlappingSegments = transcription.segments.compactMap { transcriptSegment -> (segment: AudioTranscriptionSegment, start: TimeInterval, end: TimeInterval)? in
+                let transcriptStart = transcriptSegment.timestamp
+                let transcriptEnd = transcriptSegment.timestamp + max(transcriptSegment.duration, 0.0)
+                let overlapStart = max(transcriptStart, segment.startTime)
+                let overlapEnd = min(transcriptEnd, segment.endTime)
+                let overlapDuration = overlapEnd - overlapStart
+                let transcriptDuration = max(transcriptEnd - transcriptStart, 0.001)
+                guard overlapDuration >= 8.0 || overlapDuration / transcriptDuration >= 0.45 else {
+                    return nil
+                }
+                return (transcriptSegment, overlapStart, overlapEnd)
+            }
+
+            guard overlappingSegments.count >= 2 else { return [segment] }
+
+            let cuePieces = overlappingSegments.map { entry -> PhaseSegment in
+                let cuePhase = directCuePhase(in: entry.segment.text) ?? segment.phase
+                return copySegment(
+                    segment,
+                    phase: cuePhase,
+                    startTime: entry.start,
+                    endTime: entry.end
+                )
+            }
+
+            let containsMeaningfulCueChange = cuePieces.contains { $0.phase.labelingPhase != segment.phase.labelingPhase }
+                || Set(cuePieces.map { $0.phase.labelingPhase }).count > 1
+            guard containsMeaningfulCueChange else { return [segment] }
+
+            var pieces = cuePieces.sorted { $0.startTime < $1.startTime }
+            if let first = pieces.first, first.startTime > segment.startTime {
+                pieces.insert(
+                    copySegment(
+                        segment,
+                        startTime: segment.startTime,
+                        endTime: first.startTime
+                    ),
+                    at: 0
+                )
+            }
+            if let last = pieces.last, last.endTime < segment.endTime {
+                pieces.append(
+                    copySegment(
+                        segment,
+                        startTime: last.endTime,
+                        endTime: segment.endTime
+                    )
+                )
+            }
+
+            return mergeAdjacentPhaseSegments(pieces)
+        }
+    }
+
+    private func directCuePhase(in text: String) -> HypnosisMetadata.Phase? {
+        if hasDirectEmergenceCue(in: text) {
+            return .emergence
+        }
+        if hasDirectConditioningCue(in: text) {
+            return .conditioning
+        }
+        if hasDirectSuggestionCue(in: text) {
+            return .suggestions
+        }
+
+        let scored: [(phase: HypnosisMetadata.Phase, score: Double)] = [
+            (.therapy, configuredTextEvidenceScore(for: .therapy, transcriptText: text)),
+            (.deepening, configuredTextEvidenceScore(for: .deepening, transcriptText: text)),
+            (.induction, configuredTextEvidenceScore(for: .induction, transcriptText: text))
+        ]
+        guard let best = scored.max(by: { $0.score < $1.score }), best.score >= 0.36 else {
+            return nil
+        }
+        return best.phase
+    }
+
+    private func hasDirectEmergenceCue(in text: String) -> Bool {
+        let tokens = normalizedTokens(in: text)
+        guard !tokens.isEmpty else { return false }
+        let tokenSet = Set(tokens)
+        let normalizedText = " \(tokens.joined(separator: " ")) "
+        let phrases = [
+            "wide awake", "fully awake", "coming back", "come back",
+            "back in the room", "when you wake", "as you return",
+            "count to five", "clear headed", "open your eyes"
+        ]
+        if phrases.contains(where: { normalizedText.contains(" \($0) ") }) {
+            return true
+        }
+        return !tokenSet.isDisjoint(with: ["awake", "alert", "refreshed", "energized"])
+    }
+
+    private func activePhaseReplacement(
+        for currentPhase: HypnosisMetadata.Phase,
+        segmentText: String
+    ) -> HypnosisMetadata.Phase? {
+        let currentEvidence = configuredTextEvidenceScore(
+            for: currentPhase,
+            transcriptText: segmentText
+        )
+        let suggestionsEvidence = configuredTextEvidenceScore(
+            for: .suggestions,
+            transcriptText: segmentText
+        )
+        let conditioningEvidence = configuredTextEvidenceScore(
+            for: .conditioning,
+            transcriptText: segmentText
+        )
+        let candidates: [(phase: HypnosisMetadata.Phase, score: Double, hasCue: Bool)] = [
+            (.conditioning, conditioningEvidence, hasDirectConditioningCue(in: segmentText)),
+            (.suggestions, suggestionsEvidence, hasDirectSuggestionCue(in: segmentText))
+        ]
+        guard let best = candidates.max(by: { $0.score < $1.score }) else { return nil }
+        guard best.hasCue, best.score >= 0.35, best.score >= currentEvidence + 0.10 else {
+            return nil
+        }
+        return best.phase
+    }
+
+    private func hasDirectSuggestionCue(in text: String) -> Bool {
+        let tokens = normalizedTokens(in: text)
+        guard !tokens.isEmpty else { return false }
+        let tokenSet = Set(tokens)
+        let normalizedText = " \(tokens.joined(separator: " ")) "
+        let phrases = [
+            "you will", "from now on", "every time", "each time",
+            "from this moment", "you feel", "you find", "you are becoming",
+            "you are now", "your subconscious", "inner mind"
+        ]
+        if phrases.contains(where: { normalizedText.contains(" \($0) ") }) {
+            return true
+        }
+        let words = [
+            "subconscious", "imagine", "believe", "powerful", "change",
+            "transform", "suggestion", "accept", "absorb", "program",
+            "imprint", "healing", "visualize", "suggest", "automatic",
+            "anchor", "trigger"
+        ]
+        return !tokenSet.isDisjoint(with: words)
+    }
+
+    private func hasDirectConditioningCue(in text: String) -> Bool {
+        let tokens = normalizedTokens(in: text)
+        guard !tokens.isEmpty else { return false }
+        let tokenSet = Set(tokens)
+        let normalizedText = " \(tokens.joined(separator: " ")) "
+        let phrases = [
+            "post hypnotic", "future pacing", "carry with you", "take with you",
+            "remember this", "when i say", "hear the word", "next time you hear",
+            "when i snap my fingers", "snap my fingers"
+        ]
+        if phrases.contains(where: { normalizedText.contains(" \($0) ") }) {
+            return true
+        }
+        return !tokenSet.isDisjoint(with: ["whenever", "trigger", "anchor"])
+    }
+
+    private func repairCandidatePhases(
+        for phase: HypnosisMetadata.Phase
+    ) -> [HypnosisMetadata.Phase] {
+        switch phase.labelingPhase {
+        case .induction, .deepening:
+            return [.induction, .deepening, .therapy, .suggestions, .conditioning, .emergence]
+        case .therapy:
+            return [.deepening, .therapy, .suggestions, .conditioning]
+        case .suggestions, .eroticSuggestions, .brainwashing, .conditioning:
+            return [.deepening, .therapy, .suggestions, .conditioning, .brainwashing, .emergence]
+        case .emergence:
+            return [.therapy, .suggestions, .conditioning, .emergence]
+        default:
+            return Self.orderedPhases
+        }
+    }
+
+    private func shouldRepairPhase(
+        from currentPhase: HypnosisMetadata.Phase,
+        to candidatePhase: HypnosisMetadata.Phase,
+        currentEvidence: Double,
+        candidateEvidence: Double
+    ) -> Bool {
+        guard candidateEvidence >= 0.34 else { return false }
+
+        switch currentPhase.labelingPhase {
+        case .brainwashing:
+            return currentEvidence < 0.44 && candidateEvidence >= currentEvidence + 0.12
+        case .emergence:
+            return currentEvidence < 0.40 && candidateEvidence >= currentEvidence + 0.12
+        case .induction, .deepening:
+            let candidateIsActive = [.therapy, .suggestions, .conditioning, .emergence].contains(candidatePhase.labelingPhase)
+            return candidateIsActive
+                ? candidateEvidence >= max(currentEvidence + 0.14, 0.42)
+                : candidateEvidence >= currentEvidence + 0.18
+        case .suggestions, .conditioning:
+            let candidateIsTrance = [.deepening, .therapy].contains(candidatePhase.labelingPhase)
+            if candidateIsTrance, currentEvidence < 0.34 {
+                return candidateEvidence >= currentEvidence + 0.10
+            }
+            return candidateEvidence >= currentEvidence + 0.14
+        default:
+            return candidateEvidence >= currentEvidence + 0.20
+        }
+    }
+
+    private func configuredPhaseEvidenceScore(
+        for phase: HypnosisMetadata.Phase,
+        section: TranscriptSectionMetrics,
+        transcriptText: String? = nil
+    ) -> Double {
+        let terms = configuredEvidenceTerms(for: phase.labelingPhase)
+        let distinctiveWordMatches = section.topDistinctiveWords
+            .filter { terms.words.contains($0.word) }
+            .count
+        let commonWordMatches = section.topWords
+            .filter { terms.words.contains($0.word) }
+            .count
+        let distinctivePhraseMatches = section.topDistinctivePhrases
+            .filter { terms.phrases.contains($0.phrase) }
+            .count
+        let commonPhraseMatches = section.topPhrases
+            .filter { terms.phrases.contains($0.phrase) }
+            .count
+        let wordScore = clamp(
+            (Double(distinctiveWordMatches) * 0.38) + (Double(commonWordMatches) * 0.16),
+            lower: 0.0,
+            upper: 1.0
+        )
+        let phraseScore = clamp(
+            (Double(distinctivePhraseMatches) * 0.55) + (Double(commonPhraseMatches) * 0.35),
+            lower: 0.0,
+            upper: 1.0
+        )
+        let waymarkerScore = phaseWaymarkerAlignment(for: phase, section: section)
+        let sectionScore = max(wordScore, phraseScore, waymarkerScore)
+
+        guard let transcriptText, !transcriptText.isEmpty else {
+            return sectionScore
+        }
+
+        let textScore = configuredTextEvidenceScore(
+            words: terms.words,
+            phrases: terms.phrases,
+            transcriptText: transcriptText
+        )
+        return max(textScore, sectionScore * 0.65)
+    }
+
+    private func configuredTextEvidenceScore(
+        words: Set<String>,
+        phrases: Set<String>,
+        transcriptText: String
+    ) -> Double {
+        let tokens = normalizedTokens(in: transcriptText)
+        guard !tokens.isEmpty else { return 0.0 }
+
+        let tokenSet = Set(tokens)
+        let normalizedText = " \(tokens.joined(separator: " ")) "
+        let wordMatches = words.filter { tokenSet.contains($0) }.count
+        let phraseMatches = phrases.filter { phrase in
+            normalizedText.contains(" \(normalizePhrase(phrase)) ")
+        }.count
+        let wordScore = clamp(Double(wordMatches) * 0.18, lower: 0.0, upper: 1.0)
+        let phraseScore = clamp(Double(phraseMatches) * 0.50, lower: 0.0, upper: 1.0)
+        return max(wordScore, phraseScore)
+    }
+
+    private func configuredTextEvidenceScore(
+        for phase: HypnosisMetadata.Phase,
+        transcriptText: String
+    ) -> Double {
+        let terms = configuredEvidenceTerms(for: phase.labelingPhase)
+        return configuredTextEvidenceScore(
+            words: terms.words,
+            phrases: terms.phrases,
+            transcriptText: transcriptText
+        )
+    }
+
+    private func text(
+        in segment: PhaseSegment,
+        transcription: AudioTranscriptionResult
+    ) -> String {
+        let overlappingText = transcription.segments
+            .filter { transcriptSegment in
+                let transcriptStart = transcriptSegment.timestamp
+                let transcriptEnd = transcriptSegment.timestamp + max(transcriptSegment.duration, 0.0)
+                let overlapStart = max(transcriptStart, segment.startTime)
+                let overlapEnd = min(transcriptEnd, segment.endTime)
+                let overlapDuration = max(0.0, overlapEnd - overlapStart)
+                let transcriptDuration = max(transcriptEnd - transcriptStart, 0.001)
+                let midpoint = (transcriptStart + transcriptEnd) / 2.0
+                return overlapDuration / transcriptDuration >= 0.20
+                    || (midpoint >= segment.startTime && midpoint <= segment.endTime)
+            }
+            .map(\.text)
+            .joined(separator: " ")
+        return overlappingText.isEmpty ? transcription.fullText : overlappingText
+    }
+
+    private func normalizedTokens(in text: String) -> [String] {
+        text
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "'" })
+            .map { String($0).lowercased() }
+            .filter { !$0.isEmpty }
+    }
+
+    private func configuredEvidenceTerms(
+        for phase: HypnosisMetadata.Phase
+    ) -> (words: Set<String>, phrases: Set<String>) {
+        let ignoredWords = repairIgnoredWords(for: phase)
+        let keywords = HypnosisPhaseKeywords.all.filter {
+            hitMapTargetPhase(for: $0.phase).labelingPhase == phase.labelingPhase
+        }
+        let words = keywords
+            .filter { !$0.phrase.contains(" ") }
+            .filter { !ignoredWords.contains($0.phrase) }
+            .map { $0.phrase }
+        let phrases = keywords
+            .filter { $0.phrase.contains(" ") }
+            .map { normalizePhrase($0.phrase) }
+        return (
+            Set(words),
+            Set(phrases).union(HypnosisWaymarkerLexicon.phrases(for: phase))
+        )
+    }
+
+    private func repairIgnoredWords(
+        for phase: HypnosisMetadata.Phase
+    ) -> Set<String> {
+        switch phase.labelingPhase {
+        case .deepening:
+            return [
+                "deep", "down", "sleep", "trance", "nowhere", "nothing",
+                "double", "waves", "warmth", "maybe", "perhaps", "whether",
+                "wondering", "uncertain"
+            ]
+        case .induction:
+            return ["calm", "comfortable", "today", "ready", "begin", "subconscious"]
+        case .therapy:
+            return ["now", "mind", "unconscious"]
+        default:
+            return []
+        }
+    }
+
+    private func phaseOrderIndex(_ phase: HypnosisMetadata.Phase) -> Int {
+        Self.orderedPhases.firstIndex(of: phase.labelingPhase) ?? Int.max
+    }
+
+    private func copySegment(
+        _ segment: PhaseSegment,
+        startTime: TimeInterval,
+        endTime: TimeInterval
+    ) -> PhaseSegment {
+        PhaseSegment(
+            id: segment.id,
+            phase: segment.phase,
+            startTime: startTime,
+            endTime: endTime,
+            characteristics: segment.characteristics,
+            tranceDepthEstimate: segment.tranceDepthEstimate,
+            linguisticMarkers: segment.linguisticMarkers,
+            confidenceLevel: segment.confidenceLevel,
+            confidenceRationale: segment.confidenceRationale,
+            transitionTarget: segment.transitionTarget
+        )
+    }
+
+    private func copySegment(
+        _ segment: PhaseSegment,
+        phase: HypnosisMetadata.Phase
+    ) -> PhaseSegment {
+        PhaseSegment(
+            id: segment.id,
+            phase: phase,
+            startTime: segment.startTime,
+            endTime: segment.endTime,
+            characteristics: phase.displayName,
+            tranceDepthEstimate: phase.tranceDepthEstimate,
+            linguisticMarkers: segment.linguisticMarkers,
+            confidenceLevel: segment.confidenceLevel,
+            confidenceRationale: segment.confidenceRationale,
+            transitionTarget: segment.transitionTarget
+        )
+    }
+
+    private func copySegment(
+        _ segment: PhaseSegment,
+        phase: HypnosisMetadata.Phase,
+        startTime: TimeInterval,
+        endTime: TimeInterval
+    ) -> PhaseSegment {
+        PhaseSegment(
+            id: segment.id,
+            phase: phase,
+            startTime: startTime,
+            endTime: endTime,
+            characteristics: phase.displayName,
+            tranceDepthEstimate: phase.tranceDepthEstimate,
+            linguisticMarkers: segment.linguisticMarkers,
+            confidenceLevel: segment.confidenceLevel,
+            confidenceRationale: segment.confidenceRationale,
+            transitionTarget: segment.transitionTarget
+        )
     }
 
     func attachLinguisticMarkers(
@@ -1563,7 +2396,7 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         )
 
         for phaseIndex in Self.orderedPhases.indices {
-            let startPenalty = Double(max(0, phaseIndex - 2)) * 0.22
+            let startPenalty = Double(max(0, phaseIndex - 2)) * 0.08
             cumulativeScores[0][phaseIndex] = baseEvidence[0][phaseIndex].totalScore - startPenalty
         }
 
@@ -1668,15 +2501,18 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         )
 
         return Self.orderedPhases.map { phase in
-            let transcriptScore = transcriptSupportScore(for: phase, section: section) * 0.48
+            let keywordAlignment = phaseKeywordAlignment(for: phase, section: section)
+            let transcriptSupport = transcriptSupportScore(for: phase, section: section)
+            let semanticTranscriptScore = (transcriptSupport * 0.50) + (keywordAlignment * 0.50)
+            let transcriptScore = semanticTranscriptScore * 0.52
             let phraseAlignment = phraseLibraryAlignment(for: phase, section: section)
             let phraseScore = phraseAlignment.score * 0.24
-            let waymarkerScore = phaseWaymarkerAlignment(for: phase, section: section) * 0.18
+            let waymarkerScore = phaseWaymarkerAlignment(for: phase, section: section) * 0.16
             let positionScore = phasePositionWeight(
                 for: phase,
                 secondIndex: secondIndex,
                 bucketCount: phaseBucketCount
-            ) * 0.10
+            ) * 0.08
             let totalScore = transcriptScore + phraseScore + waymarkerScore + positionScore
 
             return PhaseEvidenceBreakdown(
@@ -1769,9 +2605,9 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
 
         switch jump {
         case 0:
-            return 0.18 + priorBonus
+            return 0.10 + priorBonus
         case 1:
-            return 0.12 + priorBonus
+            return 0.08 + priorBonus
         case 2:
             return 0.03 + priorBonus
         default:

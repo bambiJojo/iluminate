@@ -592,14 +592,39 @@ struct AudioTranscriptionResult: Codable, Sendable {
 
     /// - Parameter detectedLanguage: ISO 639-1 language code returned by WhisperKit (e.g. "en", "fr").
     nonisolated init(fullText: String, segments: [AudioTranscriptionSegment], duration: TimeInterval, detectedLanguage: String) {
-        self.fullText = fullText
-        self.segments = segments
+        self.fullText = Self.sanitizedTranscriptText(fullText)
+        self.segments = segments.compactMap { segment in
+            let sanitizedText = Self.sanitizedTranscriptText(segment.text)
+            guard !sanitizedText.isEmpty else { return nil }
+            return AudioTranscriptionSegment(
+                id: segment.id,
+                text: sanitizedText,
+                timestamp: segment.timestamp,
+                duration: segment.duration,
+                confidence: segment.confidence
+            )
+        }
         self.duration = duration
         self.locale = detectedLanguage
     }
 
     nonisolated var wordCount: Int {
         fullText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
+    }
+
+    nonisolated static func sanitizedTranscriptText(_ text: String) -> String {
+        text
+            .replacingOccurrences(
+                of: #"<\|[^>]*\|>"#,
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"[\u{00A0}\s]+"#,
+                with: " ",
+                options: .regularExpression
+            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var averageConfidence: Double {

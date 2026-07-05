@@ -71,6 +71,7 @@ struct MutationOperators {
         c.chunkOverlapSeconds = max(1.0, perturbDouble(c.chunkOverlapSeconds, sigma: 0.30))
         c.minChunks = max(2, perturbInt(c.minChunks, delta: 2))
         c.maxChunks = max(c.minChunks + 1, perturbInt(c.maxChunks, delta: 5))
+        c.maxConcurrentRequests = min(4, max(1, perturbInt(c.maxConcurrentRequests, delta: 1)))
 
         // Few-shot mutation: add/remove/replace from labeled corpus
         if !labeledCorpus.isEmpty && Bool.random() {

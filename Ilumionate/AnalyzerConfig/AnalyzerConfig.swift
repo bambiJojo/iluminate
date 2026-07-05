@@ -140,14 +140,57 @@ nonisolated struct AnalyzerConfig: Codable, Sendable {
         var chunkOverlapSeconds: Double
         var minChunks: Int
         var maxChunks: Int
+        var maxConcurrentRequests: Int = 2
         var systemInstructions: String
         var fewShotExamples: [FewShotExample]
+
+        init(
+            chunkDurationSeconds: Double,
+            chunkOverlapSeconds: Double,
+            minChunks: Int,
+            maxChunks: Int,
+            maxConcurrentRequests: Int = 2,
+            systemInstructions: String,
+            fewShotExamples: [FewShotExample]
+        ) {
+            self.chunkDurationSeconds = chunkDurationSeconds
+            self.chunkOverlapSeconds = chunkOverlapSeconds
+            self.minChunks = minChunks
+            self.maxChunks = maxChunks
+            self.maxConcurrentRequests = max(1, maxConcurrentRequests)
+            self.systemInstructions = systemInstructions
+            self.fewShotExamples = fewShotExamples
+        }
 
         nonisolated struct FewShotExample: Codable, Sendable {
             var text: String
             var position: Double
             var correctPhase: String
             var sourcePackID: String? = nil
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case chunkDurationSeconds
+            case chunkOverlapSeconds
+            case minChunks
+            case maxChunks
+            case maxConcurrentRequests
+            case systemInstructions
+            case fewShotExamples
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            chunkDurationSeconds = try container.decode(Double.self, forKey: .chunkDurationSeconds)
+            chunkOverlapSeconds = try container.decode(Double.self, forKey: .chunkOverlapSeconds)
+            minChunks = try container.decode(Int.self, forKey: .minChunks)
+            maxChunks = try container.decode(Int.self, forKey: .maxChunks)
+            maxConcurrentRequests = max(
+                1,
+                try container.decodeIfPresent(Int.self, forKey: .maxConcurrentRequests) ?? 2
+            )
+            systemInstructions = try container.decode(String.self, forKey: .systemInstructions)
+            fewShotExamples = try container.decode([FewShotExample].self, forKey: .fewShotExamples)
         }
     }
 

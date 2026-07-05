@@ -43,7 +43,7 @@ struct SessionGenerationView: View {
                             HStack {
                                 Image(systemName: "play.circle.fill")
                                     .font(.system(size: 24))
-                                Text("Begin Therapy Session")
+                                Text(playButtonTitle)
                                     .font(TranceTypography.body)
                                     .bold()
                             }
@@ -97,8 +97,20 @@ struct SessionGenerationView: View {
         }
     }
     
+    // MARK: - Play Button
+
+    /// A concrete, ready-to-go promise instead of a generic command: the session
+    /// is already built, so the button announces its length (smart-default framing).
+    private var playButtonTitle: String {
+        guard let session = generatedSession else {
+            return "Preparing your session…"
+        }
+        let minutes = max(1, Int((session.duration_sec / 60).rounded()))
+        return "Begin your \(minutes)-min session"
+    }
+
     // MARK: - Sections
-    
+
     private var heroSection: some View {
         VStack(spacing: TranceSpacing.list) {
             ZStack {
@@ -207,8 +219,20 @@ struct SessionGenerationView: View {
     }
     
     private var customizationSection: some View {
-        GlassCard(label: "Session Customization") {
+        GlassCard(label: "Recommended Settings") {
             VStack(spacing: TranceSpacing.list) {
+                // Framing: these values are a smart default tuned to this track,
+                // not a blank form — the user's job is to scan and adjust, not fill in.
+                HStack(alignment: .top, spacing: TranceSpacing.icon) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(.roseGold)
+                    Text("Tuned for your \(analysis.contentType.displayName.lowercased()). Adjust anything you like.")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(.textSecondary)
+                    Spacer(minLength: 0)
+                }
+
                 // Intensity
                 VStack(alignment: .leading, spacing: TranceSpacing.micro) {
                     HStack {

@@ -608,7 +608,7 @@ struct PhaseTimelineNormalizerTests {
 
         #expect(normalized.first?.startTime == 0)
         #expect(normalized.last?.endTime == 300)
-        #expect(normalized.contains { $0.phase == .preTalk && $0.startTime == 0 && $0.endTime == 10 })
+        #expect(normalized.contains { $0.phase == .induction && $0.startTime == 0 && $0.endTime == 10 })
         #expect(normalized.contains { $0.phase == .transitional && $0.startTime == 90 && $0.endTime == 120 })
         #expect(normalized.last?.phase == .emergence)
 

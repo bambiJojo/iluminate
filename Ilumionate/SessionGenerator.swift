@@ -60,10 +60,11 @@ class SessionGenerator {
         config: GenerationConfig = .default
     ) -> LightSession {
         Log.analysis.info("🎵 Generating session for: \(audioFile.filename)")
-        Log.analysis.info("📊 Content type: \(String(describing: analysis.contentType))")
+        let contentType = effectiveContentType(for: analysis)
+        Log.analysis.info("📊 Content type: \(String(describing: contentType))")
 
         let rawMoments: [LightMoment]
-        switch analysis.contentType {
+        switch contentType {
         case .hypnosis:
             rawMoments = generateHypnosisSession(analysis: analysis, duration: audioFile.duration, config: config)
         case .meditation:
@@ -107,6 +108,24 @@ class SessionGenerator {
         }
 
         return session
+    }
+
+    func effectiveContentType(for analysis: AnalysisResult) -> AudioContentType {
+        guard !analysis.contentType.isHypnosisLike else { return analysis.contentType }
+        guard analysis.contentType != .music, analysis.contentType != .brainwave else {
+            return analysis.contentType
+        }
+        guard let phases = analysis.hypnosisMetadata?.phases, phases.count >= 2 else {
+            return analysis.contentType
+        }
+
+        let canonicalPhases = Set(phases.map { $0.phase.labelingPhase })
+        let hasTranceWork = canonicalPhases.contains(.deepening)
+            || canonicalPhases.contains(.suggestions)
+            || canonicalPhases.contains(.brainwashing)
+        return canonicalPhases.contains(.induction) && hasTranceWork
+            ? .hypnosis
+            : analysis.contentType
     }
 
     // MARK: - Emergence Guard

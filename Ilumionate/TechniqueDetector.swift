@@ -174,7 +174,7 @@ nonisolated struct TechniqueDetector: Sendable {
 
 // MARK: - Detection Methods
 
-private extension TechniqueDetector {
+private nonisolated extension TechniqueDetector {
 
     // MARK: - Suggestibility Testing Detection
 

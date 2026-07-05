@@ -50,7 +50,7 @@ actor AIAnalysisManager {
         audioFile: AudioFile,
         onProgress: @Sendable @escaping (ProgressInfo) async -> Void
     ) async throws -> AnalysisResult {
-        await onProgress(ProgressInfo(progress: 0.1, message: "Setting up AI session..."))
+        await onProgress(ProgressInfo(progress: 0.05, message: "Setting up AI session..."))
 
         let addendum = await MainActor.run { AnalysisPreferences.shared.aiSystemAddendum }
         let finalInstructions = addendum.isEmpty
@@ -60,7 +60,7 @@ actor AIAnalysisManager {
         let lmSession = LanguageModelSession(instructions: finalInstructions)
         session = lmSession
 
-        await onProgress(ProgressInfo(progress: 0.25, message: "Building analysis prompt..."))
+        await onProgress(ProgressInfo(progress: 0.15, message: "Building analysis prompt..."))
 
         let prompt = buildTranscriptionPrompt(transcription: transcription, audioFile: audioFile)
 
@@ -71,16 +71,17 @@ actor AIAnalysisManager {
         let wordTimestamps = HypnosisPhaseAnalyzer()
             .approximateWordTimestamps(from: phaseTranscription.segments)
 
-        await onProgress(ProgressInfo(progress: 0.4, message: "Analyzing phases and content in parallel..."))
+        await onProgress(ProgressInfo(progress: 0.25, message: "Detecting hypnosis phases..."))
 
-        // Phase detection runs first — it's synchronous (keyword pipeline) or uses a
-        // separate Foundation Models session (ChunkedPhaseAnalyzer), so it doesn't
-        // block the main AI classification call.
+        // Phase detection runs before the broad AI classification so the final
+        // result can use the most specific timeline available.
         let detectedPhases: [PhaseSegment]? = try await runPhaseAnalysis(
             wordTimestamps: wordTimestamps,
             transcription: phaseTranscription,
             onProgress: onProgress
         )
+
+        await onProgress(ProgressInfo(progress: 0.70, message: "Classifying content..."))
 
         guard let aiResponse = try await fetchAIResponse(
             session: lmSession, prompt: prompt,
@@ -89,7 +90,7 @@ actor AIAnalysisManager {
             return makeKeywordFallbackResult(audioFile: audioFile, detectedPhases: detectedPhases)
         }
 
-        await onProgress(ProgressInfo(progress: 0.9, message: "Processing recommendations..."))
+        await onProgress(ProgressInfo(progress: 0.92, message: "Processing recommendations..."))
 
         let result = convertToAnalysisResult(
             aiResponse: aiResponse, audioFile: audioFile, detectedPhases: detectedPhases
@@ -234,7 +235,7 @@ actor AIAnalysisManager {
 
     /// Runs the phase detection pipeline: tries ChunkedPhaseAnalyzer (Apple Intelligence)
     /// first, then falls back to the keyword-based HypnosisPhaseAnalyzer.
-    /// Reports per-chunk progress via `onProgress` in the range 0.40 → 0.70 so the
+    /// Reports per-chunk progress via `onProgress` in the range 0.25 → 0.65 so the
     /// UI doesn't freeze during long recordings.
     private func runPhaseAnalysis(
         wordTimestamps: [WordTimestamp],
@@ -250,10 +251,10 @@ actor AIAnalysisManager {
             duration: transcription.duration
         )
 
-        // Scale ChunkedPhaseAnalyzer's 0–1 fraction into the 0.40–0.70 window
+        // Scale ChunkedPhaseAnalyzer's 0–1 fraction into the 0.25–0.65 window.
         let chunkProgressHandler: @Sendable (Double) async -> Void = { fraction in
             await onProgress(ProgressInfo(
-                progress: 0.40 + fraction * 0.30,
+                progress: 0.25 + fraction * 0.40,
                 message: "Detecting hypnosis phases…"
             ))
         }
@@ -264,7 +265,7 @@ actor AIAnalysisManager {
             onProgress: chunkProgressHandler
         ), !aiPhases.isEmpty {
             try Task.checkCancellation()
-            await onProgress(ProgressInfo(progress: 0.70, message: "Comparing phase models…"))
+            await onProgress(ProgressInfo(progress: 0.65, message: "Comparing phase models…"))
 
             let keywordPhases = keywordAnalyzer.analyze(
                 wordTimestamps: wordTimestamps,
@@ -289,8 +290,8 @@ actor AIAnalysisManager {
             )
         }
 
-        // Keyword fallback is instant — jump straight to 0.70
-        await onProgress(ProgressInfo(progress: 0.70, message: "Using keyword phase analysis…"))
+        // Keyword fallback is instant — jump straight to the end of phase detection.
+        await onProgress(ProgressInfo(progress: 0.65, message: "Using keyword phase analysis…"))
         try Task.checkCancellation()
 
         let keywordPhases = keywordAnalyzer.analyze(
@@ -369,10 +370,12 @@ private extension AIAnalysisManager {
         let duration = audioFile.duration
         let mood = AnalysisResult.Mood(rawValue: aiResponse.mood.lowercased()) ?? .neutral
         let aiContentType = parseContentType(aiResponse.contentType)
-        // If AI returned "unknown", try to infer from the filename before giving up
-        let contentType = aiContentType == .unknown
-            ? inferContentType(from: audioFile.displayName) ?? .unknown
-            : aiContentType
+        let contentType = resolveContentType(
+            aiContentType: aiContentType,
+            displayName: audioFile.displayName,
+            detectedPhases: detectedPhases,
+            duration: duration
+        )
         let frequencyRange: ClosedRange<Double> = {
             let lower = aiResponse.frequencyLower
             let upper = aiResponse.frequencyUpper
@@ -401,7 +404,7 @@ private extension AIAnalysisManager {
             duration: duration
         )
 
-        return AnalysisResult(
+        let result = AnalysisResult(
             mood: mood,
             energyLevel: aiResponse.energyLevel,
             suggestedFrequencyRange: frequencyRange,
@@ -414,10 +417,100 @@ private extension AIAnalysisManager {
             hypnosisMetadata: hypnosisMetadata,
             temporalAnalysis: temporalAnalysis
         )
+
+        let expertAnalysis = ExpertAnalysisBuilder().build(
+            analysis: result,
+            audioDuration: duration
+        )
+
+        return AnalysisResult(
+            mood: result.mood,
+            energyLevel: result.energyLevel,
+            suggestedFrequencyRange: result.suggestedFrequencyRange,
+            suggestedIntensity: result.suggestedIntensity,
+            suggestedColorTemperature: result.suggestedColorTemperature,
+            keyMoments: result.keyMoments,
+            aiSummary: result.aiSummary,
+            recommendedPreset: result.recommendedPreset,
+            contentType: result.contentType,
+            hypnosisMetadata: result.hypnosisMetadata,
+            temporalAnalysis: result.temporalAnalysis,
+            voiceCharacteristics: result.voiceCharacteristics,
+            classificationConfidence: result.classificationConfidence,
+            expertAnalysis: expertAnalysis,
+            prosodicProfile: result.prosodicProfile,
+            techniqueDetection: result.techniqueDetection,
+            transcriptAnalysis: result.transcriptAnalysis
+        )
     }
 
     func parseContentType(_ raw: String) -> AnalysisResult.ContentType {
         AudioContentType.parse(raw)
+    }
+
+    /// Resolves the route used for light-score generation. LumeLabel treats a
+    /// coherent phase timeline as first-class evidence; the app should do the
+    /// same when broad AI classification is uncertain or overly generic.
+    func resolveContentType(
+        aiContentType: AnalysisResult.ContentType,
+        displayName: String,
+        detectedPhases: [PhaseSegment]?,
+        duration: TimeInterval
+    ) -> AnalysisResult.ContentType {
+        let filenameType = aiContentType == .unknown ? inferContentType(from: displayName) : nil
+        let resolved = aiContentType == .unknown
+            ? filenameType ?? .unknown
+            : aiContentType
+
+        guard !resolved.isHypnosisLike else { return resolved }
+        guard resolved != .music, resolved != .brainwave else { return resolved }
+        guard hasMeaningfulHypnosisPhaseEvidence(detectedPhases, duration: duration) else {
+            return resolved
+        }
+
+        return .hypnosis
+    }
+
+    func hasMeaningfulHypnosisPhaseEvidence(
+        _ phases: [PhaseSegment]?,
+        duration: TimeInterval
+    ) -> Bool {
+        guard duration > 0, let phases else { return false }
+
+        let structural = phases
+            .filter { $0.endTime > $0.startTime }
+            .map { segment -> PhaseSegment in
+                let start = max(0, min(duration, segment.startTime))
+                let end = max(start, min(duration, segment.endTime))
+                return PhaseSegment(
+                    id: segment.id,
+                    phase: segment.phase.labelingPhase,
+                    startTime: start,
+                    endTime: end,
+                    characteristics: segment.characteristics,
+                    tranceDepthEstimate: segment.tranceDepthEstimate,
+                    linguisticMarkers: segment.linguisticMarkers,
+                    confidenceLevel: segment.confidenceLevel,
+                    confidenceRationale: segment.confidenceRationale,
+                    transitionTarget: segment.transitionTarget
+                )
+            }
+            .filter { $0.endTime - $0.startTime >= 8.0 }
+
+        guard structural.count >= 2 else { return false }
+
+        let coveredDuration = structural.reduce(0.0) { $0 + max(0, $1.endTime - $1.startTime) }
+        let coverage = coveredDuration / duration
+        let phasesPresent = Set(structural.map(\.phase))
+        let hasTranceWork = phasesPresent.contains(.deepening)
+            || phasesPresent.contains(.suggestions)
+            || phasesPresent.contains(.brainwashing)
+        let hasArcEvidence = phasesPresent.contains(.induction) && hasTranceWork
+        let hasConfidentEvidence = structural.contains { $0.confidenceLevel != .low }
+
+        return hasArcEvidence
+            && hasConfidentEvidence
+            && (coveredDuration >= min(120.0, duration * 0.20) || coverage >= 0.35)
     }
 
     /// Keyword-based content type inference from a display name (filename without extension).
@@ -484,7 +577,8 @@ private extension AIAnalysisManager {
         audioFile: AudioFile,
         detectedPhases: [PhaseSegment]?
     ) -> AnalysisResult {
-        let contentType = inferContentType(from: audioFile.displayName) ?? .unknown
+        let contentType = inferContentType(from: audioFile.displayName)
+            ?? (hasMeaningfulHypnosisPhaseEvidence(detectedPhases, duration: audioFile.duration) ? .hypnosis : .unknown)
         let duration = audioFile.duration
         let freqRange: ClosedRange<Double>
         let intensity: Double
@@ -531,7 +625,7 @@ private extension AIAnalysisManager {
             hypnosisMetadata = nil
         }
         let presetName = contentType == .unknown ? "Alpha Relaxation" : "\(contentType.displayName) Session"
-        return AnalysisResult(
+        let result = AnalysisResult(
             mood: mood,
             energyLevel: contentType == .music ? 0.75 : 0.2,
             suggestedFrequencyRange: freqRange,
@@ -542,6 +636,31 @@ private extension AIAnalysisManager {
             recommendedPreset: presetName,
             contentType: contentType,
             hypnosisMetadata: hypnosisMetadata
+        )
+
+        let expertAnalysis = ExpertAnalysisBuilder().build(
+            analysis: result,
+            audioDuration: audioFile.duration
+        )
+
+        return AnalysisResult(
+            mood: result.mood,
+            energyLevel: result.energyLevel,
+            suggestedFrequencyRange: result.suggestedFrequencyRange,
+            suggestedIntensity: result.suggestedIntensity,
+            suggestedColorTemperature: result.suggestedColorTemperature,
+            keyMoments: result.keyMoments,
+            aiSummary: result.aiSummary,
+            recommendedPreset: result.recommendedPreset,
+            contentType: result.contentType,
+            hypnosisMetadata: result.hypnosisMetadata,
+            temporalAnalysis: result.temporalAnalysis,
+            voiceCharacteristics: result.voiceCharacteristics,
+            classificationConfidence: result.classificationConfidence,
+            expertAnalysis: expertAnalysis,
+            prosodicProfile: result.prosodicProfile,
+            techniqueDetection: result.techniqueDetection,
+            transcriptAnalysis: result.transcriptAnalysis
         )
     }
 

@@ -149,7 +149,7 @@ struct AudioEnergyAnalyzer: Sendable {
             ? AnySequence((0..<windowCount).reversed())
             : AnySequence(0..<windowCount)
 
-        for windowIndex in indices {
+        walk: for windowIndex in indices {
             switch classifications[windowIndex] {
             case .silence:
                 deadCount += 1
@@ -158,9 +158,8 @@ struct AudioEnergyAnalyzer: Sendable {
                 deadCount += 1
                 hasBinaural = true
             case .content:
-                break // stop at first content window
+                break walk // stop at first content window
             }
-            if classifications[windowIndex] == .content { break }
         }
 
         let duration = Double(deadCount) * config.windowDuration

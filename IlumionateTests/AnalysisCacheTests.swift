@@ -47,6 +47,26 @@ struct AnalysisCacheTests {
         // If we get here without crashing, the test passes
     }
 
+    @Test func reusableTranscriptionResultUsesSavedTranscript() {
+        var file = makeAudioFile()
+        file.transcription = "  <|startoftranscript|> breathe slowly and relax deeper now  "
+
+        let result = AnalysisStateManager.reusableTranscriptionResult(for: file)
+
+        #expect(result?.fullText == "breathe slowly and relax deeper now")
+        #expect(result?.duration == file.duration)
+        #expect(result?.segments.count == 1)
+        #expect(result?.segments.first?.timestamp == 0)
+        #expect(result?.segments.first?.duration == file.duration)
+    }
+
+    @Test func reusableTranscriptionResultSkipsEmptyTranscript() {
+        var file = makeAudioFile()
+        file.transcription = " <|nospeech|> "
+
+        #expect(AnalysisStateManager.reusableTranscriptionResult(for: file) == nil)
+    }
+
     // MARK: Cache URL shape
 
     @Test @MainActor func cacheURLIsInDocumentsDirectory() {

@@ -11,7 +11,7 @@ import Foundation
 
 // MARK: - Pattern-Based Detection Helpers
 
-private extension TechniqueDetector {
+private nonisolated extension TechniqueDetector {
 
     /// Scans word timestamps for multi-word pattern matches and emits
     /// technique + marker pairs for each hit.
@@ -65,7 +65,7 @@ private extension TechniqueDetector {
 
 // MARK: - Advanced Technique Detectors
 
-extension TechniqueDetector {
+nonisolated extension TechniqueDetector {
 
     // MARK: Metaphorical Story
 

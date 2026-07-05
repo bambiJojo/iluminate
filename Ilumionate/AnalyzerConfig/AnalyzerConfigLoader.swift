@@ -12,6 +12,7 @@ nonisolated enum AnalyzerConfigLoader {
 
     static let documentsConfigURL: URL =
         URL.documentsDirectory.appending(path: "AnalyzerConfig.json")
+    static let minimumPublishedConfigFitness = 0.30
 
     private static let baseConfigCache = AnalyzerConfigCache()
 
@@ -25,8 +26,11 @@ nonisolated enum AnalyzerConfigLoader {
         // 1. Try trained config in Documents
         if let data = try? Data(contentsOf: documentsConfigURL),
            let config = try? JSONDecoder().decode(AnalyzerConfig.self, from: data) {
-            Log.analysis.info("📐 Loaded trained AnalyzerConfig (gen \(config.generation), fitness \(config.fitness))")
-            return config
+            if isUsablePublishedConfig(config) {
+                Log.analysis.info("📐 Loaded trained AnalyzerConfig (gen \(config.generation), fitness \(config.fitness))")
+                return config
+            }
+            Log.analysis.warning("Ignoring trained AnalyzerConfig at \(documentsConfigURL.path(), privacy: .public); fitness \(config.fitness, privacy: .public) is below minimum \(minimumPublishedConfigFitness, privacy: .public)")
         }
 
         // 2. Fall back to bundled default
@@ -39,6 +43,10 @@ nonisolated enum AnalyzerConfigLoader {
 
         // 3. Last resort — should never happen in production
         fatalError("No AnalyzerConfig found in Documents or Bundle — app cannot start")
+    }
+
+    static func isUsablePublishedConfig(_ config: AnalyzerConfig) -> Bool {
+        config.fitness.isFinite && config.fitness >= minimumPublishedConfigFitness
     }
 
     /// Saves a trained config to Documents for the app to pick up.

@@ -18,7 +18,7 @@ struct WordTimestamp: Identifiable, Codable, Sendable {
     let startTime: Double  // seconds from audio start
     let duration: Double
 
-    var endTime: Double { startTime + duration }
+    nonisolated var endTime: Double { startTime + duration }
 
     nonisolated init(id: UUID = UUID(), word: String, startTime: Double, duration: Double) {
         self.id = id

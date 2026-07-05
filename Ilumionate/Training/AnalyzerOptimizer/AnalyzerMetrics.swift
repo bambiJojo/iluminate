@@ -84,9 +84,15 @@ enum AnalyzerMetrics {
             : example.labels.denseTimeline
 
         let predictedTimeline = truthTimeline.map { bucket in
-            predictedPhase(at: min(example.audio.durationSeconds, bucket.startTime + ((bucket.endTime - bucket.startTime) / 2)), in: predictedSegments)
+            predictedPhase(
+                at: min(
+                    example.audio.durationSeconds,
+                    bucket.startTime + ((bucket.endTime - bucket.startTime) / 2)
+                ),
+                in: predictedSegments
+            )?.labelingPhase
         }
-        let truthPhases = truthTimeline.map(\.phase)
+        let truthPhases = truthTimeline.map { $0.phase?.labelingPhase }
 
         let phaseStats = scoredPhases.map { phase -> AnalyzerOptimizationPhaseStats in
             let tp = zip(truthPhases, predictedTimeline).filter { truth, predicted in

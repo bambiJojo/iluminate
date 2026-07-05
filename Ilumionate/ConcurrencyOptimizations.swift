@@ -43,11 +43,6 @@ struct AudioLevelSequence: AsyncSequence {
 
             try await Task.sleep(for: .seconds(updateInterval))
 
-            // Get real-time audio levels
-            guard let playerNode = audioEngine.mainMixerNode as AVAudioMixerNode? else {
-                return nil
-            }
-
             // Simulated audio levels - in production would be real audio analysis
             let leftLevel = Float.random(in: 0...1)
             let rightLevel = Float.random(in: 0...1)
@@ -88,12 +83,12 @@ actor AudioPipeline {
         let processorId = UUID()
 
         // Remove completed processors first
-        await cleanupCompletedProcessors()
+        cleanupCompletedProcessors()
 
         // Wait if at capacity
         while processors.count >= maxConcurrentProcessors {
             try? await Task.sleep(for: .milliseconds(100))
-            await cleanupCompletedProcessors()
+            cleanupCompletedProcessors()
         }
 
         // Create processor task

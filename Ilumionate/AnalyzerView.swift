@@ -63,10 +63,7 @@ struct AnalyzerView: View {
     // MARK: - Actions
 
     private func loadAudioFiles() {
-        if let data = UserDefaults.standard.data(forKey: "audioFiles"),
-           let files = try? JSONDecoder().decode([AudioFile].self, from: data) {
-            audioFiles = files
-        }
+        audioFiles = AudioLibraryStore.loadRepairingStoredFiles()
     }
 
     private func queueAllUnanalyzed() async {

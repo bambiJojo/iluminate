@@ -13,6 +13,7 @@ struct AnalysisProgressView: View {
 
     let audioFile: AudioFile
     @State private var viewModel = AnalysisProgressViewModel()
+    @State private var showAbandonConfirm = false
     @Environment(\.dismiss) private var dismiss
 
     var onAnalysisComplete: (AudioFile, AnalysisResult) -> Void
@@ -53,8 +54,7 @@ struct AnalysisProgressView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
-                        cancelAnalysis()
-                        dismiss()
+                        showAbandonConfirm = true
                     } label: {
                         Image(systemName: "xmark")
                             .font(.title3)
@@ -62,6 +62,21 @@ struct AnalysisProgressView: View {
                     }
                     .disabled(viewModel.stage == .complete)
                 }
+            }
+            // Loss framing: leaving mid-analysis throws away work already done,
+            // so make that cost explicit rather than a frictionless exit.
+            .confirmationDialog(
+                "Discard this analysis?",
+                isPresented: $showAbandonConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Discard progress", role: .destructive) {
+                    cancelAnalysis()
+                    dismiss()
+                }
+                Button("Keep analyzing", role: .cancel) {}
+            } message: {
+                Text("The AI has already started working through your audio. Leave now and you'll lose that progress and have to start over.")
             }
             .task {
                 await viewModel.startAnalysis(for: audioFile)

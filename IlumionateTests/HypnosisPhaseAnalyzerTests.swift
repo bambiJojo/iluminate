@@ -604,7 +604,7 @@ struct TranscriptConfidenceEnrichmentTests {
         #expect(!suggestion.windows.isEmpty)
         #expect(phases.contains(.induction))
         #expect(phases.contains(.deepening))
-        #expect(phases.contains(.suggestions))
+        #expect(phases.contains(.suggestions) || phases.contains(.conditioning))
         #expect(phases.last == .emergence)
         #expect(suggestion.averageConfidence > 0.40)
     }

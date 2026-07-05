@@ -190,6 +190,59 @@ struct AnalysisPipelineTests {
         #expect(generator.lastAnalysis?.transcriptAnalysis != nil)
     }
 
+    @Test func transcription_stripsWhisperControlTokens() {
+        let transcription = AudioTranscriptionResult(
+            fullText: "<|startoftranscript|><|en|><|transcribe|><|0.00|> go deeper <|3.20|>",
+            segments: [
+                AudioTranscriptionSegment(
+                    text: "<|0.00|> go deeper <|3.20|>",
+                    timestamp: 0,
+                    duration: 3.2,
+                    confidence: 0.9
+                )
+            ],
+            duration: 3.2,
+            detectedLanguage: "en"
+        )
+
+        #expect(transcription.fullText == "go deeper")
+        #expect(transcription.segments.map(\.text) == ["go deeper"])
+    }
+
+    @Test func enrichment_upgradesUnknownWhenTechniqueEvidenceIsStrong() {
+        let transcription = AudioTranscriptionResult(
+            fullText: """
+            Take a deep breath. That's right. Go deeper now. When I say sleep, go deeper.
+            Next time you hear my voice, relax now. Let go. Drift deeper. Five four three two one.
+            """,
+            segments: [
+                AudioTranscriptionSegment(
+                    text: """
+                    Take a deep breath. That's right. Go deeper now. When I say sleep, go deeper.
+                    Next time you hear my voice, relax now. Let go. Drift deeper. Five four three two one.
+                    """,
+                    timestamp: 0,
+                    duration: 90,
+                    confidence: 0.9
+                )
+            ],
+            duration: 90,
+            detectedLanguage: "en"
+        )
+        let unknown = AnalysisFixtures.unknownAnalysis
+
+        let enriched = AudioAnalysisEnricher().enrich(
+            unknown,
+            transcription: transcription,
+            audioFile: AnalysisFixtures.audioFile(duration: 90),
+            prosody: nil
+        )
+
+        #expect(enriched.contentType == .hypnosis)
+        #expect(enriched.hypnosisMetadata?.detectedTechniques.isEmpty == false)
+        #expect(enriched.recommendedPreset == "Hypnosis Session")
+    }
+
     // MARK: - All Content Types
 
     @Test func hypnosisAnalysis_producesSession()      async throws { try await assertSessionGenerated(analysis: AnalysisFixtures.hypnosisAnalysis)     }
