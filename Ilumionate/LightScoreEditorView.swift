@@ -144,14 +144,15 @@ struct LightScoreEditorView: View {
                     .font(TranceTypography.caption)
                     .foregroundStyle(Color.textSecondary)
 
-                Text(moment.waveform.displayName)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(Color.roseGold)
+                momentTimelineLabel(for: moment)
             }
 
             // Expanded detail
             if isSelected {
                 HStack(spacing: TranceSpacing.card) {
+                    if phaseForMoment(moment) != nil {
+                        detailPill(label: "Wave", value: moment.waveform.displayName)
+                    }
                     if let ramp = moment.ramp_duration {
                         detailPill(label: "Ramp", value: ramp.formatted(.number.precision(.fractionLength(1))) + "s")
                     }
@@ -168,6 +169,47 @@ struct LightScoreEditorView: View {
         .padding(.vertical, TranceSpacing.inner)
         .background(isSelected ? Color.roseGold.opacity(0.05) : Color.clear)
         .animation(.easeInOut(duration: 0.2), value: isSelected)
+    }
+
+    @ViewBuilder
+    private func momentTimelineLabel(for moment: LightMoment) -> some View {
+        if let phase = phaseForMoment(moment)?.labelingPhase {
+            Text(phase.displayName)
+                .font(TranceTypography.caption)
+                .foregroundStyle(phaseColor(phase))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: 112, alignment: .trailing)
+        } else {
+            Text(moment.waveform.displayName)
+                .font(TranceTypography.caption)
+                .foregroundStyle(Color.roseGold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: 112, alignment: .trailing)
+        }
+    }
+
+    private func phaseForMoment(_ moment: LightMoment) -> HypnosisMetadata.Phase? {
+        audioFile.analysisResult?.hypnosisMetadata?.phases.first {
+            moment.time >= $0.startTime && moment.time <= $0.endTime
+        }?.phase
+    }
+
+    private func phaseColor(_ phase: HypnosisMetadata.Phase) -> Color {
+        switch phase {
+        case .induction: return .phaseInduction
+        case .fractionation: return .phaseFractionation
+        case .deepening: return .phaseDeepener
+        case .confusion: return .mint
+        case .therapy, .suggestions: return .phaseSuggestion
+        case .eroticSuggestions: return .roseDeep
+        case .brainwashing: return .orange
+        case .emergence: return .bwBeta
+        case .preTalk: return .bwAlpha
+        case .conditioning: return .bwGamma
+        case .transitional: return .textLight
+        }
     }
 
     private func detailPill(label: String, value: String) -> some View {
