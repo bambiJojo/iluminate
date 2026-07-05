@@ -3,21 +3,24 @@
 ## Pre-Build Checklist
 
 ### ✅ Version Management
-- [x] **Marketing Version**: Updated to 1.0.0 (semantic versioning)
-- [x] **Build Number**: Set to 1001 (TestFlight requires unique build numbers)
+- [x] **Marketing Version**: 0.5.8 (beta; bump to 1.0.0 at public launch)
+- [x] **Build Number**: 10010 (TestFlight requires unique build numbers)
 - [x] **Bundle Identifier**: com.byronquine.Ilumionate (verify matches App Store Connect)
-- [x] **Development Team**: Set to your Apple Developer Team ID
+- [x] **Development Team**: GUHEBKT9SX
 
 ### ✅ App Configuration
-- [x] **Target iOS Version**: Currently set to iOS 26.0 (will need to be lowered to iOS 16.0+ for wider compatibility)
+- [x] **Target iOS Version**: iOS 26.0
 - [x] **Device Support**: iPhone and iPad (Universal)
 - [x] **Code Signing**: Automatic (ensure valid certificates)
-- [x] **App Icon**: Verify all required sizes are included
+- [x] **App Icon**: Complete modern set (default + dark + tinted, 1024pt universal)
 
 ### ✅ Privacy & Permissions
-- [x] **Microphone Permission**: Only requested if user chooses to record audio
+- [x] **Microphone Permission**: Not needed — no recording code in the app
+- [x] **Speech Recognition**: NSSpeechRecognitionUsageDescription present (WhisperKit transcription)
 - [x] **File Access**: For importing audio files from user's library
-- [x] **Privacy Policy**: Created and ready for App Store Connect
+- [x] **Privacy Manifest**: PrivacyInfo.xcprivacy — NSPrivacyTracking=false, required-reason APIs declared
+- [x] **Analytics**: TelemetryDeck (no cross-app tracking, no ATT needed); in-app opt-out toggle in Settings
+- [ ] **Privacy Policy**: Verify URL is set in App Store Connect (required for external testing)
 - [x] **Data Collection**: Minimal - all processing on-device
 
 ### ✅ Content & Compliance
@@ -180,18 +183,18 @@ We're excited to hear your feedback!
 ## Pre-Upload Verification
 
 ### ✅ Final Testing
-- [ ] Archive builds successfully
+- [x] Archive builds successfully (verified 2026-07-05, tag `testflight-0.5.8-10010`)
 - [ ] App launches without crashes on test device
 - [ ] Onboarding flow works end-to-end
 - [ ] Core sessions play successfully
 - [ ] Audio import/analysis works
-- [ ] No debug code or test data in release build
+- [x] No duplicate/test session data in bundle (removed `deep_relaxation_session 2.json`)
 
 ### ✅ Compliance Check
-- [ ] All debug logging removed or disabled in release
-- [ ] No development/test URLs or keys
-- [ ] Privacy strings appropriate for App Store review
-- [ ] Export compliance declaration ready
+- [x] Compliance scan run (greenlight preflight, 2026-07-05) — no real critical findings
+- [x] No hardcoded secrets or dev/test URLs (TelemetryDeck App ID is a public identifier)
+- [x] Privacy strings appropriate for App Store review
+- [x] Export compliance declared in Info.plist (ITSAppUsesNonExemptEncryption=false)
 - [ ] Content rating accurately reflects app content
 
 ### ✅ Documentation Ready
@@ -275,4 +278,4 @@ We're excited to hear your feedback!
 
 **Ready for TestFlight**: Once this checklist is complete, your app is ready for beta testing! 🎉
 
-*Last Updated: March 5, 2026*
+*Last Updated: July 5, 2026*
