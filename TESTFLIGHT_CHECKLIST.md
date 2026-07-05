@@ -3,10 +3,11 @@
 ## Pre-Build Checklist
 
 ### ✅ Version Management
-- [x] **Marketing Version**: 0.5.8 (beta; bump to 1.0.0 at public launch)
-- [x] **Build Number**: 10010 (TestFlight requires unique build numbers)
-- [x] **Bundle Identifier**: com.byronquine.Ilumionate (verify matches App Store Connect)
+- [x] **Marketing Version**: 0.6 (beta; bump to 1.0.0 at public launch)
+- [x] **Build Number**: 10011 (TestFlight requires unique build numbers)
+- [x] **Bundle Identifier**: com.byronquine.lumenSync (matches registered App ID / provisioning profile)
 - [x] **Development Team**: GUHEBKT9SX
+- [x] **Project-file sync**: repo and XcodeOpen.nosync copies identical (they diverge silently — re-check after editing build settings in Xcode)
 
 ### ✅ App Configuration
 - [x] **Target iOS Version**: iOS 26.0
@@ -183,7 +184,7 @@ We're excited to hear your feedback!
 ## Pre-Upload Verification
 
 ### ✅ Final Testing
-- [x] Archive builds successfully (verified 2026-07-05, tag `testflight-0.5.8-10010`)
+- [x] Archive builds successfully (verified 2026-07-05, tag `testflight-0.6-10011`)
 - [ ] App launches without crashes on test device
 - [ ] Onboarding flow works end-to-end
 - [ ] Core sessions play successfully
