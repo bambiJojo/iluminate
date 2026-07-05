@@ -47,6 +47,8 @@ class PlaylistPlayerController: Sendable {
 
     private var audioPlayer: AVAudioPlayer?
     private var lightPlayer: LightScorePlayer?
+    private var wholePlaylistLightPlayer: LightScorePlayer?
+    private var usesWholePlaylistLightSession = false
 
     // Crossfade state
     private var nextAudioPlayer: AVAudioPlayer?
@@ -64,12 +66,17 @@ class PlaylistPlayerController: Sendable {
         self.lightEngine = engine
         self.smartTransitions = playlist.smartTransitions
         loadAudioFileLookup()
+        loadWholePlaylistLightSessionIfAvailable()
     }
 
     // MARK: - Public Methods
 
     /// Start playback from the beginning or current item
     func startPlayback() async {
+        if wholePlaylistLightPlayer == nil {
+            loadWholePlaylistLightSessionIfAvailable()
+        }
+
         // Configure audio session
         #if os(iOS)
         do {
@@ -85,6 +92,10 @@ class PlaylistPlayerController: Sendable {
         if !lightEngine.isRunning {
             lightEngine.start()
         }
+        if usesWholePlaylistLightSession, let wholePlaylistLightPlayer {
+            lightEngine.attachSession(player: wholePlaylistLightPlayer)
+            wholePlaylistLightPlayer.seek(to: playlistTimeForCurrentItem())
+        }
 
         // Kick off background dead-time analysis for smart crossfades
         preAnalyzeDeadTime()
@@ -95,7 +106,7 @@ class PlaylistPlayerController: Sendable {
     /// Play / resume
     func play() {
         audioPlayer?.play()
-        lightPlayer?.play()
+        activeLightPlayer?.play()
         startPlaybackTimer()
         isPlaying = true
     }
@@ -103,7 +114,7 @@ class PlaylistPlayerController: Sendable {
     /// Pause playback
     func pause() {
         audioPlayer?.pause()
-        lightPlayer?.pause()
+        activeLightPlayer?.pause()
         cancelCrossfade()
         stopPlaybackTimer()
         isPlaying = false
@@ -123,6 +134,9 @@ class PlaylistPlayerController: Sendable {
         lightPlayer?.stop()
         lightPlayer = nil
         nextLightPlayer = nil
+        wholePlaylistLightPlayer?.stop()
+        wholePlaylistLightPlayer = nil
+        usesWholePlaylistLightSession = false
 
         lightEngine.detachSession()
         lightEngine.stop()
@@ -170,7 +184,11 @@ class PlaylistPlayerController: Sendable {
     func seek(to time: TimeInterval) {
         let clampedTime = max(0, min(time, currentItemDuration))
         audioPlayer?.currentTime = clampedTime
-        lightPlayer?.seek(to: clampedTime)
+        if usesWholePlaylistLightSession {
+            wholePlaylistLightPlayer?.seek(to: playlistTimeForCurrentItem() + clampedTime)
+        } else {
+            lightPlayer?.seek(to: clampedTime)
+        }
         currentTime = clampedTime
     }
 
@@ -196,6 +214,25 @@ class PlaylistPlayerController: Sendable {
                 audioFiles[file.id] = file
             }
         }
+    }
+
+    private var activeLightPlayer: LightScorePlayer? {
+        usesWholePlaylistLightSession ? wholePlaylistLightPlayer : lightPlayer
+    }
+
+    private func loadWholePlaylistLightSessionIfAvailable() {
+        guard playlist.hasCurrentWholeSessionAnalysis,
+              let session = PlaylistGeneratedSessionStore.shared.load(for: playlist) else {
+            return
+        }
+
+        wholePlaylistLightPlayer = LightScorePlayer(session: session)
+        usesWholePlaylistLightSession = true
+    }
+
+    private func playlistTimeForCurrentItem() -> TimeInterval {
+        guard currentItemIndex > 0 else { return 0 }
+        return playlist.items.prefix(currentItemIndex).reduce(0) { $0 + $1.duration }
     }
 
     /// Analyze playlist audio files for dead time in the background.
@@ -285,7 +322,13 @@ class PlaylistPlayerController: Sendable {
         }
 
         // Load light session
-        if let lightSession = loadGeneratedSession(for: audioFile) {
+        if usesWholePlaylistLightSession {
+            lightPlayer = nil
+            wholePlaylistLightPlayer?.seek(to: playlistTimeForCurrentItem())
+            if let wholePlaylistLightPlayer {
+                lightEngine.attachSession(player: wholePlaylistLightPlayer)
+            }
+        } else if let lightSession = loadGeneratedSession(for: audioFile) {
             let lp = LightScorePlayer(session: lightSession)
             lightPlayer = lp
             lightEngine.attachSession(player: lp)
@@ -296,7 +339,7 @@ class PlaylistPlayerController: Sendable {
 
         // Start playback
         audioPlayer?.play()
-        lightPlayer?.play()
+        activeLightPlayer?.play()
         startPlaybackTimer()
         isPlaying = true
         currentTime = 0
@@ -305,6 +348,10 @@ class PlaylistPlayerController: Sendable {
     }
 
     private func loadGeneratedSession(for audioFile: AudioFile) -> LightSession? {
+        if let session = GeneratedSessionStore.shared.load(for: audioFile) {
+            return session
+        }
+
         let documentsURL = URL.documentsDirectory
         let sessionsURL = documentsURL.appendingPathComponent("GeneratedSessions", isDirectory: true)
         let baseName = audioFile.filename
@@ -322,9 +369,13 @@ class PlaylistPlayerController: Sendable {
         stopPlaybackTimer()
         audioPlayer?.stop()
         audioPlayer = nil
-        lightPlayer?.stop()
-        lightPlayer = nil
-        lightEngine.detachSession()
+        if usesWholePlaylistLightSession {
+            lightPlayer = nil
+        } else {
+            lightPlayer?.stop()
+            lightPlayer = nil
+            lightEngine.detachSession()
+        }
         currentTime = 0
     }
 
@@ -349,7 +400,7 @@ class PlaylistPlayerController: Sendable {
         nextAudioPlayer = nextAudio
 
         // Pre-load next light session
-        if let nextSession = loadGeneratedSession(for: nextAudioFile) {
+        if !usesWholePlaylistLightSession, let nextSession = loadGeneratedSession(for: nextAudioFile) {
             nextLightPlayer = LightScorePlayer(session: nextSession)
         }
 
@@ -361,7 +412,9 @@ class PlaylistPlayerController: Sendable {
 
         isCrossfading = true
         nextAudio.play()
-        nextLightPlayer?.play()
+        if !usesWholePlaylistLightSession {
+            nextLightPlayer?.play()
+        }
 
         print("🔄 Crossfading to next track over \(crossfadeDuration)s")
 
@@ -382,7 +435,7 @@ class PlaylistPlayerController: Sendable {
                 self.nextAudioPlayer?.volume = self.volume * Float(progress)
 
                 // At midpoint, swap light players
-                if step == steps / 2 {
+                if !self.usesWholePlaylistLightSession && step == steps / 2 {
                     if let nextLP = self.nextLightPlayer {
                         self.lightEngine.detachSession()
                         self.lightEngine.attachSession(player: nextLP)
@@ -401,11 +454,15 @@ class PlaylistPlayerController: Sendable {
     private func finishCrossfade() {
         // Stop old players
         audioPlayer?.stop()
-        lightPlayer?.stop()
+        if !usesWholePlaylistLightSession {
+            lightPlayer?.stop()
+        }
 
         // Promote next to current
         audioPlayer = nextAudioPlayer
-        lightPlayer = nextLightPlayer
+        if !usesWholePlaylistLightSession {
+            lightPlayer = nextLightPlayer
+        }
         audioPlayer?.volume = volume
 
         nextAudioPlayer = nil
@@ -459,6 +516,9 @@ class PlaylistPlayerController: Sendable {
 
     /// Original light-session-based crossfade heuristic.
     private func determineLightSessionCrossfade() -> TimeInterval {
+        if usesWholePlaylistLightSession {
+            return 8.0
+        }
         guard let currentSession = lightPlayer?.session else { return 8.0 }
 
         let nextIndex = currentItemIndex + 1

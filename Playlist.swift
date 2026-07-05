@@ -13,13 +13,22 @@ struct Playlist: Identifiable, Codable {
     var name: String
     var items: [PlaylistItem]
     var smartTransitions: Bool
+    var wholeSessionAnalysis: PlaylistWholeSessionAnalysis?
     let createdDate: Date
 
-    init(id: UUID = UUID(), name: String, items: [PlaylistItem] = [], smartTransitions: Bool = true, createdDate: Date = Date()) {
+    init(
+        id: UUID = UUID(),
+        name: String,
+        items: [PlaylistItem] = [],
+        smartTransitions: Bool = true,
+        wholeSessionAnalysis: PlaylistWholeSessionAnalysis? = nil,
+        createdDate: Date = Date()
+    ) {
         self.id = id
         self.name = name
         self.items = items
         self.smartTransitions = smartTransitions
+        self.wholeSessionAnalysis = wholeSessionAnalysis
         self.createdDate = createdDate
     }
 
@@ -38,6 +47,17 @@ struct Playlist: Identifiable, Codable {
     var itemCount: Int { items.count }
 
     var isEmpty: Bool { items.isEmpty }
+
+    var sourceSignature: String {
+        items.map { item in
+            "\(item.audioFileId.uuidString):\(Int(item.duration.rounded()))"
+        }
+        .joined(separator: "|")
+    }
+
+    var hasCurrentWholeSessionAnalysis: Bool {
+        wholeSessionAnalysis?.isCurrent(for: self) == true
+    }
 }
 
 /// A single item in a playlist, referencing an audio file by ID
@@ -66,6 +86,72 @@ struct PlaylistItem: Identifiable, Codable {
             .replacingOccurrences(of: ".m4a", with: "")
             .replacingOccurrences(of: ".wav", with: "")
             .replacingOccurrences(of: ".aac", with: "")
+    }
+}
+
+// MARK: - Playlist Whole-Session Analysis
+
+enum PlaylistSessionRole: String, Codable, Sendable, CaseIterable {
+    case induction
+    case deepening
+    case suggestions
+    case emergence
+    case support
+
+    var displayName: String {
+        switch self {
+        case .induction: return "Induction"
+        case .deepening: return "Deepening"
+        case .suggestions: return "Suggestions"
+        case .emergence: return "Awakener"
+        case .support: return "Support"
+        }
+    }
+}
+
+struct PlaylistWholeSessionPhaseSummary: Identifiable, Codable, Sendable {
+    let id: UUID
+    let phase: HypnosisMetadata.Phase
+    let role: PlaylistSessionRole
+    let startTime: TimeInterval
+    let endTime: TimeInterval
+
+    init(
+        id: UUID = UUID(),
+        phase: HypnosisMetadata.Phase,
+        role: PlaylistSessionRole,
+        startTime: TimeInterval,
+        endTime: TimeInterval
+    ) {
+        self.id = id
+        self.phase = phase
+        self.role = role
+        self.startTime = startTime
+        self.endTime = endTime
+    }
+}
+
+struct PlaylistWholeSessionAnalysis: Codable, Sendable {
+    let generatedAt: Date
+    let sourceSignature: String
+    let duration: TimeInterval
+    let trackCount: Int
+    let contentType: AudioContentType
+    let phases: [PlaylistWholeSessionPhaseSummary]
+    let warnings: [String]
+
+    func isCurrent(for playlist: Playlist) -> Bool {
+        sourceSignature == playlist.sourceSignature
+    }
+
+    var phaseSummary: String {
+        let labels = phases.map { $0.phase.displayName }
+        let uniqueLabels = labels.reduce(into: [String]()) { result, label in
+            if result.last != label {
+                result.append(label)
+            }
+        }
+        return uniqueLabels.joined(separator: " -> ")
     }
 }
 
