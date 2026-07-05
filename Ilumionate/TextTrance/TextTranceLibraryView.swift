@@ -416,6 +416,39 @@ private struct WebTextImportSheet: View {
                         .textInputAutocapitalization(.words)
                 }
 
+                Section {
+                    Button {
+                        Task { await importPage() }
+                    } label: {
+                        HStack(spacing: TranceSpacing.icon) {
+                            if importState.isImporting {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "text.page.badge.magnifyingglass")
+                            }
+                            Text(importState.isImporting ? "Reading" : "Read")
+                        }
+                        .font(TranceTypography.body)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                        .background(
+                            LinearGradient(
+                                colors: [.roseGold, .roseDeep],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            in: RoundedRectangle(cornerRadius: TranceRadius.button)
+                        )
+                        .opacity(importDisabled ? 0.48 : 1)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(importDisabled)
+                    .accessibilityLabel(importState.isImporting ? "Reading webpage" : "Read webpage")
+                }
+
                 if importState.isImporting {
                     Section {
                         ProgressView("Importing")
@@ -438,7 +471,7 @@ private struct WebTextImportSheet: View {
                         .disabled(importState.isImporting)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Import") {
+                    Button("Read") {
                         Task { await importPage() }
                     }
                     .fontWeight(.semibold)

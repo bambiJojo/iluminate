@@ -29,6 +29,13 @@ Tools/CorpusGenerator/.build/
 # Local Xcode wrapper used to avoid iCloud/FileProvider project-open hangs
 /XcodeOpen.nosync/
 
+# Local simulator import inbox; audio files are private and too large for Git/Xcode source control scanning
+/SimulatorDrop/*.mp3
+/SimulatorDrop/*.m4a
+/SimulatorDrop/*.wav
+/SimulatorDrop/*.aac
+/SimulatorDrop/*.flac
+
 # Local nested repos/tools; keep out of parent repo tracking
 /catigorizer/
 /lightMapCreationTool/

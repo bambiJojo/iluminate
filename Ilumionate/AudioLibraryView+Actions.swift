@@ -57,18 +57,14 @@ extension AudioLibraryView {
     // MARK: - File Management
 
     func loadAudioFiles() {
-        if let data = UserDefaults.standard.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey),
-           let files = try? JSONDecoder().decode([AudioFile].self, from: data) {
-            audioFiles = files
-            Log.audio.info("📦 Loaded \(files.count) audio files")
-        }
+        let files = AudioLibraryStore.loadRepairingStoredFiles()
+        audioFiles = files
+        Log.audio.info("📦 Loaded \(files.count) audio files")
     }
 
     func saveAudioFiles() {
-        if let data = try? JSONEncoder().encode(audioFiles) {
-            UserDefaults.standard.set(data, forKey: AnalysisStateManager.audioFilesUserDefaultsKey)
-            Log.audio.info("💾 Saved \(audioFiles.count) audio files")
-        }
+        AudioLibraryStore.save(audioFiles)
+        Log.audio.info("💾 Saved \(audioFiles.count) audio files")
     }
 
     func addAudioFile(_ file: AudioFile) {

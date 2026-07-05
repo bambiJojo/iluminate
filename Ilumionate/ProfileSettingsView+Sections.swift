@@ -392,7 +392,7 @@ extension ProfileSettingsView {
                 settingsButton(title: "Rate on App Store", icon: "star.circle") {
                     TranceHaptics.shared.light()
                     if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                        SKStoreReviewController.requestReview(in: scene)
+                        AppStore.requestReview(in: scene)
                     }
                 }
                 settingsButton(title: "About LumeSync", icon: "heart.circle") {

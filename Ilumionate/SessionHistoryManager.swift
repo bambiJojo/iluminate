@@ -99,6 +99,26 @@ final class SessionHistoryManager {
         return streak
     }
 
+    /// The streak length that will lapse if no session happens today.
+    /// Zero when the user has already listened today (nothing at stake) or has
+    /// no active run ending yesterday. Drives loss-framed "keep your streak" nudges.
+    var streakAtRisk: Int {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let daySet = Set(entries.map { calendar.startOfDay(for: $0.date) })
+        // Already safe for today — nothing is at risk.
+        guard !daySet.contains(today) else { return 0 }
+
+        var streak = 0
+        guard var checkDate = calendar.date(byAdding: .day, value: -1, to: today) else { return 0 }
+        while daySet.contains(checkDate) {
+            streak += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: checkDate) else { break }
+            checkDate = previous
+        }
+        return streak
+    }
+
     /// Sessions per day for the last 7 days. Index 0 = 6 days ago, index 6 = today.
     func weeklyActivity() -> [Int] {
         let calendar = Calendar.current

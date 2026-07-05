@@ -23,6 +23,7 @@ struct OnboardingView: View {
     // Animation flags for entry/exit
     @State private var isAnimating: Bool = false
     @State private var showWelcomeSession = false
+    @State private var welcomeSession: LightSession?
     @State private var lightEngine = LightEngine()
     
     // Complex Animation Properties (from reference design style)
@@ -93,25 +94,22 @@ struct OnboardingView: View {
                 isAnimating = true
                 characterOffset = -20
             }
+            welcomeSession = loadWelcomeSession()
             UsageAnalytics.shared.screen(.onboarding)
         }
         .onChange(of: currentPhase) { _, newPhase in
             UsageAnalytics.shared.onboardingStep(index: newPhase.rawValue)
             if newPhase == .completed {
+                applyGoalPreferences()
                 UsageAnalytics.shared.onboardingCompleted()
             }
         }
         .fullScreenCover(isPresented: $showWelcomeSession) {
-            if let welcomeSession = loadWelcomeSession() {
+            if let welcomeSession {
                 UnifiedPlayerView(
                     mode: .session(session: welcomeSession, audioFile: nil),
                     engine: lightEngine
                 )
-                .onDisappear {
-                    withAnimation(.easeInOut(duration: 0.8)) {
-                        currentPhase = .completed
-                    }
-                }
             }
         }
         .persistentSystemOverlays(.hidden)
@@ -408,11 +406,32 @@ struct OnboardingView: View {
             VStack(spacing: 16) {
                 Text("You're ready.")
                     .font(TranceTypography.screenTitle)
-                
+
                 Text("Your LumeSync journey begins now. Find a quiet space, upload an audio file, and let the mind machine guide you.")
                     .font(TranceTypography.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+            }
+
+            // Reciprocity: let people feel the entrainment effect right now, before
+            // asking them to go find and import their own audio. Fully optional —
+            // "Enter LumeSync" in the footer is the one-tap skip.
+            if welcomeSession != nil {
+                Button {
+                    TranceHaptics.shared.medium()
+                    showWelcomeSession = true
+                } label: {
+                    Label("Experience a 3-min light session", systemImage: "sparkles")
+                        .font(TranceTypography.body.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Color.roseGold)
+                        .clipShape(Capsule())
+                        .shadow(color: Color.roseGold.opacity(0.3), radius: 10, x: 0, y: 5)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
             }
         }
     }
@@ -505,6 +524,17 @@ struct OnboardingView: View {
     
     private func progressIndicator() -> some View {
         HStack(spacing: 8) {
+            // Welcome is already behind them — start the bar with a completed step
+            // so the user never sees a demoralizing "0% / nothing done" (goal-gradient).
+            Circle()
+                .fill(Color.roseGold)
+                .frame(width: 8, height: 8)
+                .overlay(
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 5, weight: .bold))
+                        .foregroundStyle(.white)
+                )
+
             ForEach(1..<OnboardingPhase.allCases.count - 1, id: \.self) { index in
                 Capsule()
                     .fill(currentPhase.rawValue >= index ? Color.roseGold : Color.textGhost.opacity(0.4))
@@ -516,5 +546,21 @@ struct OnboardingView: View {
     
     private func loadWelcomeSession() -> LightSession? {
         return try? LightScoreReader.loadSession(named: "welcome_introduction")
+    }
+
+    /// Persists the chosen goal and seeds session-generation preferences so the
+    /// first generated session already matches the user's intent (smart defaults).
+    private func applyGoalPreferences() {
+        guard let goal = selectedGoal else { return }
+        UserDefaults.standard.set(goal.rawValue, forKey: "profileGoal")
+
+        guard let seed = goal.recommendedPreferenceSeed else { return }
+        let preferences = AnalysisPreferences.shared
+        preferences.frequencyProfile = seed.frequencyProfile
+        preferences.transitionStyle = seed.transitionStyle
+        preferences.colorTempMode = seed.colorTempMode
+        preferences.intensityMultiplier = seed.intensityMultiplier
+        preferences.bilateralMode = seed.bilateralMode
+        preferences.contentHint = seed.contentHint
     }
 }

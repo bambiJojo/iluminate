@@ -162,18 +162,18 @@ final class UnifiedPlayerViewModel {
         mode: PlayerMode,
         engine: LightEngine,
         initialLightSession: LightSession? = nil,
-        nowPlaying: NowPlayingState = .shared,
-        analysisManager: AnalysisStateManager = .shared,
-        sessionHistory: SessionHistoryManager = .shared,
-        haptics: TranceHaptics = .shared,
+        nowPlaying: NowPlayingState? = nil,
+        analysisManager: AnalysisStateManager? = nil,
+        sessionHistory: SessionHistoryManager? = nil,
+        haptics: TranceHaptics? = nil,
         userDefaults: UserDefaults = .standard
     ) {
         self.mode = mode
         self.engine = engine
-        self.nowPlaying = nowPlaying
-        self.analysisManager = analysisManager
-        self.sessionHistory = sessionHistory
-        self.haptics = haptics
+        self.nowPlaying = nowPlaying ?? .shared
+        self.analysisManager = analysisManager ?? .shared
+        self.sessionHistory = sessionHistory ?? .shared
+        self.haptics = haptics ?? .shared
         self.userDefaults = userDefaults
         self.lightSession = initialLightSession
 
@@ -520,12 +520,21 @@ final class UnifiedPlayerViewModel {
 
     // MARK: - Private: Countdown & Play
 
+    /// The screen backing the app's active foreground scene.
+    /// Replaces the deprecated `UIScreen.main`.
+    private var activeScreen: UIScreen? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }?
+            .screen
+    }
+
     private func startCountdownAndPlay() {
         analyticsLifecycle.prepareForNewAttempt()
 
         // Maximise screen brightness
-        savedBrightness = UIScreen.main.brightness
-        UIScreen.main.brightness = 1.0
+        savedBrightness = activeScreen?.brightness ?? 1.0
+        activeScreen?.brightness = 1.0
 
         let count = countdownDuration
         countdownMessage = "Close your eyes and relax in\u{2026}"
@@ -653,7 +662,7 @@ final class UnifiedPlayerViewModel {
     func stopAll() {
         countdownTask?.cancel()
         countdownTask = nil
-        UIScreen.main.brightness = savedBrightness
+        activeScreen?.brightness = savedBrightness
         countdownValue = nil
         countdownMessage = nil
         reportSessionEndedIfNeeded()

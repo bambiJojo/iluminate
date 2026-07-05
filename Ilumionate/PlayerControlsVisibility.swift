@@ -15,10 +15,10 @@ final class PlayerControlsVisibility {
     var isVisible: Bool = true
     var isDrawerOpen: Bool = false
 
-    private let voiceOverActive: () -> Bool
+    private let voiceOverActive: @MainActor () -> Bool
     private var hideTask: Task<Void, Never>?
 
-    init(voiceOverActive: @escaping () -> Bool = { UIAccessibility.isVoiceOverRunning }) {
+    init(voiceOverActive: @escaping @MainActor () -> Bool = { UIAccessibility.isVoiceOverRunning }) {
         self.voiceOverActive = voiceOverActive
     }
 

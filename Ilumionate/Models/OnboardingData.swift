@@ -51,4 +51,61 @@ enum OnboardingGoal: String, CaseIterable, Identifiable {
             return "Experience the power of brainwave entrainment. LumeSync uses flashing lights to synchronize your brain, safely guiding your mental state."
         }
     }
+
+    /// Session-generation preferences to apply at onboarding completion so the
+    /// user's very first generated session already reflects their stated goal
+    /// (smart defaults). Returns `nil` for goals with no strong prior — those
+    /// keep the app's neutral defaults, which the user can still tune later.
+    var recommendedPreferenceSeed: OnboardingPreferenceSeed? {
+        switch self {
+        case .relaxation:
+            return OnboardingPreferenceSeed(
+                frequencyProfile: .conservative,
+                transitionStyle: .fluid,
+                colorTempMode: .warm,
+                intensityMultiplier: 0.9,
+                bilateralMode: false,
+                contentHint: .meditation
+            )
+        case .sleep:
+            return OnboardingPreferenceSeed(
+                frequencyProfile: .conservative,
+                transitionStyle: .fluid,
+                colorTempMode: .warm,
+                intensityMultiplier: 0.75,
+                bilateralMode: false,
+                contentHint: .sleepAid
+            )
+        case .focus:
+            return OnboardingPreferenceSeed(
+                frequencyProfile: .standard,
+                transitionStyle: .standard,
+                colorTempMode: .cool,
+                intensityMultiplier: 1.0,
+                bilateralMode: false,
+                contentHint: .none
+            )
+        case .meditation:
+            return OnboardingPreferenceSeed(
+                frequencyProfile: .deep,
+                transitionStyle: .fluid,
+                colorTempMode: .warm,
+                intensityMultiplier: 1.0,
+                bilateralMode: true,
+                contentHint: .hypnosis
+            )
+        case .curious:
+            return nil
+        }
+    }
+}
+
+/// A bundle of session-generation preferences seeded from the onboarding goal.
+struct OnboardingPreferenceSeed {
+    let frequencyProfile: FrequencyProfile
+    let transitionStyle: TransitionStyle
+    let colorTempMode: ColorTempMode
+    let intensityMultiplier: Double
+    let bilateralMode: Bool
+    let contentHint: ContentHint
 }

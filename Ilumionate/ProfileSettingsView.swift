@@ -32,7 +32,7 @@ struct ProfileSettingsView: View {
     @AppStorage("countdownDuration") var countdownDuration = 3
 
     // Privacy
-    @AppStorage("listeningHistoryEnabled") var listeningHistoryEnabled = false
+    @AppStorage("listeningHistoryEnabled") var listeningHistoryEnabled = true
     @AppStorage("analyticsConsentGranted") var analyticsEnabled = false
 
     // Analysis Preferences

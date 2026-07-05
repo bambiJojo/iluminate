@@ -2,7 +2,7 @@
 //  LibraryView.swift
 //  Ilumionate
 //
-//  Unified library hub: Playlists, Creators, Folders, Favorites,
+//  Unified library hub: Playlists, Favorites, Built-in Sessions,
 //  a Recents strip, and an inline Sessions list.
 //
 
@@ -12,11 +12,8 @@ import os
 // MARK: - Library Navigation Destination
 
 enum LibraryDestination: Hashable {
-    case creators
-    case folders
     case favorites
     case builtInSessions
-    case readingSources
 }
 
 // MARK: - LibraryView
@@ -30,16 +27,12 @@ struct LibraryView: View {
     // Cached derived collections — recomputed only when audioFiles or sortOption change
     @State private var cachedSortedFiles: [AudioFile] = []
     @State private var cachedRecentFiles: [AudioFile] = []
-    @State private var cachedCreatorCount: Int = 0
     @State private var cachedFavoritesCount: Int = 0
     @State private var showingPlaylists = false
     @State private var showingSessionsManager = false
     @State private var showingAnalysisQueue = false
     @State private var playerFile: AudioFile?
     @State private var fileForPlaylist: AudioFile?
-    @State private var readingSourceStore = ReadingSourceStore.shared
-
-    @Environment(FolderStore.self) private var folderStore
 
     var body: some View {
         NavigationStack {
@@ -49,10 +42,7 @@ struct LibraryView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         LibraryCategoryRows(
-                            creatorCount: creatorCount,
-                            folderCount: folderCount,
                             favoritesCount: favoritesCount,
-                            readingSourceCount: readingSourceStore.allSources.count,
                             analysisQueueCount: analysisQueueCount,
                             onPlaylists: {
                                 TranceHaptics.shared.light()
@@ -81,16 +71,10 @@ struct LibraryView: View {
             .toolbar { toolbarContent }
             .navigationDestination(for: LibraryDestination.self) { destination in
                 switch destination {
-                case .creators:
-                    LibraryCreatorsView(audioFiles: audioFiles, engine: engine)
-                case .folders:
-                    LibraryFoldersView(audioFiles: audioFiles, engine: engine)
                 case .favorites:
                     LibraryFavoritesView(audioFiles: audioFiles, engine: engine)
                 case .builtInSessions:
                     SessionLibraryView(engine: engine)
-                case .readingSources:
-                    ReadingSourceDirectoryView(store: readingSourceStore)
                 }
             }
             .sheet(isPresented: $showingPlaylists) {
@@ -136,8 +120,6 @@ struct LibraryView: View {
 
     // MARK: - Helpers
 
-    private var creatorCount: Int { cachedCreatorCount }
-    private var folderCount: Int { folderStore.folders.count }
     private var favoritesCount: Int { cachedFavoritesCount }
     private var analysisQueueCount: Int {
         let manager = AnalysisStateManager.shared
@@ -148,9 +130,6 @@ struct LibraryView: View {
     private var sortedAudioFiles: [AudioFile] { cachedSortedFiles }
 
     private func recomputeDerivedCollections() {
-        cachedCreatorCount = Set(audioFiles.compactMap {
-            $0.creator?.isEmpty == false ? $0.creator : nil
-        }).count
         cachedFavoritesCount = audioFiles.count(where: \.favorite)
         cachedRecentFiles = audioFiles
             .filter { $0.lastPlayedDate != nil }
@@ -168,9 +147,7 @@ struct LibraryView: View {
     }
 
     private func loadAudioFiles() {
-        guard let data = UserDefaults.standard.data(forKey: "audioFiles"),
-              let files = try? JSONDecoder().decode([AudioFile].self, from: data) else { return }
-        audioFiles = files
+        audioFiles = AudioLibraryStore.loadRepairingStoredFiles()
     }
 
     private func playWithLights(_ file: AudioFile) {
@@ -220,12 +197,9 @@ private struct LibraryRowDivider: View {
     }
 }
 
-/// The top card of category navigation rows (Playlists, Creators, Folders, …).
+/// The top card of category navigation rows (Playlists, Favorites, Built-in Sessions, …).
 private struct LibraryCategoryRows: View {
-    let creatorCount: Int
-    let folderCount: Int
     let favoritesCount: Int
-    let readingSourceCount: Int
     let analysisQueueCount: Int
     let onPlaylists: () -> Void
     let onAnalysisQueue: () -> Void
@@ -235,16 +209,6 @@ private struct LibraryCategoryRows: View {
             LibraryCategoryRow(icon: "music.note.list", iconColor: .roseGold, title: "Playlists", count: nil) {
                 onPlaylists()
             }
-            LibraryRowDivider()
-            NavigationLink(value: LibraryDestination.creators) {
-                LibraryCategoryRowLabel(icon: "person.wave.2.fill", iconColor: .bwTheta, title: "Creators", count: creatorCount)
-            }
-            .buttonStyle(PlainButtonStyle())
-            LibraryRowDivider()
-            NavigationLink(value: LibraryDestination.folders) {
-                LibraryCategoryRowLabel(icon: "folder.fill", iconColor: .warmAccent, title: "Folders", count: folderCount)
-            }
-            .buttonStyle(PlainButtonStyle())
             LibraryRowDivider()
             NavigationLink(value: LibraryDestination.favorites) {
                 LibraryCategoryRowLabel(icon: "heart.fill", iconColor: Color(hex: "E85D75"), title: "Favorites", count: favoritesCount)
@@ -257,16 +221,6 @@ private struct LibraryCategoryRows: View {
                     iconColor: .bwGamma,
                     title: "Built-in Sessions",
                     count: nil
-                )
-            }
-            .buttonStyle(.plain)
-            LibraryRowDivider()
-            NavigationLink(value: LibraryDestination.readingSources) {
-                LibraryCategoryRowLabel(
-                    icon: "book.closed.fill",
-                    iconColor: .bwAlpha,
-                    title: "Reading Sources",
-                    count: readingSourceCount
                 )
             }
             .buttonStyle(.plain)
@@ -369,6 +323,7 @@ private struct LibrarySessionsList: View {
                             }
                             Button("Analyze", systemImage: "waveform") {
                                 Task {
+                                    AnalysisStateManager.shared.evictCachedResult(for: file)
                                     await AnalysisStateManager.shared.queueForAnalysis(file)
                                 }
                             }

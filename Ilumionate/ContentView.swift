@@ -53,7 +53,6 @@ struct ContentView: View {
                 } else if selectedTab == .library {
                     // LibraryView owns its own NavigationStack
                     LibraryView(engine: engine)
-                        .environment(FolderStore.shared)
                         .transition(.opacity)
                 } else if selectedTab == .read {
                     TextTranceRootView()
@@ -158,11 +157,7 @@ struct ContentView: View {
     }
 
     private func loadAudioFiles() {
-        // Read audio files from the same UserDefaults key AudioLibraryView uses
-        if let data = UserDefaults.standard.data(forKey: "audioFiles"),
-           let files = try? JSONDecoder().decode([AudioFile].self, from: data) {
-            audioFiles = files
-        }
+        audioFiles = AudioLibraryStore.loadRepairingStoredFiles()
     }
 
     private func checkForFirstLaunch() {

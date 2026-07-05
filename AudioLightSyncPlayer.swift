@@ -242,8 +242,8 @@ class AudioLightSyncPlayer: Sendable {
     private func startPlaybackTimer() {
         stopPlaybackTimer()
 
-        playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
 
                 if let audioPlayer = self.audioPlayer {

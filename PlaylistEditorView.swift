@@ -31,6 +31,9 @@ struct PlaylistEditorView: View {
     @State private var showingSessionPicker = false
     @State private var availableAudioFiles: [AudioFile] = []
     @State private var storedAudioFiles: [AudioFile] = []
+    // IDs of files that already have a generated light session, so the picker
+    // can show every file but only allow ready ones to be added.
+    @State private var readySessionIds: Set<UUID> = []
     @State private var isQuickAnalyzing = false
     @State private var quickAnalysisAlert: PlaylistEditorAlert?
     @State private var wholeJourneySession: LightSession?
@@ -132,6 +135,7 @@ struct PlaylistEditorView: View {
                 SessionPickerView(
                     audioFiles: availableAudioFiles,
                     existingItemIds: Set(playlist.items.map(\.audioFileId)),
+                    readySessionIds: readySessionIds,
                     onAddFiles: { files in
                         for file in files { addItem(from: file) }
                     }
@@ -452,26 +456,16 @@ struct PlaylistEditorView: View {
     }
 
     private func loadAvailableFiles() {
-        guard let data = UserDefaults.standard.data(forKey: "audioFiles"),
-              let files = try? JSONDecoder().decode([AudioFile].self, from: data) else { return }
+        // Show every audio file. Un-analyzed files (no generated light session)
+        // are surfaced but disabled in the picker so the list is never
+        // mysteriously empty. Detection uses the canonical store, which also
+        // resolves legacy-named sessions via migration.
+        let files = AudioLibraryStore.load()
         storedAudioFiles = files
-        availableAudioFiles = files.filter { hasGeneratedSession(for: $0) }
-    }
-
-    private func hasGeneratedSession(for file: AudioFile) -> Bool {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let sessionsDir = docs.appendingPathComponent("GeneratedSessions", isDirectory: true)
-        // Check both ID-based and name-based session file conventions
-        let byId = sessionsDir.appendingPathComponent("\(file.id).json")
-        let byName = sessionsDir.appendingPathComponent(
-            file.filename
-                .replacingOccurrences(of: ".mp3", with: "")
-                .replacingOccurrences(of: ".m4a", with: "")
-                .replacingOccurrences(of: ".wav", with: "")
-                + "_session.json"
+        availableAudioFiles = files
+        readySessionIds = Set(
+            files.filter { GeneratedSessionStore.shared.exists(for: $0) }.map(\.id)
         )
-        return FileManager.default.fileExists(atPath: byId.path)
-            || FileManager.default.fileExists(atPath: byName.path)
     }
 }
 
@@ -532,6 +526,8 @@ struct SessionPickerView: View {
 
     let audioFiles: [AudioFile]
     let existingItemIds: Set<UUID>
+    /// Files that already have a generated light session and can be added.
+    let readySessionIds: Set<UUID>
     var onAddFiles: ([AudioFile]) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -639,12 +635,12 @@ struct SessionPickerView: View {
                                 .font(.system(size: 44, weight: .ultraLight))
                                 .foregroundColor(.textLight)
                             Text(searchText.isEmpty
-                                 ? "No sessions available"
+                                 ? "No audio files yet"
                                  : "No results for \"\(searchText)\"")
                                 .font(TranceTypography.body)
                                 .foregroundColor(.textSecondary)
                             if searchText.isEmpty {
-                                Text("Analyze audio files first to add them to a playlist")
+                                Text("Import audio in your library, then analyze it to add sessions here")
                                     .font(TranceTypography.caption)
                                     .foregroundColor(.textLight)
                                     .multilineTextAlignment(.center)
@@ -658,10 +654,12 @@ struct SessionPickerView: View {
                                 ForEach(filteredFiles) { file in
                                     PickerSessionRow(
                                         file: file,
+                                        isReady: readySessionIds.contains(file.id),
                                         isAlreadyAdded: existingItemIds.contains(file.id),
                                         isSelected: selectedIds.contains(file.id)
                                     ) {
                                         TranceHaptics.shared.light()
+                                        guard readySessionIds.contains(file.id) else { return }
                                         if existingItemIds.contains(file.id) { return }
                                         if selectedIds.contains(file.id) {
                                             selectedIds.remove(file.id)
@@ -695,6 +693,7 @@ struct SessionPickerView: View {
                 if newlySelectedCount > 0 {
                     Button {
                         let toAdd = filteredFiles.filter { selectedIds.contains($0.id)
+                            && readySessionIds.contains($0.id)
                             && !existingItemIds.contains($0.id) }
                         onAddFiles(toAdd)
                         dismiss()
@@ -734,6 +733,8 @@ struct SessionPickerView: View {
 
 private struct PickerSessionRow: View {
     let file: AudioFile
+    /// Whether the file has a generated light session and can be added.
+    let isReady: Bool
     let isAlreadyAdded: Bool
     let isSelected: Bool
     let onTap: () -> Void
@@ -768,29 +769,41 @@ private struct PickerSessionRow: View {
 
                 Spacer()
 
-                // State indicator
-                Group {
-                    if isAlreadyAdded {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.textLight)
-                    } else if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.roseGold)
-                    } else {
-                        Image(systemName: "circle")
-                            .font(.system(size: 22))
-                            .foregroundColor(.textLight)
-                    }
-                }
-                .animation(.spring(response: 0.25), value: isSelected)
+                trailingIndicator
+                    .animation(.spring(response: 0.25), value: isSelected)
             }
             .padding(.vertical, TranceSpacing.card)
-            .opacity(isAlreadyAdded ? 0.45 : 1.0)
+            .opacity(isReady && !isAlreadyAdded ? 1.0 : 0.45)
         }
         .buttonStyle(PlainButtonStyle())
-        .disabled(isAlreadyAdded)
+        .disabled(!isReady || isAlreadyAdded)
+    }
+
+    @ViewBuilder
+    private var trailingIndicator: some View {
+        if !isReady {
+            // Un-analyzed: surfaced but not addable.
+            Text("Needs analysis")
+                .font(TranceTypography.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.textLight)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.glassBorder.opacity(0.18))
+                .clipShape(Capsule())
+        } else if isAlreadyAdded {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 22))
+                .foregroundColor(.textLight)
+        } else if isSelected {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 22))
+                .foregroundColor(.roseGold)
+        } else {
+            Image(systemName: "circle")
+                .font(.system(size: 22))
+                .foregroundColor(.textLight)
+        }
     }
 }
 

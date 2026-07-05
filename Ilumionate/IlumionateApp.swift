@@ -20,6 +20,12 @@ struct IlumionateApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     init() {
+        // Opt-out, default-on: listening history powers the Home streak/momentum
+        // indicator. Only sets the value for users who have never made an explicit
+        // choice — an existing opt-out is preserved.
+        UserDefaults.standard.register(defaults: [
+            AppSettingsManager.Key.listeningHistoryEnabled: true
+        ])
         UsageAnalytics.configure()
     }
 

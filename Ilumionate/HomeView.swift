@@ -64,7 +64,8 @@ struct HomeView: View {
     @State private var isRefreshing = false
     @State private var showingProfile = false
     @State var showingSessionLibrary = false
-    @State private var playerFile: AudioFile?
+    @State var playerFile: AudioFile?
+    @State var myGeneratedSessions: [MyGeneratedSessionItem] = []
     @State private var cardsVisible = false
     @State private var selectedChipCategory: BrainwaveCategory?
 
@@ -113,10 +114,20 @@ struct HomeView: View {
                 greetingSection
                     .cardEntrance(visible: cardsVisible, delay: 0.06, reduceMotion: reduceMotion)
 
+                HomeStreakPill()
+                    .cardEntrance(visible: cardsVisible, delay: 0.07, reduceMotion: reduceMotion)
+
                 if lastSessionProgress > 0,
                    let lastSession = sessions.first(where: { $0.id.uuidString == lastSessionId }) ?? sessions.first {
                     continueSessionCard(session: lastSession)
                         .cardEntrance(visible: cardsVisible, delay: 0.08, reduceMotion: reduceMotion)
+                }
+
+                // User-created sessions get the top shelf (endowment effect:
+                // the thing they made is the first thing they see).
+                if !myGeneratedSessions.isEmpty {
+                    mySessionsSection
+                        .cardEntrance(visible: cardsVisible, delay: 0.10, reduceMotion: reduceMotion)
                 }
 
                 if !sessions.isEmpty {
@@ -136,6 +147,7 @@ struct HomeView: View {
             await handleRefresh()
         }
         .onAppear {
+            myGeneratedSessions = loadMyGeneratedSessions()
             // Reset before animating so re-entry (tab switch) always replays the entrance.
             cardsVisible = false
             Task {
