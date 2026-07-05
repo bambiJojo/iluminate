@@ -169,6 +169,14 @@ struct PlaylistEditorView: View {
                 .foregroundColor(.textPrimary)
                 .submitLabel(.done)
                 .onSubmit { nameFieldFocused = false }
+                .onChange(of: playlist.name) { _, newValue in
+                    // Multiline TextFields swallow Return as a newline instead
+                    // of submitting; treat it as Done.
+                    if newValue.contains("\n") {
+                        playlist.name = newValue.replacing("\n", with: "")
+                        nameFieldFocused = false
+                    }
+                }
                 .tint(.roseGold)
                 .onAppear {
                     if isNew { nameFieldFocused = true }
