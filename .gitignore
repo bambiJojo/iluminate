@@ -48,3 +48,7 @@ Tools/CorpusGenerator/.build/
 /.scripts/
 /.stuff/
 /ScriptCorpus/
+
+# Generated artifacts: Python bytecode caches and the graphify knowledge-graph output (regenerable via graphify update)
+__pycache__/
+/graphify-out/
