@@ -19,6 +19,7 @@ enum AppSettingsManager {
         static let userFrequencyMultiplier = "userFrequencyMultiplier"
         static let countdownDuration = "countdownDuration"
         static let listeningHistoryEnabled = "listeningHistoryEnabled"
+        static let nsfwSourcesEnabled = "nsfwSourcesEnabled"
         static let audioFiles = "audioFiles"
         static let sessionHistory = "sessionHistory_v1"
         static let lastSessionId = "lastSessionId"
@@ -156,6 +157,7 @@ enum AppSettingsManager {
         defaults.set(1.0, forKey: Key.userFrequencyMultiplier)
         defaults.set(3, forKey: Key.countdownDuration)
         defaults.set(false, forKey: Key.listeningHistoryEnabled)
+        defaults.set(false, forKey: Key.nsfwSourcesEnabled)
 
         let retiredKeys = [
             Key.sessionNotifications,

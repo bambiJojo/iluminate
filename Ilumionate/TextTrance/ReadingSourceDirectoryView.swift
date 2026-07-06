@@ -16,12 +16,14 @@ struct ReadingSourceDirectoryView: View {
     @State private var searchText = ""
     @State private var showingAddSource = false
     @State private var browserDestination: BrowserDestination?
-    @State private var pendingAdultDestination: BrowserDestination?
     @State private var importingScriptID: String?
     @State private var importErrorText: String?
     @State private var importedScriptTitle: String?
 
-    @AppStorage("readingSourceAdultConfirmed") private var adultConfirmed = false
+    // When off (default) all adult (18+) sources and scripts are hidden. The
+    // Settings toggle is the one-time 18+ acknowledgment, so visible adult
+    // sources open directly without a per-tap prompt.
+    @AppStorage("nsfwSourcesEnabled") private var nsfwEnabled = false
 
     init(store: ReadingSourceStore,
          onImported: ((TranceScript) -> Void)? = nil) {
@@ -67,22 +69,15 @@ struct ReadingSourceDirectoryView: View {
                 onImported: handleImportedScript
             )
         }
-        .alert("Adult content", isPresented: adultGatePresented, presenting: pendingAdultDestination) { destination in
-            Button("Continue", role: .destructive) {
-                adultConfirmed = true
-                pendingAdultDestination = nil
-                browserDestination = destination
-            }
-            Button("Cancel", role: .cancel) {
-                pendingAdultDestination = nil
-            }
-        } message: { _ in
-            Text("This source links to adult (18+) material. Continue?")
-        }
+    }
+
+    private func isAllowed(_ rating: ReadingSourceContentRating) -> Bool {
+        nsfwEnabled || rating != .adultOnly
     }
 
     private var filteredSources: [ReadingSource] {
         let categoryFiltered = store.sources(in: selectedCategory)
+            .filter { isAllowed($0.contentRating) }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return categoryFiltered }
         return categoryFiltered.filter { source in
@@ -98,6 +93,7 @@ struct ReadingSourceDirectoryView: View {
             theme: selectedScriptTheme,
             query: searchText
         )
+        .filter { isAllowed($0.contentRating) }
     }
 
     private var groupedSources: [SourceGroup] {
@@ -248,54 +244,27 @@ struct ReadingSourceDirectoryView: View {
 
     private func openSource(_ source: ReadingSource) {
         TranceHaptics.shared.light()
-        switch openAction(for: source, adultConfirmed: adultConfirmed) {
-        case .browse(let url):
-            browserDestination = BrowserDestination(
-                url: url,
-                suggestedTitle: source.title,
-                allowsImport: source.canImport
-            )
-        case .confirmAdult(let url):
-            pendingAdultDestination = BrowserDestination(
-                url: url,
-                suggestedTitle: source.title,
-                allowsImport: source.canImport
-            )
-        }
+        // Adult sources are only visible (and thus tappable) once the NSFW
+        // toggle is on, which is itself the 18+ acknowledgment — open directly.
+        browserDestination = BrowserDestination(
+            url: source.url,
+            suggestedTitle: source.title,
+            allowsImport: source.canImport
+        )
     }
 
     private func openScript(_ entry: ReadingScriptCatalogEntry) {
         TranceHaptics.shared.light()
-        switch openAction(for: entry, adultConfirmed: adultConfirmed) {
-        case .browse(let url):
-            browserDestination = BrowserDestination(
-                url: url,
-                suggestedTitle: entry.title,
-                theme: entry.theme,
-                allowsImport: entry.canImport
-            )
-        case .confirmAdult(let url):
-            pendingAdultDestination = BrowserDestination(
-                url: url,
-                suggestedTitle: entry.title,
-                theme: entry.theme,
-                allowsImport: entry.canImport
-            )
-        }
+        browserDestination = BrowserDestination(
+            url: entry.url,
+            suggestedTitle: entry.title,
+            theme: entry.theme,
+            allowsImport: entry.canImport
+        )
     }
 
     private func importScript(_ entry: ReadingScriptCatalogEntry) {
         guard importingScriptID == nil else { return }
-
-        if entry.contentRating == .adultOnly && adultConfirmed == false {
-            pendingAdultDestination = BrowserDestination(
-                url: entry.url,
-                suggestedTitle: entry.title,
-                theme: entry.theme,
-                allowsImport: entry.canImport
-            )
-            return
-        }
 
         guard entry.canImport else {
             importErrorText = "This source can only be opened as a website."
@@ -324,13 +293,6 @@ struct ReadingSourceDirectoryView: View {
                 }
             }
         }
-    }
-
-    private var adultGatePresented: Binding<Bool> {
-        Binding(
-            get: { pendingAdultDestination != nil },
-            set: { if !$0 { pendingAdultDestination = nil } }
-        )
     }
 
     private func deleteSource(_ source: ReadingSource) {

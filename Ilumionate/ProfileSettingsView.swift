@@ -35,6 +35,10 @@ struct ProfileSettingsView: View {
     @AppStorage("listeningHistoryEnabled") var listeningHistoryEnabled = true
     @AppStorage("analyticsConsentGranted") var analyticsEnabled = false
 
+    // Content — reveals adult (18+) reading sources when enabled. Off by default.
+    @AppStorage("nsfwSourcesEnabled") var nsfwSourcesEnabled = false
+    @State var pendingNSFWEnable = false
+
     // Analysis Preferences
     @State var prefs = AnalysisPreferences.shared
 

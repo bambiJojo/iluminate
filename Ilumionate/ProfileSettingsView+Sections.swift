@@ -314,9 +314,31 @@ extension ProfileSettingsView {
 
     // MARK: - Privacy & Data
 
+    /// Enabling adult sources requires a one-time 18+ acknowledgment, so the
+    /// toggle only flips on after the user confirms; turning it off is instant.
+    private var nsfwToggleBinding: Binding<Bool> {
+        Binding(
+            get: { nsfwSourcesEnabled },
+            set: { newValue in
+                if newValue {
+                    pendingNSFWEnable = true
+                } else {
+                    nsfwSourcesEnabled = false
+                }
+            }
+        )
+    }
+
     var privacyDataSection: some View {
         GlassCard(label: "Privacy & Data") {
             VStack(spacing: TranceSpacing.list) {
+                settingsToggle(
+                    title: "Show Adult Content (18+)",
+                    description: "Reveals mature reading sources (e.g. erotic hypnosis story archives) in Text Trance's Reading Sources. Off by default; turn off anytime.",
+                    binding: nsfwToggleBinding,
+                    icon: "exclamationmark.shield",
+                    color: .roseDeep
+                )
                 settingsToggle(
                     title: "Track Session History",
                     binding: $listeningHistoryEnabled,
@@ -349,6 +371,14 @@ extension ProfileSettingsView {
             .onChange(of: analyticsEnabled) { _, enabled in
                 UsageAnalytics.shared.setEnabled(enabled)
             }
+        }
+        .alert("Show adult content?", isPresented: $pendingNSFWEnable) {
+            Button("I'm 18 or older", role: .destructive) {
+                nsfwSourcesEnabled = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This reveals mature (18+) reading sources such as erotic hypnosis story archives. You can turn this off anytime in Settings.")
         }
     }
 
