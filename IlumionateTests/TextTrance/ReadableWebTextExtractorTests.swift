@@ -162,6 +162,41 @@ struct ReadableWebTextExtractorTests {
         #expect(text.localizedCaseInsensitiveContains("Leave a Reply") == false)
     }
 
+    // Regression: real WordPress/Kadence pages put chrome-ish tokens such as
+    // "has-sidebar" onto <body>. The chrome-attribute cleaner must not treat
+    // <body> as chrome, or its lazy match deletes the entire page body and the
+    // article is lost (every freehypnosisscripts.info import failed this way).
+    @Test func keepsArticleWhenBodyClassContainsChromeToken() throws {
+        let html = """
+        <!doctype html>
+        <html>
+          <head><title>Progressive Relaxation - Free Hypnosis Scripts</title></head>
+          <body class="single single-post wp-theme-kadence has-sidebar content-style-boxed">
+            <header><nav>Home Search Login</nav></header>
+            <div class="site-container">
+              <main>
+                <article class="entry-content single-content">
+                  <h1>Progressive Relaxation</h1>
+                  <p>This progressive relaxation script is a short hypnosis induction.</p>
+                  <p>Now think about the top of your head and let those muscles soften.</p>
+                </article>
+              </main>
+              <aside class="widget-area has-sidebar related-posts">Related scripts and promos</aside>
+            </div>
+            <footer>Privacy Policy Terms Contact</footer>
+          </body>
+        </html>
+        """
+
+        let text = try ReadableWebTextExtractor.extract(fromHTML: html)
+
+        #expect(text.contains("This progressive relaxation script"))
+        #expect(text.contains("let those muscles soften"))
+        #expect(text.localizedCaseInsensitiveContains("Home Search Login") == false)
+        #expect(text.localizedCaseInsensitiveContains("Related scripts") == false)
+        #expect(text.localizedCaseInsensitiveContains("Privacy Policy") == false)
+    }
+
     @Test func rejectsChromeOnlyPages() {
         let html = """
         <html>

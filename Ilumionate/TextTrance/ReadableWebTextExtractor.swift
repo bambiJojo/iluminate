@@ -73,8 +73,12 @@ enum ReadableWebTextExtractor {
         )
 
         let chromeTerms = #"advert(?:isement|ising)?|(?<![a-z0-9])ads?(?![a-z0-9])|ad[-_ ]?(?:container|banner|slot|unit)|advanced[-_ ]?ads|awac|banner|cookie|consent|modal|newsletter|subscribe|share|social|sidebar|related|recommend|comments?|comment[-_ ]?(?:form|reply)|reply|respond|promo|sponsor|breadcrumb|pagination|nav|menu|widget"#
+        // Never treat the document's structural containers as chrome: theme
+        // classes routinely tack chrome-ish tokens (e.g. "has-sidebar") onto
+        // <body>/<html>, and the lazy backreference match would then delete the
+        // entire page body along with the article.
         let chromeAttributePattern =
-            #"<([a-z][a-z0-9]*)\b(?=[^>]*(?:class|id|role|aria-label)\s*=\s*["'][^"']*(?:"# +
+            #"<(?!(?:body|html)\b)([a-z][a-z0-9]*)\b(?=[^>]*(?:class|id|role|aria-label)\s*=\s*["'][^"']*(?:"# +
             chromeTerms +
             #")[^"']*["'])[^>]*>[\s\S]*?<\s*/\s*\1\s*>"#
 
