@@ -210,11 +210,18 @@ struct SafariBrowserView: View {
         isImporting = true
         importErrorMessage = nil
 
+        // Prefer the current page's own title (the specific story the user
+        // navigated to) over the source's suggested title, which for whole-site
+        // sources is just the site name (e.g. "MC Stories"). Fall back to the
+        // suggested title only when the page exposes no usable title.
+        let trimmedPageTitle = pageTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let importTitle = trimmedPageTitle.isEmpty ? (suggestedTitle ?? "") : trimmedPageTitle
+
         Task {
             do {
                 let script = try await WebReadableTextImporter().importScript(
                     from: currentURL,
-                    title: suggestedTitle ?? pageTitle,
+                    title: importTitle,
                     theme: theme
                 )
                 await MainActor.run {

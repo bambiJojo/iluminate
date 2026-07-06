@@ -82,14 +82,47 @@ struct ReadingSourceCatalogTests {
         }
     }
 
-    @Test func newAdultDirectoriesAreAdultLinkOnly() {
+    /// Adult text-story sites whose prose extracts cleanly: import is enabled
+    /// (behind the 18+ gate) so the in-app browser shows its Read button.
+    private static let importableAdultIDs: Set<String> = [
+        "mc-stories",
+        "spirals-nightclub",
+        "literotica-mc",
+        "warpmymind",
+        "hypnotube-stories"
+    ]
+
+    /// Structurally messy adult sources (imageboard, script builder, Reddit)
+    /// stay link-only — browse, but no import.
+    private static let linkOnlyAdultIDs: Set<String> = [
+        "nimja-hypno",
+        "hypnohub",
+        "reddit-hypnautimagery"
+    ]
+
+    @Test func everyNewAdultDirectoryIsAdultRated() {
         let byID = Dictionary(
             uniqueKeysWithValues: ReadingSourceCatalog.curatedSources.map { ($0.id, $0) }
         )
         for id in Self.newAdultIDs {
-            let source = byID[id]
-            #expect(source?.contentRating == .adultOnly, "\(id) should be adultOnly")
-            #expect(source?.importPolicy == .linkOnly, "\(id) should be linkOnly")
+            #expect(byID[id]?.contentRating == .adultOnly, "\(id) should be adultOnly")
+        }
+    }
+
+    @Test func adultDirectoriesUseTheExpectedImportPolicy() {
+        let byID = Dictionary(
+            uniqueKeysWithValues: ReadingSourceCatalog.curatedSources.map { ($0.id, $0) }
+        )
+        // The two policy sets must exactly partition the new adult directories.
+        #expect(Self.importableAdultIDs.union(Self.linkOnlyAdultIDs) == Set(Self.newAdultIDs))
+
+        for id in Self.importableAdultIDs {
+            #expect(byID[id]?.importPolicy == .userInitiatedImport, "\(id) should allow import")
+            #expect(byID[id]?.canImport == true, "\(id) should be importable")
+        }
+        for id in Self.linkOnlyAdultIDs {
+            #expect(byID[id]?.importPolicy == .linkOnly, "\(id) should stay linkOnly")
+            #expect(byID[id]?.canImport == false, "\(id) should not be importable")
         }
     }
 
