@@ -8,6 +8,7 @@ import SwiftUI
 
 struct ReaderSettingsDrawer: View {
     @Bindable var session: TextTranceSession
+    let attentionStatus: ReaderAttentionMonitorStatus
     @Environment(\.dismiss) private var dismiss
 
     private var binauralBinding: Binding<Bool> {
@@ -26,10 +27,22 @@ struct ReaderSettingsDrawer: View {
         Binding(get: { session.lightEnabledLive },
                 set: { session.setLightEnabled($0) })
     }
+    private var attentionBinding: Binding<Bool> {
+        Binding(get: { session.attentionGateEnabled },
+                set: { session.setAttentionGate(enabled: $0) })
+    }
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Attention") {
+                    Toggle("Require attention", isOn: attentionBinding)
+                    if session.attentionGateEnabled {
+                        Label(attentionStatusText, systemImage: attentionStatusImage)
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                }
                 Section("Binaural beats") {
                     Toggle("Enabled", isOn: binauralBinding)
                 }
@@ -61,5 +74,15 @@ struct ReaderSettingsDrawer: View {
             }
         }
         .presentationDetents([.medium])
+    }
+
+    private var attentionStatusText: String {
+        if session.isAttentionPaused { return "Waiting for attention" }
+        if let text = attentionStatus.displayText { return text }
+        return session.attentionSatisfied ? "Attention detected" : "Waiting for attention"
+    }
+
+    private var attentionStatusImage: String {
+        session.attentionSatisfied ? "eye.fill" : "eye.slash.fill"
     }
 }

@@ -15,6 +15,7 @@ struct TextTranceSetupView: View {
     @State private var binauralEnabled = false
     @State private var subliminalEnabled = true
     @State private var subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium
+    @State private var attentionGateEnabled = false
     @State private var startPlayer = false
     @State private var resumeIndex = 0
 
@@ -47,6 +48,7 @@ struct TextTranceSetupView: View {
                     ScriptOverviewCard(script: script)
                     ArcCard(script: script, arc: $arc)
                     LayersCard(arc: arc, lightEnabled: $lightEnabled, binauralEnabled: $binauralEnabled)
+                    AttentionGateCard(enabled: $attentionGateEnabled)
                     SpeedCard(multiplier: $speedMultiplier)
                     SubliminalCard(enabled: $subliminalEnabled, speed: $subliminalSpeed)
                 }
@@ -100,7 +102,8 @@ struct TextTranceSetupView: View {
                 beatFrequency: 10,
                 postHandoffDuration: 600,
                 subliminalEnabled: subliminalEnabled,
-                subliminalSpeed: subliminalSpeed),
+                subliminalSpeed: subliminalSpeed,
+                attentionGateEnabled: attentionGateEnabled),
             light: useLight ? FlashController(frequency: 10, intensity: 0.7, pattern: .sine) : nil,
             audio: binauralEnabled ? BinauralBeatsEngine() : nil,
             progressStore: progressStore,
@@ -127,6 +130,7 @@ struct TextTranceSetupView: View {
         binauralEnabled = s.settings.binauralEnabled
         subliminalEnabled = s.settings.subliminalEnabled
         subliminalSpeed = s.settings.subliminalSpeed
+        attentionGateEnabled = s.settings.attentionGateEnabled
     }
 }
 
@@ -227,6 +231,23 @@ private struct SpeedCard: View {
                 Slider(value: $multiplier,
                        in: TextPacingEngine.minSpeedMultiplier...TextPacingEngine.maxSpeedMultiplier)
                     .tint(.auroraTeal)
+            }
+        }
+    }
+}
+
+private struct AttentionGateCard: View {
+    @Binding var enabled: Bool
+
+    var body: some View {
+        LiminalCard(label: "Attention") {
+            VStack(spacing: TranceSpacing.list) {
+                Toggle("Require attention", isOn: $enabled)
+                    .tint(.auroraTeal)
+                Text("Uses the front camera when the reader is open")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

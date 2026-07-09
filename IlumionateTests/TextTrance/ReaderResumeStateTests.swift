@@ -14,7 +14,8 @@ struct ReaderResumeStateTests {
             settings: PersistedReaderSettings(
                 arc: .handoff, speedMultiplier: 1.25,
                 subliminalEnabled: true, subliminalSpeed: .deep,
-                binauralEnabled: false, lightEnabled: true, beatFrequency: 10),
+                binauralEnabled: false, lightEnabled: true, beatFrequency: 10,
+                attentionGateEnabled: true),
             phase: .reading,
             scriptContentHash: "hash123",
             savedAt: Date(timeIntervalSince1970: 1_000_000))
@@ -22,7 +23,24 @@ struct ReaderResumeStateTests {
         let decoded = try JSONDecoder().decode(ReaderResumeState.self, from: data)
         #expect(decoded.wordIndex == 42)
         #expect(decoded.settings.speedMultiplier == 1.25)
+        #expect(decoded.settings.attentionGateEnabled)
         #expect(decoded.phase == .reading)
+    }
+
+    @Test func missingAttentionGateSettingDecodesAsDisabled() throws {
+        let json = """
+        {
+          "arc": "fullText",
+          "speedMultiplier": 1,
+          "subliminalEnabled": true,
+          "subliminalSpeed": "medium",
+          "binauralEnabled": false,
+          "lightEnabled": false,
+          "beatFrequency": 10
+        }
+        """
+        let settings = try JSONDecoder().decode(PersistedReaderSettings.self, from: Data(json.utf8))
+        #expect(!settings.attentionGateEnabled)
     }
 
     @Test func contentHashIsStableForSameText() {
@@ -44,8 +62,24 @@ struct ReaderResumeStateTests {
             phase: .reading,
             scriptContentHash: "hash123",
             savedAt: .now)
+        let firstWordState = ReaderResumeState(
+            scriptId: "abc",
+            wordIndex: 0,
+            settings: state.settings,
+            phase: .reading,
+            scriptContentHash: "hash123",
+            savedAt: .now)
+        let beforeStartState = ReaderResumeState(
+            scriptId: "abc",
+            wordIndex: -1,
+            settings: state.settings,
+            phase: .reading,
+            scriptContentHash: "hash123",
+            savedAt: .now)
 
         #expect(state.isUsable(contentHash: "hash123", scheduleCount: 3))
+        #expect(firstWordState.isUsable(contentHash: "hash123", scheduleCount: 3))
+        #expect(!beforeStartState.isUsable(contentHash: "hash123", scheduleCount: 3))
         #expect(!state.isUsable(contentHash: "changed", scheduleCount: 3))
         #expect(!state.isUsable(contentHash: "hash123", scheduleCount: 2))
         #expect(!state.isUsable(contentHash: "hash123", scheduleCount: 0))

@@ -10,6 +10,7 @@ import SwiftUI
 
 struct ReaderControlCluster: View {
     @Bindable var session: TextTranceSession
+    let onSections: () -> Void
     let onSettings: () -> Void
     let onEnd: () -> Void
 
@@ -35,10 +36,11 @@ struct ReaderControlCluster: View {
                 ClusterGhostButton(label: "End session", systemImage: "xmark", action: onEnd)
 
                 ClusterPlayButton(
-                    label: session.isPaused ? "Resume" : "Pause",
-                    systemImage: session.isPaused ? "play.fill" : "pause.fill",
+                    label: transportLabel,
+                    systemImage: transportSystemImage,
                     size: 56
                 ) {
+                    guard !session.isAttentionPaused else { return }
                     if session.isPaused { session.resume() } else { session.pause() }
                 }
 
@@ -47,6 +49,17 @@ struct ReaderControlCluster: View {
             }
 
             HStack(spacing: TranceSpacing.small) {
+                if session.sections.count > 1 {
+                    SatelliteButton(
+                        label: "Sections",
+                        systemImage: "list.bullet.rectangle",
+                        active: false
+                    ) {
+                        TranceHaptics.shared.light()
+                        onSections()
+                    }
+                }
+
                 SatelliteButton(
                     label: "Reading speed",
                     systemImage: "speedometer",
@@ -69,9 +82,25 @@ struct ReaderControlCluster: View {
                     systemImage: "waveform",
                     active: session.binauralActive
                 ) { session.setBinaural(enabled: !session.binauralActive) }
+
+                SatelliteButton(
+                    label: session.attentionGateEnabled ? "Attention on" : "Attention off",
+                    systemImage: session.attentionGateEnabled ? "eye.fill" : "eye",
+                    active: session.attentionGateEnabled || session.isAttentionPaused
+                ) { session.setAttentionGate(enabled: !session.attentionGateEnabled) }
             }
         }
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.bottom, TranceSpacing.statusBar)
+    }
+
+    private var transportLabel: String {
+        if session.isAttentionPaused { return "Waiting" }
+        return session.isPaused ? "Resume" : "Pause"
+    }
+
+    private var transportSystemImage: String {
+        if session.isAttentionPaused { return "eye.slash.fill" }
+        return session.isPaused ? "play.fill" : "pause.fill"
     }
 }

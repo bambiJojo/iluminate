@@ -286,6 +286,89 @@ struct TextTranceSessionTests {
         #expect(audio.stopCount == 1)            // stopped at completion
     }
 
+    @Test func attentionGatePausesAndResumesWhenAttentionReturns() async {
+        let controller = PacingSleepController()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 0,
+                attentionGateEnabled: true),
+            light: MockLightLayer(), audio: MockAudioLayer(), sleep: controller.sleepClosure)
+
+        controller.onSleep = { call in
+            if call == 1 { session.setReaderAttention(isLookingAtScreen: false) }
+        }
+        let task = Task { await session.begin() }
+        while !session.isAttentionPaused { await Task.yield() }
+
+        #expect(session.isPaused)
+        #expect(session.currentWordIndex == 0)
+
+        controller.onSleep = { _ in }
+        session.setReaderAttention(isLookingAtScreen: true)
+        await task.value
+
+        #expect(session.isComplete)
+        #expect(session.currentWord == "two")
+    }
+
+    @Test func attentionReturnDoesNotResumeManualPause() async {
+        let controller = PacingSleepController()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 0,
+                attentionGateEnabled: true),
+            light: MockLightLayer(), audio: MockAudioLayer(), sleep: controller.sleepClosure)
+
+        controller.onSleep = { call in
+            if call == 1 { session.pause() }
+        }
+        let task = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        session.setReaderAttention(isLookingAtScreen: false)
+        #expect(!session.isAttentionPaused)
+
+        session.setReaderAttention(isLookingAtScreen: true)
+        #expect(session.isPaused)
+
+        controller.onSleep = { _ in }
+        session.resume()
+        await task.value
+
+        #expect(session.isComplete)
+    }
+
+    @Test func disablingAttentionGateReleasesAttentionPause() async {
+        let controller = PacingSleepController()
+        let session = TextTranceSession(
+            script: handoffScript(),
+            settings: TextTranceSessionSettings(
+                arc: .fullText, speedMultiplier: 1.0,
+                lightEnabled: false, binauralEnabled: false,
+                beatFrequency: 10, postHandoffDuration: 0,
+                attentionGateEnabled: true),
+            light: MockLightLayer(), audio: MockAudioLayer(), sleep: controller.sleepClosure)
+
+        controller.onSleep = { call in
+            if call == 1 { session.setReaderAttention(isLookingAtScreen: false) }
+        }
+        let task = Task { await session.begin() }
+        while !session.isAttentionPaused { await Task.yield() }
+
+        controller.onSleep = { _ in }
+        session.setAttentionGate(enabled: false)
+        await task.value
+
+        #expect(session.isComplete)
+        #expect(!session.isAttentionPaused)
+    }
+
     @Test func savesSnapshotOnPauseAndClearsOnCompletion() async {
         let store = ReaderProgressStore(directory:
             URL.temporaryDirectory.appending(path: "rp-\(UUID().uuidString)"))
@@ -364,7 +447,11 @@ struct TextTranceSessionTests {
             ])
     }
 
-    private func makeSeekSession(sleep: @escaping @Sendable (Duration) async -> Void)
+    private func makeSeekSession(
+        sleep: @escaping @Sendable (Duration) async -> Void,
+        progressStore: ReaderProgressStore? = nil,
+        scriptContentHash: String = ""
+    )
         -> TextTranceSession {
         TextTranceSession(
             script: seekScript(),
@@ -373,7 +460,8 @@ struct TextTranceSessionTests {
                 lightEnabled: false, binauralEnabled: false,
                 beatFrequency: 10, postHandoffDuration: 0,
                 subliminalEnabled: false),
-            light: MockLightLayer(), audio: MockAudioLayer(), sleep: sleep)
+            light: MockLightLayer(), audio: MockAudioLayer(), sleep: sleep,
+            progressStore: progressStore, scriptContentHash: scriptContentHash)
     }
 
     @Test func seekBeforeBeginIsNoOp() {
@@ -428,6 +516,31 @@ struct TextTranceSessionTests {
         #expect(session.currentWord == "six")     // played 4, 5 then finished
         // Holds: word 0 (interrupted) + words 4 and 5 = 3 sleep calls total.
         #expect(controller.callCount == 3)
+    }
+
+    @Test func pausedSeekCanSaveUpdatedResumeIndex() async {
+        let store = ReaderProgressStore(directory:
+            URL.temporaryDirectory.appending(path: "rp-\(UUID().uuidString)"))
+        let controller = PacingSleepController()
+        let session = makeSeekSession(
+            sleep: controller.sleepClosure,
+            progressStore: store,
+            scriptContentHash: "seek-hash")
+        controller.onSleep = { count in
+            if count == 1 { session.pause() }
+        }
+        let run = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        #expect(store.resumeState(forScriptId: seekScript().id)?.wordIndex == 0)
+
+        session.seek(toWordIndex: 4, savingProgress: true)
+        let snapshot = store.resumeState(forScriptId: seekScript().id)
+        #expect(snapshot?.wordIndex == 4)
+        #expect(snapshot?.scriptContentHash == "seek-hash")
+
+        session.end()
+        await run.value
     }
 
     @Test func seekWhilePlayingJumpsWithoutReplayingSkippedWords() async {

@@ -10,7 +10,10 @@ import SwiftUI
 struct TextTrancePlayerView: View {
     @State private var session: TextTranceSession
     @State private var controlsVisibility = PlayerControlsVisibility()
-    @State private var showingSettings = false
+    @State private var activeSheet: ReaderSheet?
+    @State private var resumeAfterSectionSheet = false
+    @State private var attentionMonitor = ReaderAttentionMonitor()
+    @State private var attentionStatus: ReaderAttentionMonitorStatus = .inactive
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -20,6 +23,13 @@ struct TextTrancePlayerView: View {
     @State private var isScrubbing = false
     @State private var wasPausedBeforeScrub = false
     private let startIndex: Int
+
+    private enum ReaderSheet: String, Identifiable {
+        case settings
+        case sections
+
+        var id: String { rawValue }
+    }
 
     init(session: TextTranceSession, startIndex: Int = 0) {
         _session = State(initialValue: session)
@@ -49,7 +59,8 @@ struct TextTrancePlayerView: View {
                     Spacer()
                     ReaderControlCluster(
                         session: session,
-                        onSettings: { showingSettings = true },
+                        onSections: presentSections,
+                        onSettings: { activeSheet = .settings },
                         onEnd: { session.end(); dismiss() })
                 }
                 .opacity(isScrubbing ? 0 : 1)       // clear the stage for the scrub readout
@@ -76,7 +87,7 @@ struct TextTrancePlayerView: View {
                     session.seek(toWordIndex: wordIndex(for: fraction))
                 },
                 onScrubEnd: { fraction in
-                    session.seek(toWordIndex: wordIndex(for: fraction))
+                    session.seek(toWordIndex: wordIndex(for: fraction), savingProgress: true)
                     if isScrubbing, !wasPausedBeforeScrub { session.resume() }
                     isScrubbing = false
                 }
@@ -94,27 +105,49 @@ struct TextTrancePlayerView: View {
         .task {
             backgroundPulse = true
             controlsVisibility.registerInteraction()
+            configureAttentionMonitor()
+            await syncAttentionMonitor()
             UsageAnalytics.shared.textTranceStarted()
             await session.begin(from: startIndex)
+            attentionMonitor.stop()
             if session.isComplete {
                 UsageAnalytics.shared.textTranceCompleted()
                 dismiss()
             }
         }
         .statusBarHidden(!controlsVisibility.isVisible)
-        .onChange(of: showingSettings) { _, open in
-            controlsVisibility.isDrawerOpen = open
+        .onChange(of: activeSheet) { _, sheet in
+            controlsVisibility.isDrawerOpen = sheet != nil
+        }
+        .onChange(of: session.attentionGateEnabled) { _, _ in
+            Task { await syncAttentionMonitor() }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active, session.isReading, !session.isPaused {
-                session.pause()
-                controlsVisibility.registerInteraction()
+            if phase == .active {
+                Task { await syncAttentionMonitor() }
+            } else {
+                attentionMonitor.stop()
+            }
+
+            if phase != .active, session.isReading {
+                if session.isPaused {
+                    session.persistProgress()
+                } else {
+                    session.pause()
+                    controlsVisibility.registerInteraction()
+                }
             }
         }
-        .sheet(isPresented: $showingSettings) {
-            ReaderSettingsDrawer(session: session)
+        .sheet(item: $activeSheet, onDismiss: handleSheetDismiss) { sheet in
+            switch sheet {
+            case .settings:
+                ReaderSettingsDrawer(session: session, attentionStatus: attentionStatus)
+            case .sections:
+                ReaderSectionNavigatorSheet(session: session)
+            }
         }
         .onDisappear {
+            attentionMonitor.stop()
             if !session.isComplete { session.end() }
         }
     }
@@ -138,11 +171,45 @@ struct TextTrancePlayerView: View {
     }
 
     private var pausedWhisper: some View {
-        Text("Paused")
+        Text(session.isAttentionPaused ? "Look at screen" : "Paused")
             .font(TranceTypography.caption)
             .foregroundStyle(Color.textSecondary.opacity(0.6))
             .frame(maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, TranceSpacing.statusBar)
+    }
+
+    private func configureAttentionMonitor() {
+        attentionMonitor.onUpdate = { isLookingAtScreen, status in
+            attentionStatus = status
+            if status == .running {
+                session.setReaderAttention(isLookingAtScreen: isLookingAtScreen)
+            } else if status.disablesGate {
+                session.setAttentionGate(enabled: false)
+                controlsVisibility.registerInteraction()
+            }
+        }
+    }
+
+    private func syncAttentionMonitor() async {
+        guard session.attentionGateEnabled, scenePhase == .active else {
+            attentionMonitor.stop()
+            return
+        }
+        await attentionMonitor.start()
+    }
+
+    private func presentSections() {
+        resumeAfterSectionSheet = session.isReading && !session.isPaused
+        if resumeAfterSectionSheet {
+            session.pause()
+        }
+        activeSheet = .sections
+    }
+
+    private func handleSheetDismiss() {
+        guard resumeAfterSectionSheet else { return }
+        resumeAfterSectionSheet = false
+        session.resume()
     }
 
     private func wordIndex(for fraction: Double) -> Int {
@@ -225,7 +292,6 @@ private struct AnchoredWord: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let chars = Array(text)
             let layout = TextTranceWordSizing.layout(
                 for: text,
                 pivot: pivot,
@@ -233,16 +299,22 @@ private struct AnchoredWord: View {
                 referenceCharacterCount: referenceCharacterCount
             )
 
-            HStack(spacing: 0) {
-                ForEach(chars.indices, id: \.self) { index in
-                    Text(String(chars[index]))
-                        .foregroundStyle(index == layout.safePivot ? Color.auroraTeal : Color.textPrimary)
-                }
-            }
+            Text(attributedText(highlighting: layout.safePivot))
             .font(.system(size: layout.fontSize, weight: .regular, design: .monospaced))
             .offset(x: layout.anchorOffset)
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
+    }
+
+    private func attributedText(highlighting safePivot: Int) -> AttributedString {
+        var attributed = AttributedString(text)
+        attributed.foregroundColor = .textPrimary
+        guard safePivot >= 0, safePivot < attributed.characters.count else { return attributed }
+
+        let lowerBound = attributed.characters.index(attributed.startIndex, offsetBy: safePivot)
+        let upperBound = attributed.characters.index(after: lowerBound)
+        attributed[lowerBound..<upperBound].foregroundColor = .auroraTeal
+        return attributed
     }
 }
 

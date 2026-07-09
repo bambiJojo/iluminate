@@ -16,6 +16,48 @@ struct PersistedReaderSettings: Codable, Sendable, Equatable {
     let binauralEnabled: Bool
     let lightEnabled: Bool
     let beatFrequency: Double
+    let attentionGateEnabled: Bool
+
+    init(arc: ScriptArc,
+         speedMultiplier: Double,
+         subliminalEnabled: Bool,
+         subliminalSpeed: TextPacingSettings.SubliminalSpeed,
+         binauralEnabled: Bool,
+         lightEnabled: Bool,
+         beatFrequency: Double,
+         attentionGateEnabled: Bool = false) {
+        self.arc = arc
+        self.speedMultiplier = speedMultiplier
+        self.subliminalEnabled = subliminalEnabled
+        self.subliminalSpeed = subliminalSpeed
+        self.binauralEnabled = binauralEnabled
+        self.lightEnabled = lightEnabled
+        self.beatFrequency = beatFrequency
+        self.attentionGateEnabled = attentionGateEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case arc
+        case speedMultiplier
+        case subliminalEnabled
+        case subliminalSpeed
+        case binauralEnabled
+        case lightEnabled
+        case beatFrequency
+        case attentionGateEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        arc = try container.decode(ScriptArc.self, forKey: .arc)
+        speedMultiplier = try container.decode(Double.self, forKey: .speedMultiplier)
+        subliminalEnabled = try container.decode(Bool.self, forKey: .subliminalEnabled)
+        subliminalSpeed = try container.decode(TextPacingSettings.SubliminalSpeed.self, forKey: .subliminalSpeed)
+        binauralEnabled = try container.decode(Bool.self, forKey: .binauralEnabled)
+        lightEnabled = try container.decode(Bool.self, forKey: .lightEnabled)
+        beatFrequency = try container.decode(Double.self, forKey: .beatFrequency)
+        attentionGateEnabled = try container.decodeIfPresent(Bool.self, forKey: .attentionGateEnabled) ?? false
+    }
 }
 
 /// Where in the arc the user left off.
@@ -41,7 +83,7 @@ struct ReaderResumeState: Codable, Sendable, Equatable {
 
     func isUsable(contentHash: String, scheduleCount: Int) -> Bool {
         scriptContentHash == contentHash
-            && wordIndex > 0
+            && wordIndex >= 0
             && wordIndex < scheduleCount
     }
 }
