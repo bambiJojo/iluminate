@@ -6,9 +6,11 @@
 import SwiftUI
 
 struct TextTranceRootView: View {
+    var sharedImportTrigger = 0
+
     var body: some View {
         NavigationStack {
-            TextTranceLibraryView()
+            TextTranceLibraryView(sharedImportTrigger: sharedImportTrigger)
         }
     }
 }

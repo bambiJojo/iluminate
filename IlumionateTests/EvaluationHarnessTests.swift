@@ -156,7 +156,10 @@ struct KeywordPipelineEvaluationTests {
 @MainActor
 struct AIAnalysisPipelineEvaluationTests {
 
-    @Test(.enabled(if: ChunkedPhaseAnalyzer.isAvailable))
+    @Test(.enabled(if:
+        ChunkedPhaseAnalyzer.isAvailable
+            && ProcessInfo.processInfo.environment["RUN_AI_INTEGRATION_TESTS"] == "1"
+    ))
     func classicHypnosis_chunkedAnalyzerProducesUsableTimeline() async throws {
         let evalCase = EvaluationCorpus.classicHypnosis30min
         let timestamps = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)

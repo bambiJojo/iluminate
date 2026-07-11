@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1B2C3022FF1000000000002 /* IlumionateShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C3012FF1000000000001 /* IlumionateShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		792B361C2FE4D88300487953 /* TelemetryDeck in Frameworks */ = {isa = PBXBuildFile; productRef = 792B361B2FE4D88300487953 /* TelemetryDeck */; };
 		798216E12FD3BC6F00FAD431 /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 798216E02FD3BC6F00FAD431 /* CorpusKit */; };
 		798216E32FD3BC8200FAD431 /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 798216E22FD3BC8200FAD431 /* CorpusKit */; };
@@ -24,6 +25,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		A1B2C30D2FF100000000000D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 795943FB2F38010900907305 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1B2C3072FF1000000000007;
+			remoteInfo = IlumionateShareExtension;
+		};
 		795944112F38010B00907305 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 795943FB2F38010900907305 /* Project object */;
@@ -55,6 +63,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A1B2C3012FF1000000000001 /* IlumionateShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = IlumionateShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		795944032F38010900907305 /* Ilumionate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ilumionate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		795944102F38010B00907305 /* IlumionateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IlumionateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7959441A2F38010B00907305 /* IlumionateUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IlumionateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -73,6 +82,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A1B2C30C2FF100000000000C /* Exceptions for "IlumionateShareExtension" folder in "IlumionateShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				IlumionateShareExtension.entitlements,
+				Info.plist,
+			);
+			target = A1B2C3072FF1000000000007 /* IlumionateShareExtension */;
+		};
 		0A5757A1C8F9518170689AA7 /* Exceptions for "Ilumionate" folder in "AnalyzerImprover" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -88,6 +105,7 @@
 				HypnosisPhaseAnalyzer.swift,
 				HypnosisPhaseKeywords.swift,
 				HypnosisPhraseLexicons.swift,
+				Ilumionate.entitlements,
 				Logging.swift,
 				TechniqueDetector.swift,
 				"TechniqueDetector+AdvancedTechniques.swift",
@@ -121,6 +139,7 @@
 				HypnosisPhaseAnalyzer.swift,
 				HypnosisPhaseKeywords.swift,
 				HypnosisPhraseLexicons.swift,
+				Ilumionate.entitlements,
 				Logging.swift,
 				Training/AnalyzerOptimizer/AnalyzerEvaluationEngine.swift,
 				Training/AnalyzerOptimizer/AnalyzerMetrics.swift,
@@ -142,6 +161,7 @@
 		79E9C7112FE2000100C0DEC0 /* Exceptions for "Ilumionate" folder in "Ilumionate" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Ilumionate.entitlements,
 				Info.plist,
 			);
 			target = 795944022F38010900907305 /* Ilumionate */;
@@ -149,6 +169,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		A1B2C30B2FF100000000000B /* IlumionateShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1B2C30C2FF100000000000C /* Exceptions for "IlumionateShareExtension" folder in "IlumionateShareExtension" target */,
+			);
+			path = IlumionateShareExtension;
+			sourceTree = "<group>";
+		};
 		795944052F38010900907305 /* Ilumionate */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -191,7 +219,28 @@
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		A1B2C3032FF1000000000003 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A1B2C3022FF1000000000002 /* IlumionateShareExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFrameworksBuildPhase section */
+		A1B2C3042FF1000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4881BC224739BBD42720F856 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -254,6 +303,7 @@
 			isa = PBXGroup;
 			children = (
 				795944052F38010900907305 /* Ilumionate */,
+				A1B2C30B2FF100000000000B /* IlumionateShareExtension */,
 				795944132F38010B00907305 /* IlumionateTests */,
 				7959441D2F38010B00907305 /* IlumionateUITests */,
 				79999FC52F7B8A4700DC1F2D /* LumeLabel */,
@@ -277,6 +327,7 @@
 			isa = PBXGroup;
 			children = (
 				795944032F38010900907305 /* Ilumionate.app */,
+				A1B2C3012FF1000000000001 /* IlumionateShareExtension.appex */,
 				795944102F38010B00907305 /* IlumionateTests.xctest */,
 				7959441A2F38010B00907305 /* IlumionateUITests.xctest */,
 				79999FC42F7B8A4700DC1F2D /* LumeLabel.app */,
@@ -297,6 +348,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		A1B2C3072FF1000000000007 /* IlumionateShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3082FF1000000000008 /* Build configuration list for PBXNativeTarget "IlumionateShareExtension" */;
+			buildPhases = (
+				A1B2C3062FF1000000000006 /* Sources */,
+				A1B2C3042FF1000000000004 /* Frameworks */,
+				A1B2C3052FF1000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1B2C30B2FF100000000000B /* IlumionateShareExtension */,
+			);
+			name = IlumionateShareExtension;
+			packageProductDependencies = (
+			);
+			productName = IlumionateShareExtension;
+			productReference = A1B2C3012FF1000000000001 /* IlumionateShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		795944022F38010900907305 /* Ilumionate */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 795944242F38010B00907305 /* Build configuration list for PBXNativeTarget "Ilumionate" */;
@@ -304,10 +377,12 @@
 				795943FF2F38010900907305 /* Sources */,
 				795944002F38010900907305 /* Frameworks */,
 				795944012F38010900907305 /* Resources */,
+				A1B2C3032FF1000000000003 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A1B2C30E2FF100000000000E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				795944052F38010900907305 /* Ilumionate */,
@@ -471,8 +546,21 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					A1B2C3072FF1000000000007 = {
+						CreatedOnToolsVersion = 26.4;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+						};
+					};
 					795944022F38010900907305 = {
 						CreatedOnToolsVersion = 26.2;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+						};
 					};
 					7959440F2F38010B00907305 = {
 						CreatedOnToolsVersion = 26.2;
@@ -518,6 +606,7 @@
 			projectRoot = "";
 			targets = (
 				795944022F38010900907305 /* Ilumionate */,
+				A1B2C3072FF1000000000007 /* IlumionateShareExtension */,
 				7959440F2F38010B00907305 /* IlumionateTests */,
 				795944192F38010B00907305 /* IlumionateUITests */,
 				79999FC32F7B8A4700DC1F2D /* LumeLabel */,
@@ -529,6 +618,13 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A1B2C3052FF1000000000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		795944012F38010900907305 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -583,6 +679,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A1B2C3062FF1000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		795943FF2F38010900907305 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -641,6 +744,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		A1B2C30E2FF100000000000E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1B2C3072FF1000000000007 /* IlumionateShareExtension */;
+			targetProxy = A1B2C30D2FF100000000000D /* PBXContainerItemProxy */;
+		};
 		795944122F38010B00907305 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 795944022F38010900907305 /* Ilumionate */;
@@ -664,6 +772,74 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		A1B2C3092FF1000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = IlumionateShareExtension/IlumionateShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 10013;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1B2C30A2FF100000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = IlumionateShareExtension/IlumionateShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 10013;
+				DEVELOPMENT_TEAM = GUHEBKT9SX;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		795944222F38010B00907305 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -790,8 +966,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Ilumionate/Ilumionate.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10011;
+				CURRENT_PROJECT_VERSION = 10013;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -801,7 +978,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6;
+				MARKETING_VERSION = 0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -824,8 +1001,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Ilumionate/Ilumionate.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10011;
+				CURRENT_PROJECT_VERSION = 10013;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -835,7 +1013,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6;
+				MARKETING_VERSION = 0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -1134,6 +1312,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A1B2C3082FF1000000000008 /* Build configuration list for PBXNativeTarget "IlumionateShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3092FF1000000000009 /* Debug */,
+				A1B2C30A2FF100000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		111414AAB852E4EE093DDB37 /* Build configuration list for PBXNativeTarget "AnalyzerImprover" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

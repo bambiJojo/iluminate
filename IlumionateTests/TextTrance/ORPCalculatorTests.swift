@@ -27,4 +27,9 @@ struct ORPCalculatorTests {
         // "deeper." has 6 letters + 1 punctuation; pivot computed on letters only.
         #expect(ORPCalculator.pivotIndex(for: "deeper.") == 2)
     }
+
+    @Test func pivotMapsPastPreservedApostrophes() {
+        #expect(ORPCalculator.pivotIndex(for: "I’m") == 2)
+        #expect(ORPCalculator.pivotIndex(for: "parents’") == 2)
+    }
 }

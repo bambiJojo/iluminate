@@ -43,6 +43,14 @@ struct ReaderProgressStoreTests {
         #expect(store.resumeState(forScriptId: "gamma") == nil)
     }
 
+    @Test func recentStatesAreNewestFirst() {
+        let store = ReaderProgressStore(directory: tempDir())
+        store.save(makeState(id: "older", savedAt: Date(timeIntervalSince1970: 100)))
+        store.save(makeState(id: "newer", savedAt: Date(timeIntervalSince1970: 200)))
+
+        #expect(store.recentStates.map(\.scriptId) == ["newer", "older"])
+    }
+
     @Test func expiredEntriesArePrunedOnLoad() {
         let dir = tempDir()
         let old = Date.now.addingTimeInterval(-31 * 24 * 60 * 60)

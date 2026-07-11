@@ -84,6 +84,12 @@ struct ReaderControlCluster: View {
                 ) { session.setBinaural(enabled: !session.binauralActive) }
 
                 SatelliteButton(
+                    label: session.narrationActive ? "Narration on" : "Narration off",
+                    systemImage: session.narrationActive ? "speaker.wave.2.fill" : "speaker.wave.2",
+                    active: session.narrationActive
+                ) { session.setNarration(enabled: !session.narrationActive) }
+
+                SatelliteButton(
                     label: session.attentionGateEnabled ? "Attention on" : "Attention off",
                     systemImage: session.attentionGateEnabled ? "eye.fill" : "eye",
                     active: session.attentionGateEnabled || session.isAttentionPaused

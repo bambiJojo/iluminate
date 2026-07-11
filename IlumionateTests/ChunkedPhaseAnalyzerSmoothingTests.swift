@@ -105,7 +105,7 @@ struct ChunkedConsolidateTests {
 struct TranceDepthTests {
 
     @Test func preTalkIsNearlySurface() {
-        #expect(ChunkedPhaseAnalyzer.tranceDepthForPhase(.preTalk) < 0.1)
+        #expect(ChunkedPhaseAnalyzer.tranceDepthForPhase(.preTalk) == TrancePhase.preTalk.tranceDepthEstimate)
     }
 
     @Test func therapyIsDeepest() {

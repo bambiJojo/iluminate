@@ -18,6 +18,9 @@ struct TextTranceSessionSettings: Sendable {
     let subliminalEnabled: Bool
     let subliminalSpeed: TextPacingSettings.SubliminalSpeed
     let attentionGateEnabled: Bool
+    let narrationEnabled: Bool
+    let speedTraining: ReaderSpeedTrainingSettings
+    let displayPreferences: ReaderDisplayPreferences
 
     init(arc: ScriptArc,
          speedMultiplier: Double,
@@ -27,7 +30,10 @@ struct TextTranceSessionSettings: Sendable {
          postHandoffDuration: TimeInterval,
          subliminalEnabled: Bool = true,
          subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium,
-         attentionGateEnabled: Bool = false) {
+         attentionGateEnabled: Bool = false,
+         narrationEnabled: Bool = false,
+         speedTraining: ReaderSpeedTrainingSettings = .standard,
+         displayPreferences: ReaderDisplayPreferences = .standard) {
         self.arc = arc
         self.speedMultiplier = speedMultiplier
         self.lightEnabled = lightEnabled
@@ -37,6 +43,9 @@ struct TextTranceSessionSettings: Sendable {
         self.subliminalEnabled = subliminalEnabled
         self.subliminalSpeed = subliminalSpeed
         self.attentionGateEnabled = attentionGateEnabled
+        self.narrationEnabled = narrationEnabled
+        self.speedTraining = speedTraining
+        self.displayPreferences = displayPreferences
     }
 
     /// Convenience for the legacy three presets (tests, anchors).
@@ -48,12 +57,18 @@ struct TextTranceSessionSettings: Sendable {
          postHandoffDuration: TimeInterval,
          subliminalEnabled: Bool = true,
          subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium,
-         attentionGateEnabled: Bool = false) {
+         attentionGateEnabled: Bool = false,
+         narrationEnabled: Bool = false,
+         speedTraining: ReaderSpeedTrainingSettings = .standard,
+         displayPreferences: ReaderDisplayPreferences = .standard) {
         self.init(arc: arc, speedMultiplier: speed.multiplier,
                   lightEnabled: lightEnabled, binauralEnabled: binauralEnabled,
                   beatFrequency: beatFrequency, postHandoffDuration: postHandoffDuration,
                   subliminalEnabled: subliminalEnabled, subliminalSpeed: subliminalSpeed,
-                  attentionGateEnabled: attentionGateEnabled)
+                  attentionGateEnabled: attentionGateEnabled,
+                  narrationEnabled: narrationEnabled,
+                  speedTraining: speedTraining,
+                  displayPreferences: displayPreferences)
     }
 }
 
@@ -106,7 +121,10 @@ final class TextTranceSession {
         render(schedule[currentWordIndex])
         seekRequested = true
         holdTask?.cancel()          // break any in-flight hold promptly
-        if savingProgress { persistProgress() }
+        if savingProgress {
+            persistProgress()
+            restartNarrationAfterCommittedSeek()
+        }
     }
 
     // Live, mutable copies of schedule-affecting settings.
@@ -114,6 +132,9 @@ final class TextTranceSession {
     private(set) var subliminalSpeed: TextPacingSettings.SubliminalSpeed
     private(set) var binauralActive: Bool
     private(set) var lightEnabledLive: Bool
+    private(set) var narrationActive: Bool
+    private(set) var speedTraining: ReaderSpeedTrainingSettings
+    private(set) var displayPreferences: ReaderDisplayPreferences
 
     let script: TranceScript
     let settings: TextTranceSessionSettings
@@ -121,6 +142,7 @@ final class TextTranceSession {
 
     private let light: (any LightLayerControlling)?
     private let audio: (any AudioLayerControlling)?
+    private let narration: (any NarrationControlling)?
     private let sleep: @Sendable (Duration) async -> Void
     private let now: @Sendable () -> TimeInterval
     private var schedule: [PacedWord] = []
@@ -136,6 +158,7 @@ final class TextTranceSession {
          settings: TextTranceSessionSettings,
          light: (any LightLayerControlling)?,
          audio: (any AudioLayerControlling)?,
+         narration: (any NarrationControlling)? = nil,
          sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
          now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          progressStore: ReaderProgressStore? = nil,
@@ -148,35 +171,41 @@ final class TextTranceSession {
         self.attentionGateEnabled = settings.attentionGateEnabled
         self.binauralActive = settings.binauralEnabled
         self.lightEnabledLive = settings.lightEnabled
+        self.narrationActive = settings.narrationEnabled
+        self.speedTraining = settings.speedTraining
+        self.displayPreferences = settings.displayPreferences
         self.light = light
         self.audio = audio
+        self.narration = narration
         self.sleep = sleep
         self.now = now
         self.progressStore = progressStore
         self.scriptContentHash = scriptContentHash
-        // Sizing depends on word lengths, not durations; build at neutral speed.
+        // Sizing depends on word lengths and chunks, not durations.
         self.readerReferenceCharacterCount = TextTranceWordSizing.referenceCharacterCount(
             for: TextPacingEngine.schedule(
                 for: script,
                 settings: TextPacingSettings(arc: settings.arc,
-                                             speedMultiplier: 1.0,
+                                             speedMultiplier: settings.speedMultiplier,
                                              subliminalEnabled: settings.subliminalEnabled,
-                                             subliminalSpeed: settings.subliminalSpeed)))
+                                             subliminalSpeed: settings.subliminalSpeed,
+                                             speedTraining: settings.speedTraining)))
     }
 
-    /// Base schedule at neutral speed; live speed is applied per-word at the hold site.
+    /// Current schedule. Speed-training changes rebuild this schedule.
     private func makeSchedule() -> [PacedWord] {
         TextPacingEngine.schedule(
             for: script,
             settings: TextPacingSettings(arc: settings.arc,
-                                         speedMultiplier: 1.0,
+                                         speedMultiplier: speedMultiplier,
                                          subliminalEnabled: subliminalEnabled,
-                                         subliminalSpeed: subliminalSpeed))
+                                         subliminalSpeed: subliminalSpeed,
+                                         speedTraining: speedTraining))
     }
 
-    /// Live-scaled hold: readable words scale inversely with speed; flashes are fixed.
+    /// The schedule already includes speed, chunking, and punctuation timing.
     private func scaledHold(for word: PacedWord) -> TimeInterval {
-        word.isSubliminal ? word.duration : word.duration / max(speedMultiplier, 0.0001)
+        word.duration
     }
 
     private func render(_ word: PacedWord) {
@@ -202,6 +231,7 @@ final class TextTranceSession {
         currentWordIndex = min(max(startIndex, 0), schedule.count)
 
         isReading = true
+        startNarration(at: currentWordIndex)
         while currentWordIndex < schedule.count, !cancelled, !Task.isCancelled {
             let word = schedule[currentWordIndex]
             render(word)
@@ -228,6 +258,7 @@ final class TextTranceSession {
         }
 
         if binauralActive { audio?.stop() }
+        narration?.stop()
         isComplete = !cancelled && !Task.isCancelled
         if isComplete { progressStore?.clear(scriptId: script.id) }
     }
@@ -249,7 +280,10 @@ final class TextTranceSession {
                 binauralEnabled: binauralActive,
                 lightEnabled: lightEnabledLive,
                 beatFrequency: settings.beatFrequency,
-                attentionGateEnabled: attentionGateEnabled),
+                attentionGateEnabled: attentionGateEnabled,
+                narrationEnabled: narrationActive,
+                speedTraining: speedTraining,
+                displayPreferences: displayPreferences),
             phase: .reading,
             scriptContentHash: scriptContentHash,
             savedAt: .now)
@@ -275,7 +309,7 @@ final class TextTranceSession {
         while remaining > 0, !cancelled, !Task.isCancelled {
             if seekRequested { return }
             if isPaused {
-                await withCheckedContinuation { resumeContinuation = $0 }
+                await waitForResume()
                 continue
             }
             let start = now()
@@ -293,10 +327,17 @@ final class TextTranceSession {
             if isPaused {
                 let elapsed = now() - start
                 remaining = max(0, remaining - elapsed)
+                await waitForResume()
+                if cancelled || Task.isCancelled { return }
+                if seekRequested { return }
                 continue
             }
             remaining = 0
         }
+    }
+
+    private func waitForResume() async {
+        await withCheckedContinuation { resumeContinuation = $0 }
     }
 
     /// Pause word advance and the binaural layer.
@@ -305,6 +346,7 @@ final class TextTranceSession {
         isPaused = true
         holdTask?.cancel()                 // wake the in-flight hold promptly
         if binauralActive { audio?.stop() }
+        if narrationActive { narration?.pause() }
         persistProgress()
     }
 
@@ -314,6 +356,7 @@ final class TextTranceSession {
         guard !attentionGateEnabled || attentionSatisfied else { return }
         isPaused = false
         if binauralActive, isReading { startBinaural() }
+        if narrationActive { narration?.resume() }
         resumeContinuation?.resume()
         resumeContinuation = nil
     }
@@ -323,10 +366,7 @@ final class TextTranceSession {
     func setSubliminal(enabled: Bool, speed: TextPacingSettings.SubliminalSpeed) {
         subliminalEnabled = enabled
         subliminalSpeed = speed
-        let index = currentWordIndex
-        schedule = makeSchedule()
-        currentWordIndex = min(index, max(schedule.count - 1, 0))
-        if currentWordIndex < schedule.count { render(schedule[currentWordIndex]) }
+        rebuildScheduleKeepingCurrentIndex()
     }
 
     /// Toggle the binaural layer live. Starts only while actively reading.
@@ -337,6 +377,20 @@ final class TextTranceSession {
             if isReading, !isPaused { startBinaural() }
         } else {
             audio?.stop()
+        }
+    }
+
+    /// Toggle spoken narration live. Narration starts from the current word.
+    func setNarration(enabled: Bool) {
+        guard enabled != narrationActive else { return }
+        narrationActive = enabled
+        if enabled {
+            if isReading {
+                startNarration(at: currentWordIndex)
+                if isPaused { narration?.pause() }
+            }
+        } else {
+            narration?.stop()
         }
     }
 
@@ -380,12 +434,77 @@ final class TextTranceSession {
     func setSpeed(multiplier: Double) {
         speedMultiplier = min(max(multiplier, TextPacingEngine.minSpeedMultiplier),
                               TextPacingEngine.maxSpeedMultiplier)
-        if currentWordIndex < schedule.count { render(schedule[currentWordIndex]) }
+        speedTraining.targetWPM = TextPacingEngine.nominalWPM(forMultiplier: speedMultiplier)
+        rebuildScheduleKeepingCurrentIndex()
+    }
+
+    /// Replace the full speed-training profile and rebuild the timed schedule.
+    func setSpeedTraining(_ settings: ReaderSpeedTrainingSettings) {
+        speedTraining = settings
+        speedMultiplier = settings.targetSpeedMultiplier
+        rebuildScheduleKeepingCurrentIndex()
+    }
+
+    /// Replace display preferences. The player view reacts immediately.
+    func setDisplayPreferences(_ preferences: ReaderDisplayPreferences) {
+        displayPreferences = preferences
+    }
+
+    private func rebuildScheduleKeepingCurrentIndex() {
+        guard isReading || !schedule.isEmpty else { return }
+        let readableAnchor = readableAnchor(for: currentWordIndex, in: schedule)
+        let fallbackProgress = progressFraction
+        schedule = makeSchedule()
+        currentWordIndex = index(forReadableAnchor: readableAnchor,
+                                 fallbackProgress: fallbackProgress,
+                                 in: schedule)
+        if currentWordIndex < schedule.count {
+            render(schedule[currentWordIndex])
+            seekRequested = true
+            holdTask?.cancel()
+            restartNarrationAfterCommittedSeek()
+        }
+    }
+
+    private func readableAnchor(for index: Int, in schedule: [PacedWord]) -> Int? {
+        guard schedule.indices.contains(index) else { return nil }
+        if let anchor = schedule[index].readableStartIndex { return anchor }
+
+        if index > schedule.startIndex {
+            let previousRange = schedule[..<index]
+            if let previous = previousRange.last(where: { $0.readableStartIndex != nil }),
+               let start = previous.readableStartIndex {
+                return start + max(previous.readableWordCount - 1, 0)
+            }
+        }
+
+        if let next = schedule[index...].first(where: { $0.readableStartIndex != nil }) {
+            return next.readableStartIndex
+        }
+
+        return nil
+    }
+
+    private func index(forReadableAnchor anchor: Int?,
+                       fallbackProgress: Double,
+                       in schedule: [PacedWord]) -> Int {
+        guard !schedule.isEmpty else { return 0 }
+        if let anchor {
+            for index in schedule.indices {
+                guard let start = schedule[index].readableStartIndex else { continue }
+                let end = start + max(schedule[index].readableWordCount - 1, 0)
+                if anchor <= end { return index }
+            }
+            return schedule.count - 1
+        }
+
+        let fallbackIndex = Int((fallbackProgress * Double(schedule.count - 1)).rounded())
+        return min(max(fallbackIndex, 0), schedule.count - 1)
     }
 
     /// Stop everything immediately (user tap-and-hold to end).
     func end() {
-        guard !isComplete else { return }
+        guard !isComplete, !cancelled else { return }
         if isReading, !isComplete { progressStore?.save(currentSnapshot()) }
         cancelled = true
         isAttentionPaused = false
@@ -400,6 +519,27 @@ final class TextTranceSession {
             lightActive = false
         }
         if binauralActive { audio?.stop() }
+        narration?.stop()
         isReading = false
+    }
+
+    private func startNarration(at index: Int) {
+        guard narrationActive, let narration else { return }
+        let text = narrationText(from: index)
+        narration.start(text: text, speedMultiplier: speedMultiplier)
+    }
+
+    private func restartNarrationAfterCommittedSeek() {
+        guard narrationActive, isReading else { return }
+        startNarration(at: currentWordIndex)
+        if isPaused { narration?.pause() }
+    }
+
+    private func narrationText(from index: Int) -> String {
+        guard index < schedule.count else { return "" }
+        return schedule[index...]
+            .filter { !$0.isSubliminal }
+            .map(\.text)
+            .joined(separator: " ")
     }
 }

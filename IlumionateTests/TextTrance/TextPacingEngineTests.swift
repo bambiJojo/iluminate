@@ -219,8 +219,113 @@ struct TextPacingEngineTests {
         #expect(a.count == b.count)
     }
 
+    @Test func schedulePreservesSmartApostrophesInWords() {
+        let words = TextPacingEngine.schedule(
+            for: script("it’s okay I’m here for parents’ rhythm", wpm: 120),
+            settings: subSettings(subliminalEnabled: false)
+        )
+        #expect(words.map(\.text) == ["it’s", "okay", "I’m", "here", "for", "parents’", "rhythm"])
+    }
+
+    @Test func scheduleExpandsStandaloneAmpersandsForReaderLegibility() {
+        let words = TextPacingEngine.schedule(
+            for: script("rhythm & breath", wpm: 120),
+            settings: subSettings(subliminalEnabled: false)
+        )
+        #expect(words.map(\.text) == ["rhythm", "and", "breath"])
+    }
+
     @Test func nominalWPMMapsFromMultiplier() {
         #expect(TextPacingEngine.nominalWPM(forMultiplier: 1.0) == 150)
         #expect(TextPacingEngine.nominalWPM(forMultiplier: 2.0) == 300)
+    }
+
+    @Test func chunkSizeGroupsReadableWordsWithoutCrossingPunctuation() {
+        var training = ReaderSpeedTrainingSettings.standard
+        training.chunkSize = 3
+        training.punctuationPause = .normal
+
+        let words = TextPacingEngine.schedule(
+            for: script("one two three. four five six", wpm: 600),
+            settings: TextPacingSettings(
+                arc: .fullText,
+                speedMultiplier: 1.0,
+                subliminalEnabled: false,
+                speedTraining: training
+            )
+        )
+
+        #expect(words.map(\.text) == ["one two three", "four five six"])
+        #expect(words[0].fade == .breath)
+        #expect(abs(words[0].duration - 0.5) < 1e-9)
+        #expect(abs(words[1].duration - 0.3) < 1e-9)
+    }
+
+    @Test func punctuationPauseOffRemovesSentenceExtraHold() {
+        var training = ReaderSpeedTrainingSettings.standard
+        training.punctuationPause = .off
+
+        let words = TextPacingEngine.schedule(
+            for: script("now.", wpm: 600),
+            settings: TextPacingSettings(
+                arc: .fullText,
+                speedMultiplier: 1.0,
+                subliminalEnabled: false,
+                speedTraining: training
+            )
+        )
+
+        #expect(abs(words[0].duration - 0.1) < 1e-9)
+        #expect(words[0].fade == .breath)
+    }
+
+    @Test func rampModeAcceleratesTowardTargetWPM() {
+        var training = ReaderSpeedTrainingSettings(
+            mode: .ramp,
+            targetWPM: 300,
+            warmUpWPM: 100,
+            rampStartWPM: 100,
+            chunkSize: 1,
+            punctuationPause: .off
+        )
+        training.chunkSize = 1
+
+        let words = TextPacingEngine.schedule(
+            for: script(String(repeating: "word ", count: 160), wpm: 150),
+            settings: TextPacingSettings(
+                arc: .fullText,
+                speedMultiplier: 1.0,
+                subliminalEnabled: false,
+                speedTraining: training
+            )
+        )
+
+        #expect(words.count == 160)
+        #expect(words[0].duration > words[80].duration)
+        #expect(words[80].duration > words[159].duration)
+    }
+
+    @Test func warmUpModeStartsBelowTargetThenReachesTarget() {
+        let training = ReaderSpeedTrainingSettings(
+            mode: .warmUp,
+            targetWPM: 300,
+            warmUpWPM: 150,
+            rampStartWPM: 100,
+            chunkSize: 1,
+            punctuationPause: .off
+        )
+
+        let words = TextPacingEngine.schedule(
+            for: script(String(repeating: "word ", count: 220), wpm: 150),
+            settings: TextPacingSettings(
+                arc: .fullText,
+                speedMultiplier: 1.0,
+                subliminalEnabled: false,
+                speedTraining: training
+            )
+        )
+
+        #expect(abs(words[0].duration - (60.0 / 150.0)) < 1e-9)
+        #expect(abs(words[219].duration - (60.0 / 300.0)) < 1e-9)
     }
 }

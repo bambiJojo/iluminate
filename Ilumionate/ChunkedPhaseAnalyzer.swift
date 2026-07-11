@@ -682,11 +682,7 @@ extension ChunkedPhaseAnalyzer {
                             baseExamples: fewShotSeedExamples
                         )
                     )
-                    let classifications = try await Self.classifySingleChunk(
-                        request: request,
-                        previousPhase: prev,
-                        model: model
-                    )
+                    let classifications = try await classify(request, prev, model)
                     return (job.index, classifications)
                 }
             }

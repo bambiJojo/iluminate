@@ -25,6 +25,10 @@ final class ReaderProgressStore {
         entries[id]
     }
 
+    var recentStates: [ReaderResumeState] {
+        entries.values.sorted { $0.savedAt > $1.savedAt }
+    }
+
     func save(_ state: ReaderResumeState) {
         entries[state.scriptId] = state
         persist()

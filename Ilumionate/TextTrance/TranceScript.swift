@@ -47,6 +47,7 @@ struct ScriptSource: Codable, Sendable {
         case bundled
         case generated
         case importedWeb
+        case importedDocument
     }
     let kind: Kind
     let generator: String?

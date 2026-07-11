@@ -91,6 +91,26 @@ struct WordTokenizerTests {
         #expect(tokens.map(\.text) == ["you're", "calm", "and", "don't", "resist"])
     }
 
+    @Test func preservesSmartApostrophesInContractions() {
+        let tokens = WordTokenizer.tokenize("it’s okay when you’re ready")
+        #expect(tokens.map(\.text) == ["it’s", "okay", "when", "you’re", "ready"])
+    }
+
+    @Test func preservesPossessiveApostrophesAtWordEnd() {
+        let tokens = WordTokenizer.tokenize("parents’ rhythm and James' focus")
+        #expect(tokens.map(\.text) == ["parents’", "rhythm", "and", "James'", "focus"])
+    }
+
+    @Test func expandsStandaloneAmpersandForReading() {
+        let tokens = WordTokenizer.tokenize("calm & steady")
+        #expect(tokens.map(\.text) == ["calm", "and", "steady"])
+    }
+
+    @Test func expandsEncodedStandaloneAmpersandIfItReachesTokenizer() {
+        let tokens = WordTokenizer.tokenize("calm &amp; steady")
+        #expect(tokens.map(\.text) == ["calm", "and", "steady"])
+    }
+
     @Test func preservesInternalPeriodsInNumbers() {
         let tokens = WordTokenizer.tokenize("count 3.5 breaths")
         #expect(tokens.map(\.text) == ["count", "3.5", "breaths"])

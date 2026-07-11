@@ -23,6 +23,8 @@ struct PacedWord: Equatable, Sendable {
     let duration: TimeInterval   // how long this word is held
     let fade: FadeKind
     let isSubliminal: Bool
+    let readableStartIndex: Int?
+    let readableWordCount: Int
 
     init(text: String,
          pivotIndex: Int,
@@ -30,7 +32,9 @@ struct PacedWord: Equatable, Sendable {
          startTime: TimeInterval,
          duration: TimeInterval,
          fade: FadeKind = .none,
-         isSubliminal: Bool = false) {
+         isSubliminal: Bool = false,
+         readableStartIndex: Int? = nil,
+         readableWordCount: Int = 1) {
         self.text = text
         self.pivotIndex = pivotIndex
         self.phase = phase
@@ -38,6 +42,8 @@ struct PacedWord: Equatable, Sendable {
         self.duration = duration
         self.fade = fade
         self.isSubliminal = isSubliminal
+        self.readableStartIndex = readableStartIndex
+        self.readableWordCount = readableWordCount
     }
 }
 
@@ -86,24 +92,29 @@ struct TextPacingSettings: Sendable {
     let speedMultiplier: Double
     let subliminalEnabled: Bool
     let subliminalSpeed: SubliminalSpeed
+    let speedTraining: ReaderSpeedTrainingSettings
 
     init(arc: ScriptArc,
          speedMultiplier: Double,
          subliminalEnabled: Bool = true,
-         subliminalSpeed: SubliminalSpeed = .medium) {
+         subliminalSpeed: SubliminalSpeed = .medium,
+         speedTraining: ReaderSpeedTrainingSettings = .standard) {
         self.arc = arc
         self.speedMultiplier = speedMultiplier
         self.subliminalEnabled = subliminalEnabled
         self.subliminalSpeed = subliminalSpeed
+        self.speedTraining = speedTraining
     }
 
     /// Convenience for the legacy three presets (setup anchors, tests).
     init(arc: ScriptArc,
          speed: Speed,
          subliminalEnabled: Bool = true,
-         subliminalSpeed: SubliminalSpeed = .medium) {
+         subliminalSpeed: SubliminalSpeed = .medium,
+         speedTraining: ReaderSpeedTrainingSettings = .standard) {
         self.init(arc: arc, speedMultiplier: speed.multiplier,
-                  subliminalEnabled: subliminalEnabled, subliminalSpeed: subliminalSpeed)
+                  subliminalEnabled: subliminalEnabled, subliminalSpeed: subliminalSpeed,
+                  speedTraining: speedTraining)
     }
 }
 
@@ -122,7 +133,7 @@ enum TextPacingEngine {
 
     /// Live speed slider bounds (multiplier on nominal WPM).
     static let minSpeedMultiplier: Double = 0.5
-    static let maxSpeedMultiplier: Double = 2.0
+    static let maxSpeedMultiplier: Double = 4.0
 
     /// Representative WPM for the slider readout. Per-segment WPM varies; this
     /// is the nominal default-base rate scaled by the multiplier.
@@ -132,41 +143,89 @@ enum TextPacingEngine {
 
     static func schedule(for script: TranceScript,
                          settings: TextPacingSettings) -> [PacedWord] {
-        // Pass 1: flatten to pending words (text, pause, authored flag, base duration).
+        // Pass 1: flatten to pending words (text, pause, authored flag, base WPM).
         var pending: [Pending] = []
         for segment in script.segments {
             guard segmentPlays(segment, in: settings.arc) else { continue }
-            let baseDuration = 60.0 / effectiveWPM(for: segment, speedMultiplier: settings.speedMultiplier)
+            let baseWPM = effectiveBaseWPM(for: segment)
             for token in WordTokenizer.tokenize(segment.text) {
                 pending.append(Pending(text: token.text,
                                        pause: token.pause,
                                        authoredSubliminal: token.isSubliminal,
                                        phase: segment.phase,
-                                       baseDuration: baseDuration))
+                                       baseWPM: baseWPM))
             }
             if settings.arc == .handoff, segment.triggersHandoff == true { break }
         }
 
         let hasAuthored = pending.contains { $0.authoredSubliminal }
+        let readableWordCount = pending.filter {
+            !resolveSubliminal($0, hasAuthored: hasAuthored, settings: settings)
+        }.count
 
-        // Pass 2: resolve subliminal + compute the timed schedule.
+        // Pass 2: resolve subliminal, apply speed training, group readable chunks.
         var result: [PacedWord] = []
         var cursor: TimeInterval = 0
-        for item in pending {
+        var index = 0
+        var readableIndex = 0
+        while index < pending.count {
+            let item = pending[index]
             let subliminal = resolveSubliminal(item, hasAuthored: hasAuthored, settings: settings)
-            let duration = subliminal
-                ? settings.subliminalSpeed.flashDuration
-                : item.baseDuration * holdMultiplier(item.pause)
-            let fade: FadeKind = subliminal ? .none : fadeKind(item.pause)
+
+            if subliminal {
+                result.append(PacedWord(
+                    text: item.text,
+                    pivotIndex: ORPCalculator.pivotIndex(for: item.text),
+                    phase: item.phase,
+                    startTime: cursor,
+                    duration: settings.subliminalSpeed.flashDuration,
+                    fade: .none,
+                    isSubliminal: true,
+                    readableStartIndex: nil,
+                    readableWordCount: 0))
+                cursor += settings.subliminalSpeed.flashDuration
+                index += 1
+                continue
+            }
+
+            let chunk = readableChunk(
+                from: index,
+                pending: pending,
+                hasAuthored: hasAuthored,
+                settings: settings
+            )
+            var duration: TimeInterval = 0
+            var strongestPause: PauseKind = .none
+            let chunkReadableStartIndex = readableIndex
+
+            for word in chunk {
+                let speedMultiplier = settings.speedTraining == .standard
+                    ? settings.speedMultiplier
+                    : settings.speedTraining.speedMultiplier(
+                        readableWordIndex: readableIndex,
+                        readableWordCount: readableWordCount
+                    )
+                let durationWPM = word.baseWPM * max(speedMultiplier, 0.0001)
+                let baseDuration = 60.0 / durationWPM
+                duration += baseDuration * settings.speedTraining.punctuationPause.multiplier(for: word.pause)
+                strongestPause = WordTokenizer.strongest(strongestPause, word.pause)
+                readableIndex += 1
+            }
+
+            let text = chunk.map(\.text).joined(separator: " ")
+            let pivot = chunkPivotIndex(for: chunk)
             result.append(PacedWord(
-                text: item.text,
-                pivotIndex: ORPCalculator.pivotIndex(for: item.text),
-                phase: item.phase,
+                text: text,
+                pivotIndex: pivot,
+                phase: chunk[0].phase,
                 startTime: cursor,
                 duration: duration,
-                fade: fade,
-                isSubliminal: subliminal))
+                fade: fadeKind(strongestPause),
+                isSubliminal: false,
+                readableStartIndex: chunkReadableStartIndex,
+                readableWordCount: chunk.count))
             cursor += duration
+            index += chunk.count
         }
         return result
     }
@@ -176,7 +235,7 @@ enum TextPacingEngine {
         let pause: PauseKind
         let authoredSubliminal: Bool
         let phase: TrancePhase
-        let baseDuration: TimeInterval
+        let baseWPM: Double
     }
 
     private static func resolveSubliminal(_ item: Pending,
@@ -193,17 +252,20 @@ enum TextPacingEngine {
         return arcs.contains(arc)
     }
 
-    private static func effectiveWPM(for segment: TranceScriptSegment,
-                                     speedMultiplier: Double) -> Double {
+    private static func effectiveBaseWPM(for segment: TranceScriptSegment) -> Double {
         if let hint = segment.pacing?.baseWPM, hint > 0 {
-            return hint * speedMultiplier
+            return hint
         }
         let depth = segment.phase.tranceDepthEstimate            // 0...1
         let depthFactor = 1.0 - depth * (1.0 - deepeningFloor)   // [floor, 1]
-        return defaultBaseWPM * depthFactor * speedMultiplier
+        return defaultBaseWPM * depthFactor
     }
 
     static func holdMultiplier(_ pause: PauseKind) -> Double {
+        baseHoldMultiplier(pause)
+    }
+
+    static func baseHoldMultiplier(_ pause: PauseKind) -> Double {
         switch pause {
         case .none:   return 1.0
         case .brief:  return briefHoldMultiplier
@@ -219,5 +281,32 @@ enum TextPacingEngine {
         case .drift:  return .drift
         default:      return .none
         }
+    }
+
+    private static func readableChunk(from startIndex: Int,
+                                      pending: [Pending],
+                                      hasAuthored: Bool,
+                                      settings: TextPacingSettings) -> [Pending] {
+        var chunk: [Pending] = []
+        var index = startIndex
+        let maxCount = settings.speedTraining.clampedChunkSize
+
+        while index < pending.count, chunk.count < maxCount {
+            let item = pending[index]
+            if resolveSubliminal(item, hasAuthored: hasAuthored, settings: settings) {
+                break
+            }
+            chunk.append(item)
+            index += 1
+
+            if item.pause != .none { break }
+        }
+
+        return chunk.isEmpty ? [pending[startIndex]] : chunk
+    }
+
+    private static func chunkPivotIndex(for chunk: [Pending]) -> Int {
+        guard let first = chunk.first else { return 0 }
+        return ORPCalculator.pivotIndex(for: first.text)
     }
 }

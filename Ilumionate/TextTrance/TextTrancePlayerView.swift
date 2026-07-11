@@ -22,6 +22,7 @@ struct TextTrancePlayerView: View {
     @State private var wordOpacity: Double = 1
     @State private var isScrubbing = false
     @State private var wasPausedBeforeScrub = false
+    @State private var playbackTask: Task<Void, Never>?
     private let startIndex: Int
 
     private enum ReaderSheet: String, Identifiable {
@@ -38,14 +39,21 @@ struct TextTrancePlayerView: View {
 
     var body: some View {
         ZStack {
-            Color.voidDeep.ignoresSafeArea()
+            session.displayPreferences.adjustedBackground.ignoresSafeArea()
 
             // Phase-aware atmosphere: the glow color follows the current reading
             // phase (induction → teal, deepening → violet, …), crossfading slowly
             // as phases blend. A slow breath is layered on top. (NOT the
             // entrainment light layer — FlashController only runs post-handoff.)
             RadialGradient(
-                colors: [phaseColor.opacity(backgroundPulse ? 0.24 : 0.10), .clear],
+                colors: [
+                    phaseColor.opacity(
+                        session.displayPreferences.theme.showsPhaseAtmosphere
+                            ? (backgroundPulse ? 0.24 : 0.10)
+                            : 0
+                    ),
+                    .clear
+                ],
                 center: .center, startRadius: 20, endRadius: 440)
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 4).repeatForever(autoreverses: true),
@@ -102,18 +110,9 @@ struct TextTrancePlayerView: View {
         .gesture(endHoldGesture)
         .simultaneousGesture(revealHideDrag)
         .onTapGesture { controlsVisibility.registerInteraction() }
-        .task {
-            backgroundPulse = true
-            controlsVisibility.registerInteraction()
-            configureAttentionMonitor()
-            await syncAttentionMonitor()
-            UsageAnalytics.shared.textTranceStarted()
-            await session.begin(from: startIndex)
-            attentionMonitor.stop()
-            if session.isComplete {
-                UsageAnalytics.shared.textTranceCompleted()
-                dismiss()
-            }
+        .onAppear {
+            preparePresentation()
+            startPlaybackIfNeeded()
         }
         .statusBarHidden(!controlsVisibility.isVisible)
         .onChange(of: activeSheet) { _, sheet in
@@ -121,6 +120,13 @@ struct TextTrancePlayerView: View {
         }
         .onChange(of: session.attentionGateEnabled) { _, _ in
             Task { await syncAttentionMonitor() }
+        }
+        .onChange(of: session.displayPreferences.hideControls) { _, shouldHide in
+            if shouldHide {
+                controlsVisibility.hideNow()
+            } else {
+                controlsVisibility.registerInteraction()
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -148,7 +154,16 @@ struct TextTrancePlayerView: View {
         }
         .onDisappear {
             attentionMonitor.stop()
-            if !session.isComplete { session.end() }
+            if session.isReading {
+                session.persistProgress()
+            }
+            ReaderPresetStore.shared.save(
+                ReaderPreset(
+                    speedTraining: session.speedTraining,
+                    displayPreferences: session.displayPreferences
+                ),
+                forScriptId: session.script.id
+            )
         }
     }
 
@@ -158,7 +173,8 @@ struct TextTrancePlayerView: View {
             AnchoredWord(
                 text: session.currentWord,
                 pivot: session.currentPivotIndex,
-                referenceCharacterCount: session.readerReferenceCharacterCount
+                referenceCharacterCount: session.readerReferenceCharacterCount,
+                preferences: session.displayPreferences
             )
             .opacity(session.isPaused ? 0.4 : wordOpacity)
             .shadow(color: reduceMotion ? .clear : phaseColor.opacity(0.30), radius: 14)
@@ -173,7 +189,7 @@ struct TextTrancePlayerView: View {
     private var pausedWhisper: some View {
         Text(session.isAttentionPaused ? "Look at screen" : "Paused")
             .font(TranceTypography.caption)
-            .foregroundStyle(Color.textSecondary.opacity(0.6))
+            .foregroundStyle(session.displayPreferences.secondaryTextColor.opacity(0.7))
             .frame(maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, TranceSpacing.statusBar)
     }
@@ -196,6 +212,32 @@ struct TextTrancePlayerView: View {
             return
         }
         await attentionMonitor.start()
+    }
+
+    private func preparePresentation() {
+        backgroundPulse = true
+        if session.displayPreferences.hideControls {
+            controlsVisibility.hideNow()
+        } else {
+            controlsVisibility.registerInteraction()
+        }
+        configureAttentionMonitor()
+        Task { await syncAttentionMonitor() }
+    }
+
+    private func startPlaybackIfNeeded() {
+        guard playbackTask == nil, !session.isReading, !session.isComplete else { return }
+
+        playbackTask = Task { @MainActor in
+            UsageAnalytics.shared.textTranceStarted()
+            await session.begin(from: startIndex)
+            playbackTask = nil
+            attentionMonitor.stop()
+            if session.isComplete {
+                UsageAnalytics.shared.textTranceCompleted()
+                dismiss()
+            }
+        }
     }
 
     private func presentSections() {
@@ -229,7 +271,7 @@ struct TextTrancePlayerView: View {
             }
             Text("word \(index + 1) / \(session.wordCount)")
                 .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(Color.textPrimary)
+                .foregroundStyle(session.displayPreferences.textColor)
         }
     }
 
@@ -289,6 +331,7 @@ private struct AnchoredWord: View {
     let text: String
     let pivot: Int
     let referenceCharacterCount: Int
+    let preferences: ReaderDisplayPreferences
 
     var body: some View {
         GeometryReader { proxy in
@@ -298,22 +341,35 @@ private struct AnchoredWord: View {
                 containerWidth: proxy.size.width,
                 referenceCharacterCount: referenceCharacterCount
             )
+            let fontSize = min(
+                TextTranceWordSizing.maximumFontSize,
+                max(TextTranceWordSizing.absoluteMinimumFontSize,
+                    layout.fontSize * preferences.clampedFontScale)
+            )
+            let offsetScale = layout.fontSize > 0 ? fontSize / layout.fontSize : 1
 
             Text(attributedText(highlighting: layout.safePivot))
-            .font(.system(size: layout.fontSize, weight: .regular, design: .monospaced))
-            .offset(x: layout.anchorOffset)
+            .font(.system(
+                size: fontSize,
+                weight: preferences.effectiveFontWeight,
+                design: preferences.effectiveFont.design
+            ))
+            .lineSpacing(preferences.lineSpacingPoints)
+            .multilineTextAlignment(.center)
+            .minimumScaleFactor(0.55)
+            .offset(x: layout.anchorOffset * offsetScale)
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
 
     private func attributedText(highlighting safePivot: Int) -> AttributedString {
         var attributed = AttributedString(text)
-        attributed.foregroundColor = .textPrimary
+        attributed.foregroundColor = preferences.textColor
         guard safePivot >= 0, safePivot < attributed.characters.count else { return attributed }
 
         let lowerBound = attributed.characters.index(attributed.startIndex, offsetBy: safePivot)
         let upperBound = attributed.characters.index(after: lowerBound)
-        attributed[lowerBound..<upperBound].foregroundColor = .auroraTeal
+        attributed[lowerBound..<upperBound].foregroundColor = preferences.pivotColor
         return attributed
     }
 }

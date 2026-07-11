@@ -11,15 +11,21 @@ struct TextTranceSetupView: View {
 
     @State private var arc: ScriptArc
     @State private var speedMultiplier: Double = 1.0
+    @State private var speedTraining: ReaderSpeedTrainingSettings = .standard
+    @State private var displayPreferences: ReaderDisplayPreferences = .standard
     @State private var lightEnabled = true
     @State private var binauralEnabled = false
+    @State private var narrationEnabled = false
     @State private var subliminalEnabled = true
     @State private var subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium
     @State private var attentionGateEnabled = false
     @State private var startPlayer = false
     @State private var resumeIndex = 0
+    @State private var activePlayerSession: TextTranceSession?
+    @State private var loadedPreset = false
 
     private let progressStore = ReaderProgressStore.shared
+    private let presetStore = ReaderPresetStore.shared
 
     init(script: TranceScript) {
         self.script = script
@@ -47,9 +53,15 @@ struct TextTranceSetupView: View {
                 VStack(spacing: TranceSpacing.cardMargin) {
                     ScriptOverviewCard(script: script)
                     ArcCard(script: script, arc: $arc)
-                    LayersCard(arc: arc, lightEnabled: $lightEnabled, binauralEnabled: $binauralEnabled)
+                    LayersCard(
+                        arc: arc,
+                        lightEnabled: $lightEnabled,
+                        binauralEnabled: $binauralEnabled,
+                        narrationEnabled: $narrationEnabled
+                    )
                     AttentionGateCard(enabled: $attentionGateEnabled)
-                    SpeedCard(multiplier: $speedMultiplier)
+                    SpeedTrainingCard(settings: $speedTraining)
+                    ReaderDisplayCard(preferences: $displayPreferences)
                     SubliminalCard(enabled: $subliminalEnabled, speed: $subliminalSpeed)
                 }
                 .padding(TranceSpacing.screen)
@@ -62,20 +74,20 @@ struct TextTranceSetupView: View {
                 if let resume = validResume {
                     GlowButton(title: "Resume", systemImage: "play.fill", kind: .primary) {
                         applyResumeSettings(resume)
-                        resumeIndex = resume.wordIndex
-                        startPlayer = true
+                        savePreset()
+                        launchPlayer(at: resume.wordIndex)
                     }
                     .frame(maxWidth: .infinity)
                     GlowButton(title: "Start over", systemImage: "arrow.counterclockwise", kind: .secondary) {
                         progressStore.clear(scriptId: script.id)
-                        resumeIndex = 0
-                        startPlayer = true
+                        savePreset()
+                        launchPlayer(at: 0)
                     }
                     .frame(maxWidth: .infinity)
                 } else {
                     GlowButton(title: "Begin", systemImage: "play.fill", kind: .primary) {
-                        resumeIndex = 0
-                        startPlayer = true
+                        savePreset()
+                        launchPlayer(at: 0)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -85,29 +97,50 @@ struct TextTranceSetupView: View {
             // Lift the buttons clear of the app's floating tab bar.
             .padding(.bottom, TranceSpacing.tabBarClearance)
         }
-        .fullScreenCover(isPresented: $startPlayer) {
-            TextTrancePlayerView(session: makeSession(from: resumeIndex), startIndex: resumeIndex)
+        .fullScreenCover(isPresented: $startPlayer, onDismiss: handlePlayerDismiss) {
+            if let activePlayerSession {
+                TextTrancePlayerView(session: activePlayerSession, startIndex: resumeIndex)
+            }
         }
+        .onAppear { loadPresetIfNeeded() }
     }
 
-    private func makeSession(from startIndex: Int) -> TextTranceSession {
+    private func makeSession() -> TextTranceSession {
         let useLight = arc == .handoff && lightEnabled
+        let activeSpeedTraining = normalizedSpeedTraining()
         return TextTranceSession(
             script: script,
             settings: TextTranceSessionSettings(
                 arc: arc,
-                speedMultiplier: speedMultiplier,
+                speedMultiplier: activeSpeedTraining.targetSpeedMultiplier,
                 lightEnabled: useLight,
                 binauralEnabled: binauralEnabled,
                 beatFrequency: 10,
                 postHandoffDuration: 600,
                 subliminalEnabled: subliminalEnabled,
                 subliminalSpeed: subliminalSpeed,
-                attentionGateEnabled: attentionGateEnabled),
+                attentionGateEnabled: attentionGateEnabled,
+                narrationEnabled: narrationEnabled,
+                speedTraining: activeSpeedTraining,
+                displayPreferences: displayPreferences),
             light: useLight ? FlashController(frequency: 10, intensity: 0.7, pattern: .sine) : nil,
             audio: binauralEnabled ? BinauralBeatsEngine() : nil,
+            narration: SpeechNarrator(),
             progressStore: progressStore,
             scriptContentHash: contentHash)
+    }
+
+    private func launchPlayer(at startIndex: Int) {
+        resumeIndex = startIndex
+        activePlayerSession = makeSession()
+        startPlayer = true
+    }
+
+    private func handlePlayerDismiss() {
+        if let activePlayerSession, !activePlayerSession.isComplete {
+            activePlayerSession.end()
+        }
+        activePlayerSession = nil
     }
 
     private func resumeScheduleCount(for settings: PersistedReaderSettings) -> Int {
@@ -117,7 +150,8 @@ struct TextTranceSetupView: View {
                 arc: settings.arc,
                 speedMultiplier: 1.0,
                 subliminalEnabled: settings.subliminalEnabled,
-                subliminalSpeed: settings.subliminalSpeed
+                subliminalSpeed: settings.subliminalSpeed,
+                speedTraining: settings.speedTraining
             )
         ).count
     }
@@ -126,11 +160,51 @@ struct TextTranceSetupView: View {
     private func applyResumeSettings(_ s: ReaderResumeState) {
         arc = s.settings.arc
         speedMultiplier = s.settings.speedMultiplier
+        speedTraining = normalizedSpeedTraining(from: s.settings)
         lightEnabled = s.settings.lightEnabled
         binauralEnabled = s.settings.binauralEnabled
+        narrationEnabled = s.settings.narrationEnabled
         subliminalEnabled = s.settings.subliminalEnabled
         subliminalSpeed = s.settings.subliminalSpeed
         attentionGateEnabled = s.settings.attentionGateEnabled
+        displayPreferences = s.settings.displayPreferences
+    }
+
+    private func loadPresetIfNeeded() {
+        guard !loadedPreset else { return }
+        loadedPreset = true
+        let preset = presetStore.preset(forScriptId: script.id)
+        speedTraining = preset.speedTraining
+        speedMultiplier = preset.speedTraining.targetSpeedMultiplier
+        displayPreferences = preset.displayPreferences
+    }
+
+    private func savePreset() {
+        presetStore.save(
+            ReaderPreset(
+                speedTraining: normalizedSpeedTraining(),
+                displayPreferences: displayPreferences
+            ),
+            forScriptId: script.id
+        )
+    }
+
+    private func normalizedSpeedTraining() -> ReaderSpeedTrainingSettings {
+        var settings = speedTraining
+        settings.targetWPM = min(
+            max(settings.targetWPM, ReaderSpeedTrainingSettings.targetWPMRange.lowerBound),
+            ReaderSpeedTrainingSettings.targetWPMRange.upperBound
+        )
+        speedMultiplier = settings.targetSpeedMultiplier
+        return settings
+    }
+
+    private func normalizedSpeedTraining(from settings: PersistedReaderSettings) -> ReaderSpeedTrainingSettings {
+        var speedTraining = settings.speedTraining
+        if speedTraining == .standard, settings.speedMultiplier != 1.0 {
+            speedTraining.targetWPM = TextPacingEngine.nominalWPM(forMultiplier: settings.speedMultiplier)
+        }
+        return speedTraining
     }
 }
 
@@ -186,10 +260,12 @@ private struct LayersCard: View {
     let arc: ScriptArc
     @Binding var lightEnabled: Bool
     @Binding var binauralEnabled: Bool
+    @Binding var narrationEnabled: Bool
 
     var body: some View {
         LiminalCard(label: "Layers") {
             VStack(spacing: TranceSpacing.list) {
+                Toggle("Voice narration", isOn: $narrationEnabled)
                 Toggle("Binaural beats", isOn: $binauralEnabled)
                 Text("Requires headphones")
                     .font(TranceTypography.caption)
@@ -216,20 +292,182 @@ private struct LayersCard: View {
     }
 }
 
-private struct SpeedCard: View {
-    @Binding var multiplier: Double
+private struct SpeedTrainingCard: View {
+    @Binding var settings: ReaderSpeedTrainingSettings
+
+    private var targetBinding: Binding<Double> {
+        Binding(
+            get: { Double(settings.clampedTargetWPM) },
+            set: { newValue in
+                settings.targetWPM = Int(newValue.rounded())
+                settings.warmUpWPM = min(settings.warmUpWPM, settings.targetWPM)
+                settings.rampStartWPM = min(settings.rampStartWPM, settings.targetWPM)
+            }
+        )
+    }
+
+    private var warmUpBinding: Binding<Double> {
+        Binding(
+            get: { Double(settings.clampedWarmUpWPM) },
+            set: { settings.warmUpWPM = Int($0.rounded()) }
+        )
+    }
+
+    private var rampStartBinding: Binding<Double> {
+        Binding(
+            get: { Double(settings.clampedRampStartWPM) },
+            set: { settings.rampStartWPM = Int($0.rounded()) }
+        )
+    }
+
+    private var chunkBinding: Binding<Int> {
+        Binding(
+            get: { settings.clampedChunkSize },
+            set: { settings.chunkSize = $0 }
+        )
+    }
 
     var body: some View {
-        LiminalCard(label: "Reading speed") {
-            VStack(spacing: TranceSpacing.micro) {
+        LiminalCard(label: "Speed training") {
+            VStack(spacing: TranceSpacing.list) {
+                Picker("Mode", selection: $settings.mode) {
+                    ForEach(ReaderSpeedMode.allCases) {
+                        Text($0.displayName).tag($0)
+                    }
+                }
+                .pickerStyle(.segmented)
+
                 HStack {
-                    Text("~\(TextPacingEngine.nominalWPM(forMultiplier: multiplier)) wpm")
+                    Text("\(settings.clampedTargetWPM) wpm target")
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(Color.textSecondary)
                     Spacer()
                 }
-                Slider(value: $multiplier,
-                       in: TextPacingEngine.minSpeedMultiplier...TextPacingEngine.maxSpeedMultiplier)
+                Slider(value: targetBinding,
+                       in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
+                       step: 5)
+                .tint(.auroraTeal)
+
+                if settings.mode == .warmUp {
+                    HStack {
+                        Text("\(settings.clampedWarmUpWPM) wpm warm-up")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(Color.textSecondary)
+                        Spacer()
+                    }
+                    Slider(value: warmUpBinding,
+                           in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
+                           step: 5)
+                    .tint(.auroraBlue)
+                }
+
+                if settings.mode == .ramp {
+                    HStack {
+                        Text("\(settings.clampedRampStartWPM) wpm start")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(Color.textSecondary)
+                        Spacer()
+                    }
+                    Slider(value: rampStartBinding,
+                           in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
+                           step: 5)
+                    .tint(.auroraBlue)
+                }
+
+                Picker("Chunk size", selection: chunkBinding) {
+                    Text("1").tag(1)
+                    Text("2").tag(2)
+                    Text("3").tag(3)
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Punctuation pauses", selection: $settings.punctuationPause) {
+                    ForEach(ReaderPunctuationPause.allCases) {
+                        Text($0.displayName).tag($0)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            .tint(.auroraTeal)
+        }
+    }
+}
+
+private struct ReaderDisplayCard: View {
+    @Binding var preferences: ReaderDisplayPreferences
+
+    private var fontScaleBinding: Binding<Double> {
+        Binding(
+            get: { preferences.clampedFontScale },
+            set: { preferences.fontScale = $0 }
+        )
+    }
+
+    private var lineSpacingBinding: Binding<Double> {
+        Binding(
+            get: { preferences.clampedLineSpacing },
+            set: { preferences.lineSpacing = $0 }
+        )
+    }
+
+    private var brightnessBinding: Binding<Double> {
+        Binding(
+            get: { preferences.clampedBackgroundBrightness },
+            set: { preferences.backgroundBrightness = $0 }
+        )
+    }
+
+    var body: some View {
+        LiminalCard(label: "Reader display") {
+            VStack(spacing: TranceSpacing.list) {
+                Picker("Theme", selection: $preferences.theme) {
+                    ForEach(ReaderTheme.allCases) {
+                        Text($0.displayName).tag($0)
+                    }
+                }
+
+                Picker("Font", selection: $preferences.font) {
+                    ForEach(ReaderFont.allCases) {
+                        Text($0.displayName).tag($0)
+                    }
+                }
+
+                HStack {
+                    Text("Size \(Int((preferences.clampedFontScale * 100).rounded()))%")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(Color.textSecondary)
+                    Spacer()
+                }
+                Slider(value: fontScaleBinding, in: ReaderDisplayPreferences.fontScaleRange)
+                    .tint(.auroraTeal)
+
+                HStack {
+                    Text("Line \(String(format: "%.1fx", preferences.clampedLineSpacing))")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(Color.textSecondary)
+                    Spacer()
+                }
+                Slider(value: lineSpacingBinding, in: ReaderDisplayPreferences.lineSpacingRange)
+                    .tint(.auroraBlue)
+
+                Picker("ORP color", selection: $preferences.orpColor) {
+                    ForEach(ReaderORPColor.allCases) {
+                        Text($0.displayName).tag($0)
+                    }
+                }
+
+                HStack {
+                    Text("Background \(Int((preferences.clampedBackgroundBrightness * 100).rounded()))%")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(Color.textSecondary)
+                    Spacer()
+                }
+                Slider(value: brightnessBinding, in: ReaderDisplayPreferences.backgroundBrightnessRange)
+                    .tint(.auroraTeal)
+
+                Toggle("Hide controls by default", isOn: $preferences.hideControls)
+                    .tint(.auroraTeal)
+                Toggle("Dyslexia-friendly rendering", isOn: $preferences.dyslexiaFriendly)
                     .tint(.auroraTeal)
             }
         }

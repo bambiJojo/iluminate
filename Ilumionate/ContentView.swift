@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var showingResumedPlayer = false
     @State private var isLoading = true
     @State private var showingAnalysisQueue = false
+    @State private var readerSharedImportTrigger = 0
     @State private var nowPlaying = NowPlayingState.shared
     @State private var analysisManager = AnalysisStateManager.shared
 
@@ -55,7 +56,7 @@ struct ContentView: View {
                     LibraryView(engine: engine)
                         .transition(.opacity)
                 } else if selectedTab == .read {
-                    TextTranceRootView()
+                    TextTranceRootView(sharedImportTrigger: readerSharedImportTrigger)
                         .transition(.opacity)
                 } else if selectedTab == .create {
                     NavigationStack {
@@ -103,6 +104,9 @@ struct ContentView: View {
         }
         .onChange(of: selectedTab) { _, newTab in
             UsageAnalytics.shared.screen(screen(for: newTab))
+        }
+        .onOpenURL { url in
+            handleDeepLink(url)
         }
         .fullScreenCover(item: $selectedSession) { session in
             UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
@@ -192,6 +196,15 @@ struct ContentView: View {
         case .read:    .read
         case .create:  .create
         }
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme == "ilumionate",
+              url.host(percentEncoded: false) == "shared-import" else {
+            return
+        }
+        selectedTab = .read
+        readerSharedImportTrigger += 1
     }
 }
 

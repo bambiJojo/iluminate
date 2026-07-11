@@ -48,13 +48,14 @@ enum WordTokenizer {
             // An em-dash before this segment is a medium pause on the previous word.
             if segment.precededByEmDash { mergePauseIntoPrevious(.medium, &tokens) }
 
-            let cleaned = stripped(segment.text)
-            guard !cleaned.display.isEmpty else {
+            let cleaned = stripped(decodedStandaloneAmpersand(segment.text))
+            let display = readableDisplayText(for: cleaned.display)
+            guard !display.isEmpty else {
                 // pure punctuation / empty: fold its pause into the previous word
                 mergePauseIntoPrevious(cleaned.pause, &tokens)
                 continue
             }
-            tokens.append(WordToken(text: cleaned.display,
+            tokens.append(WordToken(text: display,
                                     pause: cleaned.pause,
                                     isSubliminal: subliminal))
         }
@@ -93,18 +94,28 @@ enum WordTokenizer {
         ".": .breath, "!": .breath, "?": .breath, "…": .drift,
         ",": .brief, ";": .brief, ":": .brief
     ]
-    // Removed from display but contribute no pause.
+    // Removed from display but contribute no pause. Apostrophe-like marks need
+    // word-aware handling below so contractions and possessives stay readable.
     private static let neutralTrailing: Set<Character> =
         ["\"", "'", ")", "]", "\u{201D}", "\u{2019}"]   // " ' ) ] ” ’
     private static let neutralLeading: Set<Character> =
         ["\"", "'", "(", "[", "\u{201C}", "\u{2018}"]   // " ' ( [ “ ‘
+    private static let apostropheMarks: Set<Character> =
+        ["'", "\u{2018}", "\u{2019}"]                    // ' ‘ ’
 
     /// Strip surrounding quotes/brackets + trailing punctuation; return the
     /// display text and the strongest trailing pause. Internal apostrophes and
     /// periods (contractions, decimals) are preserved.
     private static func stripped(_ word: String) -> (display: String, pause: PauseKind) {
         var chars = Array(word)
+        var strippedOpeningApostrophe = false
         while let first = chars.first, neutralLeading.contains(first) {
+            if apostropheMarks.contains(first), shouldKeepLeadingApostrophe(chars) {
+                break
+            }
+            if apostropheMarks.contains(first) {
+                strippedOpeningApostrophe = true
+            }
             chars.removeFirst()
         }
         var pause: PauseKind = .none
@@ -119,12 +130,45 @@ enum WordTokenizer {
                 pause = strongest(pause, kind)
                 chars.removeLast()
             } else if neutralTrailing.contains(last) {
+                if apostropheMarks.contains(last),
+                   shouldKeepTrailingApostrophe(chars, strippedOpening: strippedOpeningApostrophe) {
+                    break
+                }
                 chars.removeLast()
             } else {
                 break
             }
         }
         return (String(chars), pause)
+    }
+
+    private static func shouldKeepLeadingApostrophe(_ chars: [Character]) -> Bool {
+        guard chars.count > 1, isWordCharacter(chars[1]) else { return false }
+        return chars.dropFirst().contains { apostropheMarks.contains($0) } == false
+    }
+
+    private static func shouldKeepTrailingApostrophe(_ chars: [Character],
+                                                     strippedOpening: Bool) -> Bool {
+        guard chars.count > 1 else { return false }
+        if strippedOpening || chars.first.map({ apostropheMarks.contains($0) }) == true {
+            return false
+        }
+        return isWordCharacter(chars[chars.count - 2])
+    }
+
+    private static func isWordCharacter(_ character: Character) -> Bool {
+        character.isLetter || character.isNumber
+    }
+
+    private static func readableDisplayText(for display: String) -> String {
+        switch display.lowercased() {
+        case "&", "&amp", "&amp;": return "and"
+        default: return display
+        }
+    }
+
+    private static func decodedStandaloneAmpersand(_ text: String) -> String {
+        text.lowercased() == "&amp;" ? "&" : text
     }
 
     static func strongest(_ a: PauseKind, _ b: PauseKind) -> PauseKind {
