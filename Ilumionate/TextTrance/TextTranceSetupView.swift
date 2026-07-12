@@ -19,7 +19,6 @@ struct TextTranceSetupView: View {
     @State private var subliminalEnabled = true
     @State private var subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium
     @State private var attentionGateEnabled = false
-    @State private var startPlayer = false
     @State private var resumeIndex = 0
     @State private var activePlayerSession: TextTranceSession?
     @State private var loadedPreset = false
@@ -66,6 +65,7 @@ struct TextTranceSetupView: View {
                 }
                 .padding(TranceSpacing.screen)
             }
+            .scrollIndicators(.hidden)
         }
         .navigationTitle(script.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -96,11 +96,23 @@ struct TextTranceSetupView: View {
             .padding(.top, TranceSpacing.cardMargin)
             // Lift the buttons clear of the app's floating tab bar.
             .padding(.bottom, TranceSpacing.tabBarClearance)
-        }
-        .fullScreenCover(isPresented: $startPlayer, onDismiss: handlePlayerDismiss) {
-            if let activePlayerSession {
-                TextTrancePlayerView(session: activePlayerSession, startIndex: resumeIndex)
+            .background {
+                // Scrim so scrolled cards fade out beneath the launch buttons
+                // and tab bar instead of colliding with them.
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: Color.bgPrimary.opacity(0.88), location: 0.32),
+                        .init(color: Color.bgPrimary.opacity(0.96), location: 1)
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .padding(.top, -TranceSpacing.card)
+                .ignoresSafeArea(edges: .bottom)
             }
+        }
+        .fullScreenCover(item: $activePlayerSession, onDismiss: handlePlayerDismiss) { session in
+            TextTrancePlayerView(session: session, startIndex: resumeIndex)
         }
         .onAppear { loadPresetIfNeeded() }
     }
@@ -133,7 +145,6 @@ struct TextTranceSetupView: View {
     private func launchPlayer(at startIndex: Int) {
         resumeIndex = startIndex
         activePlayerSession = makeSession()
-        startPlayer = true
     }
 
     private func handlePlayerDismiss() {
@@ -337,24 +348,14 @@ private struct SpeedTrainingCard: View {
                 }
                 .pickerStyle(.segmented)
 
-                HStack {
-                    Text("\(settings.clampedTargetWPM) wpm target")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Color.textSecondary)
-                    Spacer()
-                }
+                SetupControlLabel(text: "\(settings.clampedTargetWPM) wpm target")
                 Slider(value: targetBinding,
                        in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
                        step: 5)
                 .tint(.auroraTeal)
 
                 if settings.mode == .warmUp {
-                    HStack {
-                        Text("\(settings.clampedWarmUpWPM) wpm warm-up")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(Color.textSecondary)
-                        Spacer()
-                    }
+                    SetupControlLabel(text: "\(settings.clampedWarmUpWPM) wpm warm-up")
                     Slider(value: warmUpBinding,
                            in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
                            step: 5)
@@ -362,18 +363,14 @@ private struct SpeedTrainingCard: View {
                 }
 
                 if settings.mode == .ramp {
-                    HStack {
-                        Text("\(settings.clampedRampStartWPM) wpm start")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(Color.textSecondary)
-                        Spacer()
-                    }
+                    SetupControlLabel(text: "\(settings.clampedRampStartWPM) wpm start")
                     Slider(value: rampStartBinding,
                            in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
                            step: 5)
                     .tint(.auroraBlue)
                 }
 
+                SetupControlLabel(text: "Words per flash")
                 Picker("Chunk size", selection: chunkBinding) {
                     Text("1").tag(1)
                     Text("2").tag(2)
@@ -381,6 +378,7 @@ private struct SpeedTrainingCard: View {
                 }
                 .pickerStyle(.segmented)
 
+                SetupControlLabel(text: "Punctuation pauses")
                 Picker("Punctuation pauses", selection: $settings.punctuationPause) {
                     ForEach(ReaderPunctuationPause.allCases) {
                         Text($0.displayName).tag($0)
@@ -420,48 +418,39 @@ private struct ReaderDisplayCard: View {
     var body: some View {
         LiminalCard(label: "Reader display") {
             VStack(spacing: TranceSpacing.list) {
-                Picker("Theme", selection: $preferences.theme) {
-                    ForEach(ReaderTheme.allCases) {
-                        Text($0.displayName).tag($0)
+                SetupPickerRow(title: "Theme") {
+                    Picker("Theme", selection: $preferences.theme) {
+                        ForEach(ReaderTheme.allCases) {
+                            Text($0.displayName).tag($0)
+                        }
                     }
                 }
 
-                Picker("Font", selection: $preferences.font) {
-                    ForEach(ReaderFont.allCases) {
-                        Text($0.displayName).tag($0)
+                SetupPickerRow(title: "Font") {
+                    Picker("Font", selection: $preferences.font) {
+                        ForEach(ReaderFont.allCases) {
+                            Text($0.displayName).tag($0)
+                        }
                     }
                 }
 
-                HStack {
-                    Text("Size \(Int((preferences.clampedFontScale * 100).rounded()))%")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Color.textSecondary)
-                    Spacer()
-                }
+                SetupControlLabel(text: "Size \(Int((preferences.clampedFontScale * 100).rounded()))%")
                 Slider(value: fontScaleBinding, in: ReaderDisplayPreferences.fontScaleRange)
                     .tint(.auroraTeal)
 
-                HStack {
-                    Text("Line \(String(format: "%.1fx", preferences.clampedLineSpacing))")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Color.textSecondary)
-                    Spacer()
-                }
+                SetupControlLabel(text: "Line \(String(format: "%.1fx", preferences.clampedLineSpacing))")
                 Slider(value: lineSpacingBinding, in: ReaderDisplayPreferences.lineSpacingRange)
                     .tint(.auroraBlue)
 
-                Picker("ORP color", selection: $preferences.orpColor) {
-                    ForEach(ReaderORPColor.allCases) {
-                        Text($0.displayName).tag($0)
+                SetupPickerRow(title: "Highlight color") {
+                    Picker("Highlight color", selection: $preferences.orpColor) {
+                        ForEach(ReaderORPColor.allCases) {
+                            Text($0.displayName).tag($0)
+                        }
                     }
                 }
 
-                HStack {
-                    Text("Background \(Int((preferences.clampedBackgroundBrightness * 100).rounded()))%")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Color.textSecondary)
-                    Spacer()
-                }
+                SetupControlLabel(text: "Background \(Int((preferences.clampedBackgroundBrightness * 100).rounded()))%")
                 Slider(value: brightnessBinding, in: ReaderDisplayPreferences.backgroundBrightnessRange)
                     .tint(.auroraTeal)
 
@@ -509,6 +498,38 @@ private struct SubliminalCard: View {
                     .pickerStyle(.segmented)
                 }
             }
+        }
+    }
+}
+
+/// Caption label above a slider or segmented control in a setup card.
+private struct SetupControlLabel: View {
+    let text: String
+
+    var body: some View {
+        HStack {
+            Text(text)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(Color.textSecondary)
+            Spacer()
+        }
+    }
+}
+
+/// Labeled row hosting a menu-style picker, so the picker's choice reads
+/// against a visible title instead of floating as a bare blue menu.
+private struct SetupPickerRow<Content: View>: View {
+    let title: String
+    @ViewBuilder let picker: () -> Content
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(TranceTypography.body)
+                .foregroundStyle(Color.textPrimary)
+            Spacer()
+            picker()
+                .tint(.auroraTeal)
         }
     }
 }

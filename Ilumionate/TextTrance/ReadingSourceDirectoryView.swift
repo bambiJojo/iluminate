@@ -10,9 +10,6 @@ struct ReadingSourceDirectoryView: View {
 
     @State private var store: ReadingSourceStore
     @State private var directoryMode: ReadingDirectoryMode = .scripts
-    @State private var selectedCategory: ReadingSourceCategory?
-    @State private var selectedScriptKind: ReadingScriptKind?
-    @State private var selectedScriptTheme: ScriptTheme?
     @State private var searchText = ""
     @State private var showingAddSource = false
     @State private var browserDestination: BrowserDestination?
@@ -35,19 +32,26 @@ struct ReadingSourceDirectoryView: View {
         ZStack {
             AuroraBackground()
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: TranceSpacing.card) {
-                    modePicker
-                    directoryContent
+            VStack(spacing: TranceSpacing.card) {
+                modePicker
+                    .padding(.horizontal, TranceSpacing.screen)
+                    .padding(.top, TranceSpacing.inner)
 
-                    Color.clear.frame(height: TranceSpacing.tabBarClearance)
+                // The two sections are full-width pages: tapping the picker
+                // slides between them, and swiping horizontally does the same.
+                TabView(selection: animatedModeSelection) {
+                    scriptsContent.tag(ReadingDirectoryMode.scripts)
+                    sitesContent.tag(ReadingDirectoryMode.sites)
                 }
-                .padding(.horizontal, TranceSpacing.screen)
-                .padding(.top, TranceSpacing.content)
+                .tabViewStyle(.page(indexDisplayMode: .never))
             }
         }
         .navigationTitle("Reading Sources")
-        .searchable(text: $searchText, prompt: searchPrompt)
+        // Keep search attached to the navigation bar; the default bottom
+        // placement puts the field underneath the app's floating tab bar.
+        .searchable(text: $searchText,
+                    placement: .navigationBarDrawer(displayMode: .automatic),
+                    prompt: searchPrompt)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Add custom source", systemImage: "plus") {
@@ -75,12 +79,22 @@ struct ReadingSourceDirectoryView: View {
         nsfwEnabled || rating != .adultOnly
     }
 
+    /// Animate the page slide when the segmented picker changes the mode.
+    private var animatedModeSelection: Binding<ReadingDirectoryMode> {
+        Binding(
+            get: { directoryMode },
+            set: { newMode in
+                withAnimation(.easeInOut(duration: 0.25)) { directoryMode = newMode }
+            }
+        )
+    }
+
     private var filteredSources: [ReadingSource] {
-        let categoryFiltered = store.sources(in: selectedCategory)
+        let allowed = store.sources(in: nil)
             .filter { isAllowed($0.contentRating) }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return categoryFiltered }
-        return categoryFiltered.filter { source in
+        guard !query.isEmpty else { return allowed }
+        return allowed.filter { source in
             source.title.localizedCaseInsensitiveContains(query)
                 || source.summary.localizedCaseInsensitiveContains(query)
                 || source.url.host(percentEncoded: false)?.localizedCaseInsensitiveContains(query) == true
@@ -89,11 +103,19 @@ struct ReadingSourceDirectoryView: View {
 
     private var filteredScripts: [ReadingScriptCatalogEntry] {
         ReadingScriptCatalog.entries(
-            kind: selectedScriptKind,
-            theme: selectedScriptTheme,
+            kind: nil,
+            theme: nil,
             query: searchText
         )
         .filter { isAllowed($0.contentRating) }
+    }
+
+    /// One shelf per script kind that has entries, in canonical kind order.
+    private var scriptShelves: [(kind: ReadingScriptKind, entries: [ReadingScriptCatalogEntry])] {
+        ReadingScriptKind.allCases.compactMap { kind in
+            let entries = filteredScripts.filter { $0.kind == kind }
+            return entries.isEmpty ? nil : (kind, entries)
+        }
     }
 
     private var groupedSources: [SourceGroup] {
@@ -119,127 +141,97 @@ struct ReadingSourceDirectoryView: View {
         .pickerStyle(.segmented)
     }
 
-    @ViewBuilder
-    private var directoryContent: some View {
-        switch directoryMode {
-        case .scripts:
-            scriptsContent
-        case .sites:
-            sitesContent
-        }
-    }
-
+    /// Scripts page: vertically scrolling shelves, one per script kind.
     private var scriptsContent: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.card) {
-            scriptFilters
-            if let importedScriptTitle {
-                ImportResultMessage(
-                    title: "Script imported",
-                    message: "\(importedScriptTitle) is now available in Text Trance."
-                )
-            }
-            if let importErrorText {
-                EmptyDirectoryMessage(
-                    title: "Import failed",
-                    message: importErrorText
-                )
-            }
-            if filteredScripts.isEmpty {
-                EmptyDirectoryMessage(
-                    title: "No scripts found",
-                    message: "Try a different search or filter."
-                )
-            } else {
-                ScriptCatalogSection(
-                    entries: filteredScripts,
-                    importingScriptID: importingScriptID,
-                    onImport: importScript,
-                    onOpen: openScript
-                )
+        ScrollView {
+            VStack(alignment: .leading, spacing: TranceSpacing.cardMargin) {
+                if let importedScriptTitle {
+                    ImportResultMessage(
+                        title: "Script imported",
+                        message: "\(importedScriptTitle) is now available in Text Trance."
+                    )
+                    .padding(.horizontal, TranceSpacing.screen)
+                }
+                if let importErrorText {
+                    EmptyDirectoryMessage(
+                        title: "Import failed",
+                        message: importErrorText
+                    )
+                    .padding(.horizontal, TranceSpacing.screen)
+                }
+                if scriptShelves.isEmpty {
+                    EmptyDirectoryMessage(
+                        title: "No scripts found",
+                        message: "Try a different search."
+                    )
+                    .padding(.horizontal, TranceSpacing.screen)
+                } else {
+                    ForEach(scriptShelves, id: \.kind) { shelf in
+                        Text(shelf.kind.displayName)
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(.textPrimary)
+                            .padding(.horizontal, TranceSpacing.screen)
+
+                        CarouselRow(items: shelf.entries) { entry in
+                            ScriptCatalogCard(
+                                entry: entry,
+                                isImporting: importingScriptID == entry.id,
+                                onImport: importScript,
+                                onOpen: openScript
+                            )
+                        }
+                    }
+
+                    // One shared notice instead of the same caption on every card.
+                    Text("Review each script page and site terms before use.")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(.textLight)
+                        .padding(.horizontal, TranceSpacing.screen)
+                }
+
+                Color.clear.frame(height: TranceSpacing.tabBarClearance)
             }
         }
+        .scrollIndicators(.hidden)
     }
 
+    /// Sites page: vertically scrolling shelves, one per source category.
     private var sitesContent: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.card) {
-            categoryFilter
-            if groupedSources.isEmpty {
-                EmptyDirectoryMessage(
-                    title: "No sources found",
-                    message: "Try a different search or category."
-                )
-            } else {
-                ForEach(groupedSources) { group in
-                    SourceSection(
-                        category: group.category,
-                        sources: group.sources,
-                        onOpen: openSource,
-                        onDelete: deleteSource
+        ScrollView {
+            VStack(alignment: .leading, spacing: TranceSpacing.cardMargin) {
+                if groupedSources.isEmpty {
+                    EmptyDirectoryMessage(
+                        title: "No sources found",
+                        message: "Try a different search."
                     )
-                }
-            }
-        }
-    }
+                    .padding(.horizontal, TranceSpacing.screen)
+                } else {
+                    ForEach(groupedSources) { group in
+                        Text(group.category.displayName)
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(.textPrimary)
+                            .padding(.horizontal, TranceSpacing.screen)
 
-    private var scriptFilters: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.inner) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: TranceSpacing.inner) {
-                    CategoryChip(
-                        title: "All Types",
-                        isSelected: selectedScriptKind == nil,
-                        action: { selectedScriptKind = nil }
-                    )
-
-                    ForEach(ReadingScriptKind.allCases) { kind in
-                        CategoryChip(
-                            title: kind.displayName,
-                            isSelected: selectedScriptKind == kind,
-                            action: { selectedScriptKind = kind }
-                        )
+                        CarouselRow(items: group.sources) { source in
+                            ReadingSourceCard(source: source, onOpen: openSource)
+                                .contextMenu {
+                                    Button("Open", systemImage: "safari") {
+                                        openSource(source)
+                                    }
+                                    if !source.isCurated {
+                                        Button("Delete", systemImage: "trash", role: .destructive) {
+                                            deleteSource(source)
+                                        }
+                                    }
+                                }
+                        }
                     }
                 }
-            }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: TranceSpacing.inner) {
-                    CategoryChip(
-                        title: "All Themes",
-                        isSelected: selectedScriptTheme == nil,
-                        action: { selectedScriptTheme = nil }
-                    )
-
-                    ForEach(ScriptTheme.allCases) { theme in
-                        CategoryChip(
-                            title: theme.displayName,
-                            isSelected: selectedScriptTheme == theme,
-                            action: { selectedScriptTheme = theme }
-                        )
-                    }
-                }
+                Color.clear.frame(height: TranceSpacing.tabBarClearance)
             }
         }
-    }
-
-    private var categoryFilter: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: TranceSpacing.inner) {
-                CategoryChip(
-                    title: "All",
-                    isSelected: selectedCategory == nil,
-                    action: { selectedCategory = nil }
-                )
-
-                ForEach(ReadingSourceCategory.allCases) { category in
-                    CategoryChip(
-                        title: category.displayName,
-                        isSelected: selectedCategory == category,
-                        action: { selectedCategory = category }
-                    )
-                }
-            }
-            .padding(.bottom, TranceSpacing.micro)
-        }
+        .scrollIndicators(.hidden)
     }
 
     private func openSource(_ source: ReadingSource) {
@@ -355,63 +347,6 @@ private struct SourceGroup: Identifiable {
     var id: ReadingSourceCategory { category }
 }
 
-private struct SourceSection: View {
-    let category: ReadingSourceCategory
-    let sources: [ReadingSource]
-    let onOpen: (ReadingSource) -> Void
-    let onDelete: (ReadingSource) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.inner) {
-            Text(category.displayName)
-                .font(TranceTypography.sectionTitle)
-                .foregroundStyle(.textPrimary)
-
-            VStack(spacing: TranceSpacing.inner) {
-                ForEach(sources) { source in
-                    ReadingSourceCard(source: source, onOpen: onOpen)
-                        .contextMenu {
-                            Button("Open", systemImage: "safari") {
-                                onOpen(source)
-                            }
-                            if !source.isCurated {
-                                Button("Delete", systemImage: "trash", role: .destructive) {
-                                    onDelete(source)
-                                }
-                            }
-                        }
-                }
-            }
-        }
-    }
-}
-
-private struct ScriptCatalogSection: View {
-    let entries: [ReadingScriptCatalogEntry]
-    let importingScriptID: String?
-    let onImport: (ReadingScriptCatalogEntry) -> Void
-    let onOpen: (ReadingScriptCatalogEntry) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.inner) {
-            Text("Scripts")
-                .font(TranceTypography.sectionTitle)
-                .foregroundStyle(.textPrimary)
-
-            VStack(spacing: TranceSpacing.inner) {
-                ForEach(entries) { entry in
-                    ScriptCatalogCard(
-                        entry: entry,
-                        isImporting: importingScriptID == entry.id,
-                        onImport: onImport,
-                        onOpen: onOpen
-                    )
-                }
-            }
-        }
-    }
-}
-
 private struct ScriptCatalogCard: View {
     let entry: ReadingScriptCatalogEntry
     let isImporting: Bool
@@ -441,23 +376,22 @@ private struct ScriptCatalogCard: View {
                     if entry.contentRating == .adultOnly {
                         AdultBadge()
                     }
-                    ImportPolicyBadge(policy: entry.importPolicy)
+                    // No import-policy badge here: the Import button below
+                    // already communicates whether the entry is importable.
                 }
 
                 Text(entry.summary)
                     .font(TranceTypography.body)
                     .foregroundStyle(.textSecondary)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Spacer(minLength: 0)
+
                 HStack(spacing: 6) {
-                    TagPill(text: entry.kind.displayName)
                     TagPill(text: entry.theme.displayName)
                     TagPill(text: entry.length.displayName)
                 }
-
-                Text(entry.licenseNote)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.textLight)
 
                 HStack(spacing: TranceSpacing.inner) {
                     Button {
@@ -466,25 +400,25 @@ private struct ScriptCatalogCard: View {
                         HStack(spacing: TranceSpacing.icon) {
                             if isImporting {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(Color.voidDeep)
                             } else {
                                 Image(systemName: "square.and.arrow.down.fill")
                             }
                             Text(isImporting ? "Importing" : "Import")
                         }
-                        .font(TranceTypography.body)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
+                        .font(.headline)
+                        .foregroundStyle(Color.voidDeep)
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .background(
                             LinearGradient(
-                                colors: [.roseGold, .roseDeep],
+                                colors: [.auroraTeal, .auroraBlue],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
+                        .opacity(isImporting || entry.canImport == false ? 0.48 : 1)
                     }
                     .disabled(isImporting || entry.canImport == false)
                     .accessibilityLabel("Import \(entry.title)")
@@ -505,7 +439,11 @@ private struct ScriptCatalogCard: View {
                     .accessibilityLabel("Open \(entry.title) website")
                 }
             }
+            // Uniform card height across the shelf, actions pinned to the
+            // bottom edge.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(height: 268)
     }
 }
 
@@ -543,6 +481,7 @@ private struct ReadingSourceCard: View {
                     Text(source.summary)
                         .font(TranceTypography.body)
                         .foregroundStyle(.textSecondary)
+                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -550,17 +489,24 @@ private struct ReadingSourceCard: View {
                     Text(source.licenseNote)
                         .font(TranceTypography.caption)
                         .foregroundStyle(.textSecondary)
+                        .lineLimit(2)
                     Text(source.contentNote)
                         .font(TranceTypography.caption)
                         .foregroundStyle(.textLight)
+                        .lineLimit(2)
                 }
+
+                Spacer(minLength: 0)
 
                 GlowButton(title: "Open", systemImage: "safari.fill", kind: .primary) {
                     onOpen(source)
                 }
                 .accessibilityLabel("Open \(source.title)")
             }
+            // Uniform card height across the shelf, Open pinned to the bottom.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(height: 300)
     }
 }
 
@@ -730,29 +676,6 @@ private struct AdultBadge: View {
             .padding(.vertical, 4)
             .background(Color.warmAccent.opacity(0.16), in: Capsule())
             .accessibilityLabel("Adult content")
-    }
-}
-
-private struct CategoryChip: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(TranceTypography.caption)
-                .fontWeight(isSelected ? .semibold : .regular)
-                .foregroundStyle(isSelected ? .white : .textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color.auroraTeal : Color.glassBorder.opacity(0.12), in: Capsule())
-                .overlay {
-                    Capsule()
-                        .strokeBorder(isSelected ? Color.clear : Color.glassBorder.opacity(0.35), lineWidth: 1)
-                }
-        }
-        .buttonStyle(.plain)
     }
 }
 

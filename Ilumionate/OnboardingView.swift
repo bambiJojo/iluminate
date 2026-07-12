@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 /// Focused onboarding flow for hypnosis audio player + mind machine
 struct OnboardingView: View {
@@ -25,6 +26,8 @@ struct OnboardingView: View {
     @State private var showWelcomeSession = false
     @State private var welcomeSession: LightSession?
     @State private var lightEngine = LightEngine()
+    @State private var cameraAuthorization = AVCaptureDevice.authorizationStatus(for: .video)
+    @State private var isRequestingCameraPermission = false
     
     // Complex Animation Properties (from reference design style)
     @State private var characterOffset: CGFloat = 0
@@ -37,6 +40,7 @@ struct OnboardingView: View {
         case questionnaire
         case personalizedResponse
         case warning
+        case attentionPermission
         case analyticsConsent
         case completed
     }
@@ -71,6 +75,9 @@ struct OnboardingView: View {
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     case .warning:
                         warningPhase
+                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+                    case .attentionPermission:
+                        attentionPermissionPhase
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     case .analyticsConsent:
                         analyticsConsentPhase
@@ -125,7 +132,7 @@ struct OnboardingView: View {
     // MARK: - Navigation Footer
     @ViewBuilder
     private var navigationFooter: some View {
-        if currentPhase == .analyticsConsent {
+        if currentPhase == .attentionPermission || currentPhase == .analyticsConsent {
             EmptyView()
         } else {
             HStack {
@@ -328,7 +335,97 @@ struct OnboardingView: View {
         }
     }
 
-    // 5. Analytics Consent Phase
+    // 5. Reader Attention Permission Phase
+    private var attentionPermissionPhase: some View {
+        VStack(spacing: 28) {
+            ZStack {
+                Circle()
+                    .fill(Color.auroraTeal.opacity(0.16))
+                    .frame(width: 140, height: 140)
+
+                Image(systemName: cameraAuthorization == .authorized ? "eye.fill" : "eye")
+                    .font(.system(size: 62, weight: .light))
+                    .foregroundStyle(Color.auroraTeal)
+            }
+            .padding(.top, 20)
+
+            VStack(spacing: 16) {
+                Text("Keep the reader in sync")
+                    .font(TranceTypography.screenTitle)
+                    .multilineTextAlignment(.center)
+
+                Text("The optional attention check uses the front camera to pause the reader when you look away and resume when you return.")
+                    .font(TranceTypography.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                permissionBullet("Face tracking is processed on your device.")
+                permissionBullet("LumeSync does not record or save camera images.")
+                permissionBullet("The camera runs only while reader attention is enabled.")
+            }
+
+            if cameraAuthorization == .authorized {
+                Label("Camera access enabled", systemImage: "checkmark.circle.fill")
+                    .font(TranceTypography.body.weight(.semibold))
+                    .foregroundStyle(Color.auroraTeal)
+            } else if cameraAuthorization == .denied {
+                Text("Camera access was declined. You can enable it later in iOS Settings.")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            } else if cameraAuthorization == .restricted {
+                Text("Camera access is restricted on this device. The reader will work without attention check.")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            VStack(spacing: 12) {
+                Button {
+                    if cameraAuthorization == .notDetermined {
+                        requestCameraPermission()
+                    } else {
+                        nextPhase()
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        if isRequestingCameraPermission {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: cameraAuthorization == .authorized ? "arrow.right" : "camera.fill")
+                        }
+                        Text(attentionPermissionButtonTitle)
+                    }
+                    .font(TranceTypography.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Color.roseGold)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(isRequestingCameraPermission)
+
+                if cameraAuthorization == .notDetermined {
+                    Button("Not Now") { nextPhase() }
+                        .font(TranceTypography.body.weight(.semibold))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                        .buttonStyle(.plain)
+                        .disabled(isRequestingCameraPermission)
+                }
+            }
+        }
+    }
+
+    // 6. Analytics Consent Phase
     private var analyticsConsentPhase: some View {
         VStack(spacing: 28) {
             Image(systemName: "chart.bar.xaxis")
@@ -385,7 +482,7 @@ struct OnboardingView: View {
         }
     }
     
-    // 6. Completed Phase
+    // 7. Completed Phase
     private var completedPhase: some View {
         VStack(spacing: 40) {
             ZStack {
@@ -448,6 +545,8 @@ struct OnboardingView: View {
             return LinearGradient(colors: [Color.bgSecondary, Color.lavender.opacity(0.2)], startPoint: .top, endPoint: .bottom)
         case .warning:
             return LinearGradient(colors: [Color.bgPrimary, Color.roseGold.opacity(0.1)], startPoint: .top, endPoint: .bottom)
+        case .attentionPermission:
+            return LinearGradient(colors: [Color.bgPrimary, Color.auroraTeal.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .analyticsConsent:
             return LinearGradient(colors: [Color.bgPrimary, Color.roseGold.opacity(0.14)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .completed:
@@ -461,6 +560,7 @@ struct OnboardingView: View {
         case .questionnaire: return selectedGoal != nil ? "Continue" : ""
         case .personalizedResponse: return "Next"
         case .warning: return "I Understand & Accept"
+        case .attentionPermission: return ""
         case .analyticsConsent: return ""
         case .completed: return "Enter LumeSync"
         }
@@ -469,6 +569,29 @@ struct OnboardingView: View {
     private func chooseAnalyticsConsent(_ enabled: Bool) {
         UsageAnalytics.shared.setEnabled(enabled)
         nextPhase()
+    }
+
+    private var attentionPermissionButtonTitle: String {
+        switch cameraAuthorization {
+        case .notDetermined:
+            isRequestingCameraPermission ? "Requesting Access…" : "Enable Attention Check"
+        case .authorized:
+            "Continue"
+        case .denied, .restricted:
+            "Continue Without It"
+        @unknown default:
+            "Continue"
+        }
+    }
+
+    private func requestCameraPermission() {
+        guard !isRequestingCameraPermission else { return }
+        isRequestingCameraPermission = true
+        Task {
+            _ = await AVCaptureDevice.requestAccess(for: .video)
+            cameraAuthorization = AVCaptureDevice.authorizationStatus(for: .video)
+            isRequestingCameraPermission = false
+        }
     }
     
     private func nextPhase() {
@@ -512,6 +635,21 @@ struct OnboardingView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 14))
                 .foregroundStyle(Color.roseGold)
+                .padding(.top, 2)
+
+            Text(text)
+                .font(TranceTypography.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func permissionBullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.auroraTeal)
                 .padding(.top, 2)
 
             Text(text)

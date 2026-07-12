@@ -14,6 +14,11 @@ struct TextTrancePlayerView: View {
     @State private var resumeAfterSectionSheet = false
     @State private var attentionMonitor = ReaderAttentionMonitor()
     @State private var attentionStatus: ReaderAttentionMonitorStatus = .inactive
+    #if DEBUG
+    @State private var attentionSample: ReaderAttentionSample?
+    @State private var attentionFrameCount = 0
+    @State private var attentionLastEvent = "—"
+    #endif
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -105,6 +110,18 @@ struct TextTrancePlayerView: View {
             .frame(maxHeight: .infinity, alignment: .bottom)
             .padding(.horizontal, TranceSpacing.screen)
             .padding(.bottom, TranceSpacing.inner)
+
+            #if DEBUG
+            if session.attentionGateEnabled {
+                AttentionDebugReadout(
+                    sample: attentionSample,
+                    status: attentionStatus,
+                    isAttentionPaused: session.isAttentionPaused,
+                    frameCount: attentionFrameCount,
+                    lastEvent: attentionLastEvent
+                )
+            }
+            #endif
         }
         .contentShape(.rect)
         .gesture(endHoldGesture)
@@ -195,7 +212,7 @@ struct TextTrancePlayerView: View {
     }
 
     private func configureAttentionMonitor() {
-        attentionMonitor.onUpdate = { isLookingAtScreen, status in
+        attentionMonitor.onUpdate = { isLookingAtScreen, status, _ in
             attentionStatus = status
             if status == .running {
                 session.setReaderAttention(isLookingAtScreen: isLookingAtScreen)
@@ -204,6 +221,15 @@ struct TextTrancePlayerView: View {
                 controlsVisibility.registerInteraction()
             }
         }
+        #if DEBUG
+        attentionMonitor.onSample = { sample in
+            attentionSample = sample
+            attentionFrameCount += 1
+        }
+        attentionMonitor.onDebugEvent = { event in
+            attentionLastEvent = event
+        }
+        #endif
     }
 
     private func syncAttentionMonitor() async {
@@ -373,6 +399,44 @@ private struct AnchoredWord: View {
         return attributed
     }
 }
+
+#if DEBUG
+/// Debug-only live readout of the attention gate's raw signals, so the
+/// head-facing / eyes-closed thresholds can be verified and tuned on-device.
+/// Compiled out of release builds.
+private struct AttentionDebugReadout: View {
+    let sample: ReaderAttentionSample?
+    let status: ReaderAttentionMonitorStatus
+    let isAttentionPaused: Bool
+    let frameCount: Int
+    let lastEvent: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("attention: \(isAttentionPaused ? "PAUSED" : "reading")")
+                .bold()
+            // If this stops climbing, the camera stopped delivering frames.
+            Text("frames: \(frameCount)")
+            Text("event: \(lastEvent)")
+            if let sample {
+                Text("tracked: \(sample.faceTracked ? "yes" : "no")")
+                Text("facing:  \(sample.headFacing, format: .number.precision(.fractionLength(2))) (need > \(ReaderAttentionThresholds.facing, format: .number.precision(.fractionLength(2))))")
+                Text("eyesShut: \(sample.eyesClosed, format: .number.precision(.fractionLength(2))) (pause > \(ReaderAttentionThresholds.eyesClosed, format: .number.precision(.fractionLength(2))))")
+                Text("rawLooking: \(sample.isLookingAtScreen ? "yes" : "no")")
+            } else {
+                Text("status: \(String(describing: status))")
+            }
+        }
+        .font(.system(.caption2, design: .monospaced))
+        .foregroundStyle(.white)
+        .padding(8)
+        .background(.black.opacity(0.55), in: .rect(cornerRadius: 8))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding()
+        .allowsHitTesting(false)
+    }
+}
+#endif
 
 #Preview {
     let script = TranceScript(

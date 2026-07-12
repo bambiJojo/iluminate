@@ -1,10 +1,11 @@
 //  TextTranceLibraryView.swift
 //  Ilumionate
 //
-//  Script picker: theme filter + cards. Tapping a card pushes setup.
+//  Reader library shelves: Apple Music-style vertical scroll of horizontal
+//  carousels. All actions and stores live in TextTranceRootView, which owns
+//  the persistent quick-actions bar; this view just presents the content.
 
 import SwiftUI
-import os
 
 /// Typed navigation values for the Text Trance stack (avoids bare-String
 /// destination collisions as more destinations join this stack).
@@ -12,294 +13,305 @@ enum TextTranceDestination: Hashable {
     case setup(scriptID: String)
 }
 
-private enum DocumentImportState: Equatable {
+enum DocumentImportState: Equatable {
     case idle
     case importing(String)
     case failed(String)
 }
 
 struct TextTranceLibraryView: View {
-    var sharedImportTrigger = 0
-
-    @State private var importedStore = ImportedTranceScriptStore.shared
-    @State private var documentStore = ReadingDocumentStore.shared
-    @State private var scripts: [TranceScript] = []
-    @State private var themeFilter: ScriptTheme?
-    @State private var progressStore = ReaderProgressStore.shared
-    @State private var quickActionsCollapseProgress: CGFloat = 0
-    @State private var showingWebImport = false
-    @State private var showingDocumentImporter = false
-    @State private var showingReadingSources = false
-    @State private var showingHistory = false
-    @State private var documentImportState: DocumentImportState = .idle
-    @State private var importedSetupScript: TranceScript?
-    @State private var pendingHistoryScript: TranceScript?
+    let scripts: [TranceScript]
+    let documents: [ReadingDocument]
+    let sources: [ReadingSource]
+    let historyItems: [ReaderHistoryItem]
+    let importState: DocumentImportState
+    let onImportFile: () -> Void
+    let onLoadWebsite: () -> Void
+    let onResume: (TranceScript) -> Void
+    let onSeeAllHistory: () -> Void
+    let onOpenSource: (ReadingSource) -> Void
+    let onSeeAllSources: () -> Void
+    let onOpenDocument: (ReadingDocument) -> Void
+    let onDeleteDocument: (ReadingDocument) -> Void
 
     var body: some View {
         ZStack {
             AuroraBackground()
+            // Apple Music-style shelves: a vertical scroll of horizontal
+            // carousels, one shelf per content group. Imports live in the
+            // header's + menu; history and sites are shelves of their own.
             ScrollView {
-                LazyVStack(spacing: TranceSpacing.cardMargin) {
-                    ReaderLibrarySummaryCard(
-                        scripts: scripts,
-                        documents: documentStore.documents
+                VStack(alignment: .leading, spacing: TranceSpacing.cardMargin) {
+                    LibraryHeader(
+                        onImportFile: onImportFile,
+                        onLoadWebsite: onLoadWebsite
                     )
+                    .padding(.horizontal, TranceSpacing.screen)
 
-                    if documentImportState != .idle {
-                        DocumentImportStatusCard(state: documentImportState)
+                    if importState != .idle {
+                        DocumentImportStatusCard(state: importState)
+                            .padding(.horizontal, TranceSpacing.screen)
                     }
 
-                    ThemeChipsRow(selection: $themeFilter)
+                    if !historyItems.isEmpty {
+                        SectionHeader(title: "Continue Reading", onSeeAll: onSeeAllHistory)
+                            .padding(.horizontal, TranceSpacing.screen)
+                        HistoryCarousel(items: historyItems, onResume: onResume)
+                    }
 
-                    if !documentStore.documents.isEmpty {
-                        DocumentLibrarySection(
-                            documents: documentStore.documents,
-                            onOpen: openDocument,
-                            onDelete: deleteDocument
+                    if !documents.isEmpty {
+                        SectionHeader(title: "Documents")
+                            .padding(.horizontal, TranceSpacing.screen)
+                        DocumentCarousel(
+                            documents: documents,
+                            onOpen: onOpenDocument,
+                            onDelete: onDeleteDocument
                         )
                     }
 
-                    if filteredScripts.isEmpty {
+                    if scripts.isEmpty {
                         EmptyScriptLibraryCard()
+                            .padding(.horizontal, TranceSpacing.screen)
                     } else {
                         SectionHeader(title: "Scripts")
-                        ForEach(filteredScripts) { script in
-                            NavigationLink(value: TextTranceDestination.setup(scriptID: script.id)) {
-                                ScriptCard(script: script)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                            .padding(.horizontal, TranceSpacing.screen)
+                        ScriptCarousel(scripts: scripts)
+                    }
+
+                    if !sources.isEmpty {
+                        SectionHeader(title: "Sites", onSeeAll: onSeeAllSources)
+                            .padding(.horizontal, TranceSpacing.screen)
+                        SourceCarousel(sources: sources, onOpen: onOpenSource)
                     }
                     // Clear the app's floating tab bar so the last card isn't cut off.
                     Color.clear.frame(height: TranceSpacing.tabBarClearance)
                 }
-                .padding(TranceSpacing.screen)
+                .padding(.vertical, TranceSpacing.screen)
             }
             .scrollIndicators(.hidden)
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                let offset = geometry.contentOffset.y + geometry.contentInsets.top
-                return min(max((offset - 12) / 40, 0), 1)
-            } action: { _, progress in
-                quickActionsCollapseProgress = progress
-            }
-        }
-        .navigationTitle("Text Trance")
-        .safeAreaBar(edge: .top) {
-            ReaderQuickActionsBar(
-                collapseProgress: quickActionsCollapseProgress,
-                onImportFile: { showingDocumentImporter = true },
-                onLoadWebsite: { showingWebImport = true },
-                onFindScripts: { showingReadingSources = true },
-                onHistory: { showingHistory = true }
-            )
-            .padding(.horizontal, TranceSpacing.screen)
-            .padding(.vertical, TranceSpacing.icon)
-        }
-        .sheet(isPresented: $showingWebImport) {
-            WebTextImportSheet { script in
-                insertImportedScript(script)
-                importedSetupScript = script
-            }
-        }
-        .sheet(isPresented: $showingHistory, onDismiss: openPendingHistoryScript) {
-            ReaderHistorySheet(items: historyItems) { script in
-                pendingHistoryScript = script
-            }
-        }
-        .fileImporter(
-            isPresented: $showingDocumentImporter,
-            allowedContentTypes: ReadingDocumentImporter.supportedContentTypes,
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
-                Task { await importDocument(from: url) }
-            case .failure(let error):
-                documentImportState = .failed(error.localizedDescription)
-            }
-        }
-        .navigationDestination(for: TextTranceDestination.self) { destination in
-            switch destination {
-            case .setup(let id):
-                if let script = scripts.first(where: { $0.id == id }) {
-                    TextTranceSetupView(script: script)
-                }
-            }
-        }
-        .navigationDestination(isPresented: importedSetupPresented) {
-            if let importedSetupScript {
-                TextTranceSetupView(script: importedSetupScript)
-            }
-        }
-        .navigationDestination(isPresented: $showingReadingSources) {
-            ReadingSourceDirectoryView(store: .shared) { script in
-                insertImportedScript(script)
-                importedSetupScript = script
-            }
-        }
-        .task {
-            if scripts.isEmpty { reloadScripts() }
-            await drainSharedImports()
-        }
-        .onChange(of: sharedImportTrigger) { _, _ in
-            Task { await drainSharedImports() }
-        }
-    }
-
-    private var filteredScripts: [TranceScript] {
-        guard let themeFilter else { return scripts }
-        return scripts.filter { $0.theme == themeFilter }
-    }
-
-    private var historyItems: [ReaderHistoryItem] {
-        progressStore.recentStates.compactMap { state in
-            if let script = scripts.first(where: { $0.id == state.scriptId }) {
-                return ReaderHistoryItem(script: script, state: state)
-            }
-
-            guard let document = documentStore.documents.first(where: { $0.scriptID == state.scriptId }),
-                  let script = try? documentStore.script(for: document) else {
-                return nil
-            }
-            return ReaderHistoryItem(script: script, state: state)
-        }
-    }
-
-    private var importedSetupPresented: Binding<Bool> {
-        Binding(
-            get: { importedSetupScript != nil },
-            set: { if !$0 { importedSetupScript = nil } }
-        )
-    }
-
-    private func insertImportedScript(_ script: TranceScript) {
-        do {
-            try importedStore.save(script)
-            reloadScripts()
-            return
-        } catch {
-            Log.ui.info("[TextTranceLibraryView] Import was not persisted: \(error.localizedDescription)")
-        }
-
-        scripts.removeAll { $0.id == script.id }
-        scripts.insert(script, at: 0)
-    }
-
-    private func openPendingHistoryScript() {
-        guard let pendingHistoryScript else { return }
-        self.pendingHistoryScript = nil
-        importedSetupScript = pendingHistoryScript
-    }
-
-    private func importDocument(from url: URL) async {
-        documentImportState = .importing(url.lastPathComponent)
-        do {
-            let document = try await documentStore.importDocument(from: url)
-            documentImportState = .idle
-            importedSetupScript = try documentStore.script(for: document)
-        } catch {
-            documentImportState = .failed(error.localizedDescription)
-        }
-    }
-
-    private func openDocument(_ document: ReadingDocument) {
-        do {
-            importedSetupScript = try documentStore.script(for: document)
-        } catch {
-            documentImportState = .failed(error.localizedDescription)
-        }
-    }
-
-    private func deleteDocument(_ document: ReadingDocument) {
-        do {
-            try documentStore.delete(document)
-            ReaderProgressStore.shared.clear(scriptId: document.scriptID)
-        } catch {
-            documentImportState = .failed(error.localizedDescription)
-        }
-    }
-
-    private func reloadScripts() {
-        let importedScripts = importedStore.importedScripts
-        let importedIDs = Set(importedScripts.map(\.id))
-        scripts = importedScripts + TranceScriptLibrary.bundled().filter { script in
-            importedIDs.contains(script.id) == false
-        }
-    }
-
-    private func drainSharedImports() async {
-        guard !SharedReaderImportQueue.pendingItems().isEmpty else { return }
-        documentImportState = .importing("Shared items")
-
-        let result = await SharedReaderImportCoordinator(
-            importedStore: importedStore,
-            documentStore: documentStore
-        ).drainPendingImports()
-
-        reloadScripts()
-        if result.failureMessages.isEmpty {
-            documentImportState = .idle
-        } else {
-            documentImportState = .failed(result.failureMessages.joined(separator: "\n"))
         }
     }
 
 }
 
-private struct ThemeChipsRow: View {
-    @Binding var selection: ScriptTheme?
+/// "Reader" title with the + menu that gathers the import actions.
+private struct LibraryHeader: View {
+    let onImportFile: () -> Void
+    let onLoadWebsite: () -> Void
 
     var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: TranceSpacing.list) {
-                FilterChip(title: "All", isOn: selection == nil) { selection = nil }
-                ForEach(ScriptTheme.allCases) { theme in
-                    FilterChip(title: theme.displayName, isOn: selection == theme) {
-                        selection = theme
+        HStack {
+            Text("Reader")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(Color.textPrimary)
+
+            Spacer()
+
+            Menu {
+                Button("Import File", systemImage: "doc.badge.plus", action: onImportFile)
+                Button("Load Website", systemImage: "square.and.arrow.down", action: onLoadWebsite)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.auroraTeal)
+                    .frame(width: 36, height: 36)
+                    .background(Color.glassBorder.opacity(0.14), in: .circle)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(Color.glassBorder.opacity(0.35), lineWidth: 1)
                     }
-                }
             }
-            .padding(.vertical, TranceSpacing.micro)
+            .accessibilityLabel("Add reading material")
         }
-        .scrollIndicators(.hidden)
     }
 }
 
 private struct SectionHeader: View {
     let title: String
+    var onSeeAll: (() -> Void)? = nil
 
     var body: some View {
-        Text(title)
-            .font(TranceTypography.sectionTitle)
-            .foregroundStyle(Color.textPrimary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, TranceSpacing.micro)
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(Color.textPrimary)
+
+            Spacer()
+
+            if let onSeeAll {
+                Button("See all", action: onSeeAll)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.auroraTeal)
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, TranceSpacing.micro)
     }
 }
 
-private struct DocumentLibrarySection: View {
+/// Horizontal shelf of resumable reads; tapping a card opens setup ready to
+/// resume at the saved word.
+private struct HistoryCarousel: View {
+    let items: [ReaderHistoryItem]
+    let onResume: (TranceScript) -> Void
+
+    var body: some View {
+        CarouselRow(items: items) { item in
+            Button {
+                onResume(item.script)
+            } label: {
+                HistoryCard(item: item)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct HistoryCard: View {
+    let item: ReaderHistoryItem
+
+    var body: some View {
+        LiminalCard {
+            VStack(alignment: .leading, spacing: TranceSpacing.list) {
+                HStack(spacing: TranceSpacing.list) {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(item.script.theme.accent.opacity(0.18))
+                        .frame(width: 40, height: 40)
+                        .overlay {
+                            Image(systemName: item.script.source.kind == .importedDocument
+                                  ? "doc.text.fill"
+                                  : item.script.theme.symbol)
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(item.script.theme.accent)
+                        }
+
+                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                        Text(item.script.title)
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(1)
+                        Text("Word \(item.state.wordIndex + 1) · \(item.state.savedAt.formatted(.relative(presentation: .named)))")
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Label("Resume", systemImage: "play.fill")
+                    .font(TranceTypography.caption.weight(.semibold))
+                    .foregroundStyle(Color.voidDeep)
+                    .padding(.horizontal, TranceSpacing.list)
+                    .padding(.vertical, TranceSpacing.icon)
+                    .background(
+                        LinearGradient(colors: [.auroraTeal, .auroraBlue],
+                                       startPoint: .leading, endPoint: .trailing),
+                        in: .capsule
+                    )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(height: 128)
+    }
+}
+
+/// Horizontal shelf of curated reading sites; tapping opens the in-app browser.
+private struct SourceCarousel: View {
+    let sources: [ReadingSource]
+    let onOpen: (ReadingSource) -> Void
+
+    var body: some View {
+        CarouselRow(items: sources) { source in
+            Button {
+                TranceHaptics.shared.light()
+                onOpen(source)
+            } label: {
+                SourceShelfCard(source: source)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct SourceShelfCard: View {
+    let source: ReadingSource
+
+    var body: some View {
+        LiminalCard {
+            VStack(alignment: .leading, spacing: TranceSpacing.list) {
+                HStack(alignment: .top, spacing: TranceSpacing.list) {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.bwTheta.opacity(0.18))
+                        .frame(width: 40, height: 40)
+                        .overlay {
+                            Image(systemName: "globe")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Color.bwTheta)
+                        }
+
+                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                        Text(source.title)
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(1)
+                        Text(source.url.host(percentEncoded: false) ?? source.url.absoluteString)
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "safari")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+
+                Text(source.summary)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(height: 118)
+    }
+}
+
+/// Horizontal shelf of script cards for one theme.
+private struct ScriptCarousel: View {
+    let scripts: [TranceScript]
+
+    var body: some View {
+        CarouselRow(items: scripts) { script in
+            NavigationLink(value: TextTranceDestination.setup(scriptID: script.id)) {
+                ScriptCard(script: script)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+/// Horizontal shelf of imported documents.
+private struct DocumentCarousel: View {
     let documents: [ReadingDocument]
     let onOpen: (ReadingDocument) -> Void
     let onDelete: (ReadingDocument) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: TranceSpacing.list) {
-            SectionHeader(title: "Documents")
-            ForEach(documents) { document in
-                Button {
+        CarouselRow(items: documents) { document in
+            Button {
+                onOpen(document)
+            } label: {
+                DocumentCard(document: document)
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button("Open", systemImage: "play.fill") {
                     onOpen(document)
-                } label: {
-                    DocumentCard(document: document)
                 }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    Button("Open", systemImage: "play.fill") {
-                        onOpen(document)
-                    }
-                    Button("Delete", systemImage: "trash", role: .destructive) {
-                        onDelete(document)
-                    }
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    onDelete(document)
                 }
             }
         }
@@ -340,19 +352,18 @@ private struct DocumentCard: View {
                         .foregroundStyle(Color.textSecondary)
                 }
 
+                Spacer(minLength: 0)
+
                 HStack(spacing: 6) {
                     MetricPill(systemImage: "doc.text", text: document.kind.displayName)
                     MetricPill(systemImage: "textformat", text: document.wordCountSummary)
                     MetricPill(systemImage: "calendar", text: document.importedAt.formatted(.dateTime.month().day()))
                 }
-
-                HStack(spacing: 6) {
-                    TagChip(text: "Document")
-                    TagChip(text: "Read-through")
-                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Uniform card height across the documents carousel.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(height: 132)
     }
 }
 
@@ -369,6 +380,7 @@ private struct ScriptCard: View {
                         Text(script.title)
                             .font(TranceTypography.sectionTitle)
                             .foregroundStyle(Color.textPrimary)
+                            .lineLimit(1)
                         Text(script.theme.displayName)
                             .font(TranceTypography.caption)
                             .foregroundStyle(Color.textSecondary)
@@ -384,17 +396,15 @@ private struct ScriptCard: View {
                 Text(script.librarySummary)
                     .font(TranceTypography.body)
                     .foregroundStyle(Color.textSecondary)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
 
                 HStack(spacing: 6) {
                     MetricPill(systemImage: "clock", text: script.durationSummary)
                     MetricPill(systemImage: "textformat", text: script.wordCountSummary)
                 }
-
-                Text(script.phaseSummary)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(Color.textLight)
-                    .lineLimit(2)
 
                 HStack(spacing: 6) {
                     TagChip(text: script.arcSummary)
@@ -403,69 +413,11 @@ private struct ScriptCard: View {
                     if script.source.reviewed { TagChip(text: "Reviewed") }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Fill the carousel's fixed card height so every page's glass
+            // surface matches, with the tag row pinned to the bottom edge.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-    }
-}
-
-private struct ReaderLibrarySummaryCard: View {
-    let scripts: [TranceScript]
-    let documents: [ReadingDocument]
-
-    var body: some View {
-        LiminalCard(label: "Reader library") {
-            HStack(spacing: TranceSpacing.list) {
-                SummaryValue(value: documents.count.formatted(.number), label: "documents")
-                Divider()
-                    .frame(height: 32)
-                    .overlay(Color.glassBorder)
-                SummaryValue(value: scripts.count.formatted(.number), label: "scripts")
-                Divider()
-                    .frame(height: 32)
-                    .overlay(Color.glassBorder)
-                SummaryValue(value: themeCount.formatted(.number), label: "themes")
-                Divider()
-                    .frame(height: 32)
-                    .overlay(Color.glassBorder)
-                SummaryValue(value: durationRange, label: "read time")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var themeCount: Int {
-        Set(scripts.map(\.theme.rawValue)).count
-    }
-
-    private var durationRange: String {
-        let scriptDurations = scripts.flatMap { script in
-            script.supportedArcs.map { script.metrics(for: $0).estimatedDuration }
-        }
-        let documentDurations = documents.map { document in
-            Double(document.wordCount) / TextPacingEngine.defaultBaseWPM * 60
-        }
-        let durations = scriptDurations + documentDurations
-        let minutes = durations.map { max(1, Int(($0 / 60).rounded())) }
-        guard let min = minutes.min(), let max = minutes.max() else { return "0 min" }
-        if min == max { return min == 1 ? "1 min" : "\(min) min" }
-        return "\(min)-\(max) min"
-    }
-}
-
-private struct SummaryValue: View {
-    let value: String
-    let label: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value)
-                .font(TranceTypography.sectionTitle)
-                .foregroundStyle(Color.textPrimary)
-            Text(label)
-                .font(TranceTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 228)
     }
 }
 
@@ -584,24 +536,7 @@ private struct ScriptThemeIcon: View {
     }
 }
 
-private struct FilterChip: View {
-    let title: String
-    let isOn: Bool
-    let action: () -> Void
-    var body: some View {
-        Button(title, action: action)
-            .font(TranceTypography.caption)
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(
-                isOn ? Color.auroraTeal.opacity(0.22) : Color.glassBorder.opacity(0.4),
-                in: .capsule
-            )
-            .foregroundStyle(isOn ? Color.auroraTeal : Color.textSecondary)
-            .buttonStyle(.plain)
-    }
-}
-
-private struct WebTextImportSheet: View {
+struct WebTextImportSheet: View {
     let importer: WebReadableTextImporter
     let onImported: (TranceScript) -> Void
 
@@ -636,20 +571,19 @@ private struct WebTextImportSheet: View {
                         HStack(spacing: TranceSpacing.icon) {
                             if importState.isImporting {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(Color.voidDeep)
                             } else {
                                 Image(systemName: "text.page.badge.magnifyingglass")
                             }
                             Text(importState.isImporting ? "Reading" : "Read")
                         }
-                        .font(TranceTypography.body)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
+                        .font(.headline)
+                        .foregroundStyle(Color.voidDeep)
                         .frame(maxWidth: .infinity)
                         .frame(height: 46)
                         .background(
                             LinearGradient(
-                                colors: [.roseGold, .roseDeep],
+                                colors: [.auroraTeal, .auroraBlue],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
@@ -660,12 +594,6 @@ private struct WebTextImportSheet: View {
                     .buttonStyle(.plain)
                     .disabled(importDisabled)
                     .accessibilityLabel(importState.isImporting ? "Reading webpage" : "Read webpage")
-                }
-
-                if importState.isImporting {
-                    Section {
-                        ProgressView("Importing")
-                    }
                 }
 
                 if case .failed(let message) = importState {
@@ -682,13 +610,6 @@ private struct WebTextImportSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                         .disabled(importState.isImporting)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Read") {
-                        Task { await importPage() }
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(importDisabled)
                 }
             }
         }
@@ -722,5 +643,21 @@ private struct WebTextImportSheet: View {
 }
 
 #Preview {
-    NavigationStack { TextTranceLibraryView() }
+    NavigationStack {
+        TextTranceLibraryView(
+            scripts: TranceScriptLibrary.bundled(),
+            documents: [],
+            sources: [],
+            historyItems: [],
+            importState: .idle,
+            onImportFile: {},
+            onLoadWebsite: {},
+            onResume: { _ in },
+            onSeeAllHistory: {},
+            onOpenSource: { _ in },
+            onSeeAllSources: {},
+            onOpenDocument: { _ in },
+            onDeleteDocument: { _ in }
+        )
+    }
 }

@@ -85,7 +85,7 @@ private struct ReaderHistoryRow: View {
 
                     HStack(spacing: TranceSpacing.inner) {
                         Label("Word \(item.state.wordIndex + 1)", systemImage: "textformat")
-                        Text(item.state.savedAt, style: .relative)
+                        Text(item.state.savedAt.formatted(.relative(presentation: .named)))
                     }
                     .font(TranceTypography.caption)
                     .foregroundStyle(Color.textSecondary)

@@ -175,7 +175,7 @@ private struct ReaderSpeedTrainingFormSection: View {
                 )
             }
 
-            Picker("Chunk size", selection: chunkBinding) {
+            Picker("Words per flash", selection: chunkBinding) {
                 Text("1 word").tag(1)
                 Text("2 words").tag(2)
                 Text("3 words").tag(3)
@@ -234,7 +234,7 @@ private struct ReaderDisplayFormSection: View {
             LabeledContent("Line spacing", value: String(format: "%.1fx", preferences.clampedLineSpacing))
             Slider(value: lineSpacingBinding, in: ReaderDisplayPreferences.lineSpacingRange)
 
-            Picker("ORP color", selection: $preferences.orpColor) {
+            Picker("Highlight color", selection: $preferences.orpColor) {
                 ForEach(ReaderORPColor.allCases) {
                     Text($0.displayName).tag($0)
                 }

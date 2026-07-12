@@ -74,7 +74,7 @@ struct TextTranceSessionSettings: Sendable {
 
 @MainActor
 @Observable
-final class TextTranceSession {
+final class TextTranceSession: Identifiable {
 
     // Rendered state
     private(set) var currentWord: String = ""
