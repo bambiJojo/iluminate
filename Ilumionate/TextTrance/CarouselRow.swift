@@ -1,8 +1,8 @@
 //  CarouselRow.swift
 //  Ilumionate
 //
-//  Shared horizontal shelf for the Reader tab: view-aligned paging with a
-//  peek of the next card, matching the Apple Music shelf pattern.
+//  Shared horizontal shelf used by the Reader and Library tabs: view-aligned
+//  paging with a peek of the next card, matching the Apple Music shelf pattern.
 
 import SwiftUI
 
