@@ -354,24 +354,6 @@ private struct LibrarySessionsList: View {
     }
 }
 
-// MARK: - Sort Options
-
-enum LibrarySortOption: String, CaseIterable {
-    case newest     = "newest"
-    case name       = "name"
-    case lastPlayed = "lastPlayed"
-    case favorites  = "favorites"
-
-    var label: String {
-        switch self {
-        case .newest:     "Newest"
-        case .name:       "Name"
-        case .lastPlayed: "Recently Played"
-        case .favorites:  "Favorites First"
-        }
-    }
-}
-
 // MARK: - LibrarySessionRow
 
 struct LibrarySessionRow: View {
