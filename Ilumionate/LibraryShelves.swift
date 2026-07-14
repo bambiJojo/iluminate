@@ -113,6 +113,7 @@ struct AnalysisQueueStatusCard: View {
 struct LibraryAudioShelf: View {
     let files: [AudioFile]
     var showsHeart = false
+    var showsAnalyzedSeal = false
     let onPlay: (AudioFile) -> Void
 
     var body: some View {
@@ -120,7 +121,7 @@ struct LibraryAudioShelf: View {
             Button {
                 onPlay(file)
             } label: {
-                AudioShelfCard(file: file, showsHeart: showsHeart)
+                AudioShelfCard(file: file, showsHeart: showsHeart, showsAnalyzedSeal: showsAnalyzedSeal)
             }
             .buttonStyle(.plain)
         }
@@ -130,6 +131,7 @@ struct LibraryAudioShelf: View {
 private struct AudioShelfCard: View {
     let file: AudioFile
     var showsHeart = false
+    var showsAnalyzedSeal = false
 
     var body: some View {
         LiminalCard {
@@ -155,6 +157,12 @@ private struct AudioShelfCard: View {
                             .font(.system(size: 12))
                             .foregroundStyle(Color(hex: "E85D75"))
                     }
+
+                    if showsAnalyzedSeal {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.roseGold)
+                    }
                 }
 
                 ShelfPlayPill()
@@ -167,28 +175,80 @@ private struct AudioShelfCard: View {
 
 // MARK: - Playlists Shelf
 
-/// Horizontal shelf of playlist cards; tapping plays the playlist.
+/// Horizontal shelf of playlist cards, led by a create card; tapping a
+/// playlist plays it, tapping the create card opens the new-playlist editor.
 struct LibraryPlaylistShelf: View {
     let playlists: [Playlist]
     let onPlay: (Playlist) -> Void
+    let onCreate: () -> Void
     let onOpenLibrary: () -> Void
 
+    private var items: [PlaylistShelfItem] {
+        [.create] + playlists.map(PlaylistShelfItem.playlist)
+    }
+
     var body: some View {
-        CarouselRow(items: playlists) { playlist in
-            Button {
-                onPlay(playlist)
-            } label: {
-                PlaylistShelfCard(playlist: playlist)
-            }
-            .buttonStyle(.plain)
-            .contextMenu {
-                Button("Play", systemImage: "play.fill") {
+        CarouselRow(items: items) { item in
+            switch item {
+            case .create:
+                Button {
+                    TranceHaptics.shared.light()
+                    onCreate()
+                } label: {
+                    NewPlaylistCard()
+                }
+                .buttonStyle(.plain)
+            case .playlist(let playlist):
+                Button {
                     onPlay(playlist)
+                } label: {
+                    PlaylistShelfCard(playlist: playlist)
                 }
-                Button("Open Playlists", systemImage: "music.note.list") {
-                    onOpenLibrary()
+                .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Play", systemImage: "play.fill") {
+                        onPlay(playlist)
+                    }
+                    Button("Open Playlists", systemImage: "music.note.list") {
+                        onOpenLibrary()
+                    }
                 }
             }
+        }
+    }
+}
+
+private enum PlaylistShelfItem: Identifiable {
+    case create
+    case playlist(Playlist)
+
+    var id: String {
+        switch self {
+        case .create: return "create-playlist"
+        case .playlist(let playlist): return playlist.id.uuidString
+        }
+    }
+}
+
+/// Dashed "New Playlist" affordance leading the playlists shelf.
+private struct NewPlaylistCard: View {
+    var body: some View {
+        VStack(spacing: TranceSpacing.list) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(Color.auroraTeal)
+            Text("New Playlist")
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(Color.textPrimary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(height: 128)
+        .background(Color.glassBorder.opacity(0.10),
+                    in: .rect(cornerRadius: TranceRadius.glassCard))
+        .overlay {
+            RoundedRectangle(cornerRadius: TranceRadius.glassCard)
+                .strokeBorder(Color.auroraTeal.opacity(0.5),
+                              style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
         }
     }
 }
@@ -285,6 +345,87 @@ private struct BuiltInSessionShelfCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(height: 128)
+    }
+}
+
+// MARK: - Artists Shelf
+
+/// Horizontal shelf of creator cards; tapping opens that artist's sessions.
+struct LibraryArtistShelf: View {
+    let artists: [LibraryArtist]
+    let onOpen: (LibraryArtist) -> Void
+
+    var body: some View {
+        CarouselRow(items: artists) { artist in
+            Button {
+                TranceHaptics.shared.light()
+                onOpen(artist)
+            } label: {
+                ArtistShelfCard(artist: artist)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct ArtistShelfCard: View {
+    let artist: LibraryArtist
+
+    var body: some View {
+        LiminalCard {
+            HStack(spacing: TranceSpacing.list) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.auroraBlue.opacity(0.18))
+                    .frame(width: 40, height: 40)
+                    .overlay {
+                        Image(systemName: "music.mic")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Color.auroraBlue)
+                    }
+
+                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                    Text(artist.name)
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                    Text("\(artist.fileCount) sessions")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+        .frame(height: 88)
+    }
+}
+
+// MARK: - Empty Library
+
+/// Shown under the header when no audio files exist at all.
+struct LibraryEmptyCard: View {
+    var body: some View {
+        GlassCard {
+            HStack(spacing: TranceSpacing.list) {
+                Image(systemName: "plus")
+                    .font(.title2)
+                    .foregroundStyle(Color.auroraTeal)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("No sessions yet")
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(Color.textPrimary)
+                    Text("Tap  +  to add your first session")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

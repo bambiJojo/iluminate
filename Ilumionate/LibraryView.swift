@@ -15,6 +15,9 @@ import os
 enum LibraryDestination: Hashable {
     case favorites
     case builtInSessions
+    case artists
+    case artist(String)
+    case allFiles
 }
 
 // MARK: - LibraryView
@@ -26,11 +29,12 @@ struct LibraryView: View {
     @State private var audioFiles: [AudioFile] = []
     @State private var playlists: [Playlist] = []
     @State private var builtInSessions: [LightSession] = []
-    @State private var sortOption: LibrarySortOption = .newest
-    // Cached derived collections — recomputed only when audioFiles or sortOption change
-    @State private var cachedSortedFiles: [AudioFile] = []
+    // Cached derived collections — recomputed only when audioFiles change
     @State private var cachedRecentFiles: [AudioFile] = []
     @State private var cachedFavoriteFiles: [AudioFile] = []
+    @State private var cachedArtists: [LibraryArtist] = []
+    @State private var cachedAnalyzedFiles: [AudioFile] = []
+    @State private var cachedAllFiles: [AudioFile] = []
     @State private var navPath = NavigationPath()
     @State private var showingPlaylists = false
     @State private var showingSessionsManager = false
@@ -39,6 +43,7 @@ struct LibraryView: View {
     @State private var playingPlaylist: Playlist?
     @State private var playingSession: LightSession?
     @State private var fileForPlaylist: AudioFile?
+    @State private var editingPlaylist: Playlist?
 
     var body: some View {
         NavigationStack(path: $navPath) {
@@ -61,6 +66,11 @@ struct LibraryView: View {
                             .padding(.horizontal, TranceSpacing.screen)
                         }
 
+                        if audioFiles.isEmpty {
+                            LibraryEmptyCard()
+                                .padding(.horizontal, TranceSpacing.screen)
+                        }
+
                         if !recentFiles.isEmpty {
                             LibraryShelfSectionHeader(title: "Recently Played")
                                 .padding(.horizontal, TranceSpacing.screen)
@@ -75,17 +85,40 @@ struct LibraryView: View {
                             LibraryAudioShelf(files: favoriteFiles, showsHeart: true, onPlay: playWithLights)
                         }
 
-                        if !shelfPlaylists.isEmpty {
-                            LibraryShelfSectionHeader(title: "Playlists") {
-                                TranceHaptics.shared.light()
-                                showingPlaylists = true
+                        LibraryShelfSectionHeader(title: "Playlists") {
+                            TranceHaptics.shared.light()
+                            showingPlaylists = true
+                        }
+                        .padding(.horizontal, TranceSpacing.screen)
+                        LibraryPlaylistShelf(
+                            playlists: shelfPlaylists,
+                            onPlay: { playPlaylist($0) },
+                            onCreate: { editingPlaylist = Playlist(name: "") },
+                            onOpenLibrary: { showingPlaylists = true }
+                        )
+
+                        if !artists.isEmpty {
+                            LibraryShelfSectionHeader(title: "Artists") {
+                                navPath.append(LibraryDestination.artists)
                             }
                             .padding(.horizontal, TranceSpacing.screen)
-                            LibraryPlaylistShelf(
-                                playlists: shelfPlaylists,
-                                onPlay: { playPlaylist($0) },
-                                onOpenLibrary: { showingPlaylists = true }
-                            )
+                            LibraryArtistShelf(artists: artists) { artist in
+                                navPath.append(LibraryDestination.artist(artist.name))
+                            }
+                        }
+
+                        if !analyzedFiles.isEmpty {
+                            LibraryShelfSectionHeader(title: "Analyzed")
+                                .padding(.horizontal, TranceSpacing.screen)
+                            LibraryAudioShelf(files: analyzedFiles, showsAnalyzedSeal: true, onPlay: playWithLights)
+                        }
+
+                        if !allFilesShelf.isEmpty {
+                            LibraryShelfSectionHeader(title: "All Files") {
+                                navPath.append(LibraryDestination.allFiles)
+                            }
+                            .padding(.horizontal, TranceSpacing.screen)
+                            LibraryAudioShelf(files: allFilesShelf, onPlay: playWithLights)
                         }
 
                         if !shelfSessions.isEmpty {
@@ -98,13 +131,6 @@ struct LibraryView: View {
                             }
                         }
 
-                        LibrarySessionsList(
-                            files: sortedAudioFiles,
-                            engine: engine,
-                            sortOption: $sortOption,
-                            onPlay: playWithLights,
-                            onAddToPlaylist: { fileForPlaylist = $0 }
-                        )
                         bottomSpacer
                     }
                     .padding(.top, TranceSpacing.screen)
@@ -118,6 +144,16 @@ struct LibraryView: View {
                     LibraryFavoritesView(audioFiles: audioFiles, engine: engine)
                 case .builtInSessions:
                     SessionLibraryView(engine: engine)
+                case .artists:
+                    LibraryCreatorsView(audioFiles: audioFiles, engine: engine)
+                case .artist(let name):
+                    CreatorDetailView(
+                        creatorName: name,
+                        audioFiles: audioFiles.filter { $0.creatorDisplayName == name },
+                        engine: engine
+                    )
+                case .allFiles:
+                    LibraryAllFilesView(audioFiles: audioFiles, engine: engine)
                 }
             }
             .sheet(isPresented: $showingPlaylists) {
@@ -145,6 +181,13 @@ struct LibraryView: View {
                     addFile(file, to: playlist)
                 }
             }
+            .sheet(item: $editingPlaylist) { playlist in
+                PlaylistEditorView(
+                    playlist: playlist,
+                    isNew: !playlists.contains(where: { $0.id == playlist.id }),
+                    onSave: { saved in upsertPlaylist(saved) }
+                )
+            }
             .onAppear {
                 loadAudioFiles()
                 loadPlaylists()
@@ -152,7 +195,6 @@ struct LibraryView: View {
                 recomputeDerivedCollections()
             }
             .onChange(of: audioFiles) { _, _ in recomputeDerivedCollections() }
-            .onChange(of: sortOption) { _, _ in recomputeDerivedCollections() }
         }
     }
 
@@ -165,7 +207,9 @@ struct LibraryView: View {
     }
     private var recentFiles: [AudioFile] { cachedRecentFiles }
     private var favoriteFiles: [AudioFile] { cachedFavoriteFiles }
-    private var sortedAudioFiles: [AudioFile] { cachedSortedFiles }
+    private var artists: [LibraryArtist] { cachedArtists }
+    private var analyzedFiles: [AudioFile] { cachedAnalyzedFiles }
+    private var allFilesShelf: [AudioFile] { cachedAllFiles }
     private var shelfPlaylists: [Playlist] { LibraryShelfContent.shelfPlaylists(from: playlists) }
     private var shelfSessions: [LightSession] {
         Array(builtInSessions.prefix(LibraryShelfContent.shelfCap))
@@ -174,14 +218,18 @@ struct LibraryView: View {
     private func recomputeDerivedCollections() {
         cachedRecentFiles = LibraryShelfContent.recents(from: audioFiles)
         cachedFavoriteFiles = LibraryShelfContent.favorites(from: audioFiles)
-        cachedSortedFiles = audioFiles.sorted { lhs, rhs in
-            switch sortOption {
-            case .newest:     return lhs.createdDate > rhs.createdDate
-            case .name:       return lhs.filename.localizedStandardCompare(rhs.filename) == .orderedAscending
-            case .lastPlayed: return (lhs.lastPlayedDate ?? .distantPast) > (rhs.lastPlayedDate ?? .distantPast)
-            case .favorites:  return lhs.favorite && !rhs.favorite
-            }
+        cachedArtists = LibraryShelfContent.artists(from: audioFiles)
+        cachedAnalyzedFiles = LibraryShelfContent.analyzed(from: audioFiles)
+        cachedAllFiles = LibraryShelfContent.allFiles(from: audioFiles)
+    }
+
+    private func upsertPlaylist(_ playlist: Playlist) {
+        if let index = playlists.firstIndex(where: { $0.id == playlist.id }) {
+            playlists[index] = playlist
+        } else {
+            playlists.append(playlist)
         }
+        PlaylistStore.save(playlists)
     }
 
     private func loadAudioFiles() {
@@ -231,126 +279,6 @@ struct LibraryView: View {
 
     private var bottomSpacer: some View {
         Color.clear.frame(height: TranceSpacing.tabBarClearance + TranceSpacing.content)
-    }
-}
-
-// MARK: - Library Section Components
-
-/// Thin hairline divider between rows.
-private struct LibraryRowDivider: View {
-    var body: some View {
-        Rectangle()
-            .fill(Color.glassBorder.opacity(0.3))
-            .frame(height: 1)
-    }
-}
-
-/// The inline audio-files list with sort menu and per-row actions.
-private struct LibrarySessionsList: View {
-    let files: [AudioFile]
-    let engine: LightEngine
-    @Binding var sortOption: LibrarySortOption
-    let onPlay: (AudioFile) -> Void
-    let onAddToPlaylist: (AudioFile) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Audio Files")
-                    .font(TranceTypography.sectionTitle)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.textPrimary)
-                Spacer()
-                Menu {
-                    Picker("Sort By", selection: $sortOption) {
-                        ForEach(LibrarySortOption.allCases, id: \.self) { opt in
-                            Text(opt.label).tag(opt)
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.arrow.down")
-                        Text(sortOption.label)
-                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
-                    }
-                    .font(TranceTypography.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.textSecondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .liminalGlass(.capsule, glow: false)
-                }
-                .padding(.trailing, TranceSpacing.screen)
-            }
-            .padding(.leading, TranceSpacing.screen)
-            .padding(.top, TranceSpacing.content)
-
-            if files.isEmpty {
-                emptySessionsHint
-            } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(files) { file in
-                        NavigationLink {
-                            SessionDetailView(audioFile: file, engine: engine)
-                        } label: {
-                            LibrarySessionRowLabel(file: file)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Play", systemImage: "play.fill") {
-                                onPlay(file)
-                            }
-                            Button("Analyze", systemImage: "waveform") {
-                                Task {
-                                    AnalysisStateManager.shared.evictCachedResult(for: file)
-                                    await AnalysisStateManager.shared.queueForAnalysis(file)
-                                }
-                            }
-                            Button("Add to Playlist", systemImage: "plus") {
-                                onAddToPlaylist(file)
-                            }
-                        }
-                        .swipeActions(edge: .trailing) {
-                            Button {
-                                onPlay(file)
-                            } label: {
-                                Label("Play", systemImage: "play.fill")
-                            }
-                            .tint(.auroraTeal)
-
-                            Button {
-                                onAddToPlaylist(file)
-                            } label: {
-                                Label("Add to Playlist", systemImage: "plus")
-                            }
-                            .tint(.bwTheta)
-                        }
-                        if file.id != files.last?.id {
-                            LibraryRowDivider()
-                                .padding(.leading, 56)
-                                .padding(.horizontal, TranceSpacing.screen)
-                        }
-                    }
-                }
-                .padding(.horizontal, TranceSpacing.screen)
-                .padding(.top, TranceSpacing.inner)
-                .liminalSurface()
-                .padding(.horizontal, TranceSpacing.screen)
-                .padding(.top, TranceSpacing.inner)
-            }
-        }
-    }
-
-    private var emptySessionsHint: some View {
-        HStack(spacing: TranceSpacing.list) {
-            Image(systemName: "plus")
-                .font(.title2)
-                .foregroundStyle(Color.auroraTeal)
-            Text("Tap  +  to add your first session")
-                .font(TranceTypography.body)
-                .foregroundStyle(.textSecondary)
-        }
-        .padding(TranceSpacing.content)
     }
 }
 
