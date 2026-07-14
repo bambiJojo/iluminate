@@ -125,13 +125,14 @@
       <tr><th>#</th><th>Shelf</th><th>Card</th><th>Tap</th><th>See all</th></tr>
       <tr><td>1</td><td>Recently Played</td><td>existing audio card</td><td>play with lights</td><td>—</td></tr>
       <tr><td>2</td><td>Favorites</td><td>audio card + heart</td><td>play with lights</td><td>Favorites screen (existing)</td></tr>
-      <tr><td>3</td><td>Playlists</td><td>existing playlist card</td><td>play playlist</td><td>playlists sheet (existing)</td></tr>
+      <tr><td>3</td><td>Playlists</td><td>"New Playlist" create card <strong>first</strong>, then playlist cards</td><td>create → editor sheet; playlist → play</td><td>playlists sheet (existing)</td></tr>
       <tr><td>4</td><td>Artists<span class="new">NEW</span></td><td><code>music.mic</code> tile, name, "N sessions"</td><td>push <code>CreatorDetailView</code> for that artist</td><td>push <code>LibraryCreatorsView</code></td></tr>
       <tr><td>5</td><td>Analyzed<span class="new">NEW</span></td><td>audio card + <code>checkmark.seal</code> accent</td><td>play with lights</td><td>— (full set in All Files)</td></tr>
       <tr><td>6</td><td>All Files<span class="new">NEW</span></td><td>existing audio card</td><td>play with lights</td><td>push new <code>LibraryAllFilesView</code></td></tr>
       <tr><td>7</td><td>Built-in Sessions</td><td>existing session card</td><td>play session</td><td>Session Library (existing)</td></tr>
     </table>
     <ul>
+      <li><strong>New Playlist card:</strong> dashed-border glass card (teal <code>plus.circle</code>, "New Playlist"), always first in the Playlists carousel. Tap opens <code>PlaylistEditorView</code> (<code>isNew: true</code>) as a sheet; save upserts via <code>PlaylistStore</code>. The Playlists shelf is therefore <em>always visible</em>; the create card doesn't count against the cap.</li>
       <li>Artists shelf excludes files with empty/unknown creator; those remain reachable via All Files. Artist cards sort by name.</li>
       <li>Analyzed and All Files order newest first (<code>createdDate</code> desc).</li>
       <li>All shelves cap at <code>LibraryShelfContent.shelfCap</code> (10).</li>

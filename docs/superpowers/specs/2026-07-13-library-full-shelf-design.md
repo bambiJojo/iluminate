@@ -25,12 +25,22 @@ screen. The Library root becomes pure shelves top to bottom, like the reader tab
 |---|-------|------|-----|---------|
 | 1 | Recently Played | existing audio card | play with lights | — |
 | 2 | Favorites | existing audio card + heart | play with lights | push Favorites (existing) |
-| 3 | Playlists | existing playlist card | play playlist | playlists sheet (existing) |
+| 3 | Playlists | "New Playlist" create card **first**, then existing playlist cards | create card → new-playlist editor sheet; playlist card → play playlist | playlists sheet (existing) |
 | 4 | **Artists** (new) | `music.mic` icon tile, artist name, "N sessions" | push `CreatorDetailView(creatorName:audioFiles:engine:)` for that artist | push `LibraryCreatorsView` |
 | 5 | **Analyzed** (new) | audio card with `checkmark.seal` accent | play with lights | — (full set lives in All Files) |
 | 6 | **All Files** (new) | existing audio card | play with lights | push new `LibraryAllFilesView` |
 | 7 | Built-in Sessions | existing session card | play session | push Session Library (existing) |
 
+- **New Playlist card (user-added 2026-07-13):** dashed-border glass card with a
+  teal `plus.circle` and "New Playlist", always the first item in the Playlists
+  carousel. Tap opens the existing `PlaylistEditorView` as a sheet
+  (`Playlist(name: "")`, `isNew: true`); `onSave` upserts via `PlaylistStore.save`
+  and refreshes the shelf. Because the create card always exists, the Playlists
+  shelf is **always visible** (a lone create card renders full-width via
+  `CarouselRow`'s single-item mode). The create card does not count against the
+  10-item cap. Implementation: a private
+  `enum PlaylistShelfItem: Identifiable { case create; case playlist(Playlist) }`
+  feeds the `CarouselRow`.
 - Artists shelf excludes files with empty/unknown creator (`creatorDisplayName`
   nil or empty); those files remain reachable via All Files. Artist cards sort by
   name (localized standard compare).
@@ -95,9 +105,12 @@ All pushed via the existing `NavigationPath`; pushed screens keep native nav bar
 
 - `Ilumionate/LibraryShelfContent.swift` — add `LibraryArtist`, four new statics.
 - `Ilumionate/LibraryShelves.swift` — add `LibraryArtistShelf` + `ArtistShelfCard`;
-  extend the audio card with an optional analyzed accent; add `LibraryEmptyCard`.
+  extend the audio card with an optional analyzed accent; add `LibraryEmptyCard`;
+  add `NewPlaylistCard` + `PlaylistShelfItem` and the create hook on
+  `LibraryPlaylistShelf`.
 - `Ilumionate/LibraryView.swift` — new shelf composition + destinations; remove
-  inline list, `sortOption`, `cachedSortedFiles`.
+  inline list, `sortOption`, `cachedSortedFiles`; add `@State editingPlaylist`
+  presenting `PlaylistEditorView` (create flow) with upsert-on-save.
 - `Ilumionate/LibraryAllFilesView.swift` (new) — pushed full-list screen;
   `LibrarySessionsList` moves here.
 - `IlumionateTests/LibraryShelfContentTests.swift` — tests for the four new
@@ -105,7 +118,8 @@ All pushed via the existing `NavigationPath`; pushed screens keep native nav bar
 
 ## Error & empty handling
 
-- Empty shelves render nothing (unchanged pattern).
+- Empty shelves render nothing (unchanged pattern) — except Playlists, which
+  always shows at least the New Playlist create card.
 - Artists shelf renders nothing when every file lacks a creator.
 - Empty library shows the `LibraryEmptyCard` under the header.
 
