@@ -40,7 +40,7 @@ struct LumeOrb: View {
             ZStack {
                 // Outer breathing glow
                 Circle()
-                    .fill(RadialGradient(colors: [Color.auroraBlue.opacity(0.4), .clear],
+                    .fill(RadialGradient(colors: [Color.roseDeep.opacity(0.4), .clear],
                                          center: .center, startRadius: 0,
                                          endRadius: size.diameter * 0.9))
                     .scaleEffect(glowScale)
@@ -48,25 +48,25 @@ struct LumeOrb: View {
 
                 // Conic aurora ring
                 Circle()
-                    .fill(AngularGradient(colors: [.auroraTeal, .auroraBlue, .auroraViolet, .auroraPink, .auroraTeal],
+                    .fill(AngularGradient(colors: [.roseGold, .roseDeep, .lavender, .blush, .roseGold],
                                           center: .center))
                     .rotationEffect(.degrees(spin))
 
                 // Void core
                 Circle()
-                    .fill(Color.voidPrimary)
+                    .fill(Color.bgPrimary)
                     .padding(size.ringInset)
             }
             .frame(width: size.diameter, height: size.diameter)
-            .shadow(color: .auroraBlue.opacity(0.4), radius: size.glowRadius)
+            .shadow(color: .roseDeep.opacity(0.4), radius: size.glowRadius)
         }
         .accessibilityHidden(true)
     }
 }
 
 #Preview("Hero") {
-    ZStack { Color.voidPrimary.ignoresSafeArea(); LumeOrb(size: .hero) }
+    ZStack { Color.bgPrimary.ignoresSafeArea(); LumeOrb(size: .hero) }
 }
 #Preview("Mini") {
-    ZStack { Color.voidPrimary.ignoresSafeArea(); LumeOrb(size: .mini) }
+    ZStack { Color.bgPrimary.ignoresSafeArea(); LumeOrb(size: .mini) }
 }

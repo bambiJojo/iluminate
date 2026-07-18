@@ -184,7 +184,7 @@ struct TranceRadius {
 struct TranceShadow {
     // Card glow (soft aurora bloom instead of a dark drop shadow)
     static let card = (
-        color: Color.auroraBlue.opacity(0.10),
+        color: Color.roseDeep.opacity(0.10),
         radius: 16.0,
         x: 0.0,
         y: 0.0
@@ -192,7 +192,7 @@ struct TranceShadow {
 
     // CTA button glow
     static let button = (
-        color: Color.auroraTeal.opacity(0.35),
+        color: Color.roseGold.opacity(0.35),
         radius: 18.0,
         x: 0.0,
         y: 6.0
@@ -205,7 +205,7 @@ struct TranceShadow {
 
     // Elevated card glow
     static let elevated = (
-        color: Color.auroraBlue.opacity(0.18),
+        color: Color.roseDeep.opacity(0.18),
         radius: 20.0,
         x: 0.0,
         y: 0.0

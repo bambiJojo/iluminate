@@ -51,26 +51,26 @@ struct GlowButton: View {
             }
         }
         .font(.headline)
-        .foregroundStyle(kind == .primary ? Color.voidDeep : Color.textBright)
+        .foregroundStyle(kind == .primary ? Color.bgDeep : Color.textPrimary)
     }
 
     @ViewBuilder
     private var background: some View {
         switch kind {
         case .primary:
-            LinearGradient(colors: [.auroraTeal, .auroraBlue],
+            LinearGradient(colors: [.roseGold, .roseDeep],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         case .secondary:
-            Color.voidElevated.opacity(0.6)
+            Color.bgSecondary.opacity(0.6)
         }
     }
 
-    private var glowColor: Color { kind == .primary ? .auroraTeal : .auroraBlue }
+    private var glowColor: Color { kind == .primary ? .roseGold : .roseDeep }
 }
 
 #Preview {
     ZStack {
-        Color.voidPrimary.ignoresSafeArea()
+        Color.bgPrimary.ignoresSafeArea()
         VStack(spacing: TranceSpacing.cardMargin) {
             GlowButton(title: "Begin", systemImage: "play.fill") {}
             GlowButton(title: "Browse Library", kind: .secondary) {}

@@ -40,10 +40,10 @@ struct PhaseTimeline: View {
             ForEach(Stage.allCases) { stage in
                 let isActive = stage == current
                 Capsule()
-                    .fill(isActive ? Color.auroraTeal : Color.auroraBlue.opacity(0.25))
+                    .fill(isActive ? Color.roseGold : Color.roseDeep.opacity(0.25))
                     .frame(maxWidth: .infinity)
                     .opacity(isActive ? pulse : 1.0)
-                    .shadow(color: isActive ? Color.auroraTeal.opacity(0.6 * pulse) : .clear, radius: 6)
+                    .shadow(color: isActive ? Color.roseGold.opacity(0.6 * pulse) : .clear, radius: 6)
             }
         }
     }
@@ -57,7 +57,7 @@ struct PhaseTimeline: View {
 
 #Preview {
     ZStack {
-        Color.voidPrimary.ignoresSafeArea()
+        Color.bgPrimary.ignoresSafeArea()
         VStack(spacing: TranceSpacing.cardMargin) {
             PhaseTimeline(current: .deepener)
             PhaseTimeline(current: nil)

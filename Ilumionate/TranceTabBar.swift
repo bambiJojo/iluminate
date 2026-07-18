@@ -79,7 +79,7 @@ struct TranceTabBar: View {
                 Text(tab.title)
                     .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
             }
-            .foregroundStyle(isSelected ? tabAccentColor : Color.textGhost)
+            .foregroundStyle(isSelected ? tabAccentColor : Color.textLight)
             .scaleEffect(isSelected && !reduceMotion ? 1.05 : 1.0)
             .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.65), value: selected)
             .frame(maxWidth: .infinity)

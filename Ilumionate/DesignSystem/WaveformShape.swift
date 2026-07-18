@@ -11,7 +11,7 @@ import SwiftUI
 /// Normalized waveform sampler. `phase` 0...1 maps one full cycle to amplitude 0...1
 /// (0.5 = baseline for sine; shapes are framed for legible picker thumbnails, not DSP).
 enum WaveformSample {
-    static func value(_ pattern: MindMachineModel.LightPattern, phase: Double) -> Double {
+    nonisolated static func value(_ pattern: MindMachineModel.LightPattern, phase: Double) -> Double {
         let p = phase - phase.rounded(.down) // wrap into 0..<1
         switch pattern {
         case .sine:
@@ -49,17 +49,17 @@ struct WaveformShape: Shape {
 
 #Preview {
     ZStack {
-        Color.voidPrimary.ignoresSafeArea()
+        Color.bgPrimary.ignoresSafeArea()
         VStack(spacing: TranceSpacing.cardMargin) {
             ForEach(MindMachineModel.LightPattern.allCases, id: \.rawValue) { pattern in
                 WaveformShape(pattern: pattern)
                     .stroke(
-                        LinearGradient(colors: [.auroraTeal, .auroraBlue],
+                        LinearGradient(colors: [.roseGold, .roseDeep],
                                        startPoint: .leading, endPoint: .trailing),
                         style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
                     )
                     .frame(height: 44)
-                    .shadow(color: .auroraTeal.opacity(0.5), radius: 8)
+                    .shadow(color: .roseGold.opacity(0.5), radius: 8)
                     .padding(.horizontal, TranceSpacing.screen)
             }
         }

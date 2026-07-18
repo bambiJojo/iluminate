@@ -30,7 +30,7 @@ enum LiminalGlassShape {
 
 /// The ONE canonical Liminal "void-glass" treatment.
 ///
-/// Layering (back to front): a tinted `voidElevated` plate establishes the
+/// Layering (back to front): a tinted `bgSecondary` plate establishes the
 /// dark void, `.ultraThinMaterial` sits in *front* of it so its blur stays
 /// visible, a hairline aurora border traces the edge, and a centered
 /// aurora-blue glow blooms outward (an atmospheric halo, not a dark drop
@@ -48,13 +48,13 @@ struct LiminalGlassModifier: ViewModifier {
             .background {
                 shape
                     .fill(.ultraThinMaterial)
-                    .background(shape.fill(Color.voidElevated.opacity(tintOpacity)))
+                    .background(shape.fill(Color.bgSecondary.opacity(tintOpacity)))
             }
             .clipShape(shape)
             .overlay {
                 shape.stroke(Color.glassBorder, lineWidth: 1)
             }
-            .shadow(color: glow ? Color.auroraBlue.opacity(0.15) : .clear,
+            .shadow(color: glow ? Color.roseDeep.opacity(0.15) : .clear,
                     radius: 16, x: 0, y: 0)
     }
 }
@@ -92,7 +92,7 @@ struct LiminalCard<Content: View>: View {
                     .font(TranceTypography.cardLabel)
                     .tracking(1.6)
                     .textCase(.uppercase)
-                    .foregroundStyle(.textGhost)
+                    .foregroundStyle(.textLight)
             }
             content()
         }
@@ -103,17 +103,17 @@ struct LiminalCard<Content: View>: View {
 
 #Preview {
     ZStack {
-        Color.voidPrimary.ignoresSafeArea()
+        Color.bgPrimary.ignoresSafeArea()
         VStack(spacing: TranceSpacing.cardMargin) {
             LiminalCard(label: "Tonight") {
                 Text("Hypnagogic Drift · 30 min")
                     .font(TranceTypography.body)
-                    .foregroundStyle(.textBright)
+                    .foregroundStyle(.textPrimary)
             }
             LiminalCard {
                 Text("No label")
                     .font(TranceTypography.body)
-                    .foregroundStyle(.textDim)
+                    .foregroundStyle(.textSecondary)
             }
         }
         .padding(TranceSpacing.screen)

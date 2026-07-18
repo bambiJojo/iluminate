@@ -20,7 +20,7 @@ enum ContentTypeStyle {
         case .music:          return .bwBeta
         case .guidedImagery:  return .bwTheta
         case .affirmations:   return .warmAccent
-        case .unknown, .none: return .auroraTeal
+        case .unknown, .none: return .roseGold
         }
     }
 
@@ -64,7 +64,7 @@ struct SessionGlowDot: View {
 
 #Preview {
     ZStack {
-        Color.voidPrimary.ignoresSafeArea()
+        Color.bgPrimary.ignoresSafeArea()
         HStack(spacing: TranceSpacing.card) {
             SessionGlowDot(contentType: .hypnosis)
             SessionGlowDot(contentType: .meditation)

@@ -5,7 +5,8 @@
 //  The signature Liminal surface: a void radial gradient with 2–3 large
 //  blurred aurora blobs drifting at Breath tempo. Mood tints the aurora
 //  toward a brainwave zone. Freezes under Reduce Motion. Pauses when an
-//  active light session owns the screen.
+//  active light session owns the screen. In light mode the void becomes
+//  the Pink Aurora dawn wash with softer blobs.
 //
 
 import SwiftUI
@@ -17,12 +18,13 @@ struct AuroraBackground: View {
     var isPaused: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
-            // Void base
+            // Void base (dark) / dawn wash (light) via adaptive tokens
             RadialGradient(
-                colors: [Color.voidPrimary, Color.voidDeep],
+                colors: [Color.bgPrimary, Color.bgDeep],
                 center: .init(x: 0.5, y: 1.15),
                 startRadius: 0, endRadius: 700
             )
@@ -34,15 +36,20 @@ struct AuroraBackground: View {
                 animatedBlobs
             }
         }
-        .background(Color.voidDeep.ignoresSafeArea())
+        .background(Color.bgDeep.ignoresSafeArea())
         .accessibilityHidden(true)
     }
 
     private var blobColors: [Color] {
         if let mood {
-            return [mood.haloColor, .auroraBlue, mood.haloColor.opacity(0.7)]
+            return [mood.haloColor, .roseDeep, mood.haloColor.opacity(0.7)]
         }
-        return [.auroraBlue, .auroraViolet, .auroraTeal]
+        return [.roseDeep, .lavender, .roseGold]
+    }
+
+    /// Aurora blobs read heavier on the blush dawn wash; back them off in light mode.
+    private var blobOpacity: Double {
+        colorScheme == .light ? 0.18 : 0.35
     }
 
     private var staticBlobs: some View {
@@ -79,9 +86,10 @@ struct AuroraBackground: View {
             .fill(color)
             .frame(width: 420, height: 420)
             .blur(radius: 90)
-            .opacity(0.35)
+            .opacity(blobOpacity)
     }
 }
 
 #Preview("Neutral") { AuroraBackground() }
 #Preview("Sleep mood") { AuroraBackground(mood: .sleep) }
+#Preview("Light") { AuroraBackground().environment(\.colorScheme, .light) }
