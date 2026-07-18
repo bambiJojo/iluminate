@@ -28,16 +28,16 @@ New file `Ilumionate/DesignSystem/PinkAuroraPalette.swift` with a `PinkAuroraHex
 | bgDeep (voidDeep) | `03040C` | `FFE9F4` |
 | bgPrimary | `070D1F` | `FFF3F9` |
 | bgSecondary/elevated | `0D1428` | `FFFFFF` |
-| accent teal (`roseGold`) | `7EE8D8` | `0FA891` |
+| accent teal (`roseGold`) | `7EE8D8` | `0B8A76` |
 | accent blue (`roseDeep`) | `7C9EFF` | `4D6DF0` |
 | blush (hero pink) | `E87CB8` | `FF2D8F` |
 | lavender | `B07DC8` | `9A4DC8` |
-| warmAccent (peach) | `E8B07A` | `E07A2E` |
+| warmAccent (peach) | `E8B07A` | `C4611A` |
 | textPrimary | `E6EEFF` | `231024` |
 | textSecondary | `8FA3CC` | `7A5A80` |
 | textLight/ghost | `5A6A8A` | `B08DB8` |
-| bwDelta…bwGamma | existing | `6B4788`, `9A4DC8`, `4D6DF0`, `0FA891`, `E07A2E` |
-| phase colors | existing | deepened variants in same hue families (chosen during implementation for AA contrast on `FFF3F9`) |
+| bwDelta…bwGamma | existing | `6B4788`, `9A4DC8`, `4D6DF0`, `0B8A76`, `C4611A` |
+| phase colors | existing | `4D6DF0`, `0B8A76`, `9A4DC8`, `C4611A`, `FF2D8F`, `A87400` (all ≥ 3:1 on `FFF3F9`) |
 | glassBorder | blue @ 0.18 | `FF2D8F` @ 0.18 |
 | glassFill | white @ 0.06 | white @ 0.60 |
 | flashOn / flashOff | `F8C8D4` / `03040C` | **not adaptive — unchanged** |
