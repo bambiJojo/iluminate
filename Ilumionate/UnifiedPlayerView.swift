@@ -104,7 +104,9 @@ struct UnifiedPlayerView: View {
                     }
                 }
         )
-        .preferredColorScheme(viewModel.useDarkChrome ? .dark : .light)
+        // Player is always dark: entrainment visuals need the void backdrop,
+        // regardless of the app-wide Pink Aurora theme.
+        .preferredColorScheme(.dark)
         .sheet(isPresented: $viewModel.showingTrackList) {
             PlayerTrackListSheet(viewModel: viewModel)
         }
