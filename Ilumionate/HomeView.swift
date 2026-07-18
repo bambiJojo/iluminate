@@ -241,10 +241,10 @@ struct HomeView: View {
             VStack(spacing: TranceSpacing.micro) {
                 Text(portalGreeting)
                     .font(.system(size: 15, weight: .light))
-                    .foregroundStyle(.textDim)
+                    .foregroundStyle(.textSecondary)
                 Text("Ready to descend?")
                     .font(.system(size: 26, weight: .ultraLight))
-                    .foregroundStyle(.textBright)
+                    .foregroundStyle(.textPrimary)
             }
             .padding(.top, TranceSpacing.content)
 
@@ -257,11 +257,11 @@ struct HomeView: View {
                     VStack(spacing: 2) {
                         Text("Begin")
                             .font(.system(size: 18, weight: .light))
-                            .foregroundStyle(.textBright)
+                            .foregroundStyle(.textPrimary)
                         if let recommended {
                             Text(recommended.session_name)
                                 .font(.system(size: 11))
-                                .foregroundStyle(.textGhost)
+                                .foregroundStyle(.textLight)
                                 .lineLimit(1)
                                 .frame(maxWidth: 140)
                         }
@@ -284,7 +284,7 @@ struct HomeView: View {
                 } label: {
                     Text("\(category.emoji) \(category.rawValue)")
                         .font(.system(size: 12))
-                        .foregroundStyle(.textDim)
+                        .foregroundStyle(.textSecondary)
                         .padding(.horizontal, TranceSpacing.list)
                         .padding(.vertical, TranceSpacing.inner)
                         .background(category.haloColor.opacity(0.12))

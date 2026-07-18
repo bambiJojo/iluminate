@@ -80,13 +80,13 @@ private struct ReaderSectionRow: View {
         HStack(spacing: TranceSpacing.list) {
             Image(systemName: isCurrent ? "location.fill" : "text.alignleft")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(isCurrent ? Color.auroraTeal : Color.textSecondary)
+                .foregroundStyle(isCurrent ? Color.roseGold : Color.textSecondary)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(section.title)
                     .font(TranceTypography.body)
-                    .foregroundStyle(isCurrent ? Color.auroraTeal : Color.textPrimary)
+                    .foregroundStyle(isCurrent ? Color.roseGold : Color.textPrimary)
                     .lineLimit(2)
 
                 Text("Word \(section.wordIndex + 1)")

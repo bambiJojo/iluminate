@@ -340,12 +340,12 @@ struct OnboardingView: View {
         VStack(spacing: 28) {
             ZStack {
                 Circle()
-                    .fill(Color.auroraTeal.opacity(0.16))
+                    .fill(Color.roseGold.opacity(0.16))
                     .frame(width: 140, height: 140)
 
                 Image(systemName: cameraAuthorization == .authorized ? "eye.fill" : "eye")
                     .font(.system(size: 62, weight: .light))
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
             }
             .padding(.top, 20)
 
@@ -370,7 +370,7 @@ struct OnboardingView: View {
             if cameraAuthorization == .authorized {
                 Label("Camera access enabled", systemImage: "checkmark.circle.fill")
                     .font(TranceTypography.body.weight(.semibold))
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
             } else if cameraAuthorization == .denied {
                 Text("Camera access was declined. You can enable it later in iOS Settings.")
                     .font(TranceTypography.caption)
@@ -546,7 +546,7 @@ struct OnboardingView: View {
         case .warning:
             return LinearGradient(colors: [Color.bgPrimary, Color.roseGold.opacity(0.1)], startPoint: .top, endPoint: .bottom)
         case .attentionPermission:
-            return LinearGradient(colors: [Color.bgPrimary, Color.auroraTeal.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return LinearGradient(colors: [Color.bgPrimary, Color.roseGold.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .analyticsConsent:
             return LinearGradient(colors: [Color.bgPrimary, Color.roseGold.opacity(0.14)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .completed:
@@ -649,7 +649,7 @@ struct OnboardingView: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 14))
-                .foregroundStyle(Color.auroraTeal)
+                .foregroundStyle(Color.roseGold)
                 .padding(.top, 2)
 
             Text(text)
@@ -675,7 +675,7 @@ struct OnboardingView: View {
 
             ForEach(1..<OnboardingPhase.allCases.count - 1, id: \.self) { index in
                 Capsule()
-                    .fill(currentPhase.rawValue >= index ? Color.roseGold : Color.textGhost.opacity(0.4))
+                    .fill(currentPhase.rawValue >= index ? Color.roseGold : Color.textLight.opacity(0.4))
                     .frame(width: currentPhase.rawValue == index ? 24 : 8, height: 8)
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: currentPhase)
             }

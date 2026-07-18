@@ -27,7 +27,7 @@ struct LibraryHubHeader: View {
             Button(action: onAdd) {
                 Image(systemName: "plus")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
                     .frame(width: 36, height: 36)
                     .background(Color.glassBorder.opacity(0.14), in: .circle)
                     .overlay {
@@ -59,7 +59,7 @@ struct LibraryShelfSectionHeader: View {
             if let onSeeAll {
                 Button("See all", action: onSeeAll)
                     .font(TranceTypography.caption)
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
                     .buttonStyle(.plain)
             }
         }
@@ -236,7 +236,7 @@ private struct NewPlaylistCard: View {
         VStack(spacing: TranceSpacing.list) {
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(Color.auroraTeal)
+                .foregroundStyle(Color.roseGold)
             Text("New Playlist")
                 .font(TranceTypography.sectionTitle)
                 .foregroundStyle(Color.textPrimary)
@@ -247,7 +247,7 @@ private struct NewPlaylistCard: View {
                     in: .rect(cornerRadius: TranceRadius.glassCard))
         .overlay {
             RoundedRectangle(cornerRadius: TranceRadius.glassCard)
-                .strokeBorder(Color.auroraTeal.opacity(0.5),
+                .strokeBorder(Color.roseGold.opacity(0.5),
                               style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
         }
     }
@@ -375,12 +375,12 @@ private struct ArtistShelfCard: View {
         LiminalCard {
             HStack(spacing: TranceSpacing.list) {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.auroraBlue.opacity(0.18))
+                    .fill(Color.roseDeep.opacity(0.18))
                     .frame(width: 40, height: 40)
                     .overlay {
                         Image(systemName: "music.mic")
                             .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Color.auroraBlue)
+                            .foregroundStyle(Color.roseDeep)
                     }
 
                 VStack(alignment: .leading, spacing: TranceSpacing.micro) {
@@ -414,7 +414,7 @@ struct LibraryEmptyCard: View {
             HStack(spacing: TranceSpacing.list) {
                 Image(systemName: "plus")
                     .font(.title2)
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("No sessions yet")
                         .font(TranceTypography.sectionTitle)
@@ -437,11 +437,11 @@ private struct ShelfPlayPill: View {
     var body: some View {
         Label("Play", systemImage: "play.fill")
             .font(TranceTypography.caption.weight(.semibold))
-            .foregroundStyle(Color.voidDeep)
+            .foregroundStyle(Color.bgDeep)
             .padding(.horizontal, TranceSpacing.list)
             .padding(.vertical, TranceSpacing.icon)
             .background(
-                LinearGradient(colors: [.auroraTeal, .auroraBlue],
+                LinearGradient(colors: [.roseGold, .roseDeep],
                                startPoint: .leading, endPoint: .trailing),
                 in: .capsule
             )

@@ -20,7 +20,7 @@ struct PlaylistHeroCard: View {
                 PlaylistArtworkView(types: types, cornerRadius: TranceRadius.glassCard)
 
                 LinearGradient(
-                    colors: [Color.voidPrimary.opacity(0.85), .clear],
+                    colors: [Color.bgPrimary.opacity(0.85), .clear],
                     startPoint: .bottom, endPoint: .center
                 )
 
@@ -75,7 +75,7 @@ struct PlaylistPlayButton: View {
         Button("Play", systemImage: "play.fill", action: action)
             .labelStyle(.iconOnly)
             .font(.system(size: size * 0.36, weight: .bold))
-            .foregroundStyle(Color.voidPrimary)
+            .foregroundStyle(Color.bgPrimary)
             .frame(width: size, height: size)
             .background(
                 LinearGradient(colors: [.roseGold, .roseDeep],
@@ -101,7 +101,7 @@ struct CrossfadeChip: View {
 
 #Preview {
     ZStack {
-        Color.voidPrimary.ignoresSafeArea()
+        Color.bgPrimary.ignoresSafeArea()
         PlaylistHeroCard(
             playlist: Playlist(name: "Evening Descent",
                                items: [PlaylistItem(audioFileId: UUID(), filename: "drift.mp3", duration: 760)]),

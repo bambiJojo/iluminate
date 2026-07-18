@@ -17,9 +17,9 @@ struct ContentTypeStyleTests {
         #expect(!ContentTypeStyle.icon(for: .music).isEmpty)
     }
 
-    @Test("nil content type falls back to a neutral aurora color and waveform icon")
+    @Test("nil content type falls back to the adaptive primary accent and waveform icon")
     func nilFallback() {
-        #expect(ContentTypeStyle.color(for: nil) == .auroraTeal)
+        #expect(ContentTypeStyle.color(for: nil) == .roseGold)
         #expect(ContentTypeStyle.icon(for: nil) == "waveform")
     }
 }

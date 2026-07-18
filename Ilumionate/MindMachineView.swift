@@ -541,19 +541,19 @@ struct PatternCard: View {
             VStack(spacing: TranceSpacing.inner) {
                 ZStack {
                     RoundedRectangle(cornerRadius: TranceRadius.pattern)
-                        .fill(Color.voidElevated.opacity(0.6))
+                        .fill(Color.bgSecondary.opacity(0.6))
                         .frame(width: 80, height: 50)
                     WaveformShape(pattern: pattern)
                         .stroke(
-                            LinearGradient(colors: [.auroraTeal, .auroraBlue], startPoint: .leading, endPoint: .trailing),
+                            LinearGradient(colors: [.roseGold, .roseDeep], startPoint: .leading, endPoint: .trailing),
                             style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
                         )
                         .frame(width: 64, height: 30)
-                        .shadow(color: .auroraTeal.opacity(isSelected ? 0.7 : 0.4), radius: isSelected ? 10 : 6)
+                        .shadow(color: .roseGold.opacity(isSelected ? 0.7 : 0.4), radius: isSelected ? 10 : 6)
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: TranceRadius.pattern)
-                        .stroke(isSelected ? Color.auroraTeal : Color.clear, lineWidth: 2)
+                        .stroke(isSelected ? Color.roseGold : Color.clear, lineWidth: 2)
                         .frame(width: 80, height: 50)
                 }
 
@@ -656,7 +656,7 @@ struct PhoneScreenOrb: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.voidElevated,
+                                Color.bgSecondary,
                                 brainwaveColor.opacity(0.06 + 0.10 * breath)
                             ],
                             startPoint: .top,

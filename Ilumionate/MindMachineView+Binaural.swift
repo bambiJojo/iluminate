@@ -46,7 +46,7 @@ struct BinauralCard: View {
                             )
                         )
                         .labelsHidden()
-                        .tint(.auroraTeal)
+                        .tint(.roseGold)
                     }
 
                     if model.binauralEnabled {
@@ -56,7 +56,7 @@ struct BinauralCard: View {
                         // Headphones reminder
                         Label("Best experienced with headphones", systemImage: "headphones")
                             .font(TranceTypography.caption)
-                            .foregroundStyle(Color.auroraTeal.opacity(0.85))
+                            .foregroundStyle(Color.roseGold.opacity(0.85))
                             .frame(maxWidth: .infinity, alignment: .leading)
 
                         // Carrier frequency
@@ -170,8 +170,8 @@ private struct BinauralSliderRow: View {
                 value: $value,
                 range: range,
                 trackColor: .glassBorder,
-                thumbColor: .auroraTeal,
-                activeColor: .auroraTeal
+                thumbColor: .roseGold,
+                activeColor: .roseGold
             )
             .onChange(of: value) { _, _ in TranceHaptics.shared.selection() }
         }

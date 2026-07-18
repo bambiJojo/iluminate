@@ -26,7 +26,7 @@ struct MiniPlayerBar: View {
                 // Thin progress tint along the top edge
                 GeometryReader { proxy in
                     Rectangle()
-                        .fill(Color.auroraTeal)
+                        .fill(Color.roseGold)
                         .frame(
                             width: proxy.size.width * nowPlaying.progress,
                             height: 2
@@ -57,7 +57,7 @@ struct MiniPlayerBar: View {
                     // Play / Pause indicator
                     Image(systemName: nowPlaying.playbackState == .playing ? "pause.fill" : "play.fill")
                         .font(.system(size: 22))
-                        .foregroundStyle(Color.auroraTeal)
+                        .foregroundStyle(Color.roseGold)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .padding(.horizontal, TranceSpacing.card)

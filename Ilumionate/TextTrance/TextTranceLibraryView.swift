@@ -113,7 +113,7 @@ private struct LibraryHeader: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
                     .frame(width: 36, height: 36)
                     .background(Color.glassBorder.opacity(0.14), in: .circle)
                     .overlay {
@@ -141,7 +141,7 @@ private struct SectionHeader: View {
             if let onSeeAll {
                 Button("See all", action: onSeeAll)
                     .font(TranceTypography.caption)
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
                     .buttonStyle(.plain)
             }
         }
@@ -199,11 +199,11 @@ private struct HistoryCard: View {
 
                 Label("Resume", systemImage: "play.fill")
                     .font(TranceTypography.caption.weight(.semibold))
-                    .foregroundStyle(Color.voidDeep)
+                    .foregroundStyle(Color.bgDeep)
                     .padding(.horizontal, TranceSpacing.list)
                     .padding(.vertical, TranceSpacing.icon)
                     .background(
-                        LinearGradient(colors: [.auroraTeal, .auroraBlue],
+                        LinearGradient(colors: [.roseGold, .roseDeep],
                                        startPoint: .leading, endPoint: .trailing),
                         in: .capsule
                     )
@@ -452,7 +452,7 @@ private struct DocumentImportStatusCard: View {
                     EmptyView()
                 case .importing:
                     ProgressView()
-                        .tint(.auroraTeal)
+                        .tint(.roseGold)
                 case .failed:
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(Color.warmAccent)
@@ -502,8 +502,8 @@ private struct TagChip: View {
         Text(text)
             .font(TranceTypography.caption)
             .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Color.auroraTeal.opacity(0.18), in: .capsule)
-            .foregroundStyle(Color.auroraTeal)
+            .background(Color.roseGold.opacity(0.18), in: .capsule)
+            .foregroundStyle(Color.roseGold)
     }
 }
 
@@ -571,19 +571,19 @@ struct WebTextImportSheet: View {
                         HStack(spacing: TranceSpacing.icon) {
                             if importState.isImporting {
                                 ProgressView()
-                                    .tint(Color.voidDeep)
+                                    .tint(Color.bgDeep)
                             } else {
                                 Image(systemName: "text.page.badge.magnifyingglass")
                             }
                             Text(importState.isImporting ? "Reading" : "Read")
                         }
                         .font(.headline)
-                        .foregroundStyle(Color.voidDeep)
+                        .foregroundStyle(Color.bgDeep)
                         .frame(maxWidth: .infinity)
                         .frame(height: 46)
                         .background(
                             LinearGradient(
-                                colors: [.auroraTeal, .auroraBlue],
+                                colors: [.roseGold, .roseDeep],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),

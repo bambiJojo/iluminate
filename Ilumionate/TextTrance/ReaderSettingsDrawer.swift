@@ -15,10 +15,6 @@ struct ReaderSettingsDrawer: View {
         Binding(get: { session.binauralActive },
                 set: { session.setBinaural(enabled: $0) })
     }
-    private var narrationBinding: Binding<Bool> {
-        Binding(get: { session.narrationActive },
-                set: { session.setNarration(enabled: $0) })
-    }
     private var subliminalBinding: Binding<Bool> {
         Binding(get: { session.subliminalEnabled },
                 set: { session.setSubliminal(enabled: $0, speed: session.subliminalSpeed) })
@@ -57,12 +53,6 @@ struct ReaderSettingsDrawer: View {
                             .foregroundStyle(Color.textSecondary)
                     }
                 }
-                Section("Narration") {
-                    Toggle("Voice narration", isOn: narrationBinding)
-                    Text("Speaks from the current word and follows pause, resume, and section jumps.")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                }
                 Section("Binaural beats") {
                     Toggle("Enabled", isOn: binauralBinding)
                 }
@@ -84,7 +74,7 @@ struct ReaderSettingsDrawer: View {
             }
             .scrollContentBackground(.hidden)
             .background(Color.bgPrimary.ignoresSafeArea())
-            .tint(.auroraTeal)
+            .tint(.roseGold)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

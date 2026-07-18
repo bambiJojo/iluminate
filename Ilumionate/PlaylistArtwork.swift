@@ -86,7 +86,7 @@ struct PlaylistArtworkView: View {
 
 #Preview {
     ZStack {
-        Color.voidPrimary.ignoresSafeArea()
+        Color.bgPrimary.ignoresSafeArea()
         VStack(spacing: TranceSpacing.card) {
             PlaylistArtworkView(types: [], cornerRadius: 24)
                 .frame(width: 120, height: 120)

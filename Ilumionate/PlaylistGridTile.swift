@@ -59,7 +59,7 @@ struct PlaylistGridTile: View {
 
 #Preview {
     ZStack {
-        Color.voidPrimary.ignoresSafeArea()
+        Color.bgPrimary.ignoresSafeArea()
         HStack(spacing: TranceSpacing.list) {
             PlaylistGridTile(
                 playlist: Playlist(name: "Focus Deep Work",

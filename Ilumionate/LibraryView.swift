@@ -188,8 +188,8 @@ struct LibraryView: View {
                     onSave: { saved in upsertPlaylist(saved) }
                 )
             }
-            .onAppear {
-                loadAudioFiles()
+            .task {
+                await loadAudioFiles()
                 loadPlaylists()
                 loadBuiltInSessions()
                 recomputeDerivedCollections()
@@ -232,8 +232,8 @@ struct LibraryView: View {
         PlaylistStore.save(playlists)
     }
 
-    private func loadAudioFiles() {
-        audioFiles = AudioLibraryStore.loadRepairingStoredFiles()
+    private func loadAudioFiles() async {
+        audioFiles = await AudioLibraryStore.loadRepairingStoredFiles()
     }
 
     private func loadPlaylists() {
@@ -330,7 +330,7 @@ struct LibrarySessionRow: View {
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.auroraTeal)
+                            .foregroundStyle(.roseGold)
                     }
                     .buttonStyle(.plain)
                 }
@@ -407,7 +407,7 @@ struct LibraryFavoritesView: View {
                 VStack(spacing: TranceSpacing.card) {
                     Image(systemName: "heart")
                         .font(.system(size: 56, weight: .ultraLight))
-                        .foregroundStyle(LinearGradient(colors: [.auroraTeal, .auroraBlue], startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(LinearGradient(colors: [.roseGold, .roseDeep], startPoint: .top, endPoint: .bottom))
                     Text("No Favorites Yet")
                         .font(TranceTypography.greeting)
                         .foregroundStyle(.textPrimary)

@@ -50,21 +50,21 @@ struct FeaturedSessionCard: View {
                     // Session name
                     Text(session.displayName)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.textBright)
+                        .foregroundStyle(.textPrimary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Tagline
                     Text(session.tagline)
                         .font(.system(size: 12))
-                        .foregroundStyle(.textDim)
+                        .foregroundStyle(.textSecondary)
                         .lineLimit(1)
 
                     // Duration + play row
                     HStack {
                         Label(session.durationFormatted, systemImage: "clock")
                             .font(.system(size: 12))
-                            .foregroundStyle(.textDim)
+                            .foregroundStyle(.textSecondary)
 
                         Spacer()
 

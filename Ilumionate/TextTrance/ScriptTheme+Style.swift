@@ -17,10 +17,10 @@ extension ScriptTheme {
 
     var accent: Color {
         switch self {
-        case .relaxation: return .auroraTeal
+        case .relaxation: return .roseGold
         case .sleep:      return .bwDelta
         case .focus:      return .bwBeta
-        case .suggestion: return .auroraPink
+        case .suggestion: return .blush
         }
     }
 }

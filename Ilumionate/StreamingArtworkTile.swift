@@ -53,11 +53,11 @@ struct StreamingArtworkTile: View {
 
 #Preview {
     ZStack {
-        Color.voidPrimary.ignoresSafeArea()
+        Color.bgPrimary.ignoresSafeArea()
         HStack(spacing: TranceSpacing.card) {
-            StreamingArtworkTile(url: nil, accentColor: .auroraTeal)
+            StreamingArtworkTile(url: nil, accentColor: .roseGold)
             StreamingArtworkTile(url: URL(string: "https://invalid.example/x.jpg"),
-                                 accentColor: .auroraPink)
+                                 accentColor: .blush)
         }
     }
 }

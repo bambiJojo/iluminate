@@ -58,7 +58,7 @@ struct ReadingSourceDirectoryView: View {
                     TranceHaptics.shared.light()
                     showingAddSource = true
                 }
-                .tint(.auroraTeal)
+                .tint(.roseGold)
             }
         }
         .sheet(isPresented: $showingAddSource) {
@@ -400,19 +400,19 @@ private struct ScriptCatalogCard: View {
                         HStack(spacing: TranceSpacing.icon) {
                             if isImporting {
                                 ProgressView()
-                                    .tint(Color.voidDeep)
+                                    .tint(Color.bgDeep)
                             } else {
                                 Image(systemName: "square.and.arrow.down.fill")
                             }
                             Text(isImporting ? "Importing" : "Import")
                         }
                         .font(.headline)
-                        .foregroundStyle(Color.voidDeep)
+                        .foregroundStyle(Color.bgDeep)
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .background(
                             LinearGradient(
-                                colors: [.auroraTeal, .auroraBlue],
+                                colors: [.roseGold, .roseDeep],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -620,7 +620,7 @@ private struct ImportResultMessage: View {
         GlassCard {
             HStack(alignment: .top, spacing: TranceSpacing.list) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
                     .font(.system(size: 20, weight: .semibold))
                     .accessibilityHidden(true)
 

@@ -15,7 +15,6 @@ struct TextTranceSetupView: View {
     @State private var displayPreferences: ReaderDisplayPreferences = .standard
     @State private var lightEnabled = true
     @State private var binauralEnabled = false
-    @State private var narrationEnabled = false
     @State private var subliminalEnabled = true
     @State private var subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium
     @State private var attentionGateEnabled = false
@@ -55,8 +54,7 @@ struct TextTranceSetupView: View {
                     LayersCard(
                         arc: arc,
                         lightEnabled: $lightEnabled,
-                        binauralEnabled: $binauralEnabled,
-                        narrationEnabled: $narrationEnabled
+                        binauralEnabled: $binauralEnabled
                     )
                     AttentionGateCard(enabled: $attentionGateEnabled)
                     SpeedTrainingCard(settings: $speedTraining)
@@ -132,12 +130,10 @@ struct TextTranceSetupView: View {
                 subliminalEnabled: subliminalEnabled,
                 subliminalSpeed: subliminalSpeed,
                 attentionGateEnabled: attentionGateEnabled,
-                narrationEnabled: narrationEnabled,
                 speedTraining: activeSpeedTraining,
                 displayPreferences: displayPreferences),
             light: useLight ? FlashController(frequency: 10, intensity: 0.7, pattern: .sine) : nil,
             audio: binauralEnabled ? BinauralBeatsEngine() : nil,
-            narration: SpeechNarrator(),
             progressStore: progressStore,
             scriptContentHash: contentHash)
     }
@@ -174,7 +170,6 @@ struct TextTranceSetupView: View {
         speedTraining = normalizedSpeedTraining(from: s.settings)
         lightEnabled = s.settings.lightEnabled
         binauralEnabled = s.settings.binauralEnabled
-        narrationEnabled = s.settings.narrationEnabled
         subliminalEnabled = s.settings.subliminalEnabled
         subliminalSpeed = s.settings.subliminalSpeed
         attentionGateEnabled = s.settings.attentionGateEnabled
@@ -271,12 +266,10 @@ private struct LayersCard: View {
     let arc: ScriptArc
     @Binding var lightEnabled: Bool
     @Binding var binauralEnabled: Bool
-    @Binding var narrationEnabled: Bool
 
     var body: some View {
         LiminalCard(label: "Layers") {
             VStack(spacing: TranceSpacing.list) {
-                Toggle("Voice narration", isOn: $narrationEnabled)
                 Toggle("Binaural beats", isOn: $binauralEnabled)
                 Text("Requires headphones")
                     .font(TranceTypography.caption)
@@ -291,7 +284,7 @@ private struct LayersCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .tint(.auroraTeal)
+            .tint(.roseGold)
         }
     }
 
@@ -352,14 +345,14 @@ private struct SpeedTrainingCard: View {
                 Slider(value: targetBinding,
                        in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
                        step: 5)
-                .tint(.auroraTeal)
+                .tint(.roseGold)
 
                 if settings.mode == .warmUp {
                     SetupControlLabel(text: "\(settings.clampedWarmUpWPM) wpm warm-up")
                     Slider(value: warmUpBinding,
                            in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
                            step: 5)
-                    .tint(.auroraBlue)
+                    .tint(.roseDeep)
                 }
 
                 if settings.mode == .ramp {
@@ -367,7 +360,7 @@ private struct SpeedTrainingCard: View {
                     Slider(value: rampStartBinding,
                            in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
                            step: 5)
-                    .tint(.auroraBlue)
+                    .tint(.roseDeep)
                 }
 
                 SetupControlLabel(text: "Words per flash")
@@ -386,7 +379,7 @@ private struct SpeedTrainingCard: View {
                 }
                 .pickerStyle(.segmented)
             }
-            .tint(.auroraTeal)
+            .tint(.roseGold)
         }
     }
 }
@@ -436,11 +429,11 @@ private struct ReaderDisplayCard: View {
 
                 SetupControlLabel(text: "Size \(Int((preferences.clampedFontScale * 100).rounded()))%")
                 Slider(value: fontScaleBinding, in: ReaderDisplayPreferences.fontScaleRange)
-                    .tint(.auroraTeal)
+                    .tint(.roseGold)
 
                 SetupControlLabel(text: "Line \(String(format: "%.1fx", preferences.clampedLineSpacing))")
                 Slider(value: lineSpacingBinding, in: ReaderDisplayPreferences.lineSpacingRange)
-                    .tint(.auroraBlue)
+                    .tint(.roseDeep)
 
                 SetupPickerRow(title: "Highlight color") {
                     Picker("Highlight color", selection: $preferences.orpColor) {
@@ -452,12 +445,12 @@ private struct ReaderDisplayCard: View {
 
                 SetupControlLabel(text: "Background \(Int((preferences.clampedBackgroundBrightness * 100).rounded()))%")
                 Slider(value: brightnessBinding, in: ReaderDisplayPreferences.backgroundBrightnessRange)
-                    .tint(.auroraTeal)
+                    .tint(.roseGold)
 
                 Toggle("Hide controls by default", isOn: $preferences.hideControls)
-                    .tint(.auroraTeal)
+                    .tint(.roseGold)
                 Toggle("Dyslexia-friendly rendering", isOn: $preferences.dyslexiaFriendly)
-                    .tint(.auroraTeal)
+                    .tint(.roseGold)
             }
         }
     }
@@ -470,7 +463,7 @@ private struct AttentionGateCard: View {
         LiminalCard(label: "Attention") {
             VStack(spacing: TranceSpacing.list) {
                 Toggle("Require attention", isOn: $enabled)
-                    .tint(.auroraTeal)
+                    .tint(.roseGold)
                 Text("Uses the front camera when the reader is open")
                     .font(TranceTypography.caption)
                     .foregroundStyle(Color.textSecondary)
@@ -488,7 +481,7 @@ private struct SubliminalCard: View {
         LiminalCard(label: "Subliminal suggestions") {
             VStack(spacing: TranceSpacing.list) {
                 Toggle("Flash suggestion words", isOn: $enabled)
-                    .tint(.auroraTeal)
+                    .tint(.roseGold)
                 if enabled {
                     Picker("Flash speed", selection: $speed) {
                         ForEach(TextPacingSettings.SubliminalSpeed.allCases) {
@@ -529,7 +522,7 @@ private struct SetupPickerRow<Content: View>: View {
                 .foregroundStyle(Color.textPrimary)
             Spacer()
             picker()
-                .tint(.auroraTeal)
+                .tint(.roseGold)
         }
     }
 }

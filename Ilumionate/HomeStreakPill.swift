@@ -90,7 +90,7 @@ struct HomeStreakPill: View {
         HStack(spacing: 4) {
             ForEach(history.weeklyActivity().enumerated(), id: \.offset) { _, count in
                 Circle()
-                    .fill(count > 0 ? Color.roseGold : Color.textGhost.opacity(0.35))
+                    .fill(count > 0 ? Color.roseGold : Color.textLight.opacity(0.35))
                     .frame(width: 6, height: 6)
             }
         }

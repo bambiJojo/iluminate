@@ -111,6 +111,10 @@ struct SessionDetailView: View {
                             .lineLimit(2)
 
                         HStack(spacing: TranceSpacing.inner) {
+                            if let creator = audioFile.creatorDisplayName {
+                                Text(creator)
+                                Text("·")
+                            }
                             Label(audioFile.durationFormatted, systemImage: "clock")
                             if let type = analysis?.contentType {
                                 Text("·")
@@ -124,14 +128,24 @@ struct SessionDetailView: View {
                     Spacer()
                 }
 
+                if !audioFile.discoveredThemes.isEmpty {
+                    Label(
+                        audioFile.discoveredThemes.joined(separator: " · "),
+                        systemImage: "tag"
+                    )
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(2)
+                }
+
                 // Analysis status badge
                 if audioFile.isAnalyzed {
                     HStack(spacing: TranceSpacing.inner) {
                         Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(Color.auroraTeal)
+                            .foregroundStyle(Color.roseGold)
                         Text("AI Analyzed")
                             .font(TranceTypography.caption)
-                            .foregroundStyle(Color.auroraTeal)
+                            .foregroundStyle(Color.roseGold)
 
                         if let confidence = analysis?.classificationConfidence?.overallConfidence {
                             Text("·")
@@ -221,7 +235,7 @@ struct SessionDetailView: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .bold))
                     }
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
                 }
                 .buttonStyle(.plain)
             }
@@ -264,7 +278,7 @@ struct SessionDetailView: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .bold))
                     }
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
                 }
                 .buttonStyle(.plain)
             }
@@ -335,7 +349,7 @@ struct SessionDetailView: View {
                                     HStack(spacing: TranceSpacing.inner) {
                                         Text(formatTime(moment.time))
                                             .font(TranceTypography.caption.monospacedDigit())
-                                            .foregroundStyle(Color.auroraTeal)
+                                            .foregroundStyle(Color.roseGold)
                                             .frame(width: 48, alignment: .leading)
                                         Text(moment.phase?.displayName ?? "Gap")
                                             .font(TranceTypography.caption.weight(.medium))
@@ -389,7 +403,7 @@ struct SessionDetailView: View {
             VStack(spacing: TranceSpacing.card) {
                 Image(systemName: "waveform.badge.magnifyingglass")
                     .font(.system(size: 40, weight: .light))
-                    .foregroundStyle(Color.auroraTeal)
+                    .foregroundStyle(Color.roseGold)
 
                 Text("Analyze this file to unlock phase timeline, transcript, and AI-generated light sessions.")
                     .font(TranceTypography.body)
@@ -458,7 +472,7 @@ struct SessionDetailView: View {
         HStack(spacing: TranceSpacing.inner) {
             Image(systemName: icon)
                 .font(.system(size: 14))
-                .foregroundStyle(Color.auroraTeal)
+                .foregroundStyle(Color.roseGold)
                 .frame(width: 20)
             Text(label)
                 .font(TranceTypography.caption)
@@ -493,7 +507,7 @@ struct SessionDetailView: View {
         HStack(alignment: .top, spacing: TranceSpacing.inner) {
             Text("P\(action.priority)")
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(Color.auroraTeal)
+                .foregroundStyle(Color.roseGold)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(action.title)
@@ -528,7 +542,7 @@ struct SessionDetailView: View {
         case .music:         return .bwBeta
         case .guidedImagery: return .bwTheta
         case .affirmations:  return .warmAccent
-        default:             return .auroraTeal
+        default:             return .roseGold
         }
     }
 
@@ -557,7 +571,7 @@ struct SessionDetailView: View {
 
     private func expertVerdictColor(_ verdict: ExpertAnalysis.Verdict) -> Color {
         switch verdict {
-        case .productionReady: return .auroraTeal
+        case .productionReady: return .roseGold
         case .reviewRecommended: return .warmAccent
         case .needsRelabeling: return .roseDeep
         }
@@ -573,7 +587,7 @@ struct SessionDetailView: View {
 
     private func expertSeverityColor(_ severity: ExpertAnalysis.Severity) -> Color {
         switch severity {
-        case .info: return .auroraTeal
+        case .info: return .roseGold
         case .warning: return .warmAccent
         case .critical: return .roseDeep
         }

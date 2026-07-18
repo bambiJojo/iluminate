@@ -42,7 +42,7 @@ struct ClusterPlayButton: View {
         Button(label, systemImage: systemImage, action: action)
             .labelStyle(.iconOnly)
             .font(.title2)
-            .foregroundStyle(Color.voidDeep)
+            .foregroundStyle(Color.bgDeep)
             .contentTransition(.symbolEffect(.replace))
             .frame(width: size, height: size)
             .background(Circle().fill(Color.roseGold))

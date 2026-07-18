@@ -142,7 +142,7 @@ private struct LibrarySessionsList: View {
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                             }
-                            .tint(.auroraTeal)
+                            .tint(.roseGold)
 
                             Button {
                                 onAddToPlaylist(file)
@@ -171,7 +171,7 @@ private struct LibrarySessionsList: View {
         HStack(spacing: TranceSpacing.list) {
             Image(systemName: "plus")
                 .font(.title2)
-                .foregroundStyle(Color.auroraTeal)
+                .foregroundStyle(Color.roseGold)
             Text("Tap  +  to add your first session")
                 .font(TranceTypography.body)
                 .foregroundStyle(.textSecondary)
