@@ -24,43 +24,53 @@ extension Color {
 
 struct TranceColors {
 
-    // MARK: Backgrounds (Liminal void — dark only)
-    static let bgPrimary   = Color.voidPrimary
-    static let bgSecondary = Color.voidElevated
-    static let bgCard      = Color.voidElevated.opacity(0.65)
+    // MARK: Backgrounds (dawn in light / Liminal void in dark)
+    static let bgDeep      = Color(light: .dawnDeep, dark: .voidDeep)
+    static let bgPrimary   = Color(light: .dawnPrimary, dark: .voidPrimary)
+    static let bgSecondary = Color(light: .dawnElevated, dark: .voidElevated)
+    static let bgCard      = Color(
+        light: Color.white.opacity(0.72),
+        dark: Color.voidElevated.opacity(0.65)
+    )
 
     // MARK: Accents (aurora)
-    static let roseGold   = Color.auroraTeal     // primary action accent
-    static let roseDeep   = Color.auroraBlue     // secondary action accent
-    static let blush      = Color.auroraPink
-    static let lavender   = Color.auroraViolet
-    static let warmAccent = Color(hex: "E8B07A")
+    static let roseGold   = Color(light: Color(hex: PinkAuroraHex.accentTeal), dark: .auroraTeal)
+    static let roseDeep   = Color(light: Color(hex: PinkAuroraHex.accentBlue), dark: .auroraBlue)
+    static let blush      = Color(light: Color(hex: PinkAuroraHex.hotPink), dark: .auroraPink)
+    static let lavender   = Color(light: Color(hex: PinkAuroraHex.violet), dark: .auroraViolet)
+    static let warmAccent = Color(light: Color(hex: PinkAuroraHex.peach), dark: Color(hex: "E8B07A"))
 
     // MARK: Text
-    static let textPrimary   = Color.textBright
-    static let textSecondary = Color.textDim
-    static let textLight     = Color.textGhost
+    static let textPrimary   = Color(light: Color(hex: PinkAuroraHex.textInk), dark: .textBright)
+    static let textSecondary = Color(light: Color(hex: PinkAuroraHex.textMuted), dark: .textDim)
+    static let textLight     = Color(light: Color(hex: PinkAuroraHex.textWhisper), dark: .textGhost)
 
     // MARK: Borders & Glass
-    static let glassBorder = Color.auroraBlue.opacity(0.18)
-    static let glassFill   = Color.white.opacity(0.06)
+    static let glassBorder = Color(
+        light: Color(hex: PinkAuroraHex.hotPink).opacity(0.18),
+        dark: Color.auroraBlue.opacity(0.18)
+    )
+    static let glassFill = Color(
+        light: Color.white.opacity(0.60),
+        dark: Color.white.opacity(0.06)
+    )
 
-    // MARK: Brainwave Zone Colors (re-tuned for the void)
-    static let bwDelta = Color(hex: "8B6BA8")
-    static let bwTheta = Color(hex: "B07DC8")
-    static let bwAlpha = Color(hex: "7C9EFF")
-    static let bwBeta  = Color(hex: "7EE8D8")
-    static let bwGamma = Color(hex: "E8B07A")
+    // MARK: Brainwave Zone Colors
+    static let bwDelta = Color(light: Color(hex: PinkAuroraHex.bwDelta), dark: Color(hex: "8B6BA8"))
+    static let bwTheta = Color(light: Color(hex: PinkAuroraHex.bwTheta), dark: Color(hex: "B07DC8"))
+    static let bwAlpha = Color(light: Color(hex: PinkAuroraHex.bwAlpha), dark: Color(hex: "7C9EFF"))
+    static let bwBeta  = Color(light: Color(hex: PinkAuroraHex.bwBeta), dark: Color(hex: "7EE8D8"))
+    static let bwGamma = Color(light: Color(hex: PinkAuroraHex.bwGamma), dark: Color(hex: "E8B07A"))
 
     // MARK: Hypnosis Phase Colors
-    static let phaseIntro         = Color(hex: "7C9EFF")
-    static let phaseInduction     = Color(hex: "7EE8D8")
-    static let phaseDeepener      = Color(hex: "B07DC8")
-    static let phaseFractionation = Color(hex: "E8B07A")
-    static let phaseSuggestion    = Color(hex: "E87CB8")
-    static let phaseAwakening     = Color(hex: "F5D08E")
+    static let phaseIntro         = Color(light: Color(hex: PinkAuroraHex.phaseIntro), dark: Color(hex: "7C9EFF"))
+    static let phaseInduction     = Color(light: Color(hex: PinkAuroraHex.phaseInduction), dark: Color(hex: "7EE8D8"))
+    static let phaseDeepener      = Color(light: Color(hex: PinkAuroraHex.phaseDeepener), dark: Color(hex: "B07DC8"))
+    static let phaseFractionation = Color(light: Color(hex: PinkAuroraHex.phaseFractionation), dark: Color(hex: "E8B07A"))
+    static let phaseSuggestion    = Color(light: Color(hex: PinkAuroraHex.phaseSuggestion), dark: Color(hex: "E87CB8"))
+    static let phaseAwakening     = Color(light: Color(hex: PinkAuroraHex.phaseAwakening), dark: Color(hex: "F5D08E"))
 
-    // MARK: Flash Mode Colors (light-therapy output — DO NOT restyle hues)
+    // MARK: Flash Mode Colors (light-therapy output — hue-locked, NEVER adaptive)
     // flashOn must stay bright/visible; flashOff goes to true void.
     static let flashOn  = Color(hex: "F8C8D4")
     static let flashOff = Color.voidDeep
@@ -69,6 +79,7 @@ struct TranceColors {
 // MARK: - Color Extension — Semantic Accessors
 
 extension Color {
+    static let bgDeep             = TranceColors.bgDeep
     static let bgPrimary          = TranceColors.bgPrimary
     static let bgSecondary        = TranceColors.bgSecondary
     static let bgCard             = TranceColors.bgCard
@@ -100,6 +111,7 @@ extension Color {
 // Expose Trance colors as ShapeStyle members so that `.foregroundStyle(.roseGold)`
 // resolves correctly without needing an explicit `Color.` prefix.
 extension ShapeStyle where Self == Color {
+    static var bgDeep: Color             { .bgDeep }
     static var bgPrimary: Color          { .bgPrimary }
     static var bgSecondary: Color        { .bgSecondary }
     static var bgCard: Color             { .bgCard }
