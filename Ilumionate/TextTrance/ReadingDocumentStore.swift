@@ -47,47 +47,17 @@ final class ReadingDocumentStore {
             if isScoped { url.stopAccessingSecurityScopedResource() }
         }
 
-        let extracted = try await Task.detached(priority: .userInitiated) {
-            try ReadingDocumentImporter.extract(from: url)
-        }.value
-
-        let id = UUID().uuidString
-        let textFilename = "\(id).txt"
-        let normalizedText = extracted.text
-        let displayFilename = normalizedOriginalFilename(originalFilename) ?? extracted.originalFilename
-        let document = ReadingDocument(
-            id: id,
-            title: displayTitle(extractedTitle: extracted.title,
-                                sourceURL: url,
-                                displayFilename: displayFilename),
-            kind: extracted.kind,
-            originalFilename: displayFilename,
-            importedAt: .now,
-            wordCount: ReadingDocumentImporter.wordCount(in: normalizedText),
-            characterCount: normalizedText.count,
-            contentHash: Self.contentHash(for: normalizedText),
-            textFilename: textFilename
+        let prepared = try await ReadingDocumentImportWorker.prepare(
+            sourceURL: url,
+            originalFilename: originalFilename,
+            textDirectoryURL: textDirectoryURL,
+            existingDocuments: documents
         )
-
-        try fileManager.createDirectory(at: textDirectoryURL, withIntermediateDirectories: true)
-        try Data(normalizedText.utf8).write(
-            to: textDirectoryURL.appending(path: textFilename),
-            options: .atomic
-        )
-
-        let replacedDocuments = documents.filter { existing in
-            existing.contentHash == document.contentHash
-                || existing.originalFilename == document.originalFilename
-        }
-        for replacedDocument in replacedDocuments {
-            let textURL = textDirectoryURL.appending(path: replacedDocument.textFilename)
-            try? fileManager.removeItem(at: textURL)
-        }
-        documents.removeAll { replacedDocuments.contains($0) }
-        documents.insert(document, at: 0)
+        documents.removeAll { prepared.replacedDocumentIDs.contains($0.id) }
+        documents.insert(prepared.document, at: 0)
         documents.sort { $0.importedAt > $1.importedAt }
         try persist()
-        return document
+        return prepared.document
     }
 
     func script(for document: ReadingDocument) throws -> TranceScript {
@@ -153,24 +123,79 @@ final class ReadingDocumentStore {
         try data.write(to: metadataURL, options: .atomic)
     }
 
+}
+
+private nonisolated enum ReadingDocumentImportWorker {
+    struct PreparedImport: Sendable {
+        let document: ReadingDocument
+        let replacedDocumentIDs: Set<String>
+    }
+
+    @concurrent
+    static func prepare(
+        sourceURL: URL,
+        originalFilename: String?,
+        textDirectoryURL: URL,
+        existingDocuments: [ReadingDocument]
+    ) async throws -> PreparedImport {
+        try Task.checkCancellation()
+        let extracted = try ReadingDocumentImporter.extract(from: sourceURL)
+        try Task.checkCancellation()
+
+        let id = UUID().uuidString
+        let textFilename = "\(id).txt"
+        let displayFilename = normalizedOriginalFilename(originalFilename) ?? extracted.originalFilename
+        let document = ReadingDocument(
+            id: id,
+            title: displayTitle(
+                extractedTitle: extracted.title,
+                sourceURL: sourceURL,
+                displayFilename: displayFilename
+            ),
+            kind: extracted.kind,
+            originalFilename: displayFilename,
+            importedAt: .now,
+            wordCount: ReadingDocumentImporter.wordCount(in: extracted.text),
+            characterCount: extracted.text.count,
+            contentHash: contentHash(for: extracted.text),
+            textFilename: textFilename
+        )
+
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: textDirectoryURL, withIntermediateDirectories: true)
+        try Data(extracted.text.utf8).write(
+            to: textDirectoryURL.appending(path: textFilename),
+            options: .atomic
+        )
+
+        let replaced = existingDocuments.filter {
+            $0.contentHash == document.contentHash || $0.originalFilename == document.originalFilename
+        }
+        for oldDocument in replaced {
+            try? fileManager.removeItem(at: textDirectoryURL.appending(path: oldDocument.textFilename))
+        }
+        return PreparedImport(document: document, replacedDocumentIDs: Set(replaced.map(\.id)))
+    }
+
     private static func contentHash(for text: String) -> String {
         let digest = SHA256.hash(data: Data(text.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    private func normalizedOriginalFilename(_ filename: String?) -> String? {
+    private static func normalizedOriginalFilename(_ filename: String?) -> String? {
         guard let filename else { return nil }
         let trimmed = filename.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return URL(fileURLWithPath: trimmed).lastPathComponent
     }
 
-    private func displayTitle(extractedTitle: String,
-                              sourceURL: URL,
-                              displayFilename: String) -> String {
+    private static func displayTitle(
+        extractedTitle: String,
+        sourceURL: URL,
+        displayFilename: String
+    ) -> String {
         let sourceFallback = sourceURL.deletingPathExtension().lastPathComponent
         guard extractedTitle == sourceFallback else { return extractedTitle }
-
         let filenameTitle = URL(fileURLWithPath: displayFilename)
             .deletingPathExtension()
             .lastPathComponent

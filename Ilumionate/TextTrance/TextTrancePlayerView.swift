@@ -22,6 +22,13 @@ struct TextTrancePlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var appColorScheme
+
+    /// Display preferences with the reader color mode applied (theme swapped
+    /// to Dawn/Void as needed). Use for RENDERING; persist the stored prefs.
+    private var displayPrefs: ReaderDisplayPreferences {
+        session.displayPreferences.resolved(appColorScheme: appColorScheme)
+    }
 
     @State private var backgroundPulse = false
     @State private var wordOpacity: Double = 1
@@ -44,7 +51,7 @@ struct TextTrancePlayerView: View {
 
     var body: some View {
         ZStack {
-            session.displayPreferences.adjustedBackground.ignoresSafeArea()
+            displayPrefs.adjustedBackground.ignoresSafeArea()
 
             // Phase-aware atmosphere: the glow color follows the current reading
             // phase (induction → teal, deepening → violet, …), crossfading slowly
@@ -53,7 +60,7 @@ struct TextTrancePlayerView: View {
             RadialGradient(
                 colors: [
                     phaseColor.opacity(
-                        session.displayPreferences.theme.showsPhaseAtmosphere
+                        displayPrefs.theme.showsPhaseAtmosphere
                             ? (backgroundPulse ? 0.24 : 0.10)
                             : 0
                     ),
@@ -123,6 +130,9 @@ struct TextTrancePlayerView: View {
             }
             #endif
         }
+        // Resolve adaptive tokens (ORP color, phase atmosphere) to the
+        // reader's own color mode, independent of the app-wide theme.
+        .environment(\.colorScheme, session.displayPreferences.resolvedScheme(appColorScheme: appColorScheme))
         .contentShape(.rect)
         .gesture(endHoldGesture)
         .simultaneousGesture(revealHideDrag)
@@ -191,7 +201,7 @@ struct TextTrancePlayerView: View {
                 text: session.currentWord,
                 pivot: session.currentPivotIndex,
                 referenceCharacterCount: session.readerReferenceCharacterCount,
-                preferences: session.displayPreferences
+                preferences: displayPrefs
             )
             .opacity(session.isPaused ? 0.4 : wordOpacity)
             .shadow(color: reduceMotion ? .clear : phaseColor.opacity(0.30), radius: 14)
@@ -206,7 +216,7 @@ struct TextTrancePlayerView: View {
     private var pausedWhisper: some View {
         Text(session.isAttentionPaused ? "Look at screen" : "Paused")
             .font(TranceTypography.caption)
-            .foregroundStyle(session.displayPreferences.secondaryTextColor.opacity(0.7))
+            .foregroundStyle(displayPrefs.secondaryTextColor.opacity(0.7))
             .frame(maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, TranceSpacing.statusBar)
     }
@@ -297,7 +307,7 @@ struct TextTrancePlayerView: View {
             }
             Text("word \(index + 1) / \(session.wordCount)")
                 .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(session.displayPreferences.textColor)
+                .foregroundStyle(displayPrefs.textColor)
         }
     }
 

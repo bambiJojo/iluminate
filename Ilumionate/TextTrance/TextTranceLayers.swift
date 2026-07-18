@@ -20,14 +20,6 @@ protocol AudioLayerControlling: AnyObject {
     func syncBeatFrequency(to frequency: Double)
 }
 
-@MainActor
-protocol NarrationControlling: AnyObject {
-    func start(text: String, speedMultiplier: Double)
-    func pause()
-    func resume()
-    func stop()
-}
-
 extension FlashController: LightLayerControlling {}
 
 extension BinauralBeatsEngine: AudioLayerControlling {}

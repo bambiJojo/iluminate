@@ -17,7 +17,6 @@ struct PersistedReaderSettings: Codable, Sendable, Equatable {
     let lightEnabled: Bool
     let beatFrequency: Double
     let attentionGateEnabled: Bool
-    let narrationEnabled: Bool
     let speedTraining: ReaderSpeedTrainingSettings
     let displayPreferences: ReaderDisplayPreferences
 
@@ -29,7 +28,6 @@ struct PersistedReaderSettings: Codable, Sendable, Equatable {
          lightEnabled: Bool,
          beatFrequency: Double,
          attentionGateEnabled: Bool = false,
-         narrationEnabled: Bool = false,
          speedTraining: ReaderSpeedTrainingSettings = .standard,
          displayPreferences: ReaderDisplayPreferences = .standard) {
         self.arc = arc
@@ -40,7 +38,6 @@ struct PersistedReaderSettings: Codable, Sendable, Equatable {
         self.lightEnabled = lightEnabled
         self.beatFrequency = beatFrequency
         self.attentionGateEnabled = attentionGateEnabled
-        self.narrationEnabled = narrationEnabled
         self.speedTraining = speedTraining
         self.displayPreferences = displayPreferences
     }
@@ -54,7 +51,6 @@ struct PersistedReaderSettings: Codable, Sendable, Equatable {
         case lightEnabled
         case beatFrequency
         case attentionGateEnabled
-        case narrationEnabled
         case speedTraining
         case displayPreferences
     }
@@ -69,7 +65,6 @@ struct PersistedReaderSettings: Codable, Sendable, Equatable {
         lightEnabled = try container.decode(Bool.self, forKey: .lightEnabled)
         beatFrequency = try container.decode(Double.self, forKey: .beatFrequency)
         attentionGateEnabled = try container.decodeIfPresent(Bool.self, forKey: .attentionGateEnabled) ?? false
-        narrationEnabled = try container.decodeIfPresent(Bool.self, forKey: .narrationEnabled) ?? false
         speedTraining = try container.decodeIfPresent(
             ReaderSpeedTrainingSettings.self,
             forKey: .speedTraining

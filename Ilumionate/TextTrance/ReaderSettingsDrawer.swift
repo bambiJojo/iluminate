@@ -206,6 +206,12 @@ private struct ReaderDisplayFormSection: View {
 
     var body: some View {
         Section("Reader display") {
+            Picker("Reader mode", selection: $preferences.colorMode) {
+                ForEach(ReaderColorMode.allCases) {
+                    Text($0.displayName).tag($0)
+                }
+            }
+
             Picker("Theme", selection: $preferences.theme) {
                 ForEach(ReaderTheme.allCases) {
                     Text($0.displayName).tag($0)

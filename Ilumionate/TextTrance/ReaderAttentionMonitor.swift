@@ -52,14 +52,14 @@ struct ReaderAttentionSample: Sendable, Equatable {
     /// eyes are closed, so a wink or one-eye tracking noise won't trip it.
     let eyesClosed: Double
 
-    static let faceLost = ReaderAttentionSample(
+    nonisolated static let faceLost = ReaderAttentionSample(
         isLookingAtScreen: false, faceTracked: false, headFacing: 0, eyesClosed: 0
     )
 
     /// Pure gate decision, factored out of the ARKit heuristic so it can be
     /// exercised without a live face anchor: the reader is engaged when a face
     /// is tracked, both eyes aren't shut, and the head faces the screen.
-    static func isLooking(headFacing: Double, eyesClosed: Double, faceTracked: Bool) -> Bool {
+    nonisolated static func isLooking(headFacing: Double, eyesClosed: Double, faceTracked: Bool) -> Bool {
         faceTracked
             && eyesClosed < ReaderAttentionThresholds.eyesClosed
             && headFacing > ReaderAttentionThresholds.facing
@@ -72,10 +72,10 @@ enum ReaderAttentionThresholds {
     /// Minimum alignment between the head's forward axis and the direction to
     /// the camera. 1.0 is dead-on; ~0.5 is a generous ~60° cone. Kept loose on
     /// purpose so normal reading posture never trips the gate.
-    static let facing: Double = 0.5
+    nonisolated static let facing: Double = 0.5
     /// Both eyes must exceed this closed amount to count as "not reading"
     /// (drowsy / eyes shut). A wink or one-eye tracking noise won't trip it.
-    static let eyesClosed: Double = 0.85
+    nonisolated static let eyesClosed: Double = 0.85
 }
 
 enum ReaderAttentionMonitorStatus: Equatable {

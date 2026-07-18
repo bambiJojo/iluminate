@@ -18,7 +18,6 @@ struct TextTranceSessionSettings: Sendable {
     let subliminalEnabled: Bool
     let subliminalSpeed: TextPacingSettings.SubliminalSpeed
     let attentionGateEnabled: Bool
-    let narrationEnabled: Bool
     let speedTraining: ReaderSpeedTrainingSettings
     let displayPreferences: ReaderDisplayPreferences
 
@@ -31,7 +30,6 @@ struct TextTranceSessionSettings: Sendable {
          subliminalEnabled: Bool = true,
          subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium,
          attentionGateEnabled: Bool = false,
-         narrationEnabled: Bool = false,
          speedTraining: ReaderSpeedTrainingSettings = .standard,
          displayPreferences: ReaderDisplayPreferences = .standard) {
         self.arc = arc
@@ -43,7 +41,6 @@ struct TextTranceSessionSettings: Sendable {
         self.subliminalEnabled = subliminalEnabled
         self.subliminalSpeed = subliminalSpeed
         self.attentionGateEnabled = attentionGateEnabled
-        self.narrationEnabled = narrationEnabled
         self.speedTraining = speedTraining
         self.displayPreferences = displayPreferences
     }
@@ -58,7 +55,6 @@ struct TextTranceSessionSettings: Sendable {
          subliminalEnabled: Bool = true,
          subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium,
          attentionGateEnabled: Bool = false,
-         narrationEnabled: Bool = false,
          speedTraining: ReaderSpeedTrainingSettings = .standard,
          displayPreferences: ReaderDisplayPreferences = .standard) {
         self.init(arc: arc, speedMultiplier: speed.multiplier,
@@ -66,7 +62,6 @@ struct TextTranceSessionSettings: Sendable {
                   beatFrequency: beatFrequency, postHandoffDuration: postHandoffDuration,
                   subliminalEnabled: subliminalEnabled, subliminalSpeed: subliminalSpeed,
                   attentionGateEnabled: attentionGateEnabled,
-                  narrationEnabled: narrationEnabled,
                   speedTraining: speedTraining,
                   displayPreferences: displayPreferences)
     }
@@ -123,7 +118,6 @@ final class TextTranceSession: Identifiable {
         holdTask?.cancel()          // break any in-flight hold promptly
         if savingProgress {
             persistProgress()
-            restartNarrationAfterCommittedSeek()
         }
     }
 
@@ -132,7 +126,6 @@ final class TextTranceSession: Identifiable {
     private(set) var subliminalSpeed: TextPacingSettings.SubliminalSpeed
     private(set) var binauralActive: Bool
     private(set) var lightEnabledLive: Bool
-    private(set) var narrationActive: Bool
     private(set) var speedTraining: ReaderSpeedTrainingSettings
     private(set) var displayPreferences: ReaderDisplayPreferences
 
@@ -142,7 +135,6 @@ final class TextTranceSession: Identifiable {
 
     private let light: (any LightLayerControlling)?
     private let audio: (any AudioLayerControlling)?
-    private let narration: (any NarrationControlling)?
     private let sleep: @Sendable (Duration) async -> Void
     private let now: @Sendable () -> TimeInterval
     private var schedule: [PacedWord] = []
@@ -158,7 +150,6 @@ final class TextTranceSession: Identifiable {
          settings: TextTranceSessionSettings,
          light: (any LightLayerControlling)?,
          audio: (any AudioLayerControlling)?,
-         narration: (any NarrationControlling)? = nil,
          sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
          now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          progressStore: ReaderProgressStore? = nil,
@@ -171,12 +162,10 @@ final class TextTranceSession: Identifiable {
         self.attentionGateEnabled = settings.attentionGateEnabled
         self.binauralActive = settings.binauralEnabled
         self.lightEnabledLive = settings.lightEnabled
-        self.narrationActive = settings.narrationEnabled
         self.speedTraining = settings.speedTraining
         self.displayPreferences = settings.displayPreferences
         self.light = light
         self.audio = audio
-        self.narration = narration
         self.sleep = sleep
         self.now = now
         self.progressStore = progressStore
@@ -231,7 +220,6 @@ final class TextTranceSession: Identifiable {
         currentWordIndex = min(max(startIndex, 0), schedule.count)
 
         isReading = true
-        startNarration(at: currentWordIndex)
         while currentWordIndex < schedule.count, !cancelled, !Task.isCancelled {
             let word = schedule[currentWordIndex]
             render(word)
@@ -258,7 +246,6 @@ final class TextTranceSession: Identifiable {
         }
 
         if binauralActive { audio?.stop() }
-        narration?.stop()
         isComplete = !cancelled && !Task.isCancelled
         if isComplete { progressStore?.clear(scriptId: script.id) }
     }
@@ -281,7 +268,6 @@ final class TextTranceSession: Identifiable {
                 lightEnabled: lightEnabledLive,
                 beatFrequency: settings.beatFrequency,
                 attentionGateEnabled: attentionGateEnabled,
-                narrationEnabled: narrationActive,
                 speedTraining: speedTraining,
                 displayPreferences: displayPreferences),
             phase: .reading,
@@ -337,7 +323,27 @@ final class TextTranceSession: Identifiable {
     }
 
     private func waitForResume() async {
-        await withCheckedContinuation { resumeContinuation = $0 }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled || !isPaused || cancelled {
+                    continuation.resume()
+                } else {
+                    // Only one playback loop may wait at a time. Releasing any
+                    // stale waiter prevents a continuation overwrite/hang.
+                    releaseResumeWaiter()
+                    resumeContinuation = continuation
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.releaseResumeWaiter()
+            }
+        }
+    }
+
+    private func releaseResumeWaiter() {
+        resumeContinuation?.resume()
+        resumeContinuation = nil
     }
 
     /// Pause word advance and the binaural layer.
@@ -346,7 +352,6 @@ final class TextTranceSession: Identifiable {
         isPaused = true
         holdTask?.cancel()                 // wake the in-flight hold promptly
         if binauralActive { audio?.stop() }
-        if narrationActive { narration?.pause() }
         persistProgress()
     }
 
@@ -356,9 +361,7 @@ final class TextTranceSession: Identifiable {
         guard !attentionGateEnabled || attentionSatisfied else { return }
         isPaused = false
         if binauralActive, isReading { startBinaural() }
-        if narrationActive { narration?.resume() }
-        resumeContinuation?.resume()
-        resumeContinuation = nil
+        releaseResumeWaiter()
     }
 
     /// Toggle subliminal flashing mid-session. Regenerates the base schedule
@@ -377,20 +380,6 @@ final class TextTranceSession: Identifiable {
             if isReading, !isPaused { startBinaural() }
         } else {
             audio?.stop()
-        }
-    }
-
-    /// Toggle spoken narration live. Narration starts from the current word.
-    func setNarration(enabled: Bool) {
-        guard enabled != narrationActive else { return }
-        narrationActive = enabled
-        if enabled {
-            if isReading {
-                startNarration(at: currentWordIndex)
-                if isPaused { narration?.pause() }
-            }
-        } else {
-            narration?.stop()
         }
     }
 
@@ -462,7 +451,6 @@ final class TextTranceSession: Identifiable {
             render(schedule[currentWordIndex])
             seekRequested = true
             holdTask?.cancel()
-            restartNarrationAfterCommittedSeek()
         }
     }
 
@@ -511,35 +499,13 @@ final class TextTranceSession: Identifiable {
         holdTask?.cancel()
         if isPaused {
             isPaused = false
-            resumeContinuation?.resume()
-            resumeContinuation = nil
+            releaseResumeWaiter()
         }
         if lightActive {
             light?.stop()
             lightActive = false
         }
         if binauralActive { audio?.stop() }
-        narration?.stop()
         isReading = false
-    }
-
-    private func startNarration(at index: Int) {
-        guard narrationActive, let narration else { return }
-        let text = narrationText(from: index)
-        narration.start(text: text, speedMultiplier: speedMultiplier)
-    }
-
-    private func restartNarrationAfterCommittedSeek() {
-        guard narrationActive, isReading else { return }
-        startNarration(at: currentWordIndex)
-        if isPaused { narration?.pause() }
-    }
-
-    private func narrationText(from index: Int) -> String {
-        guard index < schedule.count else { return "" }
-        return schedule[index...]
-            .filter { !$0.isSubliminal }
-            .map(\.text)
-            .joined(separator: " ")
     }
 }
