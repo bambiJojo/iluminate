@@ -126,6 +126,22 @@ extension ProfileSettingsView {
                     icon: "lock.open.display",
                     color: .bwTheta
                 )
+                HStack(spacing: TranceSpacing.list) {
+                    Image(systemName: "circle.lefthalf.filled")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.blush)
+                        .frame(width: 24)
+                    Text("Appearance")
+                        .font(TranceTypography.body)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    Picker("Appearance", selection: $appearanceModeRaw) {
+                        ForEach(ThemeMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode.rawValue)
+                        }
+                    }
+                    .tint(.textSecondary)
+                }
             }
         }
     }

@@ -26,6 +26,7 @@ struct ProfileSettingsView: View {
     // Core Settings
     @AppStorage("hapticFeedbackEnabled") var hapticFeedbackEnabled = true
     @AppStorage("autoLockEnabled") var autoLockEnabled = true
+    @AppStorage("appearanceMode") var appearanceModeRaw = ThemeMode.system.rawValue
 
     // Session Defaults
     @AppStorage("userFrequencyMultiplier") var userFrequencyMultiplier = 1.0
@@ -89,7 +90,6 @@ struct ProfileSettingsView: View {
             }
             .navigationTitle("Profile & Settings")
             .navigationBarTitleDisplayMode(.large)
-            .preferredColorScheme(.dark)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }

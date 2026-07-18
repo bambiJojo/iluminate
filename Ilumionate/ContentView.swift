@@ -28,6 +28,7 @@ struct ContentView: View {
 
     // Synced to engine on appear and on change
     @AppStorage("userFrequencyMultiplier") private var userFrequencyMultiplierPref = 1.0
+    @AppStorage("appearanceMode") private var appearanceModeRaw = ThemeMode.system.rawValue
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -91,9 +92,9 @@ struct ContentView: View {
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: nowPlaying.isActive)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.currentAnalysis)
         }
-        .onAppear {
+        .task {
             loadSessions()
-            loadAudioFiles()
+            await loadAudioFiles()
             checkForFirstLaunch()
             checkForAnalyticsConsentPrompt()
             engine.userFrequencyMultiplier = userFrequencyMultiplierPref
@@ -139,7 +140,7 @@ struct ContentView: View {
         } message: {
             Text("Share anonymous usage analytics so we can understand what works, find problems, and improve the app. This never includes audio, transcripts, generated session text, imported documents, or reading-source URLs.")
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(ThemeMode(persisted: appearanceModeRaw).colorScheme)
     }
 
     // MARK: - Actions
@@ -160,8 +161,8 @@ struct ContentView: View {
         isLoading = false
     }
 
-    private func loadAudioFiles() {
-        audioFiles = AudioLibraryStore.loadRepairingStoredFiles()
+    private func loadAudioFiles() async {
+        audioFiles = await AudioLibraryStore.loadRepairingStoredFiles()
     }
 
     private func checkForFirstLaunch() {
