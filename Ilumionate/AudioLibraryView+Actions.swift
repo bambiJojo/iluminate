@@ -25,16 +25,14 @@ extension AudioLibraryView {
             // Poll for completion
             while analysisManager.currentAnalysis != nil {
                 if let completed = analysisManager.getCompletedAnalysis(for: file) {
-                    await MainActor.run {
-                        // Update file with results
-                        var updatedFile = file
-                        updatedFile.analysisResult = completed.analysis
-                        updatedFile.transcription = completed.transcription.fullText
+                    var updatedFile = file
+                    updatedFile.analysisResult = completed.analysis
+                    updatedFile.transcription = completed.transcription.fullText
+                    updatedFile.trackMetadata = completed.audioFile.trackMetadata
 
-                        if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
-                            audioFiles[index] = updatedFile
-                            saveAudioFiles()
-                        }
+                    if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
+                        audioFiles[index] = updatedFile
+                        await saveAudioFiles()
                     }
                     break
                 }
@@ -49,27 +47,27 @@ extension AudioLibraryView {
         // Update the file with analysis results
         if let index = audioFiles.firstIndex(where: { $0.id == analyzedFile.id }) {
             audioFiles[index] = analyzedFile
-            saveAudioFiles()
+            Task { await saveAudioFiles() }
         }
         showingExpandedProgress = false
     }
 
     // MARK: - File Management
 
-    func loadAudioFiles() {
-        let files = AudioLibraryStore.loadRepairingStoredFiles()
+    func loadAudioFiles() async {
+        let files = await AudioLibraryStore.loadRepairingStoredFiles()
         audioFiles = files
         Log.audio.info("📦 Loaded \(files.count) audio files")
     }
 
-    func saveAudioFiles() {
-        AudioLibraryStore.save(audioFiles)
+    func saveAudioFiles() async {
+        await AudioLibraryStore.save(audioFiles)
         Log.audio.info("💾 Saved \(audioFiles.count) audio files")
     }
 
-    func addAudioFile(_ file: AudioFile) {
+    func addAudioFile(_ file: AudioFile) async {
         audioFiles.insert(file, at: 0)
-        saveAudioFiles()
+        await saveAudioFiles()
         Log.audio.info("✅ Added audio file: \(file.filename)")
     }
 
@@ -82,7 +80,7 @@ extension AudioLibraryView {
 
         // Remove from list
         audioFiles.removeAll { $0.id == file.id }
-        saveAudioFiles()
+        Task { await saveAudioFiles() }
         Log.audio.info("🗑 Deleted: \(file.filename)")
     }
 
@@ -91,15 +89,9 @@ extension AudioLibraryView {
         guard !cleanName.isEmpty else { return }
 
         if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
-            // Keep the original extension
-            let urlExtension = file.url.pathExtension
-            let finalName = cleanName.hasSuffix("." + urlExtension) || urlExtension.isEmpty
-                ? cleanName
-                : cleanName + "." + urlExtension
-
-            audioFiles[index].filename = finalName
-            saveAudioFiles()
-            Log.audio.info("✏️ Renamed to: \(finalName)")
+            audioFiles[index].userTitle = cleanName
+            Task { await saveAudioFiles() }
+            Log.audio.info("✏️ Updated library title to: \(cleanName)")
         }
     }
 
@@ -108,7 +100,7 @@ extension AudioLibraryView {
     func toggleFavorite(for file: AudioFile) {
         if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
             audioFiles[index].isFavorite = !(audioFiles[index].isFavorite ?? false)
-            saveAudioFiles()
+            Task { await saveAudioFiles() }
             TranceHaptics.shared.light()
         }
     }
@@ -116,7 +108,7 @@ extension AudioLibraryView {
     func updateRating(for file: AudioFile, rating: Int) {
         if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
             audioFiles[index].rating = rating
-            saveAudioFiles()
+            Task { await saveAudioFiles() }
             TranceHaptics.shared.light()
         }
     }
@@ -185,9 +177,7 @@ extension AudioLibraryView {
 
                     // Import with timeout handling
                     if let file = await audioManager.importAudio(from: url) {
-                        await MainActor.run {
-                            addAudioFile(file)
-                        }
+                        await addAudioFile(file)
                         importedFiles.append(file)
                         Log.audio.info("✅ Imported (\(index + 1)/\(totalFiles)): \(file.filename)")
                     } else {
@@ -227,12 +217,10 @@ extension AudioLibraryView {
         Task {
             do {
                 if let file = try await audioManager.downloadAudio(from: url) {
-                    await MainActor.run {
-                        addAudioFile(file)
-                        showingURLDownloader = false
-                        audioURLInput = ""
-                        isDownloadingURL = false
-                    }
+                    await addAudioFile(file)
+                    showingURLDownloader = false
+                    audioURLInput = ""
+                    isDownloadingURL = false
 
                     // Auto queue for analysis
                     if AnalysisPreferences.shared.autoAnalyzeOnImport {

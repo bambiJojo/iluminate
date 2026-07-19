@@ -66,7 +66,7 @@ struct AudioLibraryView: View {
     @State var selectedFile: AudioFile?
     @State var selectedFiles = Set<AudioFile.ID>()
     @State var showingAnalysis = false
-    @State var audioManager = AudioManager()
+    @State var audioManager = AudioManager.shared
     @State var analysisManager = AnalysisStateManager.shared
     @State var showingExpandedProgress = false
     @State var playerFile: AudioFile?
@@ -162,6 +162,9 @@ struct AudioLibraryView: View {
 
             }
             .navigationTitle("Audio")
+            .navigationDestination(for: AudioFile.self) { file in
+                SessionDetailView(audioFile: file, engine: engine)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if !audioFiles.isEmpty {
@@ -282,8 +285,8 @@ struct AudioLibraryView: View {
             .onChange(of: downloadError) { _, newValue in
                 showingDownloadError = newValue != nil
             }
-            .onAppear {
-                loadAudioFiles()
+            .task {
+                await loadAudioFiles()
                 UsageAnalytics.shared.screen(.audioLibrary)
             }
             .confirmationDialog("Add to Sessions", isPresented: $showingAddSheet, titleVisibility: .visible) {
@@ -303,9 +306,11 @@ struct AudioLibraryView: View {
             }
             .sheet(isPresented: $showingBrowser) {
                 InAppBrowserView { file in
-                    addAudioFile(file)
-                    if AnalysisPreferences.shared.autoAnalyzeOnImport {
-                        Task { await analysisManager.queueForAnalysis([file]) }
+                    Task {
+                        await addAudioFile(file)
+                        if AnalysisPreferences.shared.autoAnalyzeOnImport {
+                            await analysisManager.queueForAnalysis([file])
+                        }
                     }
                 }
             }
@@ -317,7 +322,7 @@ struct AudioLibraryView: View {
             .onChange(of: analysisManager.completedAnalyses.count) {
                 // Reload from UserDefaults when analysis completes —
                 // AnalysisStateManager persists results there directly.
-                loadAudioFiles()
+                Task { await loadAudioFiles() }
             }
         }
     }

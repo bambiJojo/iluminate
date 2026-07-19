@@ -35,10 +35,13 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     let duration: TimeInterval
     let fileSize: Int64
     let createdDate: Date
+    var contentFingerprint: String?
 
     var transcription: String?
     var analysisResult: AnalysisResult?
     var deadTimeProfile: DeadTimeProfile?
+    var trackMetadata: AudioTrackMetadata?
+    var userTitle: String?
 
     // User Organization Data
     var creator: String? // Voice/narrator/hypnotist name for grouping in Library
@@ -62,8 +65,9 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     // Exclude `url` from serialization — it is always derived from `filename`.
     // Old stored data may contain a `url` field; Codable ignores unknown keys.
     enum CodingKeys: String, CodingKey {
-        case id, filename, duration, fileSize, createdDate
+        case id, filename, duration, fileSize, createdDate, contentFingerprint
         case transcription, analysisResult, deadTimeProfile
+        case trackMetadata, userTitle
         case creator, isFavorite, rating, detailedRating, tags
         case lastPlayedDate, playCount, sessionNotes
     }
@@ -71,17 +75,22 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     init(id: UUID = UUID(), filename: String, duration: TimeInterval,
          fileSize: Int64, createdDate: Date = Date(),
          isFavorite: Bool? = nil, rating: Int? = nil, tags: [String]? = nil,
-         lastPlayedDate: Date? = nil, playCount: Int? = nil) {
+         lastPlayedDate: Date? = nil, playCount: Int? = nil,
+         trackMetadata: AudioTrackMetadata? = nil, userTitle: String? = nil,
+         contentFingerprint: String? = nil) {
         self.id = id
         self.filename = filename
         self.duration = duration
         self.fileSize = fileSize
         self.createdDate = createdDate
+        self.contentFingerprint = contentFingerprint
         self.isFavorite = isFavorite
         self.rating = rating
         self.tags = tags
         self.lastPlayedDate = lastPlayedDate
         self.playCount = playCount
+        self.trackMetadata = trackMetadata
+        self.userTitle = userTitle
     }
 
     // MARK: - Computed Properties
@@ -103,7 +112,17 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     }
 
     var displayName: String {
-        URL(filePath: filename).deletingPathExtension().lastPathComponent
+        AudioTrackMetadata.cleaned(userTitle)
+            ?? trackMetadata?.preferredTitle
+            ?? URL(filePath: filename).deletingPathExtension().lastPathComponent
+    }
+
+    var creatorDisplayName: String? {
+        AudioTrackMetadata.cleaned(creator) ?? trackMetadata?.creator
+    }
+
+    var discoveredThemes: [String] {
+        trackMetadata?.themes ?? []
     }
     
     // Safe accessors for optional user data
@@ -128,7 +147,9 @@ extension AudioFile: Equatable {
         lhs.creator == rhs.creator &&
         lhs.lastPlayedDate == rhs.lastPlayedDate &&
         lhs.playCount == rhs.playCount &&
-        lhs.sessionNotes == rhs.sessionNotes
+        lhs.sessionNotes == rhs.sessionNotes &&
+        lhs.trackMetadata == rhs.trackMetadata &&
+        lhs.userTitle == rhs.userTitle
     }
 }
 
@@ -170,6 +191,7 @@ nonisolated struct AnalysisResult: Codable, Sendable {
     var prosodicProfile: ProsodicProfile?
     var techniqueDetection: TechniqueDetectionResult?
     var transcriptAnalysis: TranscriptAnalysis?
+    let discoveredMetadata: AudioTrackMetadata?
 
     nonisolated init(mood: Mood, energyLevel: Double, suggestedFrequencyRange: ClosedRange<Double>,
          suggestedIntensity: Double, suggestedColorTemperature: Double? = nil,
@@ -182,7 +204,8 @@ nonisolated struct AnalysisResult: Codable, Sendable {
          expertAnalysis: ExpertAnalysis? = nil,
          prosodicProfile: ProsodicProfile? = nil,
          techniqueDetection: TechniqueDetectionResult? = nil,
-         transcriptAnalysis: TranscriptAnalysis? = nil) {
+         transcriptAnalysis: TranscriptAnalysis? = nil,
+         discoveredMetadata: AudioTrackMetadata? = nil) {
         self.mood = mood
         self.energyLevel = energyLevel
         self.suggestedFrequencyRange = suggestedFrequencyRange
@@ -200,6 +223,7 @@ nonisolated struct AnalysisResult: Codable, Sendable {
         self.prosodicProfile = prosodicProfile
         self.techniqueDetection = techniqueDetection
         self.transcriptAnalysis = transcriptAnalysis
+        self.discoveredMetadata = discoveredMetadata
     }
 }
 
@@ -334,6 +358,53 @@ nonisolated struct HypnosisMetadata: Codable, Sendable {
     let suggestionDensity: Double? // suggestions per minute
     let languagePatterns: [String] // "metaphor", "embedded commands", etc.
     let detectedTechniques: [HypnoticTechnique]
+
+    init(
+        phases: [PhaseSegment],
+        inductionStyle: InductionStyle?,
+        estimatedTranceDeph: TranceDeph,
+        suggestionDensity: Double?,
+        languagePatterns: [String],
+        detectedTechniques: [HypnoticTechnique]
+    ) {
+        self.phases = PhaseSegment.ensuringUniqueIDs(in: phases)
+        self.inductionStyle = inductionStyle
+        self.estimatedTranceDeph = estimatedTranceDeph
+        self.suggestionDensity = suggestionDensity
+        self.languagePatterns = languagePatterns
+        self.detectedTechniques = detectedTechniques
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case phases
+        case inductionStyle
+        case estimatedTranceDeph
+        case suggestionDensity
+        case languagePatterns
+        case detectedTechniques
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            phases: try container.decode([PhaseSegment].self, forKey: .phases),
+            inductionStyle: try container.decodeIfPresent(InductionStyle.self, forKey: .inductionStyle),
+            estimatedTranceDeph: try container.decode(TranceDeph.self, forKey: .estimatedTranceDeph),
+            suggestionDensity: try container.decodeIfPresent(Double.self, forKey: .suggestionDensity),
+            languagePatterns: try container.decode([String].self, forKey: .languagePatterns),
+            detectedTechniques: try container.decode([HypnoticTechnique].self, forKey: .detectedTechniques)
+        )
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(phases, forKey: .phases)
+        try container.encodeIfPresent(inductionStyle, forKey: .inductionStyle)
+        try container.encode(estimatedTranceDeph, forKey: .estimatedTranceDeph)
+        try container.encodeIfPresent(suggestionDensity, forKey: .suggestionDensity)
+        try container.encode(languagePatterns, forKey: .languagePatterns)
+        try container.encode(detectedTechniques, forKey: .detectedTechniques)
+    }
 }
 
 /// A phase segment within a hypnosis session
@@ -365,6 +436,26 @@ nonisolated struct PhaseSegment: Codable, Identifiable, Sendable {
         self.confidenceLevel = confidenceLevel
         self.confidenceRationale = confidenceRationale
         self.transitionTarget = transitionTarget
+    }
+
+    /// Preserves the first occurrence of an identity and repairs duplicates
+    /// introduced when one analyzed segment is split into several timeline pieces.
+    static func ensuringUniqueIDs(in segments: [PhaseSegment]) -> [PhaseSegment] {
+        var seen = Set<UUID>()
+        return segments.map { segment in
+            guard seen.insert(segment.id).inserted == false else { return segment }
+            return PhaseSegment(
+                phase: segment.phase,
+                startTime: segment.startTime,
+                endTime: segment.endTime,
+                characteristics: segment.characteristics,
+                tranceDepthEstimate: segment.tranceDepthEstimate,
+                linguisticMarkers: segment.linguisticMarkers,
+                confidenceLevel: segment.confidenceLevel,
+                confidenceRationale: segment.confidenceRationale,
+                transitionTarget: segment.transitionTarget
+            )
+        }
     }
 }
 

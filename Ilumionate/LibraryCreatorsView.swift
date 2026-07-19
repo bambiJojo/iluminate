@@ -17,7 +17,7 @@ struct LibraryCreatorsView: View {
     /// All unique creator names, sorted. Files with no creator → "Unknown"
     private var creators: [(name: String, files: [AudioFile])] {
         let grouped = Dictionary(grouping: audioFiles) { file -> String in
-            let creator = file.creator?.trimmingCharacters(in: .whitespaces) ?? ""
+            let creator = file.creatorDisplayName ?? ""
             return creator.isEmpty ? "Unknown" : creator
         }
         return grouped

@@ -55,6 +55,7 @@ class PlaylistPlayerController: Sendable {
     private var nextLightPlayer: LightScorePlayer?
     private var isCrossfading = false
     private var crossfadeTimer: Timer?
+    private var crossfadeStep = 0
 
     private var playbackTimer: Timer?
     private var audioFiles: [UUID: AudioFile] = [:]
@@ -421,21 +422,21 @@ class PlaylistPlayerController: Sendable {
         // Animate volume crossfade
         let steps = 30 // number of steps for crossfade
         let interval = crossfadeDuration / Double(steps)
-        var step = 0
+        crossfadeStep = 0
 
         crossfadeTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
 
-                step += 1
-                let progress = Double(step) / Double(steps)
+                self.crossfadeStep += 1
+                let progress = Double(self.crossfadeStep) / Double(steps)
 
                 // Fade out current, fade in next
                 self.audioPlayer?.volume = self.volume * Float(1.0 - progress)
                 self.nextAudioPlayer?.volume = self.volume * Float(progress)
 
                 // At midpoint, swap light players
-                if !self.usesWholePlaylistLightSession && step == steps / 2 {
+                if !self.usesWholePlaylistLightSession && self.crossfadeStep == steps / 2 {
                     if let nextLP = self.nextLightPlayer {
                         self.lightEngine.detachSession()
                         self.lightEngine.attachSession(player: nextLP)
@@ -443,7 +444,7 @@ class PlaylistPlayerController: Sendable {
                 }
 
                 // Crossfade complete
-                if step >= steps {
+                if self.crossfadeStep >= steps {
                     self.crossfadeTimer?.invalidate()
                     self.finishCrossfade()
                 }

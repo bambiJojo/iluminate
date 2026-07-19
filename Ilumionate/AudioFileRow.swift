@@ -108,6 +108,13 @@ struct AudioFileRow: View {
                             .foregroundStyle(.roseGold)
                     }
 
+                    if let creator = file.creatorDisplayName {
+                        Text(creator)
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(.roseGold)
+                            .lineLimit(1)
+                    }
+
                     Text(file.durationFormatted)
                         .font(TranceTypography.caption)
                         .foregroundStyle(.textSecondary)

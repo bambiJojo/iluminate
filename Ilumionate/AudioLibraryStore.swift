@@ -7,28 +7,31 @@ import AVFoundation
 import Foundation
 import os
 
-enum AudioLibraryStore {
-    private static let supportedExtensions: Set<String> = ["mp3", "m4a", "wav", "aac", "flac"]
+nonisolated enum AudioLibraryStore {
+    private nonisolated static let supportedExtensions: Set<String> = ["mp3", "m4a", "wav", "aac", "flac"]
+    private static let persistence = AudioLibraryPersistence()
 
+    @MainActor
     static func loadRepairingStoredFiles(
         defaults: UserDefaults = .standard,
-        fileManager: FileManager = .default,
         documentsURL: URL = .documentsDirectory
-    ) -> [AudioFile] {
+    ) async -> [AudioFile] {
         var files = load(defaults: defaults)
-        let addedFiles = discoverUnregisteredDocumentFiles(
+        let repair = await discoverUnregisteredDocumentFiles(
             existingFiles: files,
-            fileManager: fileManager,
             documentsURL: documentsURL
         )
+        files = repair.existingFiles
 
-        guard !addedFiles.isEmpty else {
+        guard repair.didChange else {
             return files
         }
 
-        files.insert(contentsOf: addedFiles, at: 0)
-        save(files, defaults: defaults)
-        Log.audio.info("📦 Registered \(addedFiles.count) audio file(s) discovered in Documents")
+        files.insert(contentsOf: repair.addedFiles, at: 0)
+        await save(files, defaults: defaults)
+        if !repair.addedFiles.isEmpty {
+            Log.audio.info("📦 Registered \(repair.addedFiles.count) audio file(s) discovered in Documents")
+        }
         return files
     }
 
@@ -43,21 +46,30 @@ enum AudioLibraryStore {
         return files
     }
 
-    static func save(_ files: [AudioFile], defaults: UserDefaults = .standard) {
-        guard let data = try? JSONEncoder().encode(files) else {
-            Log.audio.info("❌ Failed to encode \(files.count) audio file(s)")
-            return
-        }
-
-        defaults.set(data, forKey: AnalysisStateManager.audioFilesUserDefaultsKey)
+    static func save(_ files: [AudioFile], defaults: UserDefaults = .standard) async {
+        await persistence.save(files, defaults: ThreadSafeUserDefaults(defaults))
     }
 
+    @concurrent
     private static func discoverUnregisteredDocumentFiles(
         existingFiles: [AudioFile],
-        fileManager: FileManager,
         documentsURL: URL
-    ) -> [AudioFile] {
-        let existingFilenames = Set(existingFiles.map { $0.url.lastPathComponent })
+    ) async -> LibraryRepair {
+        let fileManager = FileManager.default
+        var repairedExistingFiles = existingFiles
+        var repairedFingerprint = false
+        for index in repairedExistingFiles.indices where repairedExistingFiles[index].contentFingerprint == nil {
+            guard !Task.isCancelled else { break }
+            let storedURL = repairedExistingFiles[index].filename.hasPrefix("/")
+                ? repairedExistingFiles[index].url
+                : documentsURL.appending(path: repairedExistingFiles[index].filename)
+            if let fingerprint = AudioFingerprintService.computeFingerprint(for: storedURL) {
+                repairedExistingFiles[index].contentFingerprint = fingerprint
+                repairedFingerprint = true
+            }
+        }
+
+        let existingFilenames = Set(repairedExistingFiles.map { $0.url.lastPathComponent })
 
         let urls = (try? fileManager.contentsOfDirectory(
             at: documentsURL,
@@ -65,7 +77,7 @@ enum AudioLibraryStore {
             options: [.skipsHiddenFiles]
         )) ?? []
 
-        return urls
+        let discoveredURLs = urls
             .filter { url in
                 supportedExtensions.contains(url.pathExtension.lowercased())
             }
@@ -79,22 +91,56 @@ enum AudioLibraryStore {
             .sorted {
                 $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
             }
-            .map { url in
-                let values = try? url.resourceValues(forKeys: [.fileSizeKey, .creationDateKey])
-                return AudioFile(
-                    filename: url.lastPathComponent,
-                    duration: audioDuration(url),
-                    fileSize: Int64(values?.fileSize ?? 0),
-                    createdDate: values?.creationDate ?? Date()
-                )
-            }
+
+        var addedFiles: [AudioFile] = []
+        addedFiles.reserveCapacity(discoveredURLs.count)
+        for url in discoveredURLs {
+            guard !Task.isCancelled else { break }
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .creationDateKey])
+            let asset = AVURLAsset(url: url)
+            let duration = (try? await asset.load(.duration)).map(CMTimeGetSeconds) ?? 0
+            addedFiles.append(AudioFile(
+                filename: url.lastPathComponent,
+                duration: duration.isFinite ? duration : 0,
+                fileSize: Int64(values?.fileSize ?? 0),
+                createdDate: values?.creationDate ?? Date(),
+                contentFingerprint: AudioFingerprintService.computeFingerprint(for: url)
+            ))
+        }
+        return LibraryRepair(
+            existingFiles: repairedExistingFiles,
+            addedFiles: addedFiles,
+            didChange: repairedFingerprint || !addedFiles.isEmpty
+        )
     }
 
-    private static func audioDuration(_ url: URL) -> Double {
-        guard let player = try? AVAudioPlayer(contentsOf: url) else {
-            return 0
+    private struct LibraryRepair: Sendable {
+        let existingFiles: [AudioFile]
+        let addedFiles: [AudioFile]
+        let didChange: Bool
+    }
+}
+
+/// Serializes library writes away from the main actor. Keeping one persistence
+/// actor also prevents two rapid UI edits from writing snapshots concurrently.
+private actor AudioLibraryPersistence {
+    func save(_ files: [AudioFile], defaults: ThreadSafeUserDefaults) {
+        guard let data = try? JSONEncoder().encode(files) else {
+            Log.audio.info("❌ Failed to encode \(files.count) audio file(s)")
+            return
         }
 
-        return player.duration.isFinite ? player.duration : 0
+        defaults.value.set(data, forKey: AnalysisStateManager.audioFilesUserDefaultsKey)
+    }
+}
+
+/// `UserDefaults` supports concurrent access, but Foundation does not yet mark
+/// the reference type Sendable. This wrapper is confined to the persistence
+/// actor and is never mutated outside the documented thread-safe API.
+private nonisolated struct ThreadSafeUserDefaults: @unchecked Sendable {
+    let value: UserDefaults
+
+    init(_ value: UserDefaults) {
+        self.value = value
     }
 }

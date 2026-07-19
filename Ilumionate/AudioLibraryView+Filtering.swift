@@ -31,9 +31,6 @@ extension AudioLibraryView {
                             }
                         }
                     }
-                    .navigationDestination(for: AudioFile.self) { file in
-                        SessionDetailView(audioFile: file, engine: engine)
-                    }
                 }
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.cardMargin)
@@ -76,14 +73,21 @@ extension AudioLibraryView {
             let matchesSearch: Bool = {
                 if searchText.isEmpty { return true }
 
-                let searchInFilename = file.filename.localizedCaseInsensitiveContains(searchText)
-                let searchInTranscription = searchTranscription && (file.transcription?.localizedCaseInsensitiveContains(searchText) == true)
+                let searchInFilename = file.filename.localizedStandardContains(searchText)
+                    || file.displayName.localizedStandardContains(searchText)
+                let searchInCreator = file.creatorDisplayName?.localizedStandardContains(searchText) == true
+                let searchInThemes = file.discoveredThemes.contains {
+                    $0.localizedStandardContains(searchText)
+                }
+                let searchInTranscription = searchTranscription
+                    && (file.transcription?.localizedStandardContains(searchText) == true)
 
                 // Also search in analysis results if available
-                let searchInAnalysis = file.analysisResult?.aiSummary.localizedCaseInsensitiveContains(searchText) == true ||
-                                     file.analysisResult?.recommendedPreset.localizedCaseInsensitiveContains(searchText) == true
+                let searchInAnalysis = file.analysisResult?.aiSummary.localizedStandardContains(searchText) == true
+                    || file.analysisResult?.recommendedPreset.localizedStandardContains(searchText) == true
 
-                return searchInFilename || searchInTranscription || searchInAnalysis
+                return searchInFilename || searchInCreator || searchInThemes
+                    || searchInTranscription || searchInAnalysis
             }()
 
             // Content type filter
@@ -136,7 +140,7 @@ extension AudioLibraryView {
             case .newest:
                 return file1.createdDate > file2.createdDate
             case .name:
-                return file1.filename.localizedStandardCompare(file2.filename) == .orderedAscending
+                return file1.displayName.localizedStandardCompare(file2.displayName) == .orderedAscending
             case .rating:
                 return file1.userRating > file2.userRating
             case .duration:

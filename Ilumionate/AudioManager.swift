@@ -15,6 +15,8 @@ import Observation
 @MainActor
 class AudioManager: NSObject {
 
+    static let shared = AudioManager()
+
     // MARK: - Published State
 
     var isPlaying = false
@@ -25,19 +27,17 @@ class AudioManager: NSObject {
 
     private var audioPlayer: AVAudioPlayer?
     private var timeUpdateTimer: Timer?
+    private var isAudioSessionConfigured = false
 
     // MARK: - Audio Session Setup
 
-    override init() {
-        super.init()
-        setupAudioSession()
-    }
-
     private func setupAudioSession() {
+        guard !isAudioSessionConfigured else { return }
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try session.setActive(true)
+            isAudioSessionConfigured = true
             Log.audio.info("✅ Audio session configured")
         } catch {
             Log.audio.info("❌ Failed to setup audio session: \(error)")
@@ -47,6 +47,7 @@ class AudioManager: NSObject {
     // MARK: - Playback
 
     func startPlayback(url: URL) {
+        setupAudioSession()
         do {
             audioPlayer = try AVAudioPlayer(contentsOf: url)
             audioPlayer?.delegate = self
@@ -75,6 +76,7 @@ class AudioManager: NSObject {
     }
 
     func resumePlayback() {
+        setupAudioSession()
         audioPlayer?.play()
         isPlaying = true
 
@@ -122,91 +124,27 @@ class AudioManager: NSObject {
 
     // MARK: - Import Audio
 
-    /// Create a unique file URL if the destination already exists
-    private func makeUniqueFileURL(_ url: URL) -> URL {
-        let fileManager = FileManager.default
-        var uniqueURL = url
-        var counter = 1
-
-        // Keep trying until we find a unique filename
-        while fileManager.fileExists(atPath: uniqueURL.path) {
-            let nameWithoutExtension = url.deletingPathExtension().lastPathComponent
-            let fileExtension = url.pathExtension
-            let newName = "\(nameWithoutExtension) (\(counter)).\(fileExtension)"
-            uniqueURL = url.deletingLastPathComponent().appending(path: newName)
-            counter += 1
-        }
-
-        return uniqueURL
-    }
-
     func importAudio(from url: URL) async -> AudioFile? {
-        let originalName = url.lastPathComponent
-        let destinationURL = URL.documentsDirectory.appending(path: originalName)
-
-        // Check if file already exists and create unique name if needed
-        let finalDestinationURL = makeUniqueFileURL(destinationURL)
-        let finalFilename = finalDestinationURL.lastPathComponent
-
         do {
-            // Copy file to documents directory
-            try FileManager.default.copyItem(at: url, to: finalDestinationURL)
-            Log.audio.info("📁 File copied to: \(finalDestinationURL.path)")
-
-            // Get file size first (fast operation)
-            let resources = try finalDestinationURL.resourceValues(forKeys: [.fileSizeKey])
-            let fileSize = Int64(resources.fileSize ?? 0)
-
-            // Get audio duration with optimized timeout
-            let durationSeconds = await withTaskGroup(of: Double?.self) { group in
-                // Add duration loading task with timeout
-                group.addTask {
-                    do {
-                        let asset = AVURLAsset(url: finalDestinationURL)
-                        // Use optimized loading for better performance
-
-                        Log.audio.info("🔍 Loading audio properties for: \(finalFilename)")
-                        let duration = try await asset.load(.duration)
-                        let seconds = duration.seconds
-                        Log.audio.info("⏱️ Duration loaded: \(seconds) seconds")
-                        return seconds.isFinite ? seconds : 0
-                    } catch {
-                        Log.audio.info("❌ Failed to load duration: \(error)")
-                        return 0
-                    }
-                }
-
-                // Reduced timeout for better UX
-                group.addTask {
-                    try? await Task.sleep(for: .seconds(3))
-                    Log.audio.info("⚠️ Audio loading timeout reached for: \(finalFilename)")
-                    return 0
-                }
-
-                // Return first completed task
-                for await result in group {
-                    group.cancelAll()
-                    return result ?? 0
-                }
-                return 0
-            }
-
-            // Create AudioFile with calculated or default duration
-            let audioFile = AudioFile(
-                filename: finalFilename,
-                duration: durationSeconds,
-                fileSize: fileSize
+            let audioFile = try await AudioImportWorker.prepareAudioFile(
+                from: url,
+                targetFilename: url.lastPathComponent,
+                transferMode: .copy,
+                durationTimeout: .seconds(3)
             )
 
-            Log.audio.info("✅ Imported audio: \(finalFilename) (Duration: \(durationSeconds)s)")
+            let restoredAudioFile = AnalysisStateManager.shared.restoringCachedData(in: audioFile)
+            if restoredAudioFile.isAnalyzed {
+                Log.audio.info("⚡ Restored cached analysis for: \(audioFile.filename)")
+            }
+
+            Log.audio.info("✅ Imported audio: \(audioFile.filename) (Duration: \(audioFile.duration)s)")
             UsageAnalytics.shared.audioImported(source: .files)
-            return audioFile
+            return restoredAudioFile
 
         } catch {
             Log.audio.info("❌ Failed to import audio: \(error)")
             UsageAnalytics.shared.errorOccurred(.audioFileImportFailed)
-            // Clean up partial file if copy succeeded but metadata failed
-            try? FileManager.default.removeItem(at: finalDestinationURL)
             return nil
         }
     }
@@ -252,64 +190,26 @@ class AudioManager: NSObject {
             targetName = "\(baseName).\(ext)"
         }
         
-        // Generate final destination path
-        let destinationURL = URL.documentsDirectory.appending(path: targetName)
-        let finalDestinationURL = makeUniqueFileURL(destinationURL)
-        let finalFilename = finalDestinationURL.lastPathComponent
-        
         do {
-            // Move downloaded temp file to documents directory
-            try FileManager.default.moveItem(at: tempURL, to: finalDestinationURL)
-            Log.audio.info("📁 File downloaded and saved to: \(finalDestinationURL.path)")
-            
-            // Get file size
-            let resources = try finalDestinationURL.resourceValues(forKeys: [.fileSizeKey])
-            let fileSize = Int64(resources.fileSize ?? 0)
-            
-            // Get audio duration with timeout
-            let durationSeconds = await withTaskGroup(of: Double?.self) { group in
-                group.addTask {
-                    do {
-                        let asset = AVURLAsset(url: finalDestinationURL)
-                        Log.audio.info("🔍 Loading audio properties for downloaded file: \(finalFilename)")
-                        let duration = try await asset.load(.duration)
-                        let seconds = duration.seconds
-                        Log.audio.info("⏱️ Duration loaded: \(seconds) seconds")
-                        return seconds.isFinite ? seconds : 0
-                    } catch {
-                        Log.audio.info("❌ Failed to load duration: \(error)")
-                        return 0
-                    }
-                }
-                
-                group.addTask {
-                    try? await Task.sleep(nanoseconds: 5_000_000_000)
-                    Log.audio.info("⚠️ Audio loading timeout reached for downloaded file: \(finalFilename)")
-                    return 0
-                }
-                
-                if let result = await group.next() {
-                    group.cancelAll()
-                    return result ?? 0
-                }
-                return 0
-            }
-            
-            let audioFile = AudioFile(
-                filename: finalFilename,
-                duration: durationSeconds,
-                fileSize: fileSize
+            let audioFile = try await AudioImportWorker.prepareAudioFile(
+                from: tempURL,
+                targetFilename: targetName,
+                transferMode: .move,
+                durationTimeout: .seconds(5)
             )
 
-            Log.audio.info("✅ Successfully downloaded audio: \(finalFilename) (Duration: \(durationSeconds)s)")
+            let restoredAudioFile = AnalysisStateManager.shared.restoringCachedData(in: audioFile)
+            if restoredAudioFile.isAnalyzed {
+                Log.audio.info("⚡ Restored cached analysis for downloaded file: \(audioFile.filename)")
+            }
+
+            Log.audio.info("✅ Successfully downloaded audio: \(audioFile.filename) (Duration: \(audioFile.duration)s)")
             UsageAnalytics.shared.audioImported(source: .url)
-            return audioFile
+            return restoredAudioFile
             
         } catch {
             Log.audio.info("❌ Failed to move downloaded file to Library: \(error)")
-            // Clean up files on error
             try? FileManager.default.removeItem(at: tempURL)
-            try? FileManager.default.removeItem(at: finalDestinationURL)
             throw error
         }
     }
