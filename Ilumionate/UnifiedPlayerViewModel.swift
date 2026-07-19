@@ -11,7 +11,7 @@ import AVFoundation
 
 // MARK: - Playback State
 
-enum PlaybackState: Equatable {
+nonisolated enum PlaybackState: Equatable, Sendable {
     case idle
     case countdown
     case playing
@@ -93,6 +93,7 @@ final class UnifiedPlayerViewModel {
     var showingControls = true
     var showingSafetyWarning = false
     var showingLightSyncWarning = false
+    private(set) var interruptionNotice: String?
 
     // MARK: - Countdown Setting
 
@@ -176,6 +177,8 @@ final class UnifiedPlayerViewModel {
     private var hasStarted = false
     private var analyticsLifecycle = PlaybackAnalyticsLifecycle()
     private var playbackStartType: PlaybackStartType = .fresh
+    private var hasRecordedHistoryForAttempt = false
+    private var lastPersistedProgressSecond = -1
     @ObservationIgnored private let userDefaults: UserDefaults
 
     /// When true, `onDisappear` will not stop playback — used for mini-player dismiss.
@@ -202,7 +205,7 @@ final class UnifiedPlayerViewModel {
         self.userDefaults = userDefaults
         self.lightSession = initialLightSession
 
-        if case .flashMode(let freq, _, let colorTemp, _, _, _, _) = mode {
+        if case .flashMode(let freq, _, let colorTemp, _, _, _, _, _) = mode {
             flashFrequency = freq
             flashColorTemperature = colorTemp
         }
@@ -255,9 +258,54 @@ final class UnifiedPlayerViewModel {
         case .countdown:
             break // ignore during countdown
         case .complete:
-            seekToStart()
-            startCountdownAndPlay()
+            replayCompletedSession()
         }
+    }
+
+    /// Pause safely when the system interrupts the app (for example, a phone
+    /// call). Playback never resumes automatically after an interruption.
+    func handleAudioSessionInterruption(_ notification: Notification) {
+        guard
+            let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+            AVAudioSession.InterruptionType(rawValue: rawType) == .began
+        else { return }
+
+        handlePlaybackInterruption()
+    }
+
+    /// Persist the latest position before suspension. Background-capable audio
+    /// may keep playing; this snapshot protects against process termination.
+    func persistProgressForBackground() {
+        persistPlaybackProgress()
+        guard playbackState == .countdown else { return }
+        cancelPendingStart(message: "Start cancelled while the app was inactive")
+    }
+
+    func dismissInterruptionNotice() {
+        interruptionNotice = nil
+    }
+
+    func finishCompletedSession() {
+        guard playbackState == .complete else { return }
+        UsageAnalytics.shared.sessionCompletionAction(
+            .done,
+            source: sessionSource,
+            category: sessionCategory
+        )
+        stopAll(reason: .completed)
+    }
+
+    func replayCompletedSession() {
+        guard playbackState == .complete else { return }
+        UsageAnalytics.shared.sessionCompletionAction(
+            .replay,
+            source: sessionSource,
+            category: sessionCategory
+        )
+        playbackStartType = .fresh
+        seek(to: 0)
+        currentTime = 0
+        startCountdownAndPlay()
     }
 
     func seek(to time: TimeInterval) {
@@ -458,9 +506,10 @@ final class UnifiedPlayerViewModel {
         case .session(let session, let audioFile):
             setupSessionMode(session: session, audioFile: audioFile)
 
-        case .flashMode(let frequency, let intensity, _, let pattern, let binauralEnabled, let binauralCarrier, let binauralVolume):
+        case .flashMode(let frequency, let intensity, _, let pattern, let binauralEnabled, let binauralCarrier, let binauralVolume, let goalDuration):
             setupFlashMode(frequency: frequency, intensity: intensity, pattern: pattern,
                           binauralEnabled: binauralEnabled, binauralCarrier: binauralCarrier, binauralVolume: binauralVolume)
+            duration = goalDuration ?? 0
 
         case .colorPulse:
             // No controller needed — TimelineView handles rendering
@@ -539,6 +588,15 @@ final class UnifiedPlayerViewModel {
             do {
                 try await player.loadAudio(audioFile: audioFile)
                 duration = player.duration
+                let resumeDecision = PlaybackResumeDecision(
+                    sessionID: audioFile.id.uuidString,
+                    duration: player.duration,
+                    storedSessionID: lastSessionId,
+                    storedProgress: lastSessionProgress
+                )
+                playbackStartType = resumeDecision.startType
+                currentTime = resumeDecision.startTime
+                player.seek(to: resumeDecision.startTime)
                 await checkForLightSession()
             } catch {
                 Log.general.info("Failed to load audio: \(error)")
@@ -564,6 +622,9 @@ final class UnifiedPlayerViewModel {
 
     private func startCountdownAndPlay() {
         analyticsLifecycle.prepareForNewAttempt()
+        hasRecordedHistoryForAttempt = false
+        lastPersistedProgressSecond = -1
+        interruptionNotice = nil
 
         // Maximise screen brightness
         savedBrightness = activeScreen?.brightness ?? 1.0
@@ -610,6 +671,7 @@ final class UnifiedPlayerViewModel {
 
     private func beginPlayback() {
         playbackState = .playing
+        interruptionNotice = nil
         if analyticsLifecycle.markStarted() {
             UsageAnalytics.shared.sessionStarted(
                 source: sessionSource,
@@ -650,7 +712,7 @@ final class UnifiedPlayerViewModel {
             engine.pause()
             audioSync?.pause()
             binauralEngine?.pause()
-            saveProgress()
+            persistPlaybackProgress()
 
         case .flashMode:
             flashController?.pause()
@@ -661,6 +723,7 @@ final class UnifiedPlayerViewModel {
 
         case .audioLight:
             audioLightSyncPlayer?.pause()
+            persistPlaybackProgress()
 
         case .playlist:
             playlistController?.pause()
@@ -669,6 +732,7 @@ final class UnifiedPlayerViewModel {
 
     private func resume() {
         playbackState = .playing
+        interruptionNotice = nil
 
         switch mode {
         case .session:
@@ -692,11 +756,6 @@ final class UnifiedPlayerViewModel {
         }
     }
 
-    private func seekToStart() {
-        playbackStartType = .fresh
-        seek(to: 0)
-    }
-
     func stopAll(reason: PlaybackEndReason = .userStopped) {
         countdownTask?.cancel()
         countdownTask = nil
@@ -704,10 +763,11 @@ final class UnifiedPlayerViewModel {
         countdownValue = nil
         countdownMessage = nil
         reportSessionEndedIfNeeded(reason: reason)
+        recordSessionHistoryIfNeeded()
+        persistPlaybackProgress()
 
         switch mode {
         case .session:
-            saveProgress()
             lightScorePlayer?.stop()
             engine.detachSession()
             engine.stop()
@@ -730,6 +790,69 @@ final class UnifiedPlayerViewModel {
 
         playbackState = .idle
         nowPlaying.deactivate()
+    }
+
+    private func handlePlaybackInterruption() {
+        switch PlaybackRetentionPolicy.interruptionAction(for: playbackState) {
+        case .pause:
+            pause()
+            persistPlaybackProgress()
+            showingControls = true
+            interruptionNotice = "Paused because audio was interrupted"
+
+        case .cancelPendingStart:
+            cancelPendingStart(message: "Start cancelled because audio was interrupted")
+
+        case .none:
+            break
+        }
+    }
+
+    private func cancelPendingStart(message: String) {
+        countdownTask?.cancel()
+        countdownTask = nil
+        activeScreen?.brightness = savedBrightness
+        countdownValue = nil
+        countdownMessage = nil
+        playbackState = .idle
+        showingControls = true
+        interruptionNotice = message
+    }
+
+    private func completePlayback() {
+        guard playbackState == .playing else { return }
+
+        currentTime = duration
+        playbackState = .complete
+        activeScreen?.brightness = savedBrightness
+        reportSessionEndedIfNeeded(reason: .completed)
+        recordSessionHistoryIfNeeded()
+        persistPlaybackProgress()
+
+        switch mode {
+        case .session:
+            lightScorePlayer?.pause()
+            engine.pause()
+            audioSync?.pause()
+            binauralEngine?.pause()
+
+        case .flashMode:
+            flashController?.stop()
+            binauralEngine?.stop()
+
+        case .colorPulse:
+            break
+
+        case .audioLight:
+            audioLightSyncPlayer?.pause()
+
+        case .playlist:
+            playlistController?.pause()
+        }
+
+        showingControls = true
+        nowPlaying.updateProgress(1)
+        nowPlaying.updatePlaybackState(.complete)
     }
 
     private func reportSessionEndedIfNeeded(reason: PlaybackEndReason) {
@@ -769,6 +892,8 @@ final class UnifiedPlayerViewModel {
     }
 
     private func updateUI() {
+        guard playbackState != .complete else { return }
+
         switch mode {
         case .session:
             currentTime = lightScorePlayer?.currentTime ?? 0
@@ -780,15 +905,24 @@ final class UnifiedPlayerViewModel {
                 binauralEngine?.syncBeatFrequency(to: state.frequency)
             }
             // Check completion
-            if let session = lightScorePlayer?.session,
-               currentTime >= session.duration_sec - 0.5,
-               playbackState == .playing {
-                playbackState = .complete
-                stopAll(reason: .completed)
+            persistResumeProgressIfNeeded()
+            if PlaybackRetentionPolicy.hasReachedEnd(
+                currentTime: currentTime,
+                duration: duration,
+                state: playbackState
+            ) {
+                completePlayback()
             }
 
         case .flashMode:
             currentTime = flashController?.sessionDuration ?? 0
+            if PlaybackRetentionPolicy.hasReachedEnd(
+                currentTime: currentTime,
+                duration: duration,
+                state: playbackState
+            ) {
+                completePlayback()
+            }
 
         case .colorPulse:
             // currentTime tracks how long the pulse has been running
@@ -800,10 +934,16 @@ final class UnifiedPlayerViewModel {
             currentTime = audioLightSyncPlayer?.currentTime ?? 0
             duration = audioLightSyncPlayer?.duration ?? 0
             volume = audioLightSyncPlayer?.volume ?? 0.7
+            persistResumeProgressIfNeeded()
             // Check completion
             if let player = audioLightSyncPlayer,
-               !player.isPlaying && playbackState == .playing && currentTime >= duration - 0.5 {
-                playbackState = .complete
+               !player.isPlaying,
+               PlaybackRetentionPolicy.hasReachedEnd(
+                currentTime: currentTime,
+                duration: duration,
+                state: playbackState
+               ) {
+                completePlayback()
             }
 
         case .playlist:
@@ -831,32 +971,73 @@ final class UnifiedPlayerViewModel {
         }
     }
 
-    // MARK: - Private: Progress Persistence (Session Mode)
+    // MARK: - Private: Progress Persistence
 
-    private func saveProgress() {
-        guard case .session(let session, _) = mode else { return }
-        guard session.duration_sec > 0 else { return }
-        let listenedDuration = currentTime
-        let prog = listenedDuration / session.duration_sec
+    private func persistPlaybackProgress() {
+        guard let contentID = resumableContentID, duration > 0 else { return }
+        let prog = currentTime / duration
         if prog > 0.01 && prog < 0.99 {
-            lastSessionId = session.id.uuidString
+            lastSessionId = contentID
             lastSessionProgress = prog
         } else if prog >= 0.99 {
             lastSessionId = ""
             lastSessionProgress = 0.0
         }
+    }
+
+    private func persistResumeProgressIfNeeded() {
+        guard playbackState == .playing else { return }
+        let currentSecond = Int(currentTime)
+        guard currentSecond >= lastPersistedProgressSecond + 5 else { return }
+        lastPersistedProgressSecond = currentSecond
+        persistPlaybackProgress()
+    }
+
+    private var resumableContentID: String? {
+        switch mode {
+        case .session(let session, _):
+            return session.id.uuidString
+        case .audioLight(let audioFile):
+            return audioFile.id.uuidString
+        case .flashMode, .colorPulse, .playlist:
+            return nil
+        }
+    }
+
+    private func recordSessionHistoryIfNeeded() {
+        guard analyticsLifecycle.hasStarted, !hasRecordedHistoryForAttempt else { return }
+
+        switch mode {
+        case .session, .audioLight:
+            break
+        case .flashMode(_, _, _, _, _, _, _, let goalDuration):
+            guard goalDuration != nil else { return }
+        case .colorPulse, .playlist:
+            return
+        }
+
+        hasRecordedHistoryForAttempt = true
         sessionHistory.record(
-            sessionName: session.displayName,
+            sessionName: mode.title,
             category: sessionCategory,
-            durationListened: listenedDuration,
-            totalDuration: session.duration_sec
+            durationListened: currentTime,
+            totalDuration: duration
         )
     }
 
     private var sessionCategory: String {
-        guard case .session(let session, _) = mode,
-              let first = session.light_score.first else { return "Trance" }
-        switch first.frequency {
+        let frequency: Double
+        switch mode {
+        case .session(let session, _):
+            guard let first = session.light_score.first else { return "Trance" }
+            frequency = first.frequency
+        case .flashMode(let value, _, _, _, _, _, _, _), .colorPulse(let value, _):
+            frequency = value
+        case .audioLight, .playlist:
+            return "Trance"
+        }
+
+        switch frequency {
         case ..<4.0:  return "Sleep"
         case ..<8.0:  return "Relax"
         case ..<14.0: return "Focus"

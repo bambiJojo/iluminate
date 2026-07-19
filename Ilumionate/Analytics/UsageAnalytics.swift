@@ -196,6 +196,18 @@ final class UsageAnalytics {
         }
     }
 
+    func sessionCompletionAction(
+        _ action: SessionCompletionAction,
+        source: SessionSource,
+        category: String
+    ) {
+        send(AnalyticsEvent("session.completionAction", [
+            "action": action.rawValue,
+            "source": source.rawValue,
+            "category": category,
+        ]))
+    }
+
     func audioImported(source: AudioSource) {
         send(AnalyticsEvent("audio.imported", ["source": source.rawValue]))
     }

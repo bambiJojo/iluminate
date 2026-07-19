@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 /// Represents a complete light entrainment session loaded from JSON.
 /// This is the root structure that contains all session metadata and the
@@ -51,11 +52,14 @@ struct LightSession: Codable, Identifiable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        // Generate a UUID if not present in JSON
-        self.id = (try? container.decode(UUID.self, forKey: .id)) ?? UUID()
         self.session_name = try container.decode(String.self, forKey: .session_name)
         self.duration_sec = try container.decode(Double.self, forKey: .duration_sec)
         self.light_score = try container.decode([LightMoment].self, forKey: .light_score)
+        self.id = (try? container.decode(UUID.self, forKey: .id)) ?? Self.stableID(
+            sessionName: session_name,
+            duration: duration_sec,
+            lightScore: light_score
+        )
         self.binaural_enabled = (try? container.decode(Bool.self, forKey: .binaural_enabled)) ?? false
         self.binaural_carrier = (try? container.decode(Double.self, forKey: .binaural_carrier)) ?? 200.0
         self.binaural_volume = (try? container.decode(Double.self, forKey: .binaural_volume)) ?? 0.5
@@ -73,6 +77,32 @@ struct LightSession: Codable, Identifiable, Sendable {
         self.binaural_carrier = binaural_carrier
         self.binaural_volume = binaural_volume
         self.alignment_report = alignment_report
+    }
+
+    /// Bundled session files predate explicit IDs. Deriving one from immutable
+    /// session content keeps resume keys stable across launches while preserving
+    /// IDs already stored in generated-session JSON.
+    private static func stableID(
+        sessionName: String,
+        duration: TimeInterval,
+        lightScore: [LightMoment]
+    ) -> UUID {
+        var input = "\(sessionName)|\(duration)|\(lightScore.count)"
+        for moment in lightScore {
+            input += "|\(moment.time),\(moment.frequency),\(moment.intensity),\(moment.waveform.rawValue)"
+        }
+
+        let digest = SHA256.hash(data: Data(input.utf8))
+        var bytes = Array(digest.prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
     }
 }
 

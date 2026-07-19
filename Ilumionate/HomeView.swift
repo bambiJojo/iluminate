@@ -80,6 +80,7 @@ struct HomeView: View {
     @State private var flashBinauralEnabled = true
     @State private var flashBinauralCarrier: Double = 200
     @State private var flashBinauralVolume: Double = 0.5
+    @State private var flashGoalDuration: TimeInterval?
 
     // Persist user name and last session progress
     @AppStorage("profileName") private var userName = ""
@@ -117,10 +118,17 @@ struct HomeView: View {
                 HomeStreakPill()
                     .cardEntrance(visible: cardsVisible, delay: 0.07, reduceMotion: reduceMotion)
 
-                if lastSessionProgress > 0,
-                   let lastSession = sessions.first(where: { $0.id.uuidString == lastSessionId }) ?? sessions.first {
-                    continueSessionCard(session: lastSession)
+                if lastSessionProgress > 0 {
+                    if let lastSession = sessions.first(where: { $0.id.uuidString == lastSessionId }) {
+                        continueSessionCard(session: lastSession)
+                            .cardEntrance(visible: cardsVisible, delay: 0.08, reduceMotion: reduceMotion)
+                    } else if let lastAudio = audioFiles.first(where: { $0.id.uuidString == lastSessionId }) {
+                        ContinueAudioCard(audioFile: lastAudio, progress: lastSessionProgress) {
+                            TranceHaptics.shared.medium()
+                            playerFile = lastAudio
+                        }
                         .cardEntrance(visible: cardsVisible, delay: 0.08, reduceMotion: reduceMotion)
+                    }
                 }
 
                 // User-created sessions get the top shelf (endowment effect:
@@ -183,7 +191,8 @@ struct HomeView: View {
                     pattern: flashPattern,
                     binauralEnabled: flashBinauralEnabled,
                     binauralCarrier: flashBinauralCarrier,
-                    binauralVolume: flashBinauralVolume
+                    binauralVolume: flashBinauralVolume,
+                    goalDuration: flashGoalDuration
                 ),
                 engine: engine
             )
@@ -570,6 +579,7 @@ struct HomeView: View {
         flashBinauralEnabled = true
         flashBinauralCarrier = 200
         flashBinauralVolume = 0.5
+        flashGoalDuration = TimeInterval(durationMinutes * 60)
         showingFlashMode = true
     }
 

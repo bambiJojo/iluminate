@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 struct UnifiedPlayerView: View {
     @State private var viewModel: UnifiedPlayerViewModel
@@ -14,6 +15,7 @@ struct UnifiedPlayerView: View {
     @State private var showingOverflow = false
     @State private var isScrubbing = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     init(mode: PlayerMode, engine: LightEngine, initialLightSession: LightSession? = nil) {
         _viewModel = State(initialValue: UnifiedPlayerViewModel(
@@ -67,6 +69,27 @@ struct UnifiedPlayerView: View {
                 .zIndex(10)
             }
 
+            if viewModel.playbackState == .complete {
+                PlayerCompletionOverlay(
+                    title: viewModel.mode.title,
+                    duration: viewModel.duration,
+                    onReplay: viewModel.replayCompletedSession,
+                    onDone: finishSession
+                )
+                .transition(.opacity)
+                .zIndex(15)
+            }
+
+            if let notice = viewModel.interruptionNotice,
+               viewModel.playbackState != .complete {
+                PlayerInterruptionBanner(
+                    message: notice,
+                    onDismiss: viewModel.dismissInterruptionNotice
+                )
+                .frame(maxHeight: .infinity, alignment: .top)
+                .zIndex(12)
+            }
+
             // Layer 6: Safety warning (blocks everything)
             if viewModel.showingSafetyWarning {
                 PlayerSafetyWarningView(
@@ -81,6 +104,14 @@ struct UnifiedPlayerView: View {
         .onAppear { controlsVisibility.registerInteraction() }
         .onAppear { UsageAnalytics.shared.screen(.player) }
         .onDisappear { viewModel.onDisappear() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                viewModel.persistProgressForBackground()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) {
+            viewModel.handleAudioSessionInterruption($0)
+        }
         .onChange(of: controlsVisibility.isVisible) { _, visible in
             withAnimation(LiminalMotion.fade) { viewModel.showingControls = visible }
         }
@@ -134,7 +165,7 @@ struct UnifiedPlayerView: View {
         case .session:
             SessionView(engine: viewModel.engine)
 
-        case .flashMode(_, _, let colorTemp, _, _, _, _):
+        case .flashMode(_, _, let colorTemp, _, _, _, _, _):
             if let controller = viewModel.flashController {
                 FlashGridBackground(controller: controller, colorTemperature: colorTemp)
             } else {
@@ -267,6 +298,11 @@ struct UnifiedPlayerView: View {
                 .foregroundStyle(viewModel.labelColor)
         }
         .padding(.horizontal, TranceSpacing.screen)
+    }
+
+    private func finishSession() {
+        viewModel.finishCompletedSession()
+        dismiss()
     }
 }
 

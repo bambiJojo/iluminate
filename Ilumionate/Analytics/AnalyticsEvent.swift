@@ -79,6 +79,10 @@ nonisolated enum PlaybackEndReason: String, Sendable {
     case completed, userStopped, dismissed
 }
 
+nonisolated enum SessionCompletionAction: String, Sendable {
+    case done, replay
+}
+
 nonisolated enum ActivationPath: String, Sendable {
     case playback, reading, audioAnalysis
 }

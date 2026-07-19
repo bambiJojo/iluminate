@@ -32,7 +32,7 @@ struct PlayerTitleBlock: View {
                 Text("\(viewModel.flashFrequency, format: .number.precision(.fractionLength(1))) Hz")
                     .font(TranceTypography.caption)
                     .foregroundStyle(viewModel.secondaryLabelColor)
-                if case .flashMode(_, _, let colorTemp, _, _, _, _) = viewModel.mode {
+                if case .flashMode(_, _, let colorTemp, _, _, _, _, _) = viewModel.mode {
                     Text("·")
                         .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.5))
                     Text("\(colorTemp)K")

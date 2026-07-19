@@ -218,6 +218,24 @@ struct UsageAnalyticsTests {
     }
 
     @Test
+    func completionActionCarriesReplayIntent() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.sessionCompletionAction(
+            .replay,
+            source: .preset,
+            category: "Focus"
+        )
+
+        #expect(captured == [AnalyticsEvent("session.completionAction", [
+            "action": "replay",
+            "source": "preset",
+            "category": "Focus",
+        ])])
+    }
+
+    @Test
     func endingUnboundedSessionUsesNotApplicableBucket() {
         var captured: [AnalyticsEvent] = []
         let analytics = makeAnalytics(captured: { captured.append($0) })

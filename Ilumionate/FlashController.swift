@@ -47,7 +47,6 @@ final class FlashController: Sendable {
     // Private engine state
     private var displayLink: CADisplayLink?
     private var startTime: CFTimeInterval = 0
-    private var sessionStartTime: Date?
     private var originalBrightness: CGFloat = 0.5
     private var bilateralDriftPhase: Double = 0.0
 
@@ -72,6 +71,7 @@ final class FlashController: Sendable {
         }
         isFlashing = true
         isPaused = false
+        sessionDuration = 0
         TranceHaptics.shared.heavy()
 
         if let screen = currentScreen {
@@ -79,7 +79,6 @@ final class FlashController: Sendable {
             screen.brightness = 1.0
         }
 
-        sessionStartTime = Date()
         displayLink = CADisplayLink(target: self, selector: #selector(tick))
         displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         displayLink?.add(to: .main, forMode: .common)
@@ -111,10 +110,6 @@ final class FlashController: Sendable {
     }
 
     @objc private func tick(link: CADisplayLink) {
-        if let start = sessionStartTime {
-            sessionDuration = Date().timeIntervalSince(start)
-        }
-
         if isPaused {
             leftOpacity = 0.0
             rightOpacity = 0.0
@@ -124,6 +119,7 @@ final class FlashController: Sendable {
 
         let elapsed = link.targetTimestamp - startTime
         let dt = link.targetTimestamp - link.timestamp
+        sessionDuration += max(0, dt)
 
         // Reduce Motion: hold a steady mid-brightness "on" state instead of
         // pulsing, so the flash never strobes for motion-sensitive users.

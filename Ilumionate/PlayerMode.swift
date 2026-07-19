@@ -30,7 +30,8 @@ enum PlayerMode: Identifiable {
         pattern: MindMachineModel.LightPattern,
         binauralEnabled: Bool,
         binauralCarrier: Double,
-        binauralVolume: Double
+        binauralVolume: Double,
+        goalDuration: TimeInterval? = nil
     )
     case colorPulse(frequency: Double, intensity: Double)
     case audioLight(audioFile: AudioFile)
@@ -174,9 +175,22 @@ enum PlayerMode: Identifiable {
     /// Whether this mode has a finite duration (vs infinite like flash/color pulse)
     var hasFiniteDuration: Bool {
         switch self {
-        case .session, .audioLight, .playlist: return true
-        case .flashMode, .colorPulse: return false
+        case .session, .audioLight, .playlist:
+            return true
+        case .flashMode(_, _, _, _, _, _, _, let goalDuration):
+            return goalDuration != nil
+        case .colorPulse:
+            return false
         }
+    }
+
+    /// Optional finish line for quick Mind Machine presets. Custom sessions
+    /// remain open-ended when no goal is supplied.
+    var goalDuration: TimeInterval? {
+        guard case .flashMode(_, _, _, _, _, _, _, let goalDuration) = self else {
+            return nil
+        }
+        return goalDuration
     }
 
     var hasFrequencyDisplay: Bool {

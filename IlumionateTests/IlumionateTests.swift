@@ -711,6 +711,24 @@ struct LightScoreReaderTests {
         #expect(session.light_score[1].waveform == .softPulse)
     }
 
+    @Test func missingSessionIDDecodesDeterministically() throws {
+        let json = """
+        {
+            "session_name": "Stable Resume Session",
+            "duration_sec": 300,
+            "light_score": [
+                {"time": 0, "frequency": 10, "intensity": 0.5, "waveform": "sine"}
+            ]
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+
+        let firstLoad = try LightScoreReader.loadSession(from: data)
+        let secondLoad = try LightScoreReader.loadSession(from: data)
+
+        #expect(firstLoad.id == secondLoad.id)
+    }
+
     @Test func loadSessionWithOptionalFields() throws {
         let json = """
         {
