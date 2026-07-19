@@ -38,6 +38,11 @@ protocol AudioTranscribingService: AnyObject {
     var statusMessage: String { get }
     func transcribe(audioFile: AudioFile) async throws -> AudioTranscriptionResult
     func cancelTranscription() async
+    func releaseResources() async
+}
+
+extension AudioTranscribingService {
+    func releaseResources() async {}
 }
 
 /// Analyses transcribed audio content with AI.

@@ -26,6 +26,8 @@ final class AnalysisProgressViewModel {
     var transcriptionResult: AudioTranscriptionResult?
     var analysisResult: AnalysisResult?
     var errorMessage: String?
+    /// When the current analysis run began — drives long-run reassurance copy.
+    var startedAt: Date?
 
     // MARK: - Services
 
@@ -53,6 +55,7 @@ final class AnalysisProgressViewModel {
         errorMessage = nil
         transcriptionResult = nil
         analysisResult = nil
+        startedAt = Date()
 
         do {
             let result = try await pipeline.run(audioFile: audioFile) { [weak self] progress in

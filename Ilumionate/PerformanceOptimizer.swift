@@ -11,6 +11,14 @@ import AVFoundation
 import Observation
 import UIKit
 
+nonisolated enum BackgroundTaskPolicy {
+    /// UIKit background assertions are short-lived and are not appropriate for
+    /// transcription. The analysis checkpoint store resumes interrupted work.
+    static func shouldRegisterForLongAnalysis() -> Bool {
+        false
+    }
+}
+
 /// Memory and performance optimization utilities with modern Swift concurrency
 @MainActor @Observable
 class PerformanceOptimizer: Sendable {
@@ -37,7 +45,7 @@ class PerformanceOptimizer: Sendable {
 
     // MARK: - Memory Monitoring
 
-    enum MemoryPressureLevel {
+    nonisolated enum MemoryPressureLevel: Sendable {
         case normal
         case warning  // > 200MB
         case critical // > 400MB
@@ -53,18 +61,12 @@ class PerformanceOptimizer: Sendable {
         currentMemoryUsage = memoryInfo.usage
         memoryPressure = memoryInfo.pressureLevel
 
-        switch memoryPressure {
-        case .critical:
+        switch memoryInfo.cleanupAction {
+        case .aggressive:
             Log.general.info("🔥 CRITICAL memory usage: \(Int(memoryInfo.usage))MB")
-            Task {
-                await memoryMonitor.performAggressiveCleanup()
-            }
-        case .warning:
+        case .moderate:
             Log.general.info("⚠️ High memory usage: \(Int(memoryInfo.usage))MB")
-            Task {
-                await memoryMonitor.performModerateCleanup()
-            }
-        case .normal:
+        case nil:
             break
         }
     }
@@ -92,21 +94,51 @@ class PerformanceOptimizer: Sendable {
     /// Register a background task with automatic cleanup
     func withBackgroundTask<T>(
         name: String,
-        operation: @escaping () async throws -> T
+        operation: () async throws -> T
     ) async throws -> T {
-        return try await memoryMonitor.withBackgroundTask(name: name, operation: operation)
+        _ = name
+        return try await operation()
     }
     /// Process large audio file in memory-efficient chunks
-    func processAudioInChunks<T>(
+    func processAudioInChunks<T: Sendable>(
         audioFile: AudioFile,
         chunkSize: TimeInterval,
-        processor: (AVURLAsset, CMTimeRange) async throws -> T
+        processor: @Sendable (AVURLAsset, CMTimeRange) async throws -> T
     ) async throws -> [T] {
         return try await memoryMonitor.processAudioInChunks(
             audioFile: audioFile,
             chunkSize: chunkSize,
             processor: processor
         )
+    }
+}
+
+/// Suppresses repeated cleanup while the process remains in the same pressure
+/// episode. Cleanup is rearmed only after memory returns to the normal band.
+nonisolated struct MemoryCleanupPolicy: Sendable {
+    nonisolated enum Action: Equatable, Sendable {
+        case moderate
+        case aggressive
+    }
+
+    private var highestHandledLevel: PerformanceOptimizer.MemoryPressureLevel = .normal
+
+    mutating func action(
+        for pressureLevel: PerformanceOptimizer.MemoryPressureLevel
+    ) -> Action? {
+        switch pressureLevel {
+        case .normal:
+            highestHandledLevel = .normal
+            return nil
+        case .warning:
+            guard highestHandledLevel == .normal else { return nil }
+            highestHandledLevel = .warning
+            return .moderate
+        case .critical:
+            guard highestHandledLevel != .critical else { return nil }
+            highestHandledLevel = .critical
+            return .aggressive
+        }
     }
 }
 
@@ -118,12 +150,14 @@ actor MemoryMonitor {
     // MARK: - State
 
     private var monitoringTask: Task<Void, Never>?
+    private var cleanupPolicy = MemoryCleanupPolicy()
 
     // MARK: - Memory Info
 
     struct MemoryInfo: Sendable {
         let usage: Double
         let pressureLevel: PerformanceOptimizer.MemoryPressureLevel
+        let cleanupAction: MemoryCleanupPolicy.Action?
     }
 
     // MARK: - Monitoring
@@ -137,9 +171,23 @@ actor MemoryMonitor {
             while !Task.isCancelled {
                 let usage = await getCurrentMemoryUsage()
                 let pressureLevel = determinePressureLevel(usage: usage)
+                let cleanupAction = cleanupPolicy.action(for: pressureLevel)
 
-                let memoryInfo = MemoryInfo(usage: usage, pressureLevel: pressureLevel)
+                let memoryInfo = MemoryInfo(
+                    usage: usage,
+                    pressureLevel: pressureLevel,
+                    cleanupAction: cleanupAction
+                )
                 await onUpdate(memoryInfo)
+
+                switch cleanupAction {
+                case .moderate:
+                    await performModerateCleanup()
+                case .aggressive:
+                    await performAggressiveCleanup()
+                case nil:
+                    break
+                }
 
                 try? await Task.sleep(for: .seconds(2))
             }
@@ -189,7 +237,11 @@ actor MemoryMonitor {
         if isUserInitiated {
             return .userInitiated
         }
-        return .background
+        // `.utility` instead of `.background`: analysis is work the user is
+        // actively waiting on behind a progress bar. Background QoS is
+        // restricted to efficiency cores and aggressively throttled by iOS,
+        // which multiplies wall-clock analysis time for zero benefit.
+        return .utility
     }
 
     func shouldChunkAudioFile(_ audioFile: AudioFile) async -> Bool {
@@ -231,31 +283,20 @@ actor MemoryMonitor {
 
     // MARK: - Background Task Management
 
-    func withBackgroundTask<T>(
+    func withBackgroundTask<T: Sendable>(
         name: String,
-        operation: @escaping () async throws -> T
+        operation: @Sendable () async throws -> T
     ) async throws -> T {
-        let taskID = await MainActor.run {
-            UIApplication.shared.beginBackgroundTask(withName: name) {
-                Log.general.info("⏰ Background task '\(name)' expired")
-            }
-        }
-
-        defer {
-            Task { @MainActor in
-                UIApplication.shared.endBackgroundTask(taskID)
-            }
-        }
-
+        _ = name
         return try await operation()
     }
 
     // MARK: - Audio Processing
 
-    func processAudioInChunks<T>(
+    func processAudioInChunks<T: Sendable>(
         audioFile: AudioFile,
         chunkSize: TimeInterval,
-        processor: (AVURLAsset, CMTimeRange) async throws -> T
+        processor: @Sendable (AVURLAsset, CMTimeRange) async throws -> T
     ) async throws -> [T] {
         let asset = AVURLAsset(url: audioFile.url)
         let duration = try await asset.load(.duration)

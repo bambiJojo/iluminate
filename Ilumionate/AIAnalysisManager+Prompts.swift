@@ -43,6 +43,17 @@ extension AIAnalysisManager {
         prompt += "- Transcription Confidence: \(confidenceStr)%\n"
         prompt += "- Language: \(transcription.locale)\n\n"
 
+        let introduction = String(transcription.fullText.prefix(1_500))
+        if !introduction.isEmpty {
+            prompt += "Opening Introduction (highest-priority metadata evidence):\n"
+            prompt += "\(introduction)\n\n"
+            prompt += "Metadata guidance:\n"
+            prompt += "- Openings often say 'hello, this is [creator]' followed by 'this is' or 'welcome to [title]'\n"
+            prompt += "- Use an explicitly announced creator and title over guesses from the broader content\n"
+            prompt += "- Allow for minor transcription spelling errors by comparing the spoken title with the filename\n"
+            prompt += "- Never infer a creator when no name is announced or otherwise supplied\n\n"
+        }
+
         if isSparse {
             prompt += "⚠️ SPARSE TRANSCRIPT: Only \(wordCount) words detected. "
             prompt += "This is likely subliminal or near-silent audio. "

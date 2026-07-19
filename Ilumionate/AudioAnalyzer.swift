@@ -9,7 +9,7 @@ import Foundation
 import os
 import AVFoundation
 import Observation
-import WhisperKit
+@preconcurrency import WhisperKit
 import Darwin
 
 // MARK: - Model State
@@ -186,15 +186,14 @@ class AudioAnalyzer: Sendable {
 
     private let whisperManager = WhisperManager()
     private var currentTask: Task<AudioTranscriptionResult, Error>?
+    private var currentTranscriptionID: UUID?
 
     // MARK: - Initialization
 
     init() {
-        // Initialize WhisperKit asynchronously
-        Task {
-            await whisperManager.initialize()
-            statusMessage = await whisperManager.getStatus()
-        }
+        // Keep the large WhisperKit model unloaded until transcription is
+        // requested. `transcribe` and `prepareModel` both initialize it through
+        // the actor-isolated manager before use.
     }
 
     // MARK: - Transcription
@@ -209,46 +208,69 @@ class AudioAnalyzer: Sendable {
 
     /// Transcribe an audio file using modern async/await patterns
     func transcribe(audioFile: AudioFile) async throws -> AudioTranscriptionResult {
-        // Cancel any existing transcription
-        currentTask?.cancel()
+        // A cancelled task keeps running until it cooperates. Wait for the old
+        // operation to finish before allowing a new one to reuse WhisperKit.
+        if let previousTask = currentTask {
+            previousTask.cancel()
+            _ = try? await previousTask.value
+        }
 
         isAnalyzing = true
         progress = 0.0
-        statusMessage = "Loading ML Models (may download)..."
+        statusMessage = "Preparing audio & ML models..."
+        let transcriptionID = UUID()
+        currentTranscriptionID = transcriptionID
 
-        // Initialize WhisperKit with priority for better UX
-        try await whisperManager.initializeWithPriority()
-
-        statusMessage = "Preparing audio..."
+        // Model initialization happens inside `whisperManager.transcribe`,
+        // concurrently with MP3 pre-conversion, so neither serializes the other.
 
         // Create cancellable task
-        currentTask = Task {
-            defer {
-                Task { @MainActor in
-                    self.isAnalyzing = false
-                    self.progress = 0.0
-                    self.statusMessage = "Ready"
-                }
-            }
-
-            return try await whisperManager.transcribe(audioFile: audioFile) { @MainActor progressInfo in
+        let task = Task {
+            try await whisperManager.transcribe(audioFile: audioFile) { @MainActor progressInfo in
+                guard self.currentTranscriptionID == transcriptionID else { return }
                 self.progress = progressInfo.progress
                 self.statusMessage = progressInfo.message
             }
         }
+        currentTask = task
 
-        return try await currentTask!.value
+        defer {
+            if currentTranscriptionID == transcriptionID {
+                currentTask = nil
+                currentTranscriptionID = nil
+                isAnalyzing = false
+                progress = 0.0
+                statusMessage = "Ready"
+            }
+        }
+        return try await task.value
     }
 
     /// Cancel ongoing transcription with proper cleanup
     func cancelTranscription() async {
-        currentTask?.cancel()
+        let task = currentTask
+        task?.cancel()
         await whisperManager.cancelTranscription()
+        _ = try? await task?.value
+        await whisperManager.releaseResources()
 
+        currentTask = nil
+        currentTranscriptionID = nil
         isAnalyzing = false
         progress = 0.0
         statusMessage = "Cancelled"
         Log.audio.info("🛑 Transcription cancelled")
+    }
+
+    /// Releases Core ML model resources after an analysis queue finishes.
+    func releaseResources() async {
+        let task = currentTask
+        task?.cancel()
+        _ = try? await task?.value
+        currentTask = nil
+        currentTranscriptionID = nil
+        await whisperManager.releaseResources()
+        statusMessage = "Model unloaded"
     }
 
     nonisolated static func whisperModelRepositoryURL() -> URL {
@@ -266,6 +288,8 @@ actor WhisperManager {
     private var whisperKit: WhisperKit?
     private var modelState: ModelState = .notLoaded
     private var currentTask: Task<[TranscriptionResult], Error>?
+    private var currentTaskID: UUID?
+    private var lifecycleGeneration = 0
 
     // MARK: - Progress Info
 
@@ -299,10 +323,16 @@ actor WhisperManager {
         }
 
         modelState = .loading
+        let generation = lifecycleGeneration
 
         do {
             Log.audio.info("🔄 Initializing WhisperKit...")
-            try await initializeWhisperKit()
+            let loadedWhisperKit = try await bootstrapWhisperKit()
+            guard generation == lifecycleGeneration else {
+                await loadedWhisperKit.unloadModels()
+                throw CancellationError()
+            }
+            whisperKit = loadedWhisperKit
             modelState = .loaded
             Log.audio.info("✅ WhisperKit initialized successfully")
         } catch let analyzerError as AnalyzerError {
@@ -323,23 +353,25 @@ actor WhisperManager {
         }
     }
 
-    private func initializeWhisperKit() async throws {
-        whisperKit = try await bootstrapWhisperKit()
-    }
-
     /// Removes the cached WhisperKit model files and re-downloads fresh copies.
     /// Called when initialization or transcription fails due to corrupt CoreML models.
     private func clearCacheAndReinitialize() async throws {
         Log.audio.info("🗑 Clearing WhisperKit model cache...")
         whisperKit = nil
         modelState = .loading
+        let generation = lifecycleGeneration
 
         let fileManager = FileManager.default
         let cacheURL = WhisperModelBootstrap.sharedRepositoryURL()
         try? fileManager.removeItem(at: cacheURL)
 
         Log.audio.info("🔄 Retrying WhisperKit initialization after cache clear...")
-        whisperKit = try await bootstrapWhisperKit(forceDownload: true)
+        let loadedWhisperKit = try await bootstrapWhisperKit(forceDownload: true)
+        guard generation == lifecycleGeneration else {
+            await loadedWhisperKit.unloadModels()
+            throw CancellationError()
+        }
+        whisperKit = loadedWhisperKit
         modelState = .loaded
         Log.audio.info("✅ WhisperKit re-initialized successfully after cache clear")
     }
@@ -439,21 +471,35 @@ actor WhisperManager {
         audioFile: AudioFile,
         onProgress: @Sendable @escaping (ProgressInfo) async -> Void
     ) async throws -> AudioTranscriptionResult {
-        // Ensure WhisperKit is initialized before proceeding
-        try await ensureReady()
-        guard let whisper = whisperKit else { throw AnalyzerError.whisperKitNotInitialized }
-
         // MP3 files can fail inside WhisperKit's internal AVFoundation pipeline.
         // Pre-convert to M4A in a temp directory so WhisperKit always receives
-        // a format it handles reliably.
+        // a format it handles reliably. The conversion starts immediately so it
+        // overlaps model loading instead of waiting behind it.
+        let sourceURL = audioFile.url
+        let conversionTask: Task<URL, Error>? = sourceURL.pathExtension.lowercased() == "mp3"
+            ? Task(priority: .userInitiated) { try await Self.convertMP3ToM4A(sourceURL) }
+            : nil
+
+        // Ensure WhisperKit is initialized before proceeding
+        do {
+            try await initializeWithPriority()
+        } catch {
+            conversionTask?.cancel()
+            throw error
+        }
+        guard let whisper = whisperKit else {
+            conversionTask?.cancel()
+            throw AnalyzerError.whisperKitNotInitialized
+        }
+
         let transcribeURL: URL
         var tempURL: URL?
-        if audioFile.url.pathExtension.lowercased() == "mp3" {
-            let converted = try await convertMP3ToM4A(audioFile.url)
+        if let conversionTask {
+            let converted = try await conversionTask.value
             tempURL = converted
             transcribeURL = converted
         } else {
-            transcribeURL = audioFile.url
+            transcribeURL = sourceURL
         }
         defer { if let url = tempURL { try? FileManager.default.removeItem(at: url) } }
 
@@ -466,7 +512,8 @@ actor WhisperManager {
 
         // Create transcription task with optimizations
         let transcribePath = transcribeURL.path(percentEncoded: false)
-        currentTask = Task(priority: .userInitiated) {
+        let taskID = UUID()
+        let transcriptionTask = Task(priority: .userInitiated) {
             let decodeOptions = DecodingOptions(
                 verbose: false,  // Reduce overhead
                 language: nil,   // nil = auto-detect; WhisperKit identifies the spoken language
@@ -491,11 +538,20 @@ actor WhisperManager {
                 return nil // Continue transcription
             }
         }
+        currentTaskID = taskID
+        currentTask = transcriptionTask
 
-        let task = currentTask!
+        defer {
+            if currentTaskID == taskID {
+                currentTask = nil
+                currentTaskID = nil
+            }
+        }
         let results: [TranscriptionResult]
         do {
-            results = try await task.value
+            results = try await transcriptionTask.value
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             // If transcription fails with a CoreML/MIL parsing error, the cached
             // model is likely corrupted. Clear cache and retry once.
@@ -520,8 +576,6 @@ actor WhisperManager {
                 throw error
             }
         }
-        currentTask = nil
-
         // Process results
         guard let whisperResult = results.first else {
             throw AnalyzerError.noAudioData
@@ -559,15 +613,32 @@ actor WhisperManager {
     }
 
     func cancelTranscription() async {
-        currentTask?.cancel()
+        let task = currentTask
+        task?.cancel()
+        _ = try? await task?.value
+    }
+
+    func releaseResources() async {
+        lifecycleGeneration &+= 1
+        let task = currentTask
+        task?.cancel()
+        _ = try? await task?.value
         currentTask = nil
+        currentTaskID = nil
+        if let whisperKit {
+            await whisperKit.unloadModels()
+        }
+        whisperKit = nil
+        modelState = .notLoaded
+        Log.audio.info("🧹 WhisperKit models unloaded")
     }
 
     // MARK: - MP3 Pre-Conversion
 
     /// Exports an MP3 to a temporary M4A file so WhisperKit always receives a
     /// format that AVFoundation's internal pipeline handles without errors.
-    private func convertMP3ToM4A(_ sourceURL: URL) async throws -> URL {
+    /// Nonisolated so it can run concurrently with actor-isolated model loading.
+    private nonisolated static func convertMP3ToM4A(_ sourceURL: URL) async throws -> URL {
         let tempURL = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString + ".m4a")
 
@@ -584,7 +655,7 @@ actor WhisperManager {
 // MARK: - Audio Transcription Result
 
 /// Result of audio transcription
-struct AudioTranscriptionResult: Codable, Sendable {
+nonisolated struct AudioTranscriptionResult: Codable, Sendable {
     let fullText: String
     let segments: [AudioTranscriptionSegment]
     let duration: TimeInterval
@@ -634,7 +705,7 @@ struct AudioTranscriptionResult: Codable, Sendable {
 }
 
 /// A segment of transcribed text with timing information
-struct AudioTranscriptionSegment: Codable, Identifiable, Sendable {
+nonisolated struct AudioTranscriptionSegment: Codable, Identifiable, Sendable {
     let id: UUID
     let text: String
     let timestamp: TimeInterval

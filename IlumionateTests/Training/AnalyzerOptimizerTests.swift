@@ -1006,7 +1006,7 @@ struct AnalyzerOptimizerTests {
         )
     }
 
-    private func syntheticTranscription(
+    nonisolated private func syntheticTranscription(
         for example: AnalyzerOptimizationDataset.Example
     ) -> AudioTranscriptionResult {
         let segments = example.phaseSegments.map { phase -> AudioTranscriptionSegment in

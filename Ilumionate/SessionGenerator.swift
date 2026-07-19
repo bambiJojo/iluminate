@@ -104,7 +104,8 @@ class SessionGenerator {
         if optimized.report.meetsProductionTarget {
             Log.analysis.info("✅ Light score alignment: \(Int(optimized.report.overallScore * 100))%")
         } else {
-            Log.analysis.info("⚠️ Light score alignment below target after \(optimized.iterationCount) repair pass(es): \(Int(optimized.report.overallScore * 100))%")
+            let report = optimized.report
+            Log.analysis.info("⚠️ Light score alignment below target after \(optimized.iterationCount) repair pass(es): \(Int(report.overallScore * 100))% [phase=\(Int(report.phaseFrequencyScore * 100)) boundary=\(Int(report.boundaryScore * 100)) depth=\(Int(report.depthCorrelationScore * 100)) pause=\(Int(report.pauseResponseScore * 100)) structural=\(Int(report.structuralScore * 100))]")
         }
 
         return session

@@ -105,9 +105,9 @@ struct ContentAddressedKeyTests {
         #expect(key == nil, "Non-existent file must return nil key")
     }
 
-    @Test func keyOnlyUsesFirstSixtyFourKB() throws {
-        // Two files with identical first 64 KB but different trailing bytes
-        // must produce the same key (only the fingerprint window matters).
+    @Test func keyUsesCompleteFileContents() throws {
+        // Matching headers are common in encoded audio. Trailing differences must
+        // still produce different content identities.
         let chunk    = Data(repeating: 0xCC, count: 64 * 1024)
         let trailer1 = Data(repeating: 0x00, count: 1024)
         let trailer2 = Data(repeating: 0xFF, count: 1024)
@@ -120,8 +120,23 @@ struct ContentAddressedKeyTests {
 
         let key1 = AnalysisStateManager.contentAddressedKey(audioFileURL: url1)
         let key2 = AnalysisStateManager.contentAddressedKey(audioFileURL: url2)
-        #expect(key1 == key2,
-            "Files differing only beyond 64 KB must produce the same key")
+        #expect(key1 != key2,
+            "Files differing beyond their shared header must not collide")
+    }
+
+    @Test func storedFingerprintAvoidsReadingTheFileAgain() {
+        let fingerprint = String(repeating: "a", count: 64)
+        let file = AudioFile(
+            filename: "already-deleted.m4a",
+            duration: 300,
+            fileSize: 1024,
+            contentFingerprint: fingerprint
+        )
+
+        #expect(
+            AnalysisStateManager.cacheKey(for: file)
+                == "\(fingerprint):\(AnalysisStateManager.currentModelVersion)"
+        )
     }
 }
 

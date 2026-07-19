@@ -62,8 +62,8 @@ struct AudioAnalyzerView: View {
                     }
                 }
             }
-            .onAppear {
-                startAnalysis()
+            .task {
+                await startAnalysis()
             }
         }
     }
@@ -231,16 +231,21 @@ struct AudioAnalyzerView: View {
         }
     }
     
-    private func startAnalysis() {
-        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+    private func startAnalysis() async {
+        while analysisProgress < 1, !Task.isCancelled {
+            do {
+                try await Task.sleep(for: .milliseconds(50))
+            } catch {
+                return
+            }
             withAnimation(.linear(duration: 0.05)) {
                 analysisProgress += 0.02
-                if analysisProgress >= 1.0 {
-                    timer.invalidate()
-                    withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                        isAnalyzing = false
-                    }
+            }
+            if analysisProgress >= 1.0 {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    isAnalyzing = false
                 }
+                return
             }
         }
     }

@@ -155,7 +155,8 @@ nonisolated struct AudioAnalysisEnricher: Sendable {
             classificationConfidence: analysis.classificationConfidence,
             prosodicProfile: resolvedProsody,
             techniqueDetection: techniqueDetection,
-            transcriptAnalysis: transcriptAnalysis
+            transcriptAnalysis: transcriptAnalysis,
+            discoveredMetadata: analysis.discoveredMetadata
         )
 
         let expertAnalysis = ExpertAnalysisBuilder().build(
@@ -184,7 +185,8 @@ nonisolated struct AudioAnalysisEnricher: Sendable {
             expertAnalysis: expertAnalysis,
             prosodicProfile: enrichedAnalysis.prosodicProfile,
             techniqueDetection: enrichedAnalysis.techniqueDetection,
-            transcriptAnalysis: enrichedAnalysis.transcriptAnalysis
+            transcriptAnalysis: enrichedAnalysis.transcriptAnalysis,
+            discoveredMetadata: enrichedAnalysis.discoveredMetadata
         )
     }
 

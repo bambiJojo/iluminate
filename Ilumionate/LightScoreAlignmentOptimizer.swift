@@ -44,6 +44,7 @@ struct LightScoreAlignmentOptimizer: Sendable {
         }
 
         var attemptedIterations = 0
+        var consecutiveUnsuccessfulIterations = 0
         for iteration in 1...maximumIterations {
             attemptedIterations = iteration
             var repaired = bestMoments
@@ -69,14 +70,21 @@ struct LightScoreAlignmentOptimizer: Sendable {
                 config: config
             )
 
-            guard repairedReport.overallScore >= bestReport.overallScore + minimumImprovement else {
+            if repairedReport.overallScore >= bestReport.overallScore + minimumImprovement {
+                bestMoments = repaired
+                bestReport = repairedReport
+                consecutiveUnsuccessfulIterations = 0
+            } else {
+                consecutiveUnsuccessfulIterations += 1
+            }
+
+            if bestReport.meetsProductionTarget {
                 break
             }
 
-            bestMoments = repaired
-            bestReport = repairedReport
-
-            if bestReport.meetsProductionTarget {
+            // Iteration two adds denser anchors, so a flat first pass must not
+            // prevent it from running. Stop only after both strategies fail.
+            if consecutiveUnsuccessfulIterations >= 2 {
                 break
             }
         }

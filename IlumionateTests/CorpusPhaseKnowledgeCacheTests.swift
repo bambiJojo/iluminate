@@ -32,7 +32,7 @@ struct CorpusPhaseKnowledgeCacheTests {
     }
 }
 
-private final class LockedCounter: @unchecked Sendable {
+private nonisolated final class LockedCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var storage = 0
 

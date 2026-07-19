@@ -51,19 +51,19 @@ struct AnalyzerView: View {
             Button("Clear Queue", role: .destructive) { analysisManager.clearQueue() }
             Button("Cancel", role: .cancel) {}
         }
-        .onAppear {
-            loadAudioFiles()
+        .task {
+            await loadAudioFiles()
             UsageAnalytics.shared.screen(.analysisQueue)
         }
         .onChange(of: analysisManager.completedAnalyses.count) {
-            loadAudioFiles()
+            Task { await loadAudioFiles() }
         }
     }
 
     // MARK: - Actions
 
-    private func loadAudioFiles() {
-        audioFiles = AudioLibraryStore.loadRepairingStoredFiles()
+    private func loadAudioFiles() async {
+        audioFiles = await AudioLibraryStore.loadRepairingStoredFiles()
     }
 
     private func queueAllUnanalyzed() async {

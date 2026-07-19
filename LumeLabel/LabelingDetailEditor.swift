@@ -88,7 +88,7 @@ final class LabelingDetailEditor {
         let evidenceWords: [TranscriptKeyword]
 
         var isMatch: Bool { predictedPhase == labeledPhase }
-        var averageBoundaryError: TimeInterval? {
+        nonisolated var averageBoundaryError: TimeInterval? {
             let deltas = [startDelta, endDelta].compactMap { $0 }.map(abs)
             guard !deltas.isEmpty else { return nil }
             return deltas.reduce(0, +) / Double(deltas.count)

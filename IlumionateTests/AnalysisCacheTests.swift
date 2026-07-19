@@ -27,23 +27,23 @@ struct AnalysisCacheTests {
 
     // MARK: Basic cache API (structural — no disk writes needed)
 
-    @Test func newFileHasNoCachedResultIsBoolReturned() async {
+    @Test func newFileHasNoCachedResultIsBoolReturned() {
         // A brand-new UUID will rarely be cached; mainly checks API compiles and runs
         let file = makeAudioFile()
-        let result: Bool = await AnalysisStateManager.shared.hasCachedResult(for: file)
+        let result: Bool = AnalysisStateManager.shared.hasCachedResult(for: file)
         _ = result // structural
     }
 
-    @Test func cachedResultForUnknownFileReturnsOptional() async {
+    @Test func cachedResultForUnknownFileReturnsOptional() {
         let file = makeAudioFile()
-        let result: AnalysisResult? = await AnalysisStateManager.shared.cachedResult(for: file)
+        let result: AnalysisResult? = AnalysisStateManager.shared.cachedResult(for: file)
         _ = result // structural — verifies type is Optional<AnalysisResult>
     }
 
-    @Test func evictCachedResultDoesNotCrashForMissingKey() async {
+    @Test func evictCachedResultDoesNotCrashForMissingKey() {
         // Evicting a file that was never cached must not throw or crash
         let file = makeAudioFile()
-        await AnalysisStateManager.shared.evictCachedResult(for: file)
+        AnalysisStateManager.shared.evictCachedResult(for: file)
         // If we get here without crashing, the test passes
     }
 

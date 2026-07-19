@@ -154,6 +154,21 @@ struct AnalysisProgressView: View {
                 ProgressView(value: viewModel.currentStageProgress)
                     .tint(Color.bwGamma)
                     .frame(width: 200)
+
+                // Long-run reassurance: analysis is a one-time cost per file.
+                if let startedAt = viewModel.startedAt {
+                    TimelineView(.periodic(from: .now, by: 5)) { context in
+                        let elapsed = context.date.timeIntervalSince(startedAt)
+                        if let reassurance = AnalysisReassurance.message(elapsed: elapsed) {
+                            Text(reassurance)
+                                .font(TranceTypography.caption)
+                                .italic()
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .transition(.opacity)
+                        }
+                    }
+                }
             }
         }
         .padding()
@@ -235,6 +250,9 @@ struct AnalysisProgressView: View {
                     if let transcription = viewModel.transcriptionResult {
                         updatedFile.transcription = transcription.fullText
                     }
+                    let embedded = updatedFile.trackMetadata ?? AudioTrackMetadata()
+                    let metadata = embedded.mergingAnalyzed(result.discoveredMetadata)
+                    updatedFile.trackMetadata = metadata.isEmpty ? nil : metadata
                     onAnalysisComplete(updatedFile, result)
                     dismiss()
                 } label: {

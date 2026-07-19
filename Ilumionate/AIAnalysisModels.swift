@@ -21,6 +21,7 @@ nonisolated enum AVESystemPrompt {
     /// Covers only the fields the structured-output schema requires.
     static let minimalInstructions = """
     You classify audio content for a light therapy system.
+    Also create a concise, specific library title and 1–6 short themes. Only name a creator when supported by the filename, embedded context, or transcript; otherwise return an empty creator.
     Content types: hypnosis, meditation, music, guidedImagery, affirmations, unknown.
     Frequency targets: hypnosis 4–8 Hz, meditation 6–8 Hz, music 8–18 Hz, affirmations 9–11 Hz.
     Phases (hypnosis only): pre_talk, induction, deepening, therapy, suggestions, erotic_suggestions, brainwashing, post_hypnotic_conditioning, emergence.
@@ -125,6 +126,18 @@ nonisolated enum AVESystemPrompt {
 
 @Generable(description: "Analysis of audio content for light therapy session generation")
 struct AIAnalysisResponse {
+
+    @Guide(description: "A concise, specific library title based on the content. Do not include creator or duration.")
+    var suggestedTitle: String
+
+    @Guide(description: "Creator, narrator, or artist only when clearly supported by the input; otherwise an empty string")
+    var suggestedCreator: String
+
+    @Guide(description: "One to six short themes or topics central to the audio", .count(1...6))
+    var themes: [String]
+
+    @Guide(description: "Confidence in the generated title, creator, and themes", .range(0.0...1.0))
+    var metadataConfidence: Double
 
     @Guide(description: """
         Content type — one of: hypnosis, meditation, music, guidedImagery, affirmations, unknown.

@@ -577,6 +577,7 @@ struct AnalyzerOptimizer: Sendable {
         )
 
         try Task.checkCancellation()
+        let selectedBestGeneration = bestGeneration
         let selectedAllResults = try await evaluate(
             config: selectedConfig,
             examples: dataset.examples,
@@ -591,7 +592,7 @@ struct AnalyzerOptimizer: Sendable {
                     Progress(
                         title: "Optimizing Analyzer",
                         message: "Scoring selected config across the full corpus · \(splitName) · \(example.originalFilename)",
-                        generation: bestGeneration,
+                        generation: selectedBestGeneration,
                         completedUnitCount: completedUnitCount,
                         totalUnitCount: finalizedTotalUnitCount,
                         isEstimatedTotal: false
@@ -745,7 +746,7 @@ struct AnalyzerOptimizer: Sendable {
         }
     }
 
-    func splitName(
+    nonisolated func splitName(
         for exampleID: UUID,
         in split: (
             train: [AnalyzerOptimizationDataset.Example],

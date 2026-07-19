@@ -35,6 +35,20 @@ struct AnalysisStatusOverlay: View {
                     Text(stageLabel)
                         .font(.system(size: 10, weight: .regular))
                         .foregroundStyle(Color.textSecondary)
+
+                    if isInFlight {
+                        TimelineView(.periodic(from: .now, by: 5)) { context in
+                            let elapsed = context.date.timeIntervalSince(analysis.startedAt)
+                            if let reassurance = AnalysisReassurance.message(elapsed: elapsed) {
+                                Text(reassurance)
+                                    .font(.system(size: 10, weight: .regular))
+                                    .italic()
+                                    .foregroundStyle(Color.roseGold)
+                                    .lineLimit(2)
+                                    .transition(.opacity)
+                            }
+                        }
+                    }
                 }
 
                 Spacer()
@@ -70,6 +84,13 @@ struct AnalysisStatusOverlay: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Analyzing \(analysis.audioFile.displayName), \(Int(analysis.progress * 100)) percent complete")
         .accessibilityAddTraits(.isButton)
+    }
+
+    private var isInFlight: Bool {
+        switch analysis.stage {
+        case .starting, .transcribing, .analyzing, .generatingSession: true
+        case .complete, .failed: false
+        }
     }
 
     private var stageLabel: String {

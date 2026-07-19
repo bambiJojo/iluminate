@@ -5,10 +5,31 @@
 //  Created by Byron Quine on 2/24/26.
 //
 
-import CryptoKit
 import os
 import Foundation
 import Observation
+
+private nonisolated struct CachedAudioAnalysis: Codable, Sendable {
+    static let currentSchemaVersion = 2
+
+    let schemaVersion: Int
+    let cachedAt: Date
+    let transcription: AudioTranscriptionResult?
+    let analysis: AnalysisResult
+    let trackMetadata: AudioTrackMetadata?
+
+    init(
+        transcription: AudioTranscriptionResult?,
+        analysis: AnalysisResult,
+        trackMetadata: AudioTrackMetadata?
+    ) {
+        schemaVersion = Self.currentSchemaVersion
+        cachedAt = .now
+        self.transcription = transcription
+        self.analysis = analysis
+        self.trackMetadata = trackMetadata
+    }
+}
 
 // MARK: - Analysis Stage
 
@@ -42,14 +63,18 @@ class AnalysisStateManager {
     /// Production singleton — uses the live ML-backed implementations.
     private init(
         progressStore: AnalysisProgressStore = .shared,
-        preferences: AnalysisPreferences? = nil
+        preferences: AnalysisPreferences? = nil,
+        cacheURL: URL = AnalysisStateManager.cacheURL
     ) {
         self.audioAnalyzer = AudioAnalyzer()
         self.aiAnalyzer = AIContentAnalyzer()
         self.progressStore = progressStore
         self.preferences = preferences ?? .shared
+        self.analysisCacheURL = cacheURL
+        self.scheduleBackgroundAnalysis = { audioFiles in
+            BackgroundAnalysisScheduler.shared.schedule(for: audioFiles)
+        }
         loadCachedResults()
-        Task { await resumeInterruptedAnalyses() }
     }
 
     /// Testable initializer — inject mock services for unit testing.
@@ -58,12 +83,18 @@ class AnalysisStateManager {
         transcriber: any AudioTranscribingService,
         analyzer: any ContentAnalyzingService,
         progressStore: AnalysisProgressStore = .shared,
-        preferences: AnalysisPreferences? = nil
+        preferences: AnalysisPreferences? = nil,
+        cacheURL: URL = AnalysisStateManager.cacheURL,
+        scheduleBackgroundAnalysis: @escaping @MainActor ([AudioFile]) -> Void = { audioFiles in
+            BackgroundAnalysisScheduler.shared.schedule(for: audioFiles)
+        }
     ) {
         self.audioAnalyzer = transcriber
         self.aiAnalyzer = analyzer
         self.progressStore = progressStore
         self.preferences = preferences ?? .shared
+        self.analysisCacheURL = cacheURL
+        self.scheduleBackgroundAnalysis = scheduleBackgroundAnalysis
         loadCachedResults()
     }
 
@@ -77,6 +108,9 @@ class AnalysisStateManager {
     // Injected stores — default to the shared singletons; injectable for testing.
     private let progressStore: AnalysisProgressStore
     private let preferences: AnalysisPreferences
+    private let analysisCacheURL: URL
+    private let scheduleBackgroundAnalysis: @MainActor ([AudioFile]) -> Void
+    private var automaticProcessingTask: Task<Void, Never>?
 
     // MARK: - Queue Management
 
@@ -129,16 +163,16 @@ class AnalysisStateManager {
 
     /// Add a single audio file to queue and start automatic background processing
     func queueForAnalysis(_ audioFile: AudioFile, priority: TaskPriority = .background) async {
-        // Add to queue if not already there
-        guard !analysisQueue.contains(where: { $0.id == audioFile.id }) else {
+        guard !isQueuedOrActive(audioFile) else {
             Log.analysis.info("📋 File already in queue: \(audioFile.filename)")
             return
         }
 
+        await progressStore.saveQueued(audioFile)
         analysisQueue.append(audioFile)
         Log.analysis.info("📋 Added to queue: \(audioFile.filename) (position \(self.analysisQueue.count))")
+        scheduleBackgroundAnalysis([audioFile])
 
-        // Start automatic processing if nothing is currently analyzing
         await startAutomaticProcessing(priority: priority)
     }
 
@@ -148,38 +182,57 @@ class AnalysisStateManager {
 
         // Add all files to queue (avoid duplicates)
         for audioFile in audioFiles {
-            if !analysisQueue.contains(where: { $0.id == audioFile.id }) {
+            if !isQueuedOrActive(audioFile) {
+                await progressStore.saveQueued(audioFile)
                 analysisQueue.append(audioFile)
                 newFilesAdded += 1
             }
         }
 
         Log.analysis.info("📋 Added \(newFilesAdded) files to queue (total: \(self.analysisQueue.count))")
+        if newFilesAdded > 0 {
+            scheduleBackgroundAnalysis(audioFiles)
+        }
 
-        // Start automatic processing if nothing is currently analyzing
         await startAutomaticProcessing(priority: priority)
     }
 
     /// Start automatic background processing of the queue
     private func startAutomaticProcessing(priority: TaskPriority = .background) async {
-        // Don't start if already processing or queue is empty
-        guard currentAnalysis == nil && !analysisQueue.isEmpty else {
-            Log.analysis.info("⏸️ Skipping auto-processing: analyzing=\(self.currentAnalysis != nil), queue=\(self.analysisQueue.count)")
+        if let automaticProcessingTask {
+            await automaticProcessingTask.value
             return
         }
 
-        Log.analysis.info("🚀 Starting automatic queue processing...")
-
-        // Process queue continuously until empty
-        await analysisCoordinator.processQueueAutomatically(
-            analysisManager: self,
-            audioAnalyzer: audioAnalyzer,
-            aiAnalyzer: aiAnalyzer,
-            performanceOptimizer: performanceOptimizer,
-            priority: priority
-        ) { [weak self] audioFile, result in
-            await self?.handleAnalysisComplete(audioFile: audioFile, result: result)
+        guard currentAnalysis == nil && !analysisQueue.isEmpty else {
+            return
         }
+
+        let task = Task(priority: priority) { [weak self] in
+            guard let self else { return }
+            await analysisCoordinator.processQueueAutomatically(
+                analysisManager: self,
+                audioAnalyzer: audioAnalyzer,
+                aiAnalyzer: aiAnalyzer,
+                progressStore: progressStore,
+                performanceOptimizer: performanceOptimizer,
+                priority: priority
+            ) { [weak self] audioFile, result in
+                await self?.handleAnalysisComplete(audioFile: audioFile, result: result)
+            }
+        }
+        automaticProcessingTask = task
+        await task.value
+        automaticProcessingTask = nil
+
+        if await progressStore.allPending().isEmpty {
+            BackgroundAnalysisScheduler.shared.analysisFinished()
+        }
+    }
+
+    private func isQueuedOrActive(_ audioFile: AudioFile) -> Bool {
+        analysisQueue.contains { $0.id == audioFile.id }
+            || currentAnalysis?.audioFile.id == audioFile.id
     }
 
     /// Legacy method for backward compatibility - now delegates to queueForAnalysis
@@ -194,6 +247,7 @@ class AnalysisStateManager {
 
     /// Cancel the current analysis with proper cleanup
     func cancelCurrentAnalysis() {
+        automaticProcessingTask?.cancel()
         Task {
             await analysisCoordinator.cancelCurrentTask()
             await audioAnalyzer.cancelTranscription()
@@ -203,12 +257,23 @@ class AnalysisStateManager {
 
     /// Cancel all analyses with structured cleanup
     func cancelAllAnalyses() {
+        automaticProcessingTask?.cancel()
         Task {
             await analysisCoordinator.cancelAllTasks()
             await audioAnalyzer.cancelTranscription()
         }
         currentAnalysis = nil
         analysisQueue.removeAll()
+    }
+
+    /// Stops work at an iOS background-task expiration boundary while keeping
+    /// the durable queue/checkpoints available for the next system launch.
+    func expireBackgroundProcessing() {
+        automaticProcessingTask?.cancel()
+        Task {
+            await analysisCoordinator.cancelAllTasks()
+            await audioAnalyzer.cancelTranscription()
+        }
     }
 
     /// Check if a file is in the queue
@@ -223,39 +288,37 @@ class AnalysisStateManager {
 
     // MARK: - Persistent Cache
 
-    /// In-memory cache: content-addressed key → AnalysisResult.
-    private var cachedResults: [String: AnalysisResult] = [:]
+    /// In-memory cache: content-addressed key -> complete reusable analysis payload.
+    private var cachedResults: [String: CachedAudioAnalysis] = [:]
 
     // MARK: Content-Addressed Key
 
     /// WhisperKit model version baked into every cache key.
     /// Incrementing this string automatically invalidates all existing entries
     /// and forces re-analysis — do this after upgrading the WhisperKit model.
-    nonisolated static let currentModelVersion = "base-v1"
+    nonisolated static let currentModelVersion = "base-v4-catalog-verification"
 
-    /// Maximum bytes read from the audio file for fingerprinting.
-    nonisolated private static let cacheKeyChunkBytes = 64 * 1024 // 64 KB
-
-    /// Returns a content-addressed cache key: SHA-256 of the first 64 KB
-    /// of the audio file, followed by a colon and the model version string.
+    /// Returns a content-addressed cache key: SHA-256 of the complete audio file,
+    /// followed by a colon and the model version string.
     ///
     /// Falls back to the file's UUID string when the audio file cannot be
     /// read (e.g., synthetic `AudioFile` objects in unit tests).
     nonisolated static func cacheKey(for audioFile: AudioFile) -> String {
-        contentAddressedKey(audioFileURL: audioFile.url) ?? audioFile.id.uuidString
+        if let fingerprint = audioFile.contentFingerprint, !fingerprint.isEmpty {
+            return "\(fingerprint):\(currentModelVersion)"
+        }
+        // Fingerprints are computed by the import worker. Never hash an entire
+        // legacy audio file synchronously from this MainActor cache lookup.
+        return audioFile.id.uuidString
     }
 
-    /// Computes SHA-256 of the first `cacheKeyChunkBytes` of `url`.
+    /// Computes SHA-256 of the complete contents of `url`.
     /// Returns `nil` when the file cannot be read.
     nonisolated static func contentAddressedKey(
         audioFileURL url: URL,
         modelVersion: String = currentModelVersion
     ) -> String? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-        let chunk = (try? handle.read(upToCount: cacheKeyChunkBytes)) ?? Data()
-        guard !chunk.isEmpty else { return nil }
-        let hex = SHA256.hash(data: chunk).map { String(format: "%02x", $0) }.joined()
+        guard let hex = AudioFingerprintService.computeFingerprint(for: url) else { return nil }
         return "\(hex):\(modelVersion)"
     }
 
@@ -263,7 +326,7 @@ class AnalysisStateManager {
 
     /// Returns the cached analysis result for a file, or nil if none exists.
     func cachedResult(for audioFile: AudioFile) -> AnalysisResult? {
-        cachedResults[Self.cacheKey(for: audioFile)]
+        cachedResults[Self.cacheKey(for: audioFile)]?.analysis
     }
 
     /// Returns true if a cached result already exists for this file,
@@ -276,6 +339,54 @@ class AnalysisStateManager {
     func evictCachedResult(for audioFile: AudioFile) {
         cachedResults.removeValue(forKey: Self.cacheKey(for: audioFile))
         saveCachedResults()
+    }
+
+    func cache(_ result: CompletedAnalysis, for audioFile: AudioFile) {
+        let embedded = result.audioFile.trackMetadata
+            ?? audioFile.trackMetadata
+            ?? AudioTrackMetadata()
+        let metadata = embedded.mergingAnalyzed(result.analysis.discoveredMetadata)
+        cachedResults[Self.cacheKey(for: audioFile)] = CachedAudioAnalysis(
+            transcription: result.transcription,
+            analysis: result.analysis,
+            trackMetadata: metadata.isEmpty ? nil : metadata
+        )
+        saveCachedResults()
+    }
+
+    /// Restores all reusable data while preserving metadata freshly read from the file.
+    func restoringCachedData(in audioFile: AudioFile) -> AudioFile {
+        guard let cached = cachedResults[Self.cacheKey(for: audioFile)] else { return audioFile }
+
+        var restored = audioFile
+        restored.analysisResult = cached.analysis
+        restored.transcription = cached.transcription?.fullText
+        let embedded = restored.trackMetadata ?? AudioTrackMetadata()
+        restored.trackMetadata = embedded.mergingAnalyzed(
+            cached.trackMetadata ?? cached.analysis.discoveredMetadata
+        )
+        return restored
+    }
+
+    func cachedCompletion(for audioFile: AudioFile) -> CompletedAnalysis? {
+        guard let cached = cachedResults[Self.cacheKey(for: audioFile)] else { return nil }
+        let transcription = cached.transcription
+            ?? Self.reusableTranscriptionResult(for: audioFile)
+            ?? AudioTranscriptionResult(
+                fullText: "",
+                segments: [],
+                duration: audioFile.duration,
+                detectedLanguage: "und"
+            )
+
+        var restoredFile = restoringCachedData(in: audioFile)
+        restoredFile.analysisResult = cached.analysis
+        return CompletedAnalysis(
+            audioFile: restoredFile,
+            transcription: transcription,
+            analysis: cached.analysis,
+            completedAt: cached.cachedAt
+        )
     }
 
     /// Builds a transcription result from a saved transcript so re-analysis can
@@ -302,66 +413,120 @@ class AnalysisStateManager {
     }
 
     /// URL of the on-disk analysis cache. Internal so tests can verify the path.
-    static var cacheURL: URL {
+    nonisolated static var cacheURL: URL {
         URL.documentsDirectory.appending(path: "AnalysisCache.json")
     }
 
-    /// Re-queues any audio files whose analysis was interrupted before completion.
-    private func resumeInterruptedAnalyses() async {
+    /// Re-queues durable work and waits for the active processing loop. Used by
+    /// both foreground activation and BackgroundTasks launch handlers.
+    @discardableResult
+    func resumeInterruptedAnalyses(priority: TaskPriority = .utility) async -> Bool {
         let pending = await progressStore.allPending()
-        guard !pending.isEmpty else { return }
-
-        Log.analysis.info("🔁 Resuming \(pending.count) interrupted analysis/analyses…")
-        let filesToResume = pending
-            .filter { !hasCachedResult(for: $0.audioFile) }
-            .map(\.audioFile)
-
-        guard !filesToResume.isEmpty else {
-            // All checkpoints already have finished results — clean up stale entries
-            await progressStore.clearAll()
-            return
+        guard !pending.isEmpty else {
+            await startAutomaticProcessing(priority: priority)
+            return true
         }
 
-        await queueForAnalysis(filesToResume)
+        Log.analysis.info("🔁 Resuming \(pending.count) interrupted analysis/analyses…")
+        var filesToResume: [AudioFile] = []
+        for checkpoint in pending {
+            if hasCachedResult(for: checkpoint.audioFile) {
+                await progressStore.clear(for: checkpoint.audioFile)
+            } else if !isQueuedOrActive(checkpoint.audioFile) {
+                filesToResume.append(checkpoint.audioFile)
+            }
+        }
+
+        if !filesToResume.isEmpty {
+            analysisQueue.append(contentsOf: filesToResume)
+        }
+
+        await startAutomaticProcessing(priority: priority)
+        return await progressStore.allPending().isEmpty
     }
 
     private func loadCachedResults() {
-        guard let data = try? Data(contentsOf: Self.cacheURL) else { return }
-        if let decoded = try? JSONDecoder().decode([String: AnalysisResult].self, from: data) {
+        guard let data = try? Data(contentsOf: analysisCacheURL) else { return }
+        let decoder = JSONDecoder()
+        if let decoded = try? decoder.decode([String: CachedAudioAnalysis].self, from: data) {
             cachedResults = decoded
             Log.analysis.info("📂 Loaded \(self.cachedResults.count) cached analysis result(s)")
+        } else if let legacy = try? decoder.decode([String: AnalysisResult].self, from: data) {
+            cachedResults = legacy.mapValues {
+                CachedAudioAnalysis(
+                    transcription: nil,
+                    analysis: $0,
+                    trackMetadata: $0.discoveredMetadata
+                )
+            }
+            saveCachedResults()
+            Log.analysis.info("📂 Migrated \(legacy.count) legacy analysis cache result(s)")
         }
     }
 
     private func saveCachedResults() {
         guard let data = try? JSONEncoder().encode(cachedResults) else { return }
-        try? data.write(to: Self.cacheURL, options: .atomic)
+        try? data.write(to: analysisCacheURL, options: .atomic)
     }
 
     // MARK: - Private Methods
 
     /// Handle analysis completion with proper actor isolation
     private func handleAnalysisComplete(audioFile: AudioFile, result: CompletedAnalysis) async {
-        completedAnalyses.append(result)
-        UsageAnalytics.shared.audioAnalyzeCompleted()
-        onAnalysisComplete?(audioFile, result)
+        let embedded = audioFile.trackMetadata ?? AudioTrackMetadata()
+        let analyzedMetadata = canonicalizedCreator(
+            in: result.analysis.discoveredMetadata,
+            excluding: audioFile.id
+        )
+        let metadata = embedded.mergingAnalyzed(analyzedMetadata)
+        var completedFile = audioFile
+        completedFile.analysisResult = result.analysis
+        completedFile.transcription = result.transcription.fullText
+        completedFile.trackMetadata = metadata.isEmpty ? nil : metadata
+        let completed = CompletedAnalysis(
+            audioFile: completedFile,
+            transcription: result.transcription,
+            analysis: result.analysis,
+            completedAt: result.completedAt
+        )
 
-        // Persist the analysis result, keyed by content fingerprint
-        cachedResults[Self.cacheKey(for: audioFile)] = result.analysis
-        saveCachedResults()
+        completedAnalyses.append(completed)
+        onAnalysisComplete?(completedFile, completed)
+
+        // Persist the complete result, keyed by the audio's full content fingerprint.
+        cache(completed, for: audioFile)
 
         // Write results back to the persisted AudioFile list in UserDefaults
         // so all views see the file as analyzed on next load.
         persistAnalysisToAudioFiles(
             audioFileID: audioFile.id,
-            analysis: result.analysis,
-            transcription: result.transcription.fullText
+            analysis: completed.analysis,
+            transcription: completed.transcription.fullText,
+            trackMetadata: metadata.isEmpty ? nil : metadata
         )
 
         // Remove from queue
         analysisQueue.removeAll { $0.id == audioFile.id }
 
         Log.analysis.info("✅ Analysis completed: \(audioFile.filename)")
+    }
+
+    private func canonicalizedCreator(
+        in metadata: AudioTrackMetadata?,
+        excluding audioFileID: UUID
+    ) -> AudioTrackMetadata? {
+        guard var metadata, let creator = metadata.creator else { return metadata }
+        guard metadata.verificationSource == nil else { return metadata }
+        let knownCreators = AudioLibraryStore.load()
+            .filter { $0.id != audioFileID }
+            .compactMap(\.creatorDisplayName)
+        if let match = AudioIntroductionMetadataExtractor.closestMatch(
+            to: creator,
+            among: knownCreators
+        ) {
+            metadata.creator = match
+        }
+        return metadata
     }
 
     // MARK: - AudioFile Persistence Bridge
@@ -375,7 +540,8 @@ class AnalysisStateManager {
     private func persistAnalysisToAudioFiles(
         audioFileID: UUID,
         analysis: AnalysisResult,
-        transcription: String
+        transcription: String,
+        trackMetadata: AudioTrackMetadata?
     ) {
         guard let data = UserDefaults.standard.data(forKey: Self.audioFilesUserDefaultsKey),
               var files = try? JSONDecoder().decode([AudioFile].self, from: data) else {
@@ -390,6 +556,7 @@ class AnalysisStateManager {
 
         files[index].analysisResult = analysis
         files[index].transcription = transcription
+        files[index].trackMetadata = trackMetadata
 
         if let encoded = try? JSONEncoder().encode(files) {
             UserDefaults.standard.set(encoded, forKey: Self.audioFilesUserDefaultsKey)
@@ -413,10 +580,12 @@ class AnalysisStateManager {
     }
 }
 
-// MARK: - Analysis Coordinator Actor
+// MARK: - Analysis Coordinator
 
-/// Actor-isolated coordinator for managing concurrent analysis tasks
-actor AnalysisCoordinator {
+/// Main-actor coordinator for services whose observable state drives SwiftUI.
+/// CPU-heavy transcription, prosody, and file work explicitly leave this actor.
+@MainActor
+final class AnalysisCoordinator {
 
     // MARK: - State
 
@@ -484,6 +653,7 @@ actor AnalysisCoordinator {
                 }
             }
         }
+        await audioAnalyzer.releaseResources()
     }
 
     private func performSingleAnalysis(
@@ -493,12 +663,20 @@ actor AnalysisCoordinator {
         performanceOptimizer: PerformanceOptimizer,
         onComplete: @Sendable @escaping (AudioFile, CompletedAnalysis) async -> Void
     ) async {
+        let telemetryContext = AudioAnalysisTelemetryContext(audioFile: audioFile, attempt: .first)
+        let telemetryStartedAt = Date()
+        var telemetryStage = AnalyticsAnalysisStage.preparation
+        await MainActor.run {
+            UsageAnalytics.shared.audioAnalyzeStarted(context: telemetryContext)
+        }
+
         do {
             Log.analysis.info("🔄 Starting analysis: \(audioFile.filename)")
 
             // Use background task registration for iOS background processing
             try await performanceOptimizer.withBackgroundTask(name: "AudioAnalysis-\(audioFile.filename)") {
                 // Stage 1: Transcription
+                telemetryStage = .transcription
                 let transcriptionResult: AudioTranscriptionResult
                 if let reusable = AnalysisStateManager.reusableTranscriptionResult(for: audioFile) {
                     Log.analysis.info("⏭️ Reusing saved transcript for \(audioFile.filename)")
@@ -508,19 +686,28 @@ actor AnalysisCoordinator {
                     try Task.checkCancellation()
                 }
 
-                // Stage 2: AI Analysis
+                // Stage 2: AI Analysis, with prosody extraction (independent
+                // raw-audio DSP) running concurrently rather than afterwards.
+                telemetryStage = .contentAnalysis
+                let enricher = AudioAnalysisEnricher(analyzerConfig: AnalyzerConfigLoader.load())
+                async let prosodyAsync = enricher.extractProsody(
+                    audioFile: audioFile,
+                    transcription: transcriptionResult
+                )
                 let analysisResult = try await aiAnalyzer.analyzeContent(
                     transcription: transcriptionResult,
                     audioFile: audioFile
                 )
                 try Task.checkCancellation()
-                let enrichedAnalysis = await self.enrichAnalysis(
+                let enrichedAnalysis = enricher.enrich(
+                    analysisResult,
+                    transcription: transcriptionResult,
                     audioFile: audioFile,
-                    analysis: analysisResult,
-                    transcription: transcriptionResult
+                    prosody: await prosodyAsync
                 )
 
                 // Stage 3: Generate Light Session
+                telemetryStage = .generation
                 let lightSession = try await self.generateLightSession(
                     audioFile: audioFile,
                     analysis: enrichedAnalysis
@@ -528,6 +715,7 @@ actor AnalysisCoordinator {
                 try Task.checkCancellation()
 
                 // Stage 4: Save Session
+                telemetryStage = .persistence
                 try await self.saveLightSession(lightSession, for: audioFile)
 
                 // Complete
@@ -538,14 +726,44 @@ actor AnalysisCoordinator {
                     completedAt: Date()
                 )
 
+                let processingTime = ProcessingTimeBucket(
+                    seconds: Date().timeIntervalSince(telemetryStartedAt)
+                )
+                await MainActor.run {
+                    UsageAnalytics.shared.audioAnalyzeCompleted(
+                        context: telemetryContext,
+                        processingTime: processingTime
+                    )
+                }
                 await onComplete(audioFile, completedAnalysis)
             }
         } catch is CancellationError {
             Log.analysis.info("🛑 Analysis cancelled: \(audioFile.filename)")
+            let finalStage = telemetryStage
+            let processingTime = ProcessingTimeBucket(
+                seconds: Date().timeIntervalSince(telemetryStartedAt)
+            )
+            await MainActor.run {
+                UsageAnalytics.shared.audioAnalyzeCancelled(
+                    context: telemetryContext,
+                    stage: finalStage,
+                    processingTime: processingTime
+                )
+            }
         } catch {
             Log.analysis.info("❌ Analysis failed: \(audioFile.filename) - \(error)")
+            let finalStage = telemetryStage
+            let processingTime = ProcessingTimeBucket(
+                seconds: Date().timeIntervalSince(telemetryStartedAt)
+            )
+            let reason = AnalyticsAnalysisFailureReason(error: error, stage: finalStage)
             await MainActor.run {
-                UsageAnalytics.shared.errorOccurred(.audioAnalysisFailed)
+                UsageAnalytics.shared.audioAnalysisFailed(
+                    context: telemetryContext,
+                    stage: finalStage,
+                    reason: reason,
+                    processingTime: processingTime
+                )
             }
         }
     }
@@ -615,6 +833,7 @@ actor AnalysisCoordinator {
         analysisManager: AnalysisStateManager,
         audioAnalyzer: any AudioTranscribingService,
         aiAnalyzer: any ContentAnalyzingService,
+        progressStore: AnalysisProgressStore,
         performanceOptimizer: PerformanceOptimizer,
         priority: TaskPriority,
         onComplete: @Sendable @escaping (AudioFile, CompletedAnalysis) async -> Void
@@ -650,35 +869,22 @@ actor AnalysisCoordinator {
                     stage: .starting,
                     progress: 0.0
                 )
-                UsageAnalytics.shared.audioAnalyzeStarted()
             }
 
             let queuePosition = await MainActor.run { analysisManager.queuePosition(for: audioFile) }
             Log.analysis.info("🔄 Processing: \(audioFile.filename) (queue position: \(queuePosition))")
 
-            // Process the current file
-            let taskId = UUID()
-            let optimalPriority = await performanceOptimizer.getOptimalTaskPriority(
-                isUserInitiated: priority == .userInitiated
+            // Stay structured: cancelling the queue task now propagates into
+            // the current file instead of leaving an unstructured child alive.
+            await performSingleAnalysisWithStateUpdates(
+                audioFile: audioFile,
+                analysisManager: analysisManager,
+                audioAnalyzer: audioAnalyzer,
+                aiAnalyzer: aiAnalyzer,
+                progressStore: progressStore,
+                performanceOptimizer: performanceOptimizer,
+                onComplete: onComplete
             )
-
-            // Create task for single file processing with proper concurrency
-            let task = Task(priority: optimalPriority) {
-                await self.performSingleAnalysisWithStateUpdates(
-                    audioFile: audioFile,
-                    analysisManager: analysisManager,
-                    audioAnalyzer: audioAnalyzer,
-                    aiAnalyzer: aiAnalyzer,
-                    performanceOptimizer: performanceOptimizer,
-                    onComplete: onComplete
-                )
-            }
-
-            activeTasks[taskId] = task
-
-            // Wait for completion and clean up
-            await task.value
-            activeTasks.removeValue(forKey: taskId)
 
             // Check for cancellation between files
             if Task.isCancelled {
@@ -689,6 +895,8 @@ actor AnalysisCoordinator {
                 break
             }
         }
+
+        await audioAnalyzer.releaseResources()
 
         // Clear current analysis when done
         await MainActor.run {
@@ -704,12 +912,24 @@ actor AnalysisCoordinator {
         analysisManager: AnalysisStateManager,
         audioAnalyzer: any AudioTranscribingService,
         aiAnalyzer: any ContentAnalyzingService,
+        progressStore: AnalysisProgressStore,
         performanceOptimizer: PerformanceOptimizer,
         onComplete: @Sendable @escaping (AudioFile, CompletedAnalysis) async -> Void
     ) async {
         // Load any checkpoint saved from a previous run.
-        let checkpoint = await AnalysisProgressStore.shared.checkpoint(for: audioFile)
+        let checkpoint = await progressStore.checkpoint(for: audioFile)
+        let attemptNumber = await progressStore.beginAttempt(for: audioFile)
         let resumingFrom = checkpoint?.resumeStage ?? .transcribing
+        let telemetryContext = AudioAnalysisTelemetryContext(
+            audioFile: audioFile,
+            attempt: attemptNumber == 1 ? .first : .resumed
+        )
+        let telemetryStartedAt = Date()
+        var telemetryStage = AnalyticsAnalysisStage.preparation
+
+        await MainActor.run {
+            UsageAnalytics.shared.audioAnalyzeStarted(context: telemetryContext)
+        }
 
         if checkpoint != nil {
             Log.analysis.info("🔁 Resuming \(audioFile.filename) from stage: \(String(describing: resumingFrom))")
@@ -718,6 +938,37 @@ actor AnalysisCoordinator {
         }
 
         do {
+            if let cached = await MainActor.run(body: {
+                analysisManager.cachedCompletion(for: audioFile)
+            }) {
+                telemetryStage = .generation
+                Log.analysis.info("⚡ Restoring cached analysis: \(audioFile.filename)")
+                await MainActor.run {
+                    analysisManager.currentAnalysis?.stage = .generatingSession
+                    analysisManager.currentAnalysis?.progress = 0.85
+                }
+
+                let lightSession = try await self.generateLightSession(
+                    audioFile: cached.audioFile,
+                    analysis: cached.analysis
+                )
+                try await self.saveLightSession(lightSession, for: cached.audioFile)
+                await progressStore.clear(for: audioFile)
+
+                await MainActor.run {
+                    analysisManager.currentAnalysis?.stage = .complete
+                    analysisManager.currentAnalysis?.progress = 1.0
+                    UsageAnalytics.shared.audioAnalyzeCompleted(
+                        context: telemetryContext,
+                        processingTime: ProcessingTimeBucket(
+                            seconds: Date().timeIntervalSince(telemetryStartedAt)
+                        )
+                    )
+                }
+                await onComplete(audioFile, cached)
+                return
+            }
+
             try await performanceOptimizer.withBackgroundTask(name: "AudioAnalysis-\(audioFile.filename)") {
 
                 // Start progress syncing loop
@@ -740,6 +991,7 @@ actor AnalysisCoordinator {
                 defer { progressTracker.cancel() }
 
                 // Stage 1: Transcription (skip if checkpoint already has it)
+                telemetryStage = .transcription
                 let transcriptionResult: AudioTranscriptionResult
                 if let saved = checkpoint?.transcription {
                     Log.analysis.info("⏭️ Skipping transcription (checkpoint found) for \(audioFile.filename)")
@@ -751,7 +1003,7 @@ actor AnalysisCoordinator {
                 } else if let reusable = AnalysisStateManager.reusableTranscriptionResult(for: audioFile) {
                     Log.analysis.info("⏭️ Reusing saved transcript for \(audioFile.filename)")
                     transcriptionResult = reusable
-                    await AnalysisProgressStore.shared.saveTranscription(transcriptionResult, for: audioFile)
+                    await progressStore.saveTranscription(transcriptionResult, for: audioFile)
                     await MainActor.run {
                         analysisManager.currentAnalysis?.stage = .analyzing
                         analysisManager.currentAnalysis?.progress = 0.4
@@ -762,10 +1014,11 @@ actor AnalysisCoordinator {
                     }
                     transcriptionResult = try await audioAnalyzer.transcribe(audioFile: audioFile)
                     try Task.checkCancellation()
-                    await AnalysisProgressStore.shared.saveTranscription(transcriptionResult, for: audioFile)
+                    await progressStore.saveTranscription(transcriptionResult, for: audioFile)
                 }
 
                 // Stage 2: AI Analysis (skip if checkpoint already has it)
+                telemetryStage = .contentAnalysis
                 let analysisResult: AnalysisResult
                 if let saved = checkpoint?.analysis {
                     Log.analysis.info("⏭️ Skipping AI analysis (checkpoint found) for \(audioFile.filename)")
@@ -774,7 +1027,7 @@ actor AnalysisCoordinator {
                         analysis: saved,
                         transcription: transcriptionResult
                     )
-                    await AnalysisProgressStore.shared.saveAnalysis(analysisResult, for: audioFile)
+                    await progressStore.saveAnalysis(analysisResult, for: audioFile)
                     await MainActor.run {
                         analysisManager.currentAnalysis?.stage = .generatingSession
                         analysisManager.currentAnalysis?.progress = 0.8
@@ -783,20 +1036,30 @@ actor AnalysisCoordinator {
                     await MainActor.run {
                         analysisManager.currentAnalysis?.stage = .analyzing
                     }
+                    // Prosody extraction is pure signal processing on the raw
+                    // audio and independent of the AI stage — run both
+                    // concurrently instead of paying for prosody afterwards.
+                    let enricher = AudioAnalysisEnricher(analyzerConfig: AnalyzerConfigLoader.load())
+                    async let prosodyAsync = enricher.extractProsody(
+                        audioFile: audioFile,
+                        transcription: transcriptionResult
+                    )
                     let rawAnalysis = try await aiAnalyzer.analyzeContent(
                         transcription: transcriptionResult,
                         audioFile: audioFile
                     )
                     try Task.checkCancellation()
-                    analysisResult = await self.enrichAnalysis(
+                    analysisResult = enricher.enrich(
+                        rawAnalysis,
+                        transcription: transcriptionResult,
                         audioFile: audioFile,
-                        analysis: rawAnalysis,
-                        transcription: transcriptionResult
+                        prosody: await prosodyAsync
                     )
-                    await AnalysisProgressStore.shared.saveAnalysis(analysisResult, for: audioFile)
+                    await progressStore.saveAnalysis(analysisResult, for: audioFile)
                 }
 
                 // Stage 3: Generate Light Session (always run — it's fast)
+                telemetryStage = .generation
                 await MainActor.run {
                     analysisManager.currentAnalysis?.stage = .generatingSession
                     analysisManager.currentAnalysis?.progress = 0.8
@@ -809,10 +1072,11 @@ actor AnalysisCoordinator {
                 try Task.checkCancellation()
 
                 // Stage 4: Save Session
+                telemetryStage = .persistence
                 try await self.saveLightSession(lightSession, for: audioFile)
 
                 // Stage 5: Mark complete and clear checkpoint
-                await AnalysisProgressStore.shared.clear(for: audioFile)
+                await progressStore.clear(for: audioFile)
 
                 await MainActor.run {
                     analysisManager.currentAnalysis?.stage = .complete
@@ -826,14 +1090,31 @@ actor AnalysisCoordinator {
                     completedAt: Date()
                 )
 
+                let processingTime = ProcessingTimeBucket(
+                    seconds: Date().timeIntervalSince(telemetryStartedAt)
+                )
+                await MainActor.run {
+                    UsageAnalytics.shared.audioAnalyzeCompleted(
+                        context: telemetryContext,
+                        processingTime: processingTime
+                    )
+                }
                 await onComplete(audioFile, completedAnalysis)
 
-                Log.analysis.info("✅ Analysis completed: \(audioFile.filename)")
             }
         } catch is CancellationError {
             // Keep the checkpoint — progress is preserved for next launch.
             Log.analysis.info("🛑 Analysis cancelled: \(audioFile.filename) — checkpoint preserved for resume")
+            let finalStage = telemetryStage
+            let processingTime = ProcessingTimeBucket(
+                seconds: Date().timeIntervalSince(telemetryStartedAt)
+            )
             await MainActor.run {
+                UsageAnalytics.shared.audioAnalyzeCancelled(
+                    context: telemetryContext,
+                    stage: finalStage,
+                    processingTime: processingTime
+                )
                 analysisManager.currentAnalysis?.stage = .failed
                 analysisManager.currentAnalysis?.errorMessage = "Cancelled"
                 analysisManager.removeFromQueue(audioFile: audioFile)
@@ -841,9 +1122,25 @@ actor AnalysisCoordinator {
         } catch {
             let msg = error.localizedDescription
             Log.analysis.info("❌ Analysis failed: \(audioFile.filename) - \(msg)")
-            // Keep checkpoint on transient errors; it will be retried on next launch.
+            let finalStage = telemetryStage
+            let processingTime = ProcessingTimeBucket(
+                seconds: Date().timeIntervalSince(telemetryStartedAt)
+            )
+            let reason = AnalyticsAnalysisFailureReason(error: error, stage: finalStage)
+            let shouldRetry = reason.supportsAutomaticRetry && attemptNumber < 2
+            if shouldRetry {
+                Log.analysis.info("🔁 Preserving checkpoint for one retry: \(audioFile.filename)")
+            } else {
+                await progressStore.clear(for: audioFile)
+                Log.analysis.info("🛑 Automatic retry stopped for \(audioFile.filename)")
+            }
             await MainActor.run {
-                UsageAnalytics.shared.errorOccurred(.audioAnalysisFailed)
+                UsageAnalytics.shared.audioAnalysisFailed(
+                    context: telemetryContext,
+                    stage: finalStage,
+                    reason: reason,
+                    processingTime: processingTime
+                )
                 analysisManager.currentAnalysis?.stage = .failed
                 analysisManager.currentAnalysis?.errorMessage = msg
                 analysisManager.removeFromQueue(audioFile: audioFile)
@@ -855,6 +1152,19 @@ actor AnalysisCoordinator {
     }
 }
 
+private extension AnalyticsAnalysisFailureReason {
+    /// Invalid or empty audio cannot become valid by repeating the same work.
+    /// Other failures get one recovery attempt, bounded by the coordinator.
+    var supportsAutomaticRetry: Bool {
+        switch self {
+        case .invalidAudio, .noAudioData:
+            false
+        default:
+            true
+        }
+    }
+}
+
 // MARK: - Active Analysis Model
 
 struct ActiveAnalysis: Equatable, Sendable {
@@ -862,6 +1172,9 @@ struct ActiveAnalysis: Equatable, Sendable {
     var stage: AnalysisStage
     var progress: Double
     var errorMessage: String?
+    /// When this analysis began — drives the "still working" reassurance copy.
+    /// Excluded from `==` so elapsed time never causes spurious UI diffs.
+    var startedAt: Date = Date()
 
     static func == (lhs: ActiveAnalysis, rhs: ActiveAnalysis) -> Bool {
         lhs.audioFile.id == rhs.audioFile.id &&

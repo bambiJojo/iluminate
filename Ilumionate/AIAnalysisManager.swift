@@ -63,6 +63,14 @@ actor AIAnalysisManager {
         await onProgress(ProgressInfo(progress: 0.15, message: "Building analysis prompt..."))
 
         let prompt = buildTranscriptionPrompt(transcription: transcription, audioFile: audioFile)
+        let introductionMetadata = AudioIntroductionMetadataExtractor.metadata(
+            from: transcription.fullText,
+            filename: audioFile.filename
+        )
+        async let verifiedMetadata = AudioCatalogMetadataVerifier.verifiedMetadata(
+            for: introductionMetadata,
+            duration: audioFile.duration
+        )
 
         // Build word timestamps once — shared by both phase analyzers. Some
         // imported transcripts carry full text without timed segments, so give
@@ -73,27 +81,36 @@ actor AIAnalysisManager {
 
         await onProgress(ProgressInfo(progress: 0.25, message: "Detecting hypnosis phases..."))
 
-        // Phase detection runs before the broad AI classification so the final
-        // result can use the most specific timeline available.
+        // Phase detection and the broad AI classification are independent —
+        // neither consumes the other's output — so they run concurrently.
+        // The classification is a single model call; the chunked phase pass
+        // dominates, so classification finishes essentially for free.
+        async let aiResponseAsync = fetchAIResponse(
+            session: lmSession, prompt: prompt,
+            transcription: transcription, audioFile: audioFile
+        )
+
         let detectedPhases: [PhaseSegment]? = try await runPhaseAnalysis(
             wordTimestamps: wordTimestamps,
             transcription: phaseTranscription,
             onProgress: onProgress
         )
 
-        await onProgress(ProgressInfo(progress: 0.70, message: "Classifying content..."))
+        await onProgress(ProgressInfo(progress: 0.80, message: "Classifying content..."))
 
-        guard let aiResponse = try await fetchAIResponse(
-            session: lmSession, prompt: prompt,
-            transcription: transcription, audioFile: audioFile
-        ) else {
+        guard let aiResponse = try await aiResponseAsync else {
             return makeKeywordFallbackResult(audioFile: audioFile, detectedPhases: detectedPhases)
         }
 
-        await onProgress(ProgressInfo(progress: 0.92, message: "Processing recommendations..."))
+        await onProgress(ProgressInfo(progress: 0.92, message: "Verifying track information..."))
 
+        let confirmedMetadata = await verifiedMetadata
         let result = convertToAnalysisResult(
-            aiResponse: aiResponse, audioFile: audioFile, detectedPhases: detectedPhases
+            aiResponse: aiResponse,
+            audioFile: audioFile,
+            detectedPhases: detectedPhases,
+            introductionMetadata: introductionMetadata,
+            verifiedMetadata: confirmedMetadata
         )
         logCompletedAnalysis(result)
         return result
@@ -259,6 +276,16 @@ actor AIAnalysisManager {
             ))
         }
 
+        // The keyword pipeline is pure CPU work on the same inputs; run it
+        // concurrently with the chunked model pass so it is already finished
+        // when the two timelines are compared (and instantly available as
+        // fallback when the chunked pass returns nothing).
+        async let keywordPhasesAsync = keywordAnalyzer.analyze(
+            wordTimestamps: wordTimestamps,
+            transcription: transcription,
+            techniqueDetection: textTechniqueEvidence
+        )
+
         if let aiPhases = await ChunkedPhaseAnalyzer.analyze(
             wordTimestamps: wordTimestamps,
             duration: transcription.duration,
@@ -267,11 +294,7 @@ actor AIAnalysisManager {
             try Task.checkCancellation()
             await onProgress(ProgressInfo(progress: 0.65, message: "Comparing phase models…"))
 
-            let keywordPhases = keywordAnalyzer.analyze(
-                wordTimestamps: wordTimestamps,
-                transcription: transcription,
-                techniqueDetection: textTechniqueEvidence
-            )
+            let keywordPhases = await keywordPhasesAsync
             let selection = keywordAnalyzer.selectPreferredPhases(
                 keywordPhases: keywordPhases,
                 chunkedPhases: aiPhases,
@@ -294,11 +317,7 @@ actor AIAnalysisManager {
         await onProgress(ProgressInfo(progress: 0.65, message: "Using keyword phase analysis…"))
         try Task.checkCancellation()
 
-        let keywordPhases = keywordAnalyzer.analyze(
-            wordTimestamps: wordTimestamps,
-            transcription: transcription,
-            techniqueDetection: textTechniqueEvidence
-        )
+        let keywordPhases = await keywordPhasesAsync
         try Task.checkCancellation()
         if !keywordPhases.isEmpty {
             Log.analysis.info("🔑 Keyword fallback: \(keywordPhases.count) phase segments")
@@ -365,7 +384,9 @@ private extension AIAnalysisManager {
     func convertToAnalysisResult(
         aiResponse: AIAnalysisResponse,
         audioFile: AudioFile,
-        detectedPhases: [PhaseSegment]? = nil
+        detectedPhases: [PhaseSegment]? = nil,
+        introductionMetadata: AudioTrackMetadata? = nil,
+        verifiedMetadata: AudioTrackMetadata? = nil
     ) -> AnalysisResult {
         let duration = audioFile.duration
         let mood = AnalysisResult.Mood(rawValue: aiResponse.mood.lowercased()) ?? .neutral
@@ -415,7 +436,15 @@ private extension AIAnalysisManager {
             recommendedPreset: aiResponse.recommendedPreset,
             contentType: contentType,
             hypnosisMetadata: hypnosisMetadata,
-            temporalAnalysis: temporalAnalysis
+            temporalAnalysis: temporalAnalysis,
+            discoveredMetadata: AudioTrackMetadata(
+                generatedTitle: aiResponse.suggestedTitle,
+                creator: aiResponse.suggestedCreator,
+                themes: aiResponse.themes,
+                confidence: aiResponse.metadataConfidence
+            )
+            .mergingIntroduction(introductionMetadata)
+            .mergingVerified(verifiedMetadata)
         )
 
         let expertAnalysis = ExpertAnalysisBuilder().build(
@@ -440,7 +469,8 @@ private extension AIAnalysisManager {
             expertAnalysis: expertAnalysis,
             prosodicProfile: result.prosodicProfile,
             techniqueDetection: result.techniqueDetection,
-            transcriptAnalysis: result.transcriptAnalysis
+            transcriptAnalysis: result.transcriptAnalysis,
+            discoveredMetadata: result.discoveredMetadata
         )
     }
 
@@ -660,7 +690,8 @@ private extension AIAnalysisManager {
             expertAnalysis: expertAnalysis,
             prosodicProfile: result.prosodicProfile,
             techniqueDetection: result.techniqueDetection,
-            transcriptAnalysis: result.transcriptAnalysis
+            transcriptAnalysis: result.transcriptAnalysis,
+            discoveredMetadata: result.discoveredMetadata
         )
     }
 

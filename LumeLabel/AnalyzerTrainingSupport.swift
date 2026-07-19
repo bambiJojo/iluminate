@@ -34,6 +34,14 @@ struct HypnosisMetadata: Sendable {
         case high
         case medium
         case low
+
+        nonisolated var numericValue: Double {
+            switch self {
+            case .high: 1
+            case .medium: 0.7
+            case .low: 0.4
+            }
+        }
     }
 }
 
@@ -87,7 +95,7 @@ struct LinguisticMarker: Codable, Identifiable, Sendable {
     let textSnippet: String?
     let strength: Double
 
-    init(
+    nonisolated init(
         id: UUID = UUID(),
         type: MarkerType,
         timestamp: TimeInterval,
@@ -109,7 +117,7 @@ struct HypnoticTechnique: Codable, Identifiable, Sendable {
     let description: String
     let suggestedLightSync: String
 
-    init(
+    nonisolated init(
         id: UUID = UUID(),
         technique: String,
         timestamp: TimeInterval,
@@ -128,7 +136,7 @@ struct TechniqueDetectionResult: Codable, Sendable {
     let techniques: [HypnoticTechnique]
     let markers: [LinguisticMarker]
 
-    var sortedTechniques: [HypnoticTechnique] {
+    nonisolated var sortedTechniques: [HypnoticTechnique] {
         techniques.sorted { $0.timestamp < $1.timestamp }
     }
 }
@@ -145,7 +153,7 @@ struct PhaseSegment: Codable, Identifiable, Sendable {
     let confidenceRationale: String?
     let transitionTarget: HypnosisMetadata.Phase?
 
-    init(
+    nonisolated init(
         id: UUID = UUID(),
         phase: HypnosisMetadata.Phase,
         startTime: TimeInterval,

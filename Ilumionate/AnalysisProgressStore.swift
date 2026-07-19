@@ -7,7 +7,7 @@
 //  the full pipeline completes successfully.
 //
 //  Checkpoint lifecycle:
-//    1. File enters queue       → no checkpoint yet
+//    1. File enters queue       → queued checkpoint saved
 //    2. Transcription done      → checkpoint saved with transcription
 //    3. AI analysis done        → checkpoint saved with analysis
 //    4. Session generated       → checkpoint deleted (pipeline finished)
@@ -29,6 +29,9 @@ nonisolated struct AnalysisCheckpoint: Codable, Sendable {
     var analysis: AnalysisResult?
     let startedAt: Date
     var lastUpdated: Date
+    /// Optional for backwards-compatible decoding of checkpoints written by
+    /// versions that did not track attempts.
+    var attemptCount: Int? = nil
 
     /// The most advanced stage that has been saved to disk.
     var resumeStage: AnalysisStage {
@@ -46,16 +49,18 @@ actor AnalysisProgressStore {
     static let shared = AnalysisProgressStore()
 
     private var checkpoints: [UUID: AnalysisCheckpoint] = [:]
+    private let storeURL: URL
 
-    private static var storeURL: URL {
+    private static var defaultStoreURL: URL {
         URL.documentsDirectory.appending(path: "AnalysisProgress.json")
     }
 
     // MARK: Init
 
-    init() {
+    init(storeURL: URL = AnalysisProgressStore.defaultStoreURL) {
+        self.storeURL = storeURL
         guard
-            let data = try? Data(contentsOf: Self.storeURL),
+            let data = try? Data(contentsOf: storeURL),
             let decoded = try? JSONDecoder().decode([String: AnalysisCheckpoint].self, from: data)
         else { return }
 
@@ -81,6 +86,41 @@ actor AnalysisProgressStore {
     }
 
     // MARK: Write
+
+    /// Persist the queue entry before expensive work begins. This gives both a
+    /// background launch and the next foreground launch something to resume if
+    /// iOS suspends or terminates the process during transcription.
+    func saveQueued(_ audioFile: AudioFile) {
+        guard checkpoints[audioFile.id] == nil else { return }
+        checkpoints[audioFile.id] = AnalysisCheckpoint(
+            audioFile: audioFile,
+            transcription: nil,
+            analysis: nil,
+            startedAt: Date(),
+            lastUpdated: Date(),
+            attemptCount: 0
+        )
+        persist()
+        Log.analysis.info("💾 Checkpoint: queued \(audioFile.filename)")
+    }
+
+    /// Records a pipeline start and returns its one-based attempt number.
+    /// Persisting this before work begins keeps first-vs-resumed telemetry
+    /// accurate even when iOS terminates the process mid-analysis.
+    func beginAttempt(for audioFile: AudioFile) -> Int {
+        var cp = checkpoints[audioFile.id] ?? AnalysisCheckpoint(
+            audioFile: audioFile,
+            startedAt: Date(),
+            lastUpdated: Date(),
+            attemptCount: 0
+        )
+        let attempt = (cp.attemptCount ?? 1) + 1
+        cp.attemptCount = attempt
+        cp.lastUpdated = Date()
+        checkpoints[audioFile.id] = cp
+        persist()
+        return attempt
+    }
 
     func saveTranscription(_ transcription: AudioTranscriptionResult, for audioFile: AudioFile) {
         var cp = checkpoints[audioFile.id] ?? AnalysisCheckpoint(
@@ -122,6 +162,6 @@ actor AnalysisProgressStore {
             uniqueKeysWithValues: checkpoints.map { ($0.key.uuidString, $0.value) }
         )
         guard let data = try? JSONEncoder().encode(stringKeyed) else { return }
-        try? data.write(to: Self.storeURL, options: .atomic)
+        try? data.write(to: storeURL, options: .atomic)
     }
 }
