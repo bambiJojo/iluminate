@@ -445,7 +445,7 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, WKDownloa
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
         guard let url = navigationAction.request.url else {
             decisionHandler(.allow)
@@ -466,7 +466,7 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, WKDownloa
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationResponse: WKNavigationResponse,
-        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void
     ) {
         guard let mimeType = navigationResponse.response.mimeType?.lowercased() else {
             decisionHandler(.allow)
@@ -497,16 +497,14 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, WKDownloa
 
     // MARK: - WKDownloadDelegate
 
-    nonisolated func download(
+    func download(
         _ download: WKDownload,
         decideDestinationUsing response: URLResponse,
         suggestedFilename: String,
-        completionHandler: @escaping (URL?) -> Void
+        completionHandler: @escaping @MainActor @Sendable (URL?) -> Void
     ) {
         let tempURL = FileManager.default.temporaryDirectory.appending(path: suggestedFilename)
-        Task { @MainActor in
-            self.downloadDestinationURL = tempURL
-        }
+        downloadDestinationURL = tempURL
         completionHandler(tempURL)
     }
 

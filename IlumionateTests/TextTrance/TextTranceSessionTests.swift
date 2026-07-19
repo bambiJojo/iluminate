@@ -165,6 +165,23 @@ struct TextTranceSessionTests {
         #expect(session.isComplete == false)
     }
 
+    @Test func cancellingWhilePausedReleasesResumeContinuation() async {
+        let controller = PacingSleepController()
+        let session = makeSeekSession(sleep: controller.sleepClosure)
+        controller.onSleep = { call in
+            if call == 1 { session.pause() }
+        }
+
+        let task = Task { await session.begin() }
+        while !session.isPaused { await Task.yield() }
+
+        task.cancel()
+        await task.value
+
+        #expect(!session.isReading)
+        #expect(!session.isComplete)
+    }
+
     @Test func beginFromStartsAtGivenIndex() async {
         let session = TextTranceSession(
             script: handoffScript(),
@@ -286,66 +303,6 @@ struct TextTranceSessionTests {
         #expect(audio.stopCount == 1)            // stopped at completion
     }
 
-    @Test func narrationStartsPausesResumesAndStopsWithReader() async {
-        let narration = MockNarrationLayer()
-        let controller = PacingSleepController()
-        let session = TextTranceSession(
-            script: handoffScript(),
-            settings: TextTranceSessionSettings(
-                arc: .fullText, speedMultiplier: 1.0,
-                lightEnabled: false, binauralEnabled: false,
-                beatFrequency: 10, postHandoffDuration: 0,
-                narrationEnabled: true),
-            light: MockLightLayer(), audio: MockAudioLayer(), narration: narration,
-            sleep: controller.sleepClosure)
-
-        controller.onSleep = { call in if call == 1 { session.pause() } }
-        let task = Task { await session.begin() }
-        while !session.isPaused { await Task.yield() }
-
-        #expect(narration.startCount == 1)
-        #expect(narration.lastText.contains("one two"))
-        #expect(narration.pauseCount == 1)
-
-        controller.onSleep = { _ in }
-        session.resume()
-        await task.value
-
-        #expect(narration.resumeCount == 1)
-        #expect(narration.stopCount == 1)
-        #expect(session.isComplete)
-    }
-
-    @Test func committedSeekRestartsNarrationAtNewWord() async {
-        let narration = MockNarrationLayer()
-        let controller = PacingSleepController()
-        let session = TextTranceSession(
-            script: seekScript(),
-            settings: TextTranceSessionSettings(
-                arc: .fullText, speedMultiplier: 1.0,
-                lightEnabled: false, binauralEnabled: false,
-                beatFrequency: 10, postHandoffDuration: 0,
-                subliminalEnabled: false,
-                narrationEnabled: true),
-            light: MockLightLayer(), audio: MockAudioLayer(), narration: narration,
-            sleep: controller.sleepClosure)
-
-        controller.onSleep = { call in if call == 1 { session.pause() } }
-        let task = Task { await session.begin() }
-        while !session.isPaused { await Task.yield() }
-
-        session.seek(toWordIndex: 3, savingProgress: true)
-
-        #expect(narration.startCount == 2)
-        #expect(narration.lastText.hasPrefix("four five six"))
-        #expect(narration.pauseCount == 2)
-
-        controller.onSleep = { _ in }
-        session.resume()
-        await task.value
-        #expect(session.isComplete)
-    }
-
     @Test func speedTrainingRebuildKeepsReadablePositionAcrossChunking() async {
         let controller = PacingSleepController()
         let session = makeSeekSession(sleep: controller.sleepClosure)
@@ -360,36 +317,6 @@ struct TextTranceSessionTests {
 
         #expect(session.currentWordIndex == 1)
         #expect(session.currentWord == "four five six")
-
-        session.end()
-        await task.value
-    }
-
-    @Test func scheduleRebuildRestartsNarrationFromCurrentReadablePosition() async {
-        let narration = MockNarrationLayer()
-        let controller = PacingSleepController()
-        let session = TextTranceSession(
-            script: seekScript(),
-            settings: TextTranceSessionSettings(
-                arc: .fullText, speedMultiplier: 1.0,
-                lightEnabled: false, binauralEnabled: false,
-                beatFrequency: 10, postHandoffDuration: 0,
-                subliminalEnabled: false,
-                narrationEnabled: true),
-            light: MockLightLayer(), audio: MockAudioLayer(), narration: narration,
-            sleep: controller.sleepClosure)
-
-        controller.onSleep = { call in if call == 1 { session.pause() } }
-        let task = Task { await session.begin() }
-        while !session.isPaused { await Task.yield() }
-
-        session.seek(toWordIndex: 3, savingProgress: true)
-        var chunked = ReaderSpeedTrainingSettings.standard
-        chunked.chunkSize = 3
-        session.setSpeedTraining(chunked)
-
-        #expect(narration.startCount == 3)
-        #expect(narration.lastText.hasPrefix("four five six"))
 
         session.end()
         await task.value

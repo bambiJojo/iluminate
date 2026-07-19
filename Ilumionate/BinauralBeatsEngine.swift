@@ -15,19 +15,19 @@
 
 import AVFoundation
 import os
+import Synchronization
 
 // MARK: - Audio Render State
 
 /// Mutable state shared between the MainActor setup path and the real-time
-/// audio render thread.  All properties are either:
-///   • written only from one thread (phase accumulators — audio thread only), or
-///   • single-instruction scalar writes on ARM64 (Double/Float — safe in practice).
-/// Marked @unchecked Sendable to satisfy Swift 6 strict concurrency.
+/// audio render thread. Cross-thread control values use lock-free atomics so
+/// the render callback never takes a lock. Phase/smoothing fields are confined
+/// to AVAudioEngine's serial render callback.
 private final class AudioRenderState: @unchecked Sendable {
     // Written from main thread, read from render thread
-    var targetBeatFreq: Double = 10.0
-    var carrierFreq: Double = 200.0
-    var targetAmplitude: Float = 0.105  // ~30 % of 0.35 peak
+    let targetBeatFreq = Atomic<Double>(10.0)
+    let carrierFreq = Atomic<Double>(200.0)
+    let targetAmplitude = Atomic<Float>(0.105)  // ~30 % of 0.35 peak
 
     // Exclusively accessed by the render thread
     var leftPhase: Double = 0
@@ -49,20 +49,20 @@ final class BinauralBeatsEngine {
 
     /// Beat frequency (Hz) — should mirror the therapeutic / flash frequency.
     var beatFrequency: Double = 10.0 {
-        didSet { renderState.targetBeatFreq = max(0.5, beatFrequency) }
+        didSet { renderState.targetBeatFreq.store(max(0.5, beatFrequency), ordering: .relaxed) }
     }
 
     /// Carrier tone sent to the left ear (Hz). Right ear = carrier + beatFrequency.
     /// Typical ranges: 100–200 Hz (delta/theta), 200–300 Hz (alpha/beta).
     var carrierFrequency: Double = 200.0 {
-        didSet { renderState.carrierFreq = max(50, min(500, carrierFrequency)) }
+        didSet { renderState.carrierFreq.store(max(50, min(500, carrierFrequency)), ordering: .relaxed) }
     }
 
     /// Output volume 0…1.
     var volume: Double = 0.5 {
         didSet {
             // Scale to safe listening amplitude: 0.35 max peak (≈ -9 dBFS).
-            renderState.targetAmplitude = Float(max(0, min(1, volume))) * 0.35
+            renderState.targetAmplitude.store(Float(max(0, min(1, volume))) * 0.35, ordering: .relaxed)
         }
     }
 
@@ -81,7 +81,7 @@ final class BinauralBeatsEngine {
         guard !isPlaying else { return }
         if !isSetUp { setUp() }
         // Restore amplitude — stop() zeros it, so every start must recalculate.
-        renderState.targetAmplitude = Float(max(0, min(1, volume))) * 0.35
+        renderState.targetAmplitude.store(Float(max(0, min(1, volume))) * 0.35, ordering: .relaxed)
         do {
             try AVAudioSession.sharedInstance().setActive(true)
             try audioEngine.start()
@@ -94,7 +94,7 @@ final class BinauralBeatsEngine {
     /// Pause playback by ramping amplitude to zero (no clicks).
     func pause() {
         guard isPlaying else { return }
-        renderState.targetAmplitude = 0
+        renderState.targetAmplitude.store(0, ordering: .relaxed)
         fadeOutTask?.cancel()
         fadeOutTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(180))
@@ -108,7 +108,7 @@ final class BinauralBeatsEngine {
     func resume() {
         fadeOutTask?.cancel()
         guard !isPlaying else { return }
-        renderState.targetAmplitude = Float(max(0, min(1, volume))) * 0.35
+        renderState.targetAmplitude.store(Float(max(0, min(1, volume))) * 0.35, ordering: .relaxed)
         do {
             try audioEngine.start()
             isPlaying = true
@@ -122,8 +122,7 @@ final class BinauralBeatsEngine {
         fadeOutTask?.cancel()
         audioEngine.stop()
         isPlaying = false
-        renderState.smoothAmplitude = 0
-        renderState.targetAmplitude = 0
+        renderState.targetAmplitude.store(0, ordering: .relaxed)
     }
 
     /// Convenience — update beat frequency to track the current therapeutic target.
@@ -163,8 +162,11 @@ final class BinauralBeatsEngine {
 
             for frame in 0..<Int(frameCount) {
                 // Interpolate beat frequency toward target to avoid audible clicks.
-                state.smoothBeatFreq += (state.targetBeatFreq - state.smoothBeatFreq) * freqSmooth
-                state.smoothAmplitude += (state.targetAmplitude - state.smoothAmplitude) * ampSmooth
+                let targetBeatFreq = state.targetBeatFreq.load(ordering: .relaxed)
+                let targetAmplitude = state.targetAmplitude.load(ordering: .relaxed)
+                let carrierFreq = state.carrierFreq.load(ordering: .relaxed)
+                state.smoothBeatFreq += (targetBeatFreq - state.smoothBeatFreq) * freqSmooth
+                state.smoothAmplitude += (targetAmplitude - state.smoothAmplitude) * ampSmooth
 
                 let leftSample  = Float(sin(state.leftPhase))  * state.smoothAmplitude
                 let rightSample = Float(sin(state.rightPhase)) * state.smoothAmplitude
@@ -173,8 +175,8 @@ final class BinauralBeatsEngine {
                 rightBuf[frame] = rightSample
 
                 // Advance phase accumulators.
-                state.leftPhase  += twoPi * state.carrierFreq / sampleRate
-                state.rightPhase += twoPi * (state.carrierFreq + state.smoothBeatFreq) / sampleRate
+                state.leftPhase  += twoPi * carrierFreq / sampleRate
+                state.rightPhase += twoPi * (carrierFreq + state.smoothBeatFreq) / sampleRate
 
                 // Wrap to [0, 2π] to prevent floating-point drift.
                 if state.leftPhase  >= twoPi { state.leftPhase  -= twoPi }

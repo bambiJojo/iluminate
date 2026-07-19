@@ -124,28 +124,24 @@ struct StreamingBrowserView: View {
                 // Enhanced analysis and session generation
                 let (audioFile, lightSession) = try await streamingManager.analyzeAndCreateSession(for: track)
 
-                await MainActor.run {
-                    // Add to library and start playbook with custom session
-                    addToLibraryAndPlay(audioFile, lightSession: lightSession)
-                    dismiss()
-                }
+                // Add to library and start playback with the custom session.
+                await addToLibraryAndPlay(audioFile, lightSession: lightSession)
+                dismiss()
             } catch {
-                await MainActor.run {
-                    Log.streaming.info("Failed to analyze track: \(error)")
-                    // Fallback to basic creation
-                    let audioFile = streamingManager.createAudioFileFromTrack(track)
-                    addToLibraryAndPlay(audioFile)
-                    dismiss()
-                }
+                Log.streaming.info("Failed to analyze track: \(error)")
+                // Fallback to basic creation
+                let audioFile = streamingManager.createAudioFileFromTrack(track)
+                await addToLibraryAndPlay(audioFile)
+                dismiss()
             }
         }
     }
 
-    private func addToLibraryAndPlay(_ audioFile: AudioFile, lightSession: LightSession? = nil) {
+    private func addToLibraryAndPlay(_ audioFile: AudioFile, lightSession: LightSession? = nil) async {
         // Add to user's library
-        var audioFiles = loadAudioFiles()
+        var audioFiles = await loadAudioFiles()
         audioFiles.append(audioFile)
-        saveAudioFiles(audioFiles)
+        await saveAudioFiles(audioFiles)
 
         // Save the generated light session if provided
         if let session = lightSession {
@@ -170,12 +166,12 @@ struct StreamingBrowserView: View {
     // MARK: - Helpers
 
 
-    private func loadAudioFiles() -> [AudioFile] {
-        AudioLibraryStore.loadRepairingStoredFiles()
+    private func loadAudioFiles() async -> [AudioFile] {
+        await AudioLibraryStore.loadRepairingStoredFiles()
     }
 
-    private func saveAudioFiles(_ files: [AudioFile]) {
-        AudioLibraryStore.save(files)
+    private func saveAudioFiles(_ files: [AudioFile]) async {
+        await AudioLibraryStore.save(files)
     }
 }
 

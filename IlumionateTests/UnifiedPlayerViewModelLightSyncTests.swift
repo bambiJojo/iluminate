@@ -122,4 +122,33 @@ struct PlaybackAnalyticsLifecycleTests {
         #expect(didStart)
         #expect(didEnd)
     }
+
+    @Test func matchingSavedSessionResumesAtStoredProgress() {
+        let decision = PlaybackResumeDecision(
+            sessionID: "session-a",
+            duration: 600,
+            storedSessionID: "session-a",
+            storedProgress: 0.4
+        )
+
+        #expect(decision.startType == .resumed)
+        #expect(decision.startTime == 240)
+    }
+
+    @Test(arguments: [
+        ("different", 0.4),
+        ("session-a", 0.0),
+        ("session-a", 1.0),
+    ])
+    func invalidSavedProgressStartsFresh(_ pair: (storedSessionID: String, storedProgress: Double)) {
+        let decision = PlaybackResumeDecision(
+            sessionID: "session-a",
+            duration: 600,
+            storedSessionID: pair.storedSessionID,
+            storedProgress: pair.storedProgress
+        )
+
+        #expect(decision.startType == .fresh)
+        #expect(decision.startTime == 0)
+    }
 }

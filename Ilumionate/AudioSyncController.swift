@@ -63,67 +63,25 @@ class AudioSyncController {
 
     // MARK: - Audio Loading
 
-    func loadAudio(from url: URL) throws {
-        Log.audio.info("🎵 Loading audio from: \(url.lastPathComponent)")
-
-        // Stop any existing playback
-        stop()
-
-        // Create audio player
-        do {
-            audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.prepareToPlay()
-            audioPlayer?.volume = audioVolume
-
-            audioFileURL = url
-            duration = audioPlayer?.duration ?? 0.0
-            currentTime = 0.0
-
-            Log.audio.info("✅ Audio loaded, duration: \(self.duration)s")
-        } catch {
-            Log.audio.info("❌ Failed to load audio: \(error)")
-            throw AudioSyncError.failedToLoadAudio(error)
-        }
-    }
-
     /// Asynchronous audio loading to prevent UI blocking
     func loadAudioAsync(from url: URL) async throws {
         Log.audio.info("🎵 Loading audio asynchronously from: \(url.lastPathComponent)")
+        stop()
 
-        // Stop any existing playback on main actor
-        await MainActor.run {
-            stop()
-        }
-
-        // Load audio with proper concurrency isolation
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            Task {
-                do {
-                    // Create audio player safely
-                    let player = try AVAudioPlayer(contentsOf: url)
-
-                    // Update properties on MainActor
-                    await MainActor.run { [weak self] in
-                        guard let self = self else {
-                            continuation.resume(throwing: AudioSyncError.failedToLoadAudio(NSError(domain: "AudioSync", code: -1)))
-                            return
-                        }
-                        self.audioPlayer = player
-                        self.audioPlayer?.prepareToPlay()
-                        self.audioPlayer?.volume = self.audioVolume
-
-                        self.audioFileURL = url
-                        self.duration = self.audioPlayer?.duration ?? 0.0
-                        self.currentTime = 0.0
-
-                        Log.audio.info("✅ Audio loaded asynchronously, duration: \(self.duration)s")
-                        continuation.resume()
-                    }
-                } catch {
-                    Log.audio.info("❌ Failed to load audio asynchronously: \(error)")
-                    continuation.resume(throwing: AudioSyncError.failedToLoadAudio(error))
-                }
-            }
+        do {
+            let player = try await AudioPlayerLoader.load(from: url)
+            try Task.checkCancellation()
+            audioPlayer = player
+            audioPlayer?.volume = audioVolume
+            audioFileURL = url
+            duration = player.duration
+            currentTime = 0.0
+            Log.audio.info("✅ Audio loaded asynchronously, duration: \(self.duration)s")
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            Log.audio.info("❌ Failed to load audio asynchronously: \(error)")
+            throw AudioSyncError.failedToLoadAudio(error)
         }
     }
 
@@ -230,6 +188,15 @@ class AudioSyncController {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+private nonisolated enum AudioPlayerLoader {
+    @concurrent
+    static func load(from url: URL) async throws -> sending AVAudioPlayer {
+        let player = try AVAudioPlayer(contentsOf: url)
+        player.prepareToPlay()
+        return player
     }
 }
 

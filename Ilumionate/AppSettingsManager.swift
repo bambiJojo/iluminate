@@ -43,6 +43,8 @@ enum AppSettingsManager {
         static let analyticsEnabled = "analyticsEnabled"
         static let analyticsConsentGranted = "analyticsConsentGranted"
         static let analyticsConsentAnswered = "analyticsConsentAnswered"
+        static let analyticsActivationStart = "analyticsActivationStart"
+        static let analyticsActivationCompleted = "analyticsActivationCompleted"
 
         static let analysisPrefPrefix = "analysisPref_"
         static let streamingTrackPrefix = "StreamingTrack_"
@@ -170,7 +172,9 @@ enum AppSettingsManager {
             Key.keepScreenOn,
             Key.analyticsEnabled,
             Key.analyticsConsentGranted,
-            Key.analyticsConsentAnswered
+            Key.analyticsConsentAnswered,
+            Key.analyticsActivationStart,
+            Key.analyticsActivationCompleted
         ]
         retiredKeys.forEach(defaults.removeObject(forKey:))
 

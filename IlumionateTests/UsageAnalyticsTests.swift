@@ -29,6 +29,18 @@ struct UsageAnalyticsTests {
         return defaults
     }
 
+    private func makeAnalytics(
+        defaults: UserDefaults? = nil,
+        now: @MainActor @escaping () -> Date = Date.init,
+        captured: @MainActor @escaping (AnalyticsEvent) -> Void
+    ) -> UsageAnalytics {
+        UsageAnalytics(
+            defaults: defaults ?? makeEnabledDefaults(),
+            now: now,
+            emit: captured
+        )
+    }
+
     // MARK: - Completion bucketing
 
     @Test(arguments: [
@@ -112,6 +124,16 @@ struct UsageAnalyticsTests {
     #endif
 
     @Test
+    func analyticsSDKDoesNotConfigureBeforeConsent() {
+        UsageAnalytics.configure(
+            appID: "1A7508D7-E62A-4429-9F51-D091C879D280",
+            analyticsEnabled: false
+        )
+
+        #expect(UsageAnalytics.isSDKConfigured == false)
+    }
+
+    @Test
     func missingTelemetryDeckAppIDLeavesDefaultEmitterSafe() {
         UsageAnalytics.configure(appID: "")
         let analytics = UsageAnalytics(defaults: makeDefaults())
@@ -138,40 +160,142 @@ struct UsageAnalyticsTests {
     @Test
     func sessionStartedCarriesSourceAndCategory() {
         var captured: [AnalyticsEvent] = []
-        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
-        analytics.sessionStarted(source: .generated, category: "Sleep")
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+        analytics.sessionStarted(source: .generated, category: "Sleep", startType: .resumed)
         #expect(captured == [AnalyticsEvent("session.started",
-                                            ["source": "generated", "category": "Sleep"])])
+                                            [
+                                                "source": "generated",
+                                                "category": "Sleep",
+                                                "startType": "resumed",
+                                            ]),
+                             AnalyticsEvent("activation.completed",
+                                            [
+                                                "path": "playback",
+                                                "timeToValue": "under5Minutes",
+                                            ])])
     }
 
     @Test
     func endingIncompleteSessionEmitsOnlyEndedEvent() {
         var captured: [AnalyticsEvent] = []
-        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
-        analytics.sessionEnded(fraction: 0.70)
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+        analytics.sessionEnded(
+            source: .generated,
+            category: "Relax",
+            endReason: .userStopped,
+            fraction: 0.70
+        )
         #expect(captured == [AnalyticsEvent("session.ended",
-                                            ["completionBucket": "b50_75"])])
+                                            [
+                                                "source": "generated",
+                                                "category": "Relax",
+                                                "endReason": "userStopped",
+                                                "completionBucket": "b50_75",
+                                            ])])
     }
 
     @Test
     func endingCompletedSessionEmitsEndedAndCompletedEvents() {
         var captured: [AnalyticsEvent] = []
-        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
-        analytics.sessionEnded(fraction: 0.97)
-        let parameters = ["completionBucket": "complete"]
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+        analytics.sessionEnded(
+            source: .preset,
+            category: "Focus",
+            endReason: .completed,
+            fraction: 0.97
+        )
+        let parameters = [
+            "source": "preset",
+            "category": "Focus",
+            "endReason": "completed",
+            "completionBucket": "complete",
+        ]
         #expect(captured == [
             AnalyticsEvent("session.ended", parameters),
             AnalyticsEvent("session.completed", parameters),
+            AnalyticsEvent("meaningfulSession.completed", ["source": "preset", "category": "Focus"]),
         ])
     }
 
     @Test
     func endingUnboundedSessionUsesNotApplicableBucket() {
         var captured: [AnalyticsEvent] = []
-        let analytics = UsageAnalytics(defaults: makeEnabledDefaults(), emit: { captured.append($0) })
-        analytics.sessionEnded(fraction: nil)
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+        analytics.sessionEnded(
+            source: .mindMachine,
+            category: "Trance",
+            endReason: .dismissed,
+            fraction: nil
+        )
         #expect(captured == [AnalyticsEvent("session.ended",
-                                            ["completionBucket": "notApplicable"])])
+                                            [
+                                                "source": "mindMachine",
+                                                "category": "Trance",
+                                                "endReason": "dismissed",
+                                                "completionBucket": "notApplicable",
+                                            ])])
+    }
+
+    @Test
+    func activationIsEmittedOnlyOnceWithBucketedElapsedTime() {
+        let defaults = makeEnabledDefaults()
+        defaults.set(Date(timeIntervalSince1970: 1_000), forKey: UsageAnalytics.activationStartKey)
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(
+            defaults: defaults,
+            now: { Date(timeIntervalSince1970: 1_700) },
+            captured: { captured.append($0) }
+        )
+
+        analytics.textTranceStarted()
+        analytics.sessionStarted(source: .preset, category: "Relax", startType: .fresh)
+
+        #expect(captured.filter { $0.name == "activation.completed" } == [
+            AnalyticsEvent("activation.completed", ["path": "reading", "timeToValue": "under1Hour"]),
+        ])
+    }
+
+    @Test
+    func analysisFailureContainsOnlyStableBucketedContext() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+        let context = AudioAnalysisTelemetryContext(
+            format: .mp3,
+            duration: .fiveToThirtyMinutes,
+            attempt: .resumed
+        )
+
+        analytics.audioAnalysisFailed(
+            context: context,
+            stage: .transcription,
+            reason: .modelInitialization,
+            processingTime: .oneToFiveMinutes
+        )
+
+        #expect(captured == [
+            AnalyticsEvent(
+                "Audio.Analysis.Failed",
+                [
+                    "format": "mp3",
+                    "duration": "fiveToThirtyMinutes",
+                    "attempt": "resumed",
+                    "stage": "transcription",
+                    "reason": "modelInitialization",
+                    "processingTime": "oneToFiveMinutes",
+                ],
+                kind: .error(.thrownException)
+            ),
+        ])
+    }
+
+    @Test(arguments: [
+        (30.0, ProcessingTimeBucket.underOneMinute),
+        (60.0, ProcessingTimeBucket.oneToFiveMinutes),
+        (300.0, ProcessingTimeBucket.fiveToFifteenMinutes),
+        (900.0, ProcessingTimeBucket.fifteenMinutesOrMore),
+    ])
+    func processingTimesAreBucketed(_ pair: (seconds: TimeInterval, expected: ProcessingTimeBucket)) {
+        #expect(ProcessingTimeBucket(seconds: pair.seconds) == pair.expected)
     }
 
     @Test

@@ -24,7 +24,7 @@ struct SessionLockView: View {
     // Hold duration required (in seconds) for unlock
     private let holdDuration: Double = 0.5
 
-    @State private var unlockTimer: Timer?
+    @State private var unlockTask: Task<Void, Never>?
 
     // Only show UI when actively unlocking
     private var showUnlockUI: Bool {
@@ -46,6 +46,7 @@ struct SessionLockView: View {
             }
         }
         .allowsHitTesting(true)
+        .onDisappear { cancelUnlockTimer() }
     }
 
     // MARK: - Invisible Touch Zones
@@ -173,22 +174,28 @@ struct SessionLockView: View {
         cancelUnlockTimer() // Clear any existing timer
 
         unlockProgress = 0.0
-        let startTime = Date()
+        let clock = ContinuousClock()
+        let startedAt = clock.now
 
-        unlockTimer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { timer in
-            let elapsed = Date().timeIntervalSince(startTime)
-            unlockProgress = min(elapsed / holdDuration, 1.0)
-
-            if unlockProgress >= 1.0 {
-                timer.invalidate()
-                performUnlock()
+        unlockTask = Task { @MainActor in
+            while !Task.isCancelled {
+                let elapsed = startedAt.duration(to: clock.now)
+                let elapsedSeconds = Double(elapsed.components.seconds)
+                    + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000_000
+                unlockProgress = min(elapsedSeconds / holdDuration, 1.0)
+                if unlockProgress >= 1.0 {
+                    unlockTask = nil
+                    performUnlock()
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(16))
             }
         }
     }
 
     private func cancelUnlockTimer() {
-        unlockTimer?.invalidate()
-        unlockTimer = nil
+        unlockTask?.cancel()
+        unlockTask = nil
         unlockProgress = 0.0
     }
 

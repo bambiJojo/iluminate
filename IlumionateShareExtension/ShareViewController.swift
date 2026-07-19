@@ -105,9 +105,9 @@ final class ShareViewController: UIViewController {
         guard provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) else { return nil }
         let item = try await provider.loadItem(typeIdentifier: UTType.plainText.identifier)
         let text: String?
-        if let string = item as? String {
+        if case .string(let string) = item {
             text = string
-        } else if let data = item as? Data {
+        } else if case .data(let data) = item {
             text = String(data: data, encoding: .utf8)
         } else {
             text = nil
@@ -138,19 +138,7 @@ final class ShareViewController: UIViewController {
 
         let fileName = "\(UUID().uuidString).\(ext)"
         let destinationURL = ShareImportQueueWriter.filesDirectoryURL.appending(path: fileName)
-        try FileManager.default.createDirectory(
-            at: ShareImportQueueWriter.filesDirectoryURL,
-            withIntermediateDirectories: true
-        )
-
-        let scoped = sourceURL.startAccessingSecurityScopedResource()
-        defer {
-            if scoped { sourceURL.stopAccessingSecurityScopedResource() }
-        }
-        if FileManager.default.fileExists(atPath: destinationURL.path) {
-            try FileManager.default.removeItem(at: destinationURL)
-        }
-        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        try await ShareFileImportWorker.copy(from: sourceURL, to: destinationURL)
 
         return ShareImportItem(
             id: UUID().uuidString,
@@ -164,11 +152,10 @@ final class ShareViewController: UIViewController {
         )
     }
 
-    private func normalizedURL(from item: NSSecureCoding) -> URL? {
-        if let url = item as? URL { return url }
-        if let url = item as? NSURL { return url as URL }
-        if let string = item as? String { return URL(string: string) ?? URL(fileURLWithPath: string) }
-        if let data = item as? Data,
+    private func normalizedURL(from item: LoadedProviderItem) -> URL? {
+        if case .url(let url) = item { return url }
+        if case .string(let string) = item { return URL(string: string) ?? URL(fileURLWithPath: string) }
+        if case .data(let data) = item,
            let string = String(data: data, encoding: .utf8) {
             return URL(string: string) ?? URL(fileURLWithPath: string)
         }
@@ -177,18 +164,50 @@ final class ShareViewController: UIViewController {
 }
 
 private extension NSItemProvider {
-    func loadItem(typeIdentifier: String) async throws -> NSSecureCoding {
+    func loadItem(typeIdentifier: String) async throws -> LoadedProviderItem {
         try await withCheckedThrowingContinuation { continuation in
             loadItem(forTypeIdentifier: typeIdentifier, options: nil) { item, error in
                 if let error {
                     continuation.resume(throwing: error)
-                } else if let item {
-                    continuation.resume(returning: item)
+                } else if let url = item as? URL {
+                    continuation.resume(returning: .url(url))
+                } else if let url = item as? NSURL {
+                    continuation.resume(returning: .url(url as URL))
+                } else if let string = item as? String {
+                    continuation.resume(returning: .string(string))
+                } else if let data = item as? Data {
+                    continuation.resume(returning: .data(data))
                 } else {
                     continuation.resume(throwing: ShareImportError.unreadableItem)
                 }
             }
         }
+    }
+}
+
+private enum LoadedProviderItem: Sendable {
+    case url(URL)
+    case string(String)
+    case data(Data)
+}
+
+private nonisolated enum ShareFileImportWorker {
+    @concurrent
+    static func copy(from sourceURL: URL, to destinationURL: URL) async throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        let scoped = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if scoped { sourceURL.stopAccessingSecurityScopedResource() }
+        }
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            try fileManager.removeItem(at: destinationURL)
+        }
+        try fileManager.copyItem(at: sourceURL, to: destinationURL)
     }
 }
 

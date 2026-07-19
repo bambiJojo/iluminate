@@ -41,6 +41,30 @@ struct PlaybackAnalyticsLifecycle: Equatable {
     }
 }
 
+nonisolated struct PlaybackResumeDecision: Equatable, Sendable {
+    let startType: PlaybackStartType
+    let startTime: TimeInterval
+
+    init(
+        sessionID: String,
+        duration: TimeInterval,
+        storedSessionID: String,
+        storedProgress: Double
+    ) {
+        guard sessionID == storedSessionID,
+              duration > 0,
+              storedProgress > 0,
+              storedProgress < 1 else {
+            startType = .fresh
+            startTime = 0
+            return
+        }
+
+        startType = .resumed
+        startTime = duration * storedProgress
+    }
+}
+
 // MARK: - Unified Player View Model
 
 @MainActor
@@ -151,6 +175,7 @@ final class UnifiedPlayerViewModel {
     private var savedBrightness: CGFloat = 1.0
     private var hasStarted = false
     private var analyticsLifecycle = PlaybackAnalyticsLifecycle()
+    private var playbackStartType: PlaybackStartType = .fresh
     @ObservationIgnored private let userDefaults: UserDefaults
 
     /// When true, `onDisappear` will not stop playback — used for mini-player dismiss.
@@ -211,7 +236,7 @@ final class UnifiedPlayerViewModel {
             // Keep this exact player alive so the mini-player can resume it.
             nowPlaying.updatePlaybackState(playbackState)
         } else {
-            stopAll()
+            stopAll(reason: .dismissed)
         }
     }
 
@@ -458,7 +483,15 @@ final class UnifiedPlayerViewModel {
         engine.attachSession(player: player)
         if !engine.isRunning { engine.start() }
         engine.pause()
-        player.seek(to: 0.0)
+        let resumeDecision = PlaybackResumeDecision(
+            sessionID: session.id.uuidString,
+            duration: session.duration_sec,
+            storedSessionID: lastSessionId,
+            storedProgress: lastSessionProgress
+        )
+        playbackStartType = resumeDecision.startType
+        currentTime = resumeDecision.startTime
+        player.seek(to: resumeDecision.startTime)
 
         // Set up binaural beats if the session defines them
         if session.binaural_enabled {
@@ -578,7 +611,11 @@ final class UnifiedPlayerViewModel {
     private func beginPlayback() {
         playbackState = .playing
         if analyticsLifecycle.markStarted() {
-            UsageAnalytics.shared.sessionStarted(source: sessionSource, category: sessionCategory)
+            UsageAnalytics.shared.sessionStarted(
+                source: sessionSource,
+                category: sessionCategory,
+                startType: playbackStartType
+            )
         }
 
         switch mode {
@@ -656,16 +693,17 @@ final class UnifiedPlayerViewModel {
     }
 
     private func seekToStart() {
+        playbackStartType = .fresh
         seek(to: 0)
     }
 
-    func stopAll() {
+    func stopAll(reason: PlaybackEndReason = .userStopped) {
         countdownTask?.cancel()
         countdownTask = nil
         activeScreen?.brightness = savedBrightness
         countdownValue = nil
         countdownMessage = nil
-        reportSessionEndedIfNeeded()
+        reportSessionEndedIfNeeded(reason: reason)
 
         switch mode {
         case .session:
@@ -694,16 +732,22 @@ final class UnifiedPlayerViewModel {
         nowPlaying.deactivate()
     }
 
-    private func reportSessionEndedIfNeeded() {
+    private func reportSessionEndedIfNeeded(reason: PlaybackEndReason) {
         guard analyticsLifecycle.markEnded() else { return }
 
         let fraction: Double?
-        if case .session(let session, _) = mode, session.duration_sec > 0 {
-            fraction = playbackState == .complete ? 1 : currentTime / session.duration_sec
+        if duration > 0 {
+            fraction = playbackState == .complete ? 1 : currentTime / duration
         } else {
             fraction = nil
         }
-        UsageAnalytics.shared.sessionEnded(fraction: fraction)
+        let resolvedReason: PlaybackEndReason = playbackState == .complete ? .completed : reason
+        UsageAnalytics.shared.sessionEnded(
+            source: sessionSource,
+            category: sessionCategory,
+            endReason: resolvedReason,
+            fraction: fraction
+        )
     }
 
     // MARK: - Private: Timer
@@ -740,7 +784,7 @@ final class UnifiedPlayerViewModel {
                currentTime >= session.duration_sec - 0.5,
                playbackState == .playing {
                 playbackState = .complete
-                stopAll()
+                stopAll(reason: .completed)
             }
 
         case .flashMode:

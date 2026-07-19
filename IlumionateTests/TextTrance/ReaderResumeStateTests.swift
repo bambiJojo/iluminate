@@ -15,8 +15,7 @@ struct ReaderResumeStateTests {
                 arc: .handoff, speedMultiplier: 1.25,
                 subliminalEnabled: true, subliminalSpeed: .deep,
                 binauralEnabled: false, lightEnabled: true, beatFrequency: 10,
-                attentionGateEnabled: true,
-                narrationEnabled: true),
+                attentionGateEnabled: true),
             phase: .reading,
             scriptContentHash: "hash123",
             savedAt: Date(timeIntervalSince1970: 1_000_000))
@@ -25,13 +24,12 @@ struct ReaderResumeStateTests {
         #expect(decoded.wordIndex == 42)
         #expect(decoded.settings.speedMultiplier == 1.25)
         #expect(decoded.settings.attentionGateEnabled)
-        #expect(decoded.settings.narrationEnabled)
         #expect(decoded.settings.speedTraining == .standard)
         #expect(decoded.settings.displayPreferences == .standard)
         #expect(decoded.phase == .reading)
     }
 
-    @Test func missingRecentSettingsDecodeAsDisabled() throws {
+    @Test func missingOptionalSettingsDecodeWithDefaults() throws {
         let json = """
         {
           "arc": "fullText",
@@ -45,7 +43,6 @@ struct ReaderResumeStateTests {
         """
         let settings = try JSONDecoder().decode(PersistedReaderSettings.self, from: Data(json.utf8))
         #expect(!settings.attentionGateEnabled)
-        #expect(!settings.narrationEnabled)
         #expect(settings.speedTraining == .standard)
         #expect(settings.displayPreferences == .standard)
     }

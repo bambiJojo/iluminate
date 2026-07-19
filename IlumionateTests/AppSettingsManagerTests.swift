@@ -90,6 +90,8 @@ struct AppSettingsManagerTests {
         defaults.set(true, forKey: AppSettingsManager.Key.analyticsEnabled)
         defaults.set(true, forKey: AppSettingsManager.Key.analyticsConsentGranted)
         defaults.set(true, forKey: AppSettingsManager.Key.analyticsConsentAnswered)
+        defaults.set(Date(), forKey: AppSettingsManager.Key.analyticsActivationStart)
+        defaults.set(true, forKey: AppSettingsManager.Key.analyticsActivationCompleted)
         defaults.set(0.7, forKey: AppSettingsManager.Key.defaultIntensity)
 
         AppSettingsManager.resetPreferences(
@@ -106,6 +108,8 @@ struct AppSettingsManagerTests {
         #expect(defaults.object(forKey: AppSettingsManager.Key.analyticsEnabled) == nil)
         #expect(defaults.object(forKey: AppSettingsManager.Key.analyticsConsentGranted) == nil)
         #expect(defaults.object(forKey: AppSettingsManager.Key.analyticsConsentAnswered) == nil)
+        #expect(defaults.object(forKey: AppSettingsManager.Key.analyticsActivationStart) == nil)
+        #expect(defaults.object(forKey: AppSettingsManager.Key.analyticsActivationCompleted) == nil)
         #expect(defaults.object(forKey: AppSettingsManager.Key.defaultIntensity) == nil)
     }
 

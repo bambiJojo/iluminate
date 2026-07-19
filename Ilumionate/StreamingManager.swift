@@ -53,21 +53,13 @@ class StreamingManager {
         isLoading = true
         errorMessage = nil
 
-        await withTaskGroup(of: Void.self) { group in
-            for service in availableServices {
-                group.addTask {
-                    do {
-                        try await service.authenticate()
-                        await MainActor.run {
-                            Log.streaming.info("🎵 \(service.name): Authenticated successfully")
-                        }
-                    } catch {
-                        await MainActor.run {
-                            Log.streaming.info("🎵 \(service.name): Authentication failed - \(error)")
-                            self.errorMessage = "Failed to connect to \(service.name)"
-                        }
-                    }
-                }
+        for service in availableServices {
+            do {
+                try await service.authenticate()
+                Log.streaming.info("🎵 \(service.name): Authenticated successfully")
+            } catch {
+                Log.streaming.info("🎵 \(service.name): Authentication failed - \(error)")
+                errorMessage = "Failed to connect to \(service.name)"
             }
         }
 
@@ -86,22 +78,11 @@ class StreamingManager {
         errorMessage = nil
         var allResults: [StreamingTrack] = []
 
-        await withTaskGroup(of: [StreamingTrack].self) { group in
-            for service in availableServices where service.isAuthenticated {
-                group.addTask {
-                    do {
-                        return try await service.search(query: query)
-                    } catch {
-                        await MainActor.run {
-                            Log.streaming.info("🎵 \(service.name): Search failed - \(error)")
-                        }
-                        return []
-                    }
-                }
-            }
-
-            for await results in group {
-                allResults.append(contentsOf: results)
+        for service in availableServices where service.isAuthenticated {
+            do {
+                allResults.append(contentsOf: try await service.search(query: query))
+            } catch {
+                Log.streaming.info("🎵 \(service.name): Search failed - \(error)")
             }
         }
 
@@ -115,22 +96,11 @@ class StreamingManager {
         isLoading = true
         var playlists: [StreamingPlaylist] = []
 
-        await withTaskGroup(of: [StreamingPlaylist].self) { group in
-            for service in availableServices where service.isAuthenticated {
-                group.addTask {
-                    do {
-                        return try await service.getPlaylists()
-                    } catch {
-                        await MainActor.run {
-                            Log.streaming.info("🎵 \(service.name): Failed to load playlists - \(error)")
-                        }
-                        return []
-                    }
-                }
-            }
-
-            for await serviceePlaylists in group {
-                playlists.append(contentsOf: serviceePlaylists)
+        for service in availableServices where service.isAuthenticated {
+            do {
+                playlists.append(contentsOf: try await service.getPlaylists())
+            } catch {
+                Log.streaming.info("🎵 \(service.name): Failed to load playlists - \(error)")
             }
         }
 
