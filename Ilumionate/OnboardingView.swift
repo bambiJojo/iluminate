@@ -111,7 +111,7 @@ struct OnboardingView: View {
                 UsageAnalytics.shared.onboardingCompleted()
             }
         }
-        .fullScreenCover(isPresented: $showWelcomeSession) {
+        .fullScreenCover(isPresented: $showWelcomeSession, onDismiss: finishWelcomeSession) {
             if let welcomeSession {
                 UnifiedPlayerView(
                     mode: .session(session: welcomeSession, audioFile: nil),
@@ -132,7 +132,9 @@ struct OnboardingView: View {
     // MARK: - Navigation Footer
     @ViewBuilder
     private var navigationFooter: some View {
-        if currentPhase == .attentionPermission || currentPhase == .analyticsConsent {
+        if currentPhase == .attentionPermission
+            || currentPhase == .analyticsConsent
+            || currentPhase == .completed {
             EmptyView()
         } else {
             HStack {
@@ -504,32 +506,18 @@ struct OnboardingView: View {
                 Text("You're ready.")
                     .font(TranceTypography.screenTitle)
 
-                Text("Your LumeSync journey begins now. Find a quiet space, upload an audio file, and let the mind machine guide you.")
+                Text("Begin with a short guided session, or explore the app and choose your own path.")
                     .font(TranceTypography.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
 
-            // Reciprocity: let people feel the entrainment effect right now, before
-            // asking them to go find and import their own audio. Fully optional —
-            // "Enter LumeSync" in the footer is the one-tap skip.
-            if welcomeSession != nil {
-                Button {
-                    TranceHaptics.shared.medium()
-                    showWelcomeSession = true
-                } label: {
-                    Label("Experience a 3-min light session", systemImage: "sparkles")
-                        .font(TranceTypography.body.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(Color.roseGold)
-                        .clipShape(Capsule())
-                        .shadow(color: Color.roseGold.opacity(0.3), radius: 10, x: 0, y: 5)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 10)
-            }
+            OnboardingCompletionActionsView(
+                canStartSession: welcomeSession != nil,
+                onStartSession: { completeOnboarding(with: .startWelcomeSession) },
+                onExploreApp: { completeOnboarding(with: .exploreApp) }
+            )
+            .padding(.horizontal, 10)
         }
     }
     
@@ -597,13 +585,30 @@ struct OnboardingView: View {
     private func nextPhase() {
         TranceHaptics.shared.medium()
         if currentPhase == .completed {
-            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-            dismiss()
+            completeOnboarding(with: .exploreApp)
         } else if let next = OnboardingPhase(rawValue: currentPhase.rawValue + 1) {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                 currentPhase = next
             }
         }
+    }
+
+    private func completeOnboarding(with action: OnboardingCompletionAction) {
+        TranceHaptics.shared.medium()
+        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        UsageAnalytics.shared.onboardingCompletionAction(action)
+
+        switch action {
+        case .startWelcomeSession where welcomeSession != nil:
+            showWelcomeSession = true
+        case .startWelcomeSession, .exploreApp:
+            dismiss()
+        }
+    }
+
+    private func finishWelcomeSession() {
+        guard UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") else { return }
+        dismiss()
     }
     
     private func previousPhase() {

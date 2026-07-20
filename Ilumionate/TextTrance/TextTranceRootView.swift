@@ -24,6 +24,10 @@ struct TextTranceRootView: View {
     @State private var importedSetupScript: TranceScript?
     @State private var pendingHistoryScript: TranceScript?
     @State private var browsingSource: BrowsingSource?
+    @State private var activeQuickStartSession: TextTranceSession?
+    @State private var quickStartIndex = 0
+
+    private let presetStore = ReaderPresetStore.shared
 
     // Mirrors the Settings toggle that gates adult (18+) sources.
     @AppStorage("nsfwSourcesEnabled") private var nsfwEnabled = false
@@ -40,6 +44,7 @@ struct TextTranceRootView: View {
                 documents: documentStore.documents,
                 sources: visibleSources,
                 historyItems: historyItems,
+                quickStartPlan: quickStartPlan,
                 importState: documentImportState,
                 onImportFile: { showingDocumentImporter = true },
                 onLoadWebsite: { showingWebImport = true },
@@ -48,7 +53,8 @@ struct TextTranceRootView: View {
                 onOpenSource: { source in browsingSource = BrowsingSource(source: source) },
                 onSeeAllSources: { showingReadingSources = true },
                 onOpenDocument: openDocument,
-                onDeleteDocument: deleteDocument
+                onDeleteDocument: deleteDocument,
+                onQuickStart: launchQuickStart
             )
             .navigationDestination(for: TextTranceDestination.self) { destination in
                 switch destination {
@@ -91,6 +97,12 @@ struct TextTranceRootView: View {
                     importedSetupScript = script
                 }
             )
+        }
+        .fullScreenCover(
+            item: $activeQuickStartSession,
+            onDismiss: handleQuickStartDismiss
+        ) { session in
+            TextTrancePlayerView(session: session, startIndex: quickStartIndex)
         }
         .fileImporter(
             isPresented: $showingDocumentImporter,
@@ -135,6 +147,14 @@ struct TextTranceRootView: View {
         }
     }
 
+    private var quickStartPlan: ReaderQuickStartPlan? {
+        ReaderQuickStartPlan.select(
+            scripts: scripts,
+            historyItems: historyItems,
+            preset: { presetStore.preset(forScriptId: $0) }
+        )
+    }
+
     private var importedSetupPresented: Binding<Bool> {
         Binding(
             get: { importedSetupScript != nil },
@@ -153,6 +173,19 @@ struct TextTranceRootView: View {
 
         scripts.removeAll { $0.id == script.id }
         scripts.insert(script, at: 0)
+    }
+
+    private func launchQuickStart(_ plan: ReaderQuickStartPlan) {
+        UsageAnalytics.shared.readerQuickStartSelected(plan.startType)
+        quickStartIndex = plan.startIndex
+        activeQuickStartSession = plan.makeSession(progressStore: progressStore)
+    }
+
+    private func handleQuickStartDismiss() {
+        if let activeQuickStartSession, !activeQuickStartSession.isComplete {
+            activeQuickStartSession.end()
+        }
+        activeQuickStartSession = nil
     }
 
     private func openPendingHistoryScript() {

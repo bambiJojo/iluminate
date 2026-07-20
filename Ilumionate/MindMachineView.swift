@@ -134,21 +134,6 @@ final class MindMachineModel: Sendable {
         }
     }
 
-    var startSessionDescription: String {
-        switch selectedVisualMode {
-        case .colorPulse:
-            return "Starts full-screen color pulse only"
-        case .bilateralFlash:
-            return binauralEnabled
-                ? "Starts bilateral flashes with matched binaural audio"
-                : "Starts bilateral flashes without audio"
-        case .fullScreenFlash:
-            return binauralEnabled
-                ? "Starts full-screen flashes with matched binaural audio"
-                : "Starts full-screen flashes without audio"
-        }
-    }
-
     var startSessionIcon: String {
         switch selectedVisualMode {
         case .colorPulse:
@@ -177,9 +162,6 @@ struct MindMachineView: View {
                     LightVisualizationCard(model: model)
                     FrequencyCard(model: model)
 
-                    // Primary action
-                    StartSessionCard(model: model, showingFlashMode: $showingFlashMode)
-
                     // Advanced controls — hidden by default
                     AdvancedControlsSection(model: model, showAdvanced: $showAdvanced)
 
@@ -191,6 +173,9 @@ struct MindMachineView: View {
                 .padding(.horizontal, TranceSpacing.screen)
                 .padding(.top, TranceSpacing.statusBar)
                 .padding(.bottom, TranceSpacing.tabBarClearance)
+            }
+            .safeAreaInset(edge: .bottom) {
+                MindMachineStartBar(model: model, onStart: startMindMachine)
             }
             .navigationTitle("Create")
             .navigationBarTitleDisplayMode(.large)
@@ -235,7 +220,10 @@ struct MindMachineView: View {
             }
             .onChange(of: showingFlashMode) { _, isShowing in
                 if isShowing {
-                    UsageAnalytics.shared.mindMachineStarted(mode: analyticsMode(model.selectedVisualMode))
+                    UsageAnalytics.shared.mindMachineStarted(
+                        mode: analyticsMode(model.selectedVisualMode),
+                        entryPoint: .create
+                    )
                 }
             }
         }
@@ -247,6 +235,15 @@ struct MindMachineView: View {
         case .colorPulse:      .colorPulse
         case .bilateralFlash:  .bilateral
         }
+    }
+
+    private func startMindMachine() {
+        TranceHaptics.shared.heavy()
+        UsageAnalytics.shared.mindMachineStartRequested(
+            mode: analyticsMode(model.selectedVisualMode),
+            entryPoint: .create
+        )
+        showingFlashMode = true
     }
 }
 
@@ -368,27 +365,6 @@ private struct IntensityCard: View {
     var body: some View {
         LiminalCard(label: "Intensity") {
             IntensityDial(intensity: $model.intensity)
-        }
-    }
-}
-
-private struct StartSessionCard: View {
-    @Bindable var model: MindMachineModel
-    @Binding var showingFlashMode: Bool
-
-    var body: some View {
-        LiminalCard {
-            VStack(spacing: TranceSpacing.list) {
-                GlowButton(title: model.startSessionButtonTitle, systemImage: model.startSessionIcon, kind: .primary) {
-                    showingFlashMode = true
-                    TranceHaptics.shared.heavy()
-                }
-
-                Text(model.startSessionDescription)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
         }
     }
 }

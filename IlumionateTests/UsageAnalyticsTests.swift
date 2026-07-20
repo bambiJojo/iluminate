@@ -236,6 +236,90 @@ struct UsageAnalyticsTests {
     }
 
     @Test
+    func onboardingCompletionActionIsMeasurable() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.onboardingCompletionAction(.startWelcomeSession)
+
+        #expect(captured == [AnalyticsEvent("onboarding.completionAction", [
+            "action": "startWelcomeSession",
+        ])])
+    }
+
+    @Test
+    func readerQuickStartTracksOnlyStableEntryType() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.readerQuickStartSelected(.resumed)
+
+        #expect(captured == [AnalyticsEvent("reader.quickStartSelected", [
+            "startType": "resumed",
+        ])])
+    }
+
+    @Test
+    func homeCoreActionTracksDestination() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.homeCoreActionSelected(.reader)
+
+        #expect(captured == [AnalyticsEvent("home.coreActionSelected", [
+            "destination": "reader",
+        ])])
+    }
+
+    @Test
+    func mindMachineStartRequestCarriesOnlyMode() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.mindMachineStartRequested(mode: .bilateral, entryPoint: .create)
+
+        #expect(captured == [AnalyticsEvent("mindMachine.startRequested", [
+            "mode": "bilateral",
+            "entryPoint": "create",
+        ])])
+    }
+
+    @Test
+    func mindMachinePresentationIdentifiesHomePresetEntry() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.mindMachineStarted(mode: .flash, entryPoint: .homePreset)
+
+        #expect(captured == [AnalyticsEvent("mindMachine.started", [
+            "mode": "flash",
+            "entryPoint": "homePreset",
+        ])])
+    }
+
+    @Test
+    func readyAnalysisPlayActionContainsNoFileMetadata() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.analysisReadyAction(.play)
+
+        #expect(captured == [AnalyticsEvent("analysis.readyAction", [
+            "action": "play",
+        ])])
+    }
+
+    @Test
+    func generatedSessionEventContainsNoUserMetadata() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.sessionGenerated()
+
+        #expect(captured == [AnalyticsEvent("session.generated")])
+    }
+
+    @Test
     func endingUnboundedSessionUsesNotApplicableBucket() {
         var captured: [AnalyticsEvent] = []
         let analytics = makeAnalytics(captured: { captured.append($0) })
@@ -303,6 +387,24 @@ struct UsageAnalyticsTests {
                 ],
                 kind: .error(.thrownException)
             ),
+        ])
+    }
+
+    @Test
+    func analysisRetryTracksReasonAndSavedProgressWithoutUserContent() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.audioAnalyzeRetryRequested(
+            reason: .contentAnalysis,
+            recoveryStage: .transcription
+        )
+
+        #expect(captured == [
+            AnalyticsEvent("audio.analyzeRetryRequested", [
+                "reason": "contentAnalysis",
+                "recoveryStage": "transcription",
+            ]),
         ])
     }
 

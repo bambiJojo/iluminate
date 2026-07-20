@@ -83,6 +83,14 @@ nonisolated enum SessionCompletionAction: String, Sendable {
     case done, replay
 }
 
+nonisolated enum OnboardingCompletionAction: String, Sendable {
+    case startWelcomeSession, exploreApp
+}
+
+nonisolated enum HomeCoreAction: String, Sendable {
+    case audioLibrary, reader
+}
+
 nonisolated enum ActivationPath: String, Sendable {
     case playback, reading, audioAnalysis
 }
@@ -136,11 +144,15 @@ nonisolated enum AnalysisAttempt: String, Equatable, Sendable {
     case first, resumed
 }
 
-nonisolated enum AnalyticsAnalysisStage: String, Equatable, Sendable {
+nonisolated enum AnalysisReadyAction: String, Sendable {
+    case play
+}
+
+nonisolated enum AnalyticsAnalysisStage: String, Codable, Equatable, Sendable {
     case preparation, transcription, contentAnalysis, generation, persistence, unknown
 }
 
-nonisolated enum AnalyticsAnalysisFailureReason: String, Equatable, Sendable {
+nonisolated enum AnalyticsAnalysisFailureReason: String, Codable, Equatable, Sendable {
     case modelNotReady, modelInitialization, invalidAudio, noAudioData
     case transcription, contentAnalysis, generation, persistence, unknown
 
@@ -214,6 +226,10 @@ nonisolated struct AudioAnalysisTelemetryContext: Equatable, Sendable {
 
 enum MindMachineMode: String, Sendable {
     case flash, colorPulse, bilateral
+}
+
+enum MindMachineEntryPoint: String, Sendable {
+    case create, homePreset
 }
 
 /// Bucketed completion fraction — exact playback time never leaves the device.

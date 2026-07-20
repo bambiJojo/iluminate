@@ -24,6 +24,7 @@ struct TextTranceLibraryView: View {
     let documents: [ReadingDocument]
     let sources: [ReadingSource]
     let historyItems: [ReaderHistoryItem]
+    let quickStartPlan: ReaderQuickStartPlan?
     let importState: DocumentImportState
     let onImportFile: () -> Void
     let onLoadWebsite: () -> Void
@@ -33,6 +34,7 @@ struct TextTranceLibraryView: View {
     let onSeeAllSources: () -> Void
     let onOpenDocument: (ReadingDocument) -> Void
     let onDeleteDocument: (ReadingDocument) -> Void
+    let onQuickStart: (ReaderQuickStartPlan) -> Void
 
     var body: some View {
         ZStack {
@@ -47,6 +49,14 @@ struct TextTranceLibraryView: View {
                         onLoadWebsite: onLoadWebsite
                     )
                     .padding(.horizontal, TranceSpacing.screen)
+
+                    if let quickStartPlan {
+                        ReaderQuickStartCard(
+                            plan: quickStartPlan,
+                            onStart: onQuickStart
+                        )
+                        .padding(.horizontal, TranceSpacing.screen)
+                    }
 
                     if importState != .idle {
                         DocumentImportStatusCard(state: importState)
@@ -649,6 +659,7 @@ struct WebTextImportSheet: View {
             documents: [],
             sources: [],
             historyItems: [],
+            quickStartPlan: nil,
             importState: .idle,
             onImportFile: {},
             onLoadWebsite: {},
@@ -657,7 +668,8 @@ struct WebTextImportSheet: View {
             onOpenSource: { _ in },
             onSeeAllSources: {},
             onOpenDocument: { _ in },
-            onDeleteDocument: { _ in }
+            onDeleteDocument: { _ in },
+            onQuickStart: { _ in }
         )
     }
 }

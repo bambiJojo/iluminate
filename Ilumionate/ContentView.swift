@@ -48,7 +48,8 @@ struct ContentView: View {
                             sessions: sessions,
                             audioFiles: audioFiles,
                             engine: engine,
-                            onRefresh: loadSessions
+                            onRefresh: loadSessions,
+                            onOpenReader: { selectedTab = .read }
                         )
                     }
                     .transition(.opacity)
@@ -78,6 +79,11 @@ struct ContentView: View {
                         showingAnalysisQueue = true
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else if let failure = analysisManager.failedAnalyses.last {
+                    AnalysisRecoveryStatusOverlay(failure: failure) {
+                        showingAnalysisQueue = true
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 if nowPlaying.isActive {
@@ -91,8 +97,10 @@ struct ContentView: View {
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: nowPlaying.isActive)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.currentAnalysis)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.failedAnalyses.count)
         }
         .task {
+            await analysisManager.restoreManualRecoveries()
             loadSessions()
             await loadAudioFiles()
             checkForFirstLaunch()
@@ -127,7 +135,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingAnalysisQueue) {
             NavigationStack {
-                AnalyzerView()
+                AnalyzerView(engine: engine)
             }
         }
         .alert("Help Improve LumeSync", isPresented: $showingAnalyticsConsentPrompt) {

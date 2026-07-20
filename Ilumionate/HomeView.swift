@@ -60,6 +60,7 @@ struct HomeView: View {
     let audioFiles: [AudioFile]
     let engine: LightEngine
     let onRefresh: (() -> Void)?
+    let onOpenReader: () -> Void
 
     @State private var isRefreshing = false
     @State private var showingProfile = false
@@ -93,7 +94,8 @@ struct HomeView: View {
          sessions: [LightSession],
          audioFiles: [AudioFile] = [],
          engine: LightEngine,
-         onRefresh: (() -> Void)? = nil) {
+         onRefresh: (() -> Void)? = nil,
+         onOpenReader: @escaping () -> Void = {}) {
         self._showingAudioLibrary = showingAudioLibrary
         self._showingSessionPlayer = showingSessionPlayer
         self._selectedSession = selectedSession
@@ -101,6 +103,7 @@ struct HomeView: View {
         self.audioFiles = audioFiles
         self.engine = engine
         self.onRefresh = onRefresh
+        self.onOpenReader = onOpenReader
     }
 
     var body: some View {
@@ -117,6 +120,12 @@ struct HomeView: View {
 
                 HomeStreakPill()
                     .cardEntrance(visible: cardsVisible, delay: 0.07, reduceMotion: reduceMotion)
+
+                HomeCoreActionsView(
+                    onOpenAudioLibrary: openAudioLibrary,
+                    onOpenReader: openReader
+                )
+                .cardEntrance(visible: cardsVisible, delay: 0.08, reduceMotion: reduceMotion)
 
                 if lastSessionProgress > 0 {
                     if let lastSession = sessions.first(where: { $0.id.uuidString == lastSessionId }) {
@@ -197,10 +206,30 @@ struct HomeView: View {
                 engine: engine
             )
         }
+        .onChange(of: showingFlashMode) { _, isShowing in
+            if isShowing {
+                UsageAnalytics.shared.mindMachineStarted(
+                    mode: .flash,
+                    entryPoint: .homePreset
+                )
+            }
+        }
         .fullScreenCover(item: $playerFile) { file in
             UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
         }
         } // end ZStack
+    }
+
+    private func openAudioLibrary() {
+        TranceHaptics.shared.light()
+        UsageAnalytics.shared.homeCoreActionSelected(.audioLibrary)
+        showingAudioLibrary = true
+    }
+
+    private func openReader() {
+        TranceHaptics.shared.light()
+        UsageAnalytics.shared.homeCoreActionSelected(.reader)
+        onOpenReader()
     }
 
     // MARK: - Greeting Section
@@ -566,6 +595,10 @@ struct HomeView: View {
         bilateral: Bool = false
     ) {
         TranceHaptics.shared.heavy()
+        UsageAnalytics.shared.mindMachineStartRequested(
+            mode: .flash,
+            entryPoint: .homePreset
+        )
         flashFrequency = frequency
         flashIntensity = 0.75
         // Map brainwave to a comfortable Kelvin temperature

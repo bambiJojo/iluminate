@@ -208,6 +208,18 @@ final class UsageAnalytics {
         ]))
     }
 
+    func onboardingCompletionAction(_ action: OnboardingCompletionAction) {
+        send(AnalyticsEvent("onboarding.completionAction", [
+            "action": action.rawValue,
+        ]))
+    }
+
+    func homeCoreActionSelected(_ destination: HomeCoreAction) {
+        send(AnalyticsEvent("home.coreActionSelected", [
+            "destination": destination.rawValue,
+        ]))
+    }
+
     func audioImported(source: AudioSource) {
         send(AnalyticsEvent("audio.imported", ["source": source.rawValue]))
     }
@@ -253,15 +265,48 @@ final class UsageAnalytics {
         parameters["processingTime"] = processingTime.rawValue
         send(AnalyticsEvent("audio.analyzeCancelled", parameters))
     }
+
+    func audioAnalyzeRetryRequested(
+        reason: AnalyticsAnalysisFailureReason,
+        recoveryStage: AnalysisRecoveryStage
+    ) {
+        send(AnalyticsEvent("audio.analyzeRetryRequested", [
+            "reason": reason.rawValue,
+            "recoveryStage": recoveryStage.rawValue,
+        ]))
+    }
+
+    func analysisReadyAction(_ action: AnalysisReadyAction) {
+        send(AnalyticsEvent("analysis.readyAction", [
+            "action": action.rawValue,
+        ]))
+    }
+
     func sessionGenerated() { send(AnalyticsEvent("session.generated")) }
 
-    func mindMachineStarted(mode: MindMachineMode) {
-        send(AnalyticsEvent("mindMachine.started", ["mode": mode.rawValue]))
+    func mindMachineStarted(mode: MindMachineMode, entryPoint: MindMachineEntryPoint) {
+        send(AnalyticsEvent("mindMachine.started", [
+            "mode": mode.rawValue,
+            "entryPoint": entryPoint.rawValue,
+        ]))
+    }
+
+    func mindMachineStartRequested(mode: MindMachineMode, entryPoint: MindMachineEntryPoint) {
+        send(AnalyticsEvent("mindMachine.startRequested", [
+            "mode": mode.rawValue,
+            "entryPoint": entryPoint.rawValue,
+        ]))
     }
 
     func textTranceStarted() {
         send(AnalyticsEvent("textTrance.started"))
         markActivated(path: .reading)
+    }
+
+    func readerQuickStartSelected(_ startType: PlaybackStartType) {
+        send(AnalyticsEvent("reader.quickStartSelected", [
+            "startType": startType.rawValue,
+        ]))
     }
 
     func textTranceCompleted() {

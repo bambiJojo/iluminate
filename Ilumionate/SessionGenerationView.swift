@@ -84,7 +84,7 @@ struct SessionGenerationView: View {
             }
             .onAppear {
                 config = AnalysisPreferences.shared.generationConfig
-                generateSession(trackAnalytics: true)
+                generateSession()
             }
             .fullScreenCover(isPresented: $showingPlayer) {
                 if let session = generatedSession {
@@ -283,15 +283,12 @@ struct SessionGenerationView: View {
     
     // MARK: - Logic
     
-    private func generateSession(trackAnalytics: Bool = false) {
+    private func generateSession() {
         generatedSession = generator.generateSession(
             from: audioFile,
             analysis: analysis,
             config: config
         )
-        if trackAnalytics {
-            UsageAnalytics.shared.sessionGenerated()
-        }
     }
     
     private func regenerateSession() {
