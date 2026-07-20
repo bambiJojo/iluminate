@@ -8,6 +8,23 @@ import Testing
 @MainActor
 struct GeneratedSessionStoreTests {
 
+    @Test func successfulSaveReportsGeneratedSession() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var savedCount = 0
+        let store = GeneratedSessionStore(
+            directoryURL: directory,
+            onSessionSaved: { savedCount += 1 }
+        )
+
+        try store.save(
+            makeSession(name: "Measured Session"),
+            for: makeAudioFile(filename: "measured.mp3")
+        )
+
+        #expect(savedCount == 1)
+    }
+
     @Test func saveWritesCanonicalIDBasedSessionFile() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

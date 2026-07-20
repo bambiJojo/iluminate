@@ -8,13 +8,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Bundles an audio file with its optional generated session for one player presentation.
-struct SyncPlayerItem: Identifiable {
-    let id = UUID()
-    let audioFile: AudioFile
-    let lightSession: LightSession?
-}
-
 /// Displays and manages the user's audio file library with Trance design
 struct AudioLibraryView: View {
 
@@ -93,6 +86,10 @@ struct AudioLibraryView: View {
     // TODO: Replace with actual playlist model
     @State var showingDeleteSelectedAlert = false
     @Environment(\.dismiss) private var dismiss
+
+    private var analysisAttentionCount: Int {
+        analysisManager.analysisQueue.count + analysisManager.failedAnalyses.count
+    }
 
     var body: some View {
         NavigationStack {
@@ -183,15 +180,15 @@ struct AudioLibraryView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: TranceSpacing.small) {
                         // Queue badge
-                        if analysisManager.currentAnalysis != nil || !analysisManager.analysisQueue.isEmpty {
+                        if analysisManager.currentAnalysis != nil || analysisAttentionCount > 0 {
                             Button {
                                 showingQueueManagement = true
                             } label: {
                                 HStack(spacing: 4) {
                                     Image(systemName: "list.bullet.circle.fill")
                                         .symbolRenderingMode(.hierarchical)
-                                    if !analysisManager.analysisQueue.isEmpty {
-                                        Text("\(analysisManager.analysisQueue.count)")
+                                    if analysisAttentionCount > 0 {
+                                        Text("\(analysisAttentionCount)")
                                             .font(.caption2)
                                             .foregroundStyle(.white)
                                             .padding(.horizontal, 4)
@@ -231,7 +228,9 @@ struct AudioLibraryView: View {
                 }
             }
             .sheet(isPresented: $showingQueueManagement) {
-                QueueManagementView(analysisManager: AnalysisStateManager.shared)
+                NavigationStack {
+                    AnalyzerView(engine: engine)
+                }
             }
             .sheet(isPresented: $showingFilters) {
                 filtersSheet

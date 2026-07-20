@@ -32,6 +32,10 @@ nonisolated struct AnalysisCheckpoint: Codable, Sendable {
     /// Optional for backwards-compatible decoding of checkpoints written by
     /// versions that did not track attempts.
     var attemptCount: Int? = nil
+    /// A terminal retryable failure is kept on disk until the user explicitly
+    /// asks to retry. Keeping it separate prevents BackgroundTasks from
+    /// repeatedly launching work that already exhausted its automatic retry.
+    var manualRecovery: AnalysisManualRecovery? = nil
 
     /// The most advanced stage that has been saved to disk.
     var resumeStage: AnalysisStage {
@@ -39,6 +43,19 @@ nonisolated struct AnalysisCheckpoint: Codable, Sendable {
         if transcription != nil { return .analyzing }
         return .transcribing
     }
+
+    /// The most useful partial result already saved for a future retry.
+    var recoveryStage: AnalysisRecoveryStage {
+        if analysis != nil { return .analysis }
+        if transcription != nil { return .transcription }
+        return .none
+    }
+}
+
+nonisolated struct AnalysisManualRecovery: Codable, Sendable {
+    let reason: AnalyticsAnalysisFailureReason
+    let failedStage: AnalyticsAnalysisStage
+    let failedAt: Date
 }
 
 // MARK: - Store
@@ -82,7 +99,13 @@ actor AnalysisProgressStore {
     }
 
     func allPending() -> [AnalysisCheckpoint] {
-        Array(checkpoints.values)
+        checkpoints.values.filter { $0.manualRecovery == nil }
+    }
+
+    func manualRecoveryCheckpoints() -> [AnalysisCheckpoint] {
+        checkpoints.values
+            .filter { $0.manualRecovery != nil }
+            .sorted { $0.lastUpdated < $1.lastUpdated }
     }
 
     // MARK: Write
@@ -91,7 +114,16 @@ actor AnalysisProgressStore {
     /// background launch and the next foreground launch something to resume if
     /// iOS suspends or terminates the process during transcription.
     func saveQueued(_ audioFile: AudioFile) {
-        guard checkpoints[audioFile.id] == nil else { return }
+        if var checkpoint = checkpoints[audioFile.id] {
+            guard checkpoint.manualRecovery != nil else { return }
+            checkpoint.manualRecovery = nil
+            checkpoint.attemptCount = 0
+            checkpoint.lastUpdated = Date()
+            checkpoints[audioFile.id] = checkpoint
+            persist()
+            Log.analysis.info("🔁 Checkpoint: manual retry queued for \(audioFile.filename)")
+            return
+        }
         checkpoints[audioFile.id] = AnalysisCheckpoint(
             audioFile: audioFile,
             transcription: nil,
@@ -142,6 +174,29 @@ actor AnalysisProgressStore {
         checkpoints[audioFile.id] = cp
         persist()
         Log.analysis.info("💾 Checkpoint: saved analysis for \(audioFile.filename)")
+    }
+
+    func markRequiresManualRetry(
+        for audioFile: AudioFile,
+        reason: AnalyticsAnalysisFailureReason,
+        failedStage: AnalyticsAnalysisStage,
+        failedAt: Date
+    ) {
+        var checkpoint = checkpoints[audioFile.id] ?? AnalysisCheckpoint(
+            audioFile: audioFile,
+            startedAt: failedAt,
+            lastUpdated: failedAt,
+            attemptCount: 2
+        )
+        checkpoint.manualRecovery = AnalysisManualRecovery(
+            reason: reason,
+            failedStage: failedStage,
+            failedAt: failedAt
+        )
+        checkpoint.lastUpdated = failedAt
+        checkpoints[audioFile.id] = checkpoint
+        persist()
+        Log.analysis.info("⏸️ Checkpoint: waiting for manual retry of \(audioFile.filename)")
     }
 
     func clear(for audioFile: AudioFile) {

@@ -104,3 +104,56 @@ struct AnalysisStatusOverlay: View {
         }
     }
 }
+
+/// Persistent compact status for work that needs an explicit retry. Unlike the
+/// active progress overlay, this is restored from the durable checkpoint.
+struct AnalysisRecoveryStatusOverlay: View {
+    let failure: FailedAnalysis
+    let onTap: () -> Void
+
+    var body: some View {
+        Button {
+            TranceHaptics.shared.light()
+            onTap()
+        } label: {
+            HStack(spacing: TranceSpacing.inner) {
+                Image(systemName: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                    .foregroundStyle(Color.roseGold)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(failure.audioFile.displayName)
+                        .font(TranceTypography.caption.bold())
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                    Text(failure.presentation.statusMessage ?? failure.presentation.title)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.textSecondary)
+                }
+
+                Spacer()
+
+                Text(failure.presentation.canRetry ? "Review & Retry" : "Review")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.roseGold)
+            }
+            .padding(.horizontal, TranceSpacing.card)
+            .padding(.vertical, TranceSpacing.inner)
+            .background(.ultraThinMaterial)
+            .background(Color.bgCard)
+            .clipShape(.rect(cornerRadius: TranceRadius.tabItem))
+            .overlay {
+                RoundedRectangle(cornerRadius: TranceRadius.tabItem)
+                    .strokeBorder(Color.roseGold.opacity(0.3), lineWidth: 1)
+            }
+            .padding(.horizontal, TranceSpacing.screen)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Opens recovery options")
+    }
+
+    private var accessibilityLabel: String {
+        let status = failure.presentation.statusMessage ?? failure.presentation.title
+        return "\(status) for \(failure.audioFile.displayName)"
+    }
+}

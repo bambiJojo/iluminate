@@ -164,7 +164,7 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $showingAnalysisQueue) {
                 NavigationStack {
-                    AnalyzerView()
+                    AnalyzerView(engine: engine)
                 }
             }
             .fullScreenCover(item: $playerFile) { file in

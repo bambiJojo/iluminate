@@ -66,6 +66,7 @@ class AnalysisStateManager {
         preferences: AnalysisPreferences? = nil,
         cacheURL: URL = AnalysisStateManager.cacheURL
     ) {
+        self.analysisCoordinator = AnalysisCoordinator()
         self.audioAnalyzer = AudioAnalyzer()
         self.aiAnalyzer = AIContentAnalyzer()
         self.progressStore = progressStore
@@ -85,10 +86,14 @@ class AnalysisStateManager {
         progressStore: AnalysisProgressStore = .shared,
         preferences: AnalysisPreferences? = nil,
         cacheURL: URL = AnalysisStateManager.cacheURL,
+        stageOverlapOverride: Bool? = nil,
         scheduleBackgroundAnalysis: @escaping @MainActor ([AudioFile]) -> Void = { audioFiles in
             BackgroundAnalysisScheduler.shared.schedule(for: audioFiles)
         }
     ) {
+        self.analysisCoordinator = AnalysisCoordinator(
+            stageOverlapOverride: stageOverlapOverride
+        )
         self.audioAnalyzer = transcriber
         self.aiAnalyzer = analyzer
         self.progressStore = progressStore
@@ -100,7 +105,7 @@ class AnalysisStateManager {
 
     // MARK: - Actor-Isolated State Management
 
-    private let analysisCoordinator = AnalysisCoordinator()
+    private let analysisCoordinator: AnalysisCoordinator
     private let audioAnalyzer: any AudioTranscribingService
     private let aiAnalyzer: any ContentAnalyzingService
     private let performanceOptimizer = PerformanceOptimizer.shared
@@ -195,6 +200,46 @@ class AnalysisStateManager {
         }
 
         await startAutomaticProcessing(priority: priority)
+    }
+
+    /// Restores analyses that exhausted their automatic retry so recovery is
+    /// still visible after a relaunch. These checkpoints are deliberately not
+    /// added to the automatic queue.
+    func restoreManualRecoveries() async {
+        for checkpoint in await progressStore.manualRecoveryCheckpoints() {
+            guard let recovery = checkpoint.manualRecovery else { continue }
+            recordFailure(
+                FailedAnalysis(
+                    audioFile: checkpoint.audioFile,
+                    technicalMessage: "Restored recoverable analysis failure",
+                    failedAt: recovery.failedAt,
+                    reason: recovery.reason,
+                    failedStage: recovery.failedStage,
+                    recoveryStage: checkpoint.recoveryStage,
+                    retryState: .manual
+                )
+            )
+        }
+    }
+
+    /// Explicit user recovery resets the bounded automatic-attempt counter but
+    /// leaves saved transcription/analysis data in place for the coordinator.
+    func retryFailedAnalysis(_ failure: FailedAnalysis) async {
+        guard failure.presentation.canRetry else { return }
+        UsageAnalytics.shared.audioAnalyzeRetryRequested(
+            reason: failure.reason,
+            recoveryStage: failure.recoveryStage
+        )
+        failedAnalyses.removeAll { $0.id == failure.id }
+        await queueForAnalysis(failure.audioFile, priority: .userInitiated)
+    }
+
+    func recordFailure(_ failure: FailedAnalysis) {
+        if let index = failedAnalyses.firstIndex(where: { $0.id == failure.id }) {
+            failedAnalyses[index] = failure
+        } else {
+            failedAnalyses.append(failure)
+        }
     }
 
     /// Start automatic background processing of the queue
@@ -491,6 +536,7 @@ class AnalysisStateManager {
         )
 
         completedAnalyses.append(completed)
+        failedAnalyses.removeAll { $0.audioFile.id == audioFile.id }
         onAnalysisComplete?(completedFile, completed)
 
         // Persist the complete result, keyed by the audio's full content fingerprint.
@@ -591,6 +637,11 @@ final class AnalysisCoordinator {
 
     private var activeTasks: [UUID: Task<Void, Never>] = [:]
     private var isProcessing = false
+    private let stageOverlapOverride: Bool?
+
+    init(stageOverlapOverride: Bool? = nil) {
+        self.stageOverlapOverride = stageOverlapOverride
+    }
 
     // MARK: - Task Management
 
@@ -828,7 +879,9 @@ final class AnalysisCoordinator {
 
     // MARK: - Automatic Queue Processing
 
-    /// Process files one at a time from the queue until empty
+    /// Processes the queue as a two-stage pipeline. Content analysis remains
+    /// single-file because `AIContentAnalyzer` owns one cancellable model
+    /// session, while the next file may use the independent transcription lane.
     func processQueueAutomatically(
         analysisManager: AnalysisStateManager,
         audioAnalyzer: any AudioTranscribingService,
@@ -846,10 +899,63 @@ final class AnalysisCoordinator {
         isProcessing = true
         defer { isProcessing = false }
 
-        Log.analysis.info("🚀 Starting automatic queue processing...")
+        Log.analysis.info("🚀 Starting staged automatic queue processing...")
+        let stageConcurrencyLimit = await performanceOptimizer.getOptimalConcurrentLimit()
 
-        // Process files one at a time until queue is empty
+        struct TranscriptionPrefetch {
+            let audioFileID: UUID
+            let task: Task<Void, Never>
+        }
+
+        var transcriptionPrefetch: TranscriptionPrefetch?
+
+        func awaitPrefetchedTranscriptionForNextFile() async {
+            guard let prefetch = transcriptionPrefetch else { return }
+
+            // Queue reordering remains authoritative. A speculative transcript
+            // for a file that is no longer next should not delay the new leader.
+            if analysisManager.analysisQueue.first?.id != prefetch.audioFileID {
+                prefetch.task.cancel()
+                await audioAnalyzer.cancelTranscription()
+            }
+
+            await prefetch.task.value
+            transcriptionPrefetch = nil
+        }
+
+        func startPrefetchingNextTranscription() {
+            let concurrencyAllowsPrefetch = stageOverlapOverride ?? (stageConcurrencyLimit > 1)
+            guard concurrencyAllowsPrefetch,
+                  transcriptionPrefetch == nil,
+                  let nextFile = analysisManager.analysisQueue.first else {
+                return
+            }
+
+            if stageOverlapOverride == nil {
+                guard case .normal = performanceOptimizer.memoryPressure else { return }
+            }
+
+            Log.analysis.info("⏩ Prefetching transcription: \(nextFile.filename)")
+            let task = Task(priority: priority) {
+                await self.prefetchTranscription(
+                    for: nextFile,
+                    analysisManager: analysisManager,
+                    audioAnalyzer: audioAnalyzer,
+                    progressStore: progressStore
+                )
+            }
+            transcriptionPrefetch = TranscriptionPrefetch(
+                audioFileID: nextFile.id,
+                task: task
+            )
+        }
+
         while true {
+            // Do not promote a file into content analysis until its speculative
+            // transcription has either completed or cleanly fallen back.
+            await awaitPrefetchedTranscriptionForNextFile()
+            if Task.isCancelled { break }
+
             // Get next file from queue on main actor
             let nextFile: AudioFile? = await MainActor.run {
                 guard !analysisManager.analysisQueue.isEmpty else { return nil }
@@ -883,6 +989,7 @@ final class AnalysisCoordinator {
                 aiAnalyzer: aiAnalyzer,
                 progressStore: progressStore,
                 performanceOptimizer: performanceOptimizer,
+                onTranscriptionReady: startPrefetchingNextTranscription,
                 onComplete: onComplete
             )
 
@@ -896,6 +1003,12 @@ final class AnalysisCoordinator {
             }
         }
 
+        if let transcriptionPrefetch {
+            transcriptionPrefetch.task.cancel()
+            await audioAnalyzer.cancelTranscription()
+            await transcriptionPrefetch.task.value
+        }
+
         await audioAnalyzer.releaseResources()
 
         // Clear current analysis when done
@@ -906,6 +1019,50 @@ final class AnalysisCoordinator {
         Log.analysis.info("🏁 Automatic queue processing finished")
     }
 
+    /// Speculatively completes only the transcription stage for the next file.
+    /// The normal checkpoint-aware pipeline still owns attempts, telemetry,
+    /// retries, AI analysis, and finalization when the file reaches the front.
+    private func prefetchTranscription(
+        for audioFile: AudioFile,
+        analysisManager: AnalysisStateManager,
+        audioAnalyzer: any AudioTranscribingService,
+        progressStore: AnalysisProgressStore
+    ) async {
+        do {
+            try Task.checkCancellation()
+
+            if let checkpoint = await progressStore.checkpoint(for: audioFile),
+               checkpoint.transcription != nil || checkpoint.analysis != nil {
+                Log.analysis.info("⏭️ Prefetch already checkpointed: \(audioFile.filename)")
+                return
+            }
+
+            guard analysisManager.cachedCompletion(for: audioFile) == nil else {
+                Log.analysis.info("⏭️ Prefetch skipped cached file: \(audioFile.filename)")
+                return
+            }
+
+            let transcription: AudioTranscriptionResult
+            if let reusable = AnalysisStateManager.reusableTranscriptionResult(for: audioFile) {
+                transcription = reusable
+            } else {
+                transcription = try await audioAnalyzer.transcribe(audioFile: audioFile)
+            }
+
+            try Task.checkCancellation()
+            await progressStore.saveTranscription(transcription, for: audioFile)
+            Log.analysis.info("✅ Prefetched transcription: \(audioFile.filename)")
+        } catch is CancellationError {
+            Log.analysis.info("🛑 Transcription prefetch cancelled: \(audioFile.filename)")
+        } catch {
+            // Prefetch is opportunistic. The regular pipeline gets the normal
+            // attempt and retry semantics when this file becomes current.
+            Log.analysis.info(
+                "⚠️ Transcription prefetch deferred for \(audioFile.filename): \(error.localizedDescription)"
+            )
+        }
+    }
+
     /// Perform single analysis with proper state updates, resuming from any saved checkpoint.
     private func performSingleAnalysisWithStateUpdates(
         audioFile: AudioFile,
@@ -914,6 +1071,7 @@ final class AnalysisCoordinator {
         aiAnalyzer: any ContentAnalyzingService,
         progressStore: AnalysisProgressStore,
         performanceOptimizer: PerformanceOptimizer,
+        onTranscriptionReady: @MainActor () -> Void,
         onComplete: @Sendable @escaping (AudioFile, CompletedAnalysis) async -> Void
     ) async {
         // Load any checkpoint saved from a previous run.
@@ -943,6 +1101,7 @@ final class AnalysisCoordinator {
             }) {
                 telemetryStage = .generation
                 Log.analysis.info("⚡ Restoring cached analysis: \(audioFile.filename)")
+                onTranscriptionReady()
                 await MainActor.run {
                     analysisManager.currentAnalysis?.stage = .generatingSession
                     analysisManager.currentAnalysis?.progress = 0.85
@@ -1016,6 +1175,10 @@ final class AnalysisCoordinator {
                     try Task.checkCancellation()
                     await progressStore.saveTranscription(transcriptionResult, for: audioFile)
                 }
+
+                // The shared transcriber is now idle. Let the next queued file
+                // occupy it while this file uses the AI/prosody lane.
+                onTranscriptionReady()
 
                 // Stage 2: AI Analysis (skip if checkpoint already has it)
                 telemetryStage = .contentAnalysis
@@ -1128,12 +1291,26 @@ final class AnalysisCoordinator {
             )
             let reason = AnalyticsAnalysisFailureReason(error: error, stage: finalStage)
             let shouldRetry = reason.supportsAutomaticRetry && attemptNumber < 2
+            let failedAt = Date()
+            let retryState: AnalysisRetryState
             if shouldRetry {
+                retryState = .automatic
                 Log.analysis.info("🔁 Preserving checkpoint for one retry: \(audioFile.filename)")
+            } else if reason.supportsAutomaticRetry {
+                retryState = .manual
+                await progressStore.markRequiresManualRetry(
+                    for: audioFile,
+                    reason: reason,
+                    failedStage: finalStage,
+                    failedAt: failedAt
+                )
+                Log.analysis.info("⏸️ Automatic retry stopped; manual retry available for \(audioFile.filename)")
             } else {
+                retryState = .unavailable
                 await progressStore.clear(for: audioFile)
                 Log.analysis.info("🛑 Automatic retry stopped for \(audioFile.filename)")
             }
+            let recoveryStage = await progressStore.checkpoint(for: audioFile)?.recoveryStage ?? .none
             await MainActor.run {
                 UsageAnalytics.shared.audioAnalysisFailed(
                     context: telemetryContext,
@@ -1144,8 +1321,16 @@ final class AnalysisCoordinator {
                 analysisManager.currentAnalysis?.stage = .failed
                 analysisManager.currentAnalysis?.errorMessage = msg
                 analysisManager.removeFromQueue(audioFile: audioFile)
-                analysisManager.failedAnalyses.append(
-                    FailedAnalysis(audioFile: audioFile, errorMessage: msg, failedAt: Date())
+                analysisManager.recordFailure(
+                    FailedAnalysis(
+                        audioFile: audioFile,
+                        technicalMessage: msg,
+                        failedAt: failedAt,
+                        reason: reason,
+                        failedStage: finalStage,
+                        recoveryStage: recoveryStage,
+                        retryState: retryState
+                    )
                 )
             }
         }

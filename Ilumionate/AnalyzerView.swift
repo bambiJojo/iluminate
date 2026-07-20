@@ -12,9 +12,13 @@ import SwiftUI
 
 struct AnalyzerView: View {
 
+    @Bindable var engine: LightEngine
+
     @State private var analysisManager = AnalysisStateManager.shared
     @State private var audioFiles: [AudioFile] = []
+    @State private var readySessions: [SyncPlayerItem] = []
     @State private var showingClearQueueConfirm = false
+    @State private var readyPlayerItem: SyncPlayerItem?
 
 
     var body: some View {
@@ -23,6 +27,12 @@ struct AnalyzerView: View {
             ScrollView {
                 VStack(spacing: TranceSpacing.content) {
                     AnalyzerLiveStatusSection(manager: analysisManager)
+                    if !readyFiles.isEmpty {
+                        AnalysisReadySessionsCard(
+                            files: readyFiles,
+                            onPlay: playReadySession
+                        )
+                    }
                     AnalyzerLibraryIntelligenceSection(
                         files: audioFiles,
                         onAnalyzeAll: { Task { await queueAllUnanalyzed() } }
@@ -52,23 +62,50 @@ struct AnalyzerView: View {
             Button("Cancel", role: .cancel) {}
         }
         .task {
+            await analysisManager.restoreManualRecoveries()
             await loadAudioFiles()
             UsageAnalytics.shared.screen(.analysisQueue)
         }
         .onChange(of: analysisManager.completedAnalyses.count) {
             Task { await loadAudioFiles() }
         }
+        .fullScreenCover(item: $readyPlayerItem) { item in
+            if let session = item.lightSession {
+                UnifiedPlayerView(
+                    mode: .session(session: session, audioFile: item.audioFile),
+                    engine: engine
+                )
+            }
+        }
     }
 
     // MARK: - Actions
 
     private func loadAudioFiles() async {
-        audioFiles = await AudioLibraryStore.loadRepairingStoredFiles()
+        let loadedFiles = await AudioLibraryStore.loadRepairingStoredFiles()
+        audioFiles = loadedFiles
+        readySessions = loadedFiles
+            .sorted { $0.createdDate > $1.createdDate }
+            .compactMap { file in
+                guard let session = GeneratedSessionStore.shared.load(for: file) else { return nil }
+                return SyncPlayerItem(audioFile: file, lightSession: session)
+            }
     }
 
     private func queueAllUnanalyzed() async {
         let unanalyzed = audioFiles.filter { !$0.isAnalyzed }
         await analysisManager.queueForAnalysis(unanalyzed)
+    }
+
+    private var readyFiles: [AudioFile] {
+        readySessions.map(\.audioFile)
+    }
+
+    private func playReadySession(_ file: AudioFile) {
+        guard let item = readySessions.first(where: { $0.audioFile.id == file.id }) else { return }
+        TranceHaptics.shared.medium()
+        UsageAnalytics.shared.analysisReadyAction(.play)
+        readyPlayerItem = item
     }
 }
 
@@ -123,8 +160,8 @@ private struct AnalyzerLiveStatusSection: View {
                         Text(stageName(active.stage))
                             .font(TranceTypography.caption)
                             .foregroundStyle(active.stage == .failed ? .red : Color.roseGold)
-                        if active.stage == .failed, let msg = active.errorMessage {
-                            Text(msg)
+                        if active.stage == .failed {
+                            Text("See the recovery options below.")
                                 .font(TranceTypography.caption)
                                 .foregroundStyle(.red.opacity(0.8))
                                 .lineLimit(2)
@@ -201,26 +238,12 @@ private struct AnalyzerLiveStatusSection: View {
                         .font(TranceTypography.sectionTitle)
                         .foregroundStyle(Color.textPrimary)
                     Spacer()
-                    Button {
-                        manager.failedAnalyses.removeAll()
-                    } label: {
-                        Image(systemName: "xmark.circle")
-                            .foregroundStyle(Color.textSecondary)
-                    }
                 }
                 Divider()
                 ForEach(manager.failedAnalyses.suffix(5)) { failure in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(failure.audioFile.displayName)
-                            .font(TranceTypography.body)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(1)
-                        Text(failure.errorMessage)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(.red.opacity(0.8))
-                            .lineLimit(2)
+                    AnalysisFailureRow(failure: failure) {
+                        Task { await manager.retryFailedAnalysis(failure) }
                     }
-                    .padding(.vertical, 2)
                 }
             }
         }
@@ -274,6 +297,58 @@ private struct AnalyzerLiveStatusSection: View {
         case .complete:           "Complete"
         case .failed:             "Failed"
         }
+    }
+}
+
+private struct AnalysisFailureRow: View {
+    let failure: FailedAnalysis
+    let onRetry: () -> Void
+
+    private var presentation: AnalysisFailurePresentation { failure.presentation }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(failure.audioFile.displayName)
+                        .font(TranceTypography.body)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                    Text(presentation.title)
+                        .font(TranceTypography.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.red.opacity(0.9))
+                }
+                Spacer()
+                if let status = presentation.statusMessage {
+                    Text(status)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.roseGold)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Color.roseGold.opacity(0.12), in: Capsule())
+                }
+            }
+
+            Text(presentation.message)
+                .font(TranceTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+            Text(presentation.recoveryMessage)
+                .font(TranceTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+
+            if presentation.canRetry {
+                Button(failure.retryState == .automatic ? "Retry Now" : "Retry") {
+                    TranceHaptics.shared.light()
+                    onRetry()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.roseGold)
+                .accessibilityHint("Continues from saved analysis progress when available")
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -463,6 +538,6 @@ private struct ProgressRing: View {
 
 #Preview {
     NavigationStack {
-        AnalyzerView()
+        AnalyzerView(engine: LightEngine())
     }
 }

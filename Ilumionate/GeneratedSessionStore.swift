@@ -11,9 +11,19 @@ final class GeneratedSessionStore {
     static let shared = GeneratedSessionStore()
 
     private let directoryURL: URL
+    private let onSessionSaved: () -> Void
 
-    init(directoryURL: URL = URL.documentsDirectory.appending(path: "GeneratedSessions", directoryHint: .isDirectory)) {
+    init(
+        directoryURL: URL = URL.documentsDirectory.appending(
+            path: "GeneratedSessions",
+            directoryHint: .isDirectory
+        ),
+        onSessionSaved: @escaping () -> Void = {
+            UsageAnalytics.shared.sessionGenerated()
+        }
+    ) {
         self.directoryURL = directoryURL
+        self.onSessionSaved = onSessionSaved
     }
 
     func sessionURL(forAudioFileID id: UUID) -> URL {
@@ -32,6 +42,7 @@ final class GeneratedSessionStore {
         let data = try encoder.encode(session)
         let url = sessionURL(forAudioFileID: audioFile.id)
         try data.write(to: url, options: .atomic)
+        onSessionSaved()
 
         Log.analysis.info("💾 Saved generated session: \(url.lastPathComponent)")
     }
