@@ -15,14 +15,12 @@ extension AudioLibraryView {
                 GlassCard(label: resultsHeaderText) {
                     LazyVStack(spacing: TranceSpacing.card) {
                         ForEach(filteredAudioFiles) { file in
-                            if file.isAnalyzed {
-                                NavigationLink(value: file) {
-                                    audioFileRow(for: file)
-                                }
-                                .buttonStyle(.plain)
-                            } else {
+                            // Every file gets a detail route — the detail screen
+                            // renders a "not analyzed yet" state for unanalyzed files.
+                            NavigationLink(value: file) {
                                 audioFileRow(for: file)
                             }
+                            .buttonStyle(.plain)
 
                             if file.id != filteredAudioFiles.last?.id {
                                 Rectangle()

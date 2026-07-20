@@ -109,21 +109,42 @@ struct AnalysisQueueStatusCard: View {
 
 // MARK: - Audio Shelf (Recently Played / Favorites)
 
-/// Horizontal shelf of audio-file cards; tapping a card plays it with lights.
+/// Horizontal shelf of audio-file cards; tapping a card plays it with lights,
+/// while the info control opens the file's detail screen.
 struct LibraryAudioShelf: View {
     let files: [AudioFile]
     var showsHeart = false
     var showsAnalyzedSeal = false
     let onPlay: (AudioFile) -> Void
+    var onOpenInfo: ((AudioFile) -> Void)? = nil
 
     var body: some View {
         CarouselRow(items: files) { file in
-            Button {
-                onPlay(file)
-            } label: {
-                AudioShelfCard(file: file, showsHeart: showsHeart, showsAnalyzedSeal: showsAnalyzedSeal)
+            // The info control is a sibling of the play button, not nested in
+            // its label — a button inside another button's label won't receive taps.
+            ZStack(alignment: .bottomTrailing) {
+                Button {
+                    onPlay(file)
+                } label: {
+                    AudioShelfCard(file: file, showsHeart: showsHeart, showsAnalyzedSeal: showsAnalyzedSeal)
+                }
+                .buttonStyle(.plain)
+
+                if let onOpenInfo {
+                    Button {
+                        TranceHaptics.shared.light()
+                        onOpenInfo(file)
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color.textSecondary)
+                            .padding(TranceSpacing.list)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("About \(file.displayName)")
+                }
             }
-            .buttonStyle(.plain)
         }
     }
 }

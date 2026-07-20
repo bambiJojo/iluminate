@@ -150,8 +150,8 @@ struct AudioFileRow: View {
                 }
             }
 
-            // Affordance: analyzed files open a detail screen.
-            if !isSelectionMode && file.isAnalyzed {
+            // Affordance: the row opens the file's detail screen.
+            if !isSelectionMode {
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(.textLight)

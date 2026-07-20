@@ -87,13 +87,13 @@ struct LibraryView: View {
                         if !recentFiles.isEmpty {
                             LibraryShelfSectionHeader(title: "Recently Played")
                                 .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: recentFiles, onPlay: playWithLights)
+                            LibraryAudioShelf(files: recentFiles, onPlay: playWithLights, onOpenInfo: openFileInfo)
                         }
 
                         if !recommendedFiles.isEmpty {
                             LibraryShelfSectionHeader(title: "Recommended Next")
                                 .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: recommendedFiles, onPlay: playWithLights)
+                            LibraryAudioShelf(files: recommendedFiles, onPlay: playWithLights, onOpenInfo: openFileInfo)
                         }
 
                         if !favoriteFiles.isEmpty {
@@ -101,7 +101,7 @@ struct LibraryView: View {
                                 navPath.append(LibraryDestination.favorites)
                             }
                             .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: favoriteFiles, showsHeart: true, onPlay: playWithLights)
+                            LibraryAudioShelf(files: favoriteFiles, showsHeart: true, onPlay: playWithLights, onOpenInfo: openFileInfo)
                         }
 
                         LibraryShelfSectionHeader(title: "Playlists") {
@@ -129,7 +129,7 @@ struct LibraryView: View {
                         if !analyzedFiles.isEmpty {
                             LibraryShelfSectionHeader(title: "Analyzed")
                                 .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: analyzedFiles, showsAnalyzedSeal: true, onPlay: playWithLights)
+                            LibraryAudioShelf(files: analyzedFiles, showsAnalyzedSeal: true, onPlay: playWithLights, onOpenInfo: openFileInfo)
                         }
 
                         if !allFilesShelf.isEmpty {
@@ -137,7 +137,7 @@ struct LibraryView: View {
                                 navPath.append(LibraryDestination.allFiles)
                             }
                             .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: allFilesShelf, onPlay: playWithLights)
+                            LibraryAudioShelf(files: allFilesShelf, onPlay: playWithLights, onOpenInfo: openFileInfo)
                         }
 
                         if !shelfSessions.isEmpty {
@@ -181,6 +181,9 @@ struct LibraryView: View {
                 case .allFiles:
                     LibraryAllFilesView(audioFiles: audioFiles, engine: engine)
                 }
+            }
+            .navigationDestination(for: AudioFile.self) { file in
+                SessionDetailView(audioFile: file, engine: engine)
             }
             .sheet(isPresented: $showingPlaylists) {
                 PlaylistLibraryView(engine: engine)
@@ -308,6 +311,11 @@ struct LibraryView: View {
     private func playWithLights(_ file: AudioFile) {
         TranceHaptics.shared.medium()
         playerFile = file
+    }
+
+    /// Pushes the file's detail screen (metadata, phases, transcript).
+    private func openFileInfo(_ file: AudioFile) {
+        navPath.append(file)
     }
 
     private func continueListening(_ snapshot: PlaybackProgressSnapshot) {
