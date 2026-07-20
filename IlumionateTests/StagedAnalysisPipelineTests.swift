@@ -55,6 +55,41 @@ struct StagedAnalysisPipelineTests {
         #expect(manager.completedAnalyses.count == 2)
     }
 
+    @Test("A transient failure is immediately retried from its checkpoint", .timeLimit(.minutes(1)))
+    func automaticallyRetriesOnceWithoutRepeatingTranscription() async {
+        let progressURL = URL.temporaryDirectory
+            .appending(path: "AnalysisProgress-\(UUID().uuidString).json")
+        let cacheURL = URL.temporaryDirectory
+            .appending(path: "AnalysisCache-\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: progressURL)
+            try? FileManager.default.removeItem(at: cacheURL)
+        }
+
+        let file = AnalysisFixtures.audioFile(filename: "retry-once.m4a")
+        defer { GeneratedSessionStore.shared.delete(for: file) }
+        let transcriber = CountingAudioTranscriber()
+        let analyzer = RetryOnceContentAnalyzer()
+        let progressStore = AnalysisProgressStore(storeURL: progressURL)
+        let manager = AnalysisStateManager(
+            transcriber: transcriber,
+            analyzer: analyzer,
+            progressStore: progressStore,
+            cacheURL: cacheURL,
+            stageOverlapOverride: false,
+            scheduleBackgroundAnalysis: { _ in }
+        )
+
+        await manager.queueForAnalysis(file)
+
+        #expect(transcriber.callCount == 1, "The saved transcript should be reused for retry.")
+        #expect(analyzer.callCount == 2)
+        #expect(manager.completedAnalyses.count == 1)
+        #expect(manager.failedAnalyses.isEmpty)
+        let checkpoint = await progressStore.checkpoint(for: file)
+        #expect(checkpoint == nil)
+    }
+
     // Generous deadline: a cold first run needs several seconds to reach the
     // overlap, while a warm run gets there in ~0.1s. Polling returns as soon
     // as the condition holds, so the extra headroom costs nothing when fast.
@@ -71,6 +106,54 @@ struct StagedAnalysisPipelineTests {
         }
         return await condition()
     }
+}
+
+@MainActor
+private final class CountingAudioTranscriber: AudioTranscribingService {
+    var progress = 0.0
+    var statusMessage = ""
+    private(set) var callCount = 0
+
+    func transcribe(audioFile: AudioFile) async throws -> AudioTranscriptionResult {
+        callCount += 1
+        progress = 1
+        return AnalysisFixtures.basicTranscription
+    }
+
+    func cancelTranscription() async {}
+    func releaseResources() async {}
+}
+
+@MainActor
+private final class RetryOnceContentAnalyzer: ContentAnalyzingService {
+    enum Failure: Error { case transient }
+
+    var progress = 0.0
+    var statusMessage = ""
+    var isModelAvailable = true
+    private(set) var callCount = 0
+
+    func analyzeContent(
+        transcription: AudioTranscriptionResult,
+        audioFile: AudioFile
+    ) async throws -> AnalysisResult {
+        callCount += 1
+        if callCount == 1 { throw Failure.transient }
+        progress = 1
+        return AnalysisFixtures.hypnosisAnalysis
+    }
+
+    func analyzeWithoutTranscription(
+        audioFile: AudioFile,
+        audioFeatures: AudioFeatures
+    ) async throws -> AnalysisResult {
+        try await analyzeContent(
+            transcription: AnalysisFixtures.basicTranscription,
+            audioFile: audioFile
+        )
+    }
+
+    func cancelAnalysis() async {}
 }
 
 private actor StagedAnalysisProbe {

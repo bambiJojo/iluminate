@@ -10,6 +10,7 @@ import os
 
 struct TextTranceRootView: View {
     var sharedImportTrigger = 0
+    var quickStartTrigger = 0
 
     @State private var importedStore = ImportedTranceScriptStore.shared
     @State private var documentStore = ReadingDocumentStore.shared
@@ -26,6 +27,7 @@ struct TextTranceRootView: View {
     @State private var browsingSource: BrowsingSource?
     @State private var activeQuickStartSession: TextTranceSession?
     @State private var quickStartIndex = 0
+    @State private var handledQuickStartTrigger = 0
 
     private let presetStore = ReaderPresetStore.shared
 
@@ -120,9 +122,13 @@ struct TextTranceRootView: View {
         .task {
             if scripts.isEmpty { reloadScripts() }
             await drainSharedImports()
+            handleQuickStartTriggerIfNeeded()
         }
         .onChange(of: sharedImportTrigger) { _, _ in
             Task { await drainSharedImports() }
+        }
+        .onChange(of: quickStartTrigger) { _, _ in
+            handleQuickStartTriggerIfNeeded()
         }
     }
 
@@ -179,6 +185,13 @@ struct TextTranceRootView: View {
         UsageAnalytics.shared.readerQuickStartSelected(plan.startType)
         quickStartIndex = plan.startIndex
         activeQuickStartSession = plan.makeSession(progressStore: progressStore)
+    }
+
+    private func handleQuickStartTriggerIfNeeded() {
+        guard quickStartTrigger > handledQuickStartTrigger,
+              let quickStartPlan else { return }
+        handledQuickStartTrigger = quickStartTrigger
+        launchQuickStart(quickStartPlan)
     }
 
     private func handleQuickStartDismiss() {

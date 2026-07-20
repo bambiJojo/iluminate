@@ -8,7 +8,12 @@ import SwiftUI
 struct PlayerCompletionOverlay: View {
     let title: String
     let duration: TimeInterval
+    let isSaved: Bool
+    let canSave: Bool
+    let nextTitle: String?
     let onReplay: () -> Void
+    let onSave: () -> Void
+    let onNext: () -> Void
     let onDone: () -> Void
 
     var body: some View {
@@ -42,6 +47,24 @@ struct PlayerCompletionOverlay: View {
                     Button("Repeat session", systemImage: "arrow.counterclockwise", action: onReplay)
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
+
+                    if canSave {
+                        Button(
+                            isSaved ? "Saved" : "Save session",
+                            systemImage: isSaved ? "checkmark.circle.fill" : "bookmark",
+                            action: onSave
+                        )
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .disabled(isSaved)
+                    }
+
+                    if let nextTitle {
+                        Button("Next: \(nextTitle)", systemImage: "forward.end", action: onNext)
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                            .lineLimit(1)
+                    }
 
                     Button("Done", systemImage: "checkmark", action: onDone)
                         .buttonStyle(.bordered)

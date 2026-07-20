@@ -80,7 +80,11 @@ nonisolated enum PlaybackEndReason: String, Sendable {
 }
 
 nonisolated enum SessionCompletionAction: String, Sendable {
-    case done, replay
+    case done, replay, save, next
+}
+
+nonisolated enum PlaybackLifecycleTransition: String, Sendable {
+    case backgrounded, foregrounded, interrupted, dismissed
 }
 
 nonisolated enum OnboardingCompletionAction: String, Sendable {
@@ -230,6 +234,31 @@ enum MindMachineMode: String, Sendable {
 
 enum MindMachineEntryPoint: String, Sendable {
     case create, homePreset
+}
+
+nonisolated enum CreateMode: String, Sendable {
+    case flash, colorPulse, bilateral, audioSession
+}
+
+nonisolated enum CreateFailureBucket: String, Sendable {
+    case generation, persistence, cancelled, unknown
+}
+
+nonisolated enum ReturnWindow: String, Equatable, Sendable {
+    case firstSeen, sameDay, oneToSevenDays, eightToThirtyDays, overThirtyDays
+
+    init(days: Int?) {
+        guard let days else {
+            self = .firstSeen
+            return
+        }
+        switch days {
+        case ...0: self = .sameDay
+        case 1...7: self = .oneToSevenDays
+        case 8...30: self = .eightToThirtyDays
+        default: self = .overThirtyDays
+        }
+    }
 }
 
 /// Bucketed completion fraction — exact playback time never leaves the device.

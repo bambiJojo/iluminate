@@ -80,6 +80,41 @@ struct AudioLibraryStoreTests {
         #expect(files.first?.id == existing.id)
     }
 
+    @Test func playbackUpdatesRecencyAndPlayCount() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let file = AudioFile(filename: "Played.mp3", duration: 120, fileSize: 10)
+        let playedAt = Date(timeIntervalSince1970: 5_000)
+        await AudioLibraryStore.save([file], defaults: fixture.defaults)
+
+        await AudioLibraryStore.recordPlayback(
+            audioFileID: file.id,
+            at: playedAt,
+            defaults: fixture.defaults
+        )
+
+        let updated = try #require(AudioLibraryStore.load(defaults: fixture.defaults).first)
+        #expect(updated.lastPlayedDate == playedAt)
+        #expect(updated.playCount == 1)
+    }
+
+    @Test func partialTranscriptionIsVisibleBeforeAnalysisCompletes() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let file = AudioFile(filename: "Partial.mp3", duration: 120, fileSize: 10)
+        await AudioLibraryStore.save([file], defaults: fixture.defaults)
+
+        await AudioLibraryStore.savePartialTranscription(
+            "A saved partial transcript",
+            audioFileID: file.id,
+            defaults: fixture.defaults
+        )
+
+        let updated = try #require(AudioLibraryStore.load(defaults: fixture.defaults).first)
+        #expect(updated.transcription == "A saved partial transcript")
+        #expect(updated.isAnalyzed == false)
+    }
+
     private func makeFixture() throws -> Fixture {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "AudioLibraryStoreTests-\(UUID().uuidString)", directoryHint: .isDirectory)

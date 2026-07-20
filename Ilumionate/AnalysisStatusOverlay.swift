@@ -32,20 +32,28 @@ struct AnalysisStatusOverlay: View {
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(1)
 
-                    Text(stageLabel)
+                    Text(AnalysisStageFeedback.stageSummary(analysis.stage))
                         .font(.system(size: 10, weight: .regular))
                         .foregroundStyle(Color.textSecondary)
 
                     if isInFlight {
                         TimelineView(.periodic(from: .now, by: 5)) { context in
                             let elapsed = context.date.timeIntervalSince(analysis.startedAt)
-                            if let reassurance = AnalysisReassurance.message(elapsed: elapsed) {
-                                Text(reassurance)
+                            if let estimate = AnalysisStageFeedback.estimatedRemainingText(
+                                progress: analysis.progress,
+                                elapsed: elapsed
+                            ) {
+                                Text("\(estimate) · continues in background")
+                                    .font(.system(size: 10, weight: .regular))
+                                    .foregroundStyle(Color.roseGold)
+                                    .lineLimit(2)
+                                    .transition(.opacity)
+                            } else if let reassurance = AnalysisReassurance.message(elapsed: elapsed) {
+                                Text("\(reassurance) Continues in background.")
                                     .font(.system(size: 10, weight: .regular))
                                     .italic()
                                     .foregroundStyle(Color.roseGold)
                                     .lineLimit(2)
-                                    .transition(.opacity)
                             }
                         }
                     }
@@ -93,16 +101,6 @@ struct AnalysisStatusOverlay: View {
         }
     }
 
-    private var stageLabel: String {
-        switch analysis.stage {
-        case .starting:           "Starting..."
-        case .transcribing:       "Transcribing audio..."
-        case .analyzing:          "AI analyzing content..."
-        case .generatingSession:  "Generating light session..."
-        case .complete:           "Complete"
-        case .failed:             "Failed"
-        }
-    }
 }
 
 /// Persistent compact status for work that needs an explicit retry. Unlike the

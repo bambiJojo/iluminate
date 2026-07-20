@@ -9,6 +9,8 @@ import SwiftUI
 import os
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
+
     // MARK: - State Management (Trance navigation system)
     @State private var selectedTab: TranceTab = .home
     @State private var engine = LightEngine()
@@ -23,6 +25,7 @@ struct ContentView: View {
     @State private var isLoading = true
     @State private var showingAnalysisQueue = false
     @State private var readerSharedImportTrigger = 0
+    @State private var readerQuickStartTrigger = 0
     @State private var nowPlaying = NowPlayingState.shared
     @State private var analysisManager = AnalysisStateManager.shared
 
@@ -55,10 +58,19 @@ struct ContentView: View {
                     .transition(.opacity)
                 } else if selectedTab == .library {
                     // LibraryView owns its own NavigationStack
-                    LibraryView(engine: engine)
+                    LibraryView(
+                        engine: engine,
+                        onContinueReading: {
+                            selectedTab = .read
+                            readerQuickStartTrigger += 1
+                        }
+                    )
                         .transition(.opacity)
                 } else if selectedTab == .read {
-                    TextTranceRootView(sharedImportTrigger: readerSharedImportTrigger)
+                    TextTranceRootView(
+                        sharedImportTrigger: readerSharedImportTrigger,
+                        quickStartTrigger: readerQuickStartTrigger
+                    )
                         .transition(.opacity)
                 } else if selectedTab == .create {
                     NavigationStack {
@@ -106,6 +118,7 @@ struct ContentView: View {
             checkForFirstLaunch()
             checkForAnalyticsConsentPrompt()
             engine.userFrequencyMultiplier = userFrequencyMultiplierPref
+            UsageAnalytics.shared.appBecameActive()
             UsageAnalytics.shared.screen(screen(for: selectedTab))
         }
         .onChange(of: userFrequencyMultiplierPref) { _, newValue in
@@ -113,6 +126,11 @@ struct ContentView: View {
         }
         .onChange(of: selectedTab) { _, newTab in
             UsageAnalytics.shared.screen(screen(for: newTab))
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                UsageAnalytics.shared.appBecameActive()
+            }
         }
         .onOpenURL { url in
             handleDeepLink(url)

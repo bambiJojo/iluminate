@@ -25,6 +25,7 @@ enum LibraryDestination: Hashable {
 struct LibraryView: View {
 
     @Bindable var engine: LightEngine
+    let onContinueReading: () -> Void
 
     @State private var audioFiles: [AudioFile] = []
     @State private var playlists: [Playlist] = []
@@ -35,6 +36,11 @@ struct LibraryView: View {
     @State private var cachedArtists: [LibraryArtist] = []
     @State private var cachedAnalyzedFiles: [AudioFile] = []
     @State private var cachedAllFiles: [AudioFile] = []
+    @State private var cachedRecommendedFiles: [AudioFile] = []
+    @State private var readingContinuation: LibraryReadingContinuation?
+    @State private var playbackProgressStore = PlaybackProgressStore.shared
+    @State private var savedSessionStore = SavedSessionStore.shared
+    @State private var analysisManager = AnalysisStateManager.shared
     @State private var navPath = NavigationPath()
     @State private var showingPlaylists = false
     @State private var showingSessionsManager = false
@@ -58,13 +64,20 @@ struct LibraryView: View {
                         }
                         .padding(.horizontal, TranceSpacing.screen)
 
-                        if analysisQueueCount > 0 {
-                            AnalysisQueueStatusCard(count: analysisQueueCount) {
-                                TranceHaptics.shared.light()
-                                showingAnalysisQueue = true
-                            }
-                            .padding(.horizontal, TranceSpacing.screen)
-                        }
+                        LibraryContinuationSection(
+                            listening: listeningContinuations,
+                            reading: readingContinuation,
+                            onContinueListening: continueListening,
+                            onContinueReading: onContinueReading
+                        )
+                        .padding(.horizontal, TranceSpacing.screen)
+
+                        LibraryAnalysisStatusSection(
+                            manager: analysisManager,
+                            partialFiles: partialAnalysisFiles,
+                            onOpen: openAnalysisQueue
+                        )
+                        .padding(.horizontal, TranceSpacing.screen)
 
                         if audioFiles.isEmpty {
                             LibraryEmptyCard()
@@ -75,6 +88,12 @@ struct LibraryView: View {
                             LibraryShelfSectionHeader(title: "Recently Played")
                                 .padding(.horizontal, TranceSpacing.screen)
                             LibraryAudioShelf(files: recentFiles, onPlay: playWithLights)
+                        }
+
+                        if !recommendedFiles.isEmpty {
+                            LibraryShelfSectionHeader(title: "Recommended Next")
+                                .padding(.horizontal, TranceSpacing.screen)
+                            LibraryAudioShelf(files: recommendedFiles, onPlay: playWithLights)
                         }
 
                         if !favoriteFiles.isEmpty {
@@ -131,6 +150,13 @@ struct LibraryView: View {
                             }
                         }
 
+
+                        if !savedSessions.isEmpty {
+                            LibraryShelfSectionHeader(title: "Saved Sessions")
+                                .padding(.horizontal, TranceSpacing.screen)
+                            LibraryBuiltInSessionShelf(sessions: savedSessions, onPlay: playSession)
+                        }
+
                         bottomSpacer
                     }
                     .padding(.top, TranceSpacing.screen)
@@ -167,7 +193,9 @@ struct LibraryView: View {
                     AnalyzerView(engine: engine)
                 }
             }
-            .fullScreenCover(item: $playerFile) { file in
+            .fullScreenCover(item: $playerFile, onDismiss: {
+                Task { await loadAudioFiles() }
+            }) { file in
                 UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
             }
             .fullScreenCover(item: $playingPlaylist) { playlist in
@@ -193,26 +221,40 @@ struct LibraryView: View {
                 loadPlaylists()
                 loadBuiltInSessions()
                 recomputeDerivedCollections()
+                loadReadingContinuation()
             }
             .onChange(of: audioFiles) { _, _ in recomputeDerivedCollections() }
+            .onChange(of: analysisManager.partialResultsRevision) {
+                Task { await loadAudioFiles() }
+            }
         }
     }
 
     // MARK: - Helpers
 
-    private var analysisQueueCount: Int {
-        let manager = AnalysisStateManager.shared
-        let active = manager.currentAnalysis != nil ? 1 : 0
-        return active + manager.analysisQueue.count
-    }
     private var recentFiles: [AudioFile] { cachedRecentFiles }
     private var favoriteFiles: [AudioFile] { cachedFavoriteFiles }
     private var artists: [LibraryArtist] { cachedArtists }
     private var analyzedFiles: [AudioFile] { cachedAnalyzedFiles }
     private var allFilesShelf: [AudioFile] { cachedAllFiles }
+    private var recommendedFiles: [AudioFile] { cachedRecommendedFiles }
     private var shelfPlaylists: [Playlist] { LibraryShelfContent.shelfPlaylists(from: playlists) }
     private var shelfSessions: [LightSession] {
         Array(builtInSessions.prefix(LibraryShelfContent.shelfCap))
+    }
+    private var savedSessions: [LightSession] {
+        builtInSessions.filter { savedSessionStore.contains($0.id.uuidString) }
+    }
+    private var listeningContinuations: [PlaybackProgressSnapshot] {
+        playbackProgressStore.snapshots.filter { snapshot in
+            switch snapshot.kind {
+            case .audio: audioFiles.contains { $0.id.uuidString == snapshot.contentID }
+            case .session: builtInSessions.contains { $0.id.uuidString == snapshot.contentID }
+            }
+        }
+    }
+    private var partialAnalysisFiles: [AudioFile] {
+        audioFiles.filter { $0.hasTranscription && $0.isAnalyzed == false }
     }
 
     private func recomputeDerivedCollections() {
@@ -221,6 +263,7 @@ struct LibraryView: View {
         cachedArtists = LibraryShelfContent.artists(from: audioFiles)
         cachedAnalyzedFiles = LibraryShelfContent.analyzed(from: audioFiles)
         cachedAllFiles = LibraryShelfContent.allFiles(from: audioFiles)
+        cachedRecommendedFiles = LibraryShelfContent.recommendedNext(from: audioFiles)
     }
 
     private func upsertPlaylist(_ playlist: Playlist) {
@@ -265,6 +308,46 @@ struct LibraryView: View {
     private func playWithLights(_ file: AudioFile) {
         TranceHaptics.shared.medium()
         playerFile = file
+    }
+
+    private func continueListening(_ snapshot: PlaybackProgressSnapshot) {
+        switch snapshot.kind {
+        case .audio:
+            guard let file = audioFiles.first(where: { $0.id.uuidString == snapshot.contentID }) else { return }
+            playWithLights(file)
+        case .session:
+            guard let session = builtInSessions.first(where: { $0.id.uuidString == snapshot.contentID }) else { return }
+            playSession(session)
+        }
+    }
+
+    private func openAnalysisQueue() {
+        TranceHaptics.shared.light()
+        showingAnalysisQueue = true
+    }
+
+    private func loadReadingContinuation() {
+        guard let state = ReaderProgressStore.shared.recentStates.first else {
+            readingContinuation = nil
+            return
+        }
+        let imported = ImportedTranceScriptStore.shared.importedScripts
+        let scripts = imported + TranceScriptLibrary.bundled().filter { candidate in
+            imported.contains { $0.id == candidate.id } == false
+        }
+        if let script = scripts.first(where: { $0.id == state.scriptId }) {
+            readingContinuation = LibraryReadingContinuation(
+                title: script.title,
+                wordIndex: state.wordIndex
+            )
+            return
+        }
+        if let document = ReadingDocumentStore.shared.documents.first(where: { $0.scriptID == state.scriptId }) {
+            readingContinuation = LibraryReadingContinuation(
+                title: document.title,
+                wordIndex: state.wordIndex
+            )
+        }
     }
 
     private func addFile(_ file: AudioFile, to playlist: Playlist) {

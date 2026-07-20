@@ -169,6 +169,21 @@ struct LibraryShelfContentTests {
         #expect(shelf.last?.filename == "f9.m4a")
     }
 
+    @Test
+    func recommendationsPreferUnplayedMatchingCreator() {
+        let now = Date()
+        let recent = makeFile(filename: "recent.m4a", lastPlayed: now, creator: "Guide")
+        let matching = makeFile(filename: "matching.m4a", creator: "Guide")
+        let unrelated = makeFile(filename: "unrelated.m4a", favorite: true, creator: "Other")
+
+        let recommendations = LibraryShelfContent.recommendedNext(
+            from: [recent, unrelated, matching]
+        )
+
+        #expect(recommendations.first?.id == matching.id)
+        #expect(recommendations.contains(where: { $0.id == recent.id }) == false)
+    }
+
     // MARK: - Sorted Files
 
     @Test

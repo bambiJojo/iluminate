@@ -56,6 +56,7 @@ class AnalysisStateManager {
     var analysisQueue: [AudioFile] = []
     var completedAnalyses: [CompletedAnalysis] = []
     var failedAnalyses: [FailedAnalysis] = []
+    private(set) var partialResultsRevision = 0
     var onAnalysisComplete: (@Sendable (AudioFile, CompletedAnalysis) -> Void)?
 
     // MARK: - Initialization
@@ -240,6 +241,17 @@ class AnalysisStateManager {
         } else {
             failedAnalyses.append(failure)
         }
+    }
+
+    func persistPartialTranscription(
+        _ transcription: AudioTranscriptionResult,
+        for audioFile: AudioFile
+    ) async {
+        await AudioLibraryStore.savePartialTranscription(
+            transcription.fullText,
+            audioFileID: audioFile.id
+        )
+        partialResultsRevision += 1
     }
 
     /// Start automatic background processing of the queue
@@ -1084,6 +1096,7 @@ final class AnalysisCoordinator {
         )
         let telemetryStartedAt = Date()
         var telemetryStage = AnalyticsAnalysisStage.preparation
+        var createGenerationStartedAt: Date?
 
         await MainActor.run {
             UsageAnalytics.shared.audioAnalyzeStarted(context: telemetryContext)
@@ -1100,9 +1113,11 @@ final class AnalysisCoordinator {
                 analysisManager.cachedCompletion(for: audioFile)
             }) {
                 telemetryStage = .generation
+                createGenerationStartedAt = Date()
                 Log.analysis.info("⚡ Restoring cached analysis: \(audioFile.filename)")
                 onTranscriptionReady()
                 await MainActor.run {
+                    UsageAnalytics.shared.createStarted(.audioSession)
                     analysisManager.currentAnalysis?.stage = .generatingSession
                     analysisManager.currentAnalysis?.progress = 0.85
                 }
@@ -1112,6 +1127,16 @@ final class AnalysisCoordinator {
                     analysis: cached.analysis
                 )
                 try await self.saveLightSession(lightSession, for: cached.audioFile)
+                if let createGenerationStartedAt {
+                    await MainActor.run {
+                        UsageAnalytics.shared.createCompleted(
+                            .audioSession,
+                            duration: ProcessingTimeBucket(
+                                seconds: Date().timeIntervalSince(createGenerationStartedAt)
+                            )
+                        )
+                    }
+                }
                 await progressStore.clear(for: audioFile)
 
                 await MainActor.run {
@@ -1176,6 +1201,11 @@ final class AnalysisCoordinator {
                     await progressStore.saveTranscription(transcriptionResult, for: audioFile)
                 }
 
+                await analysisManager.persistPartialTranscription(
+                    transcriptionResult,
+                    for: audioFile
+                )
+
                 // The shared transcriber is now idle. Let the next queued file
                 // occupy it while this file uses the AI/prosody lane.
                 onTranscriptionReady()
@@ -1223,7 +1253,9 @@ final class AnalysisCoordinator {
 
                 // Stage 3: Generate Light Session (always run — it's fast)
                 telemetryStage = .generation
+                createGenerationStartedAt = Date()
                 await MainActor.run {
+                    UsageAnalytics.shared.createStarted(.audioSession)
                     analysisManager.currentAnalysis?.stage = .generatingSession
                     analysisManager.currentAnalysis?.progress = 0.8
                 }
@@ -1237,6 +1269,16 @@ final class AnalysisCoordinator {
                 // Stage 4: Save Session
                 telemetryStage = .persistence
                 try await self.saveLightSession(lightSession, for: audioFile)
+                if let createGenerationStartedAt {
+                    await MainActor.run {
+                        UsageAnalytics.shared.createCompleted(
+                            .audioSession,
+                            duration: ProcessingTimeBucket(
+                                seconds: Date().timeIntervalSince(createGenerationStartedAt)
+                            )
+                        )
+                    }
+                }
 
                 // Stage 5: Mark complete and clear checkpoint
                 await progressStore.clear(for: audioFile)
@@ -1273,6 +1315,14 @@ final class AnalysisCoordinator {
                 seconds: Date().timeIntervalSince(telemetryStartedAt)
             )
             await MainActor.run {
+                if let createGenerationStartedAt {
+                    UsageAnalytics.shared.createCancelled(
+                        .audioSession,
+                        duration: ProcessingTimeBucket(
+                            seconds: Date().timeIntervalSince(createGenerationStartedAt)
+                        )
+                    )
+                }
                 UsageAnalytics.shared.audioAnalyzeCancelled(
                     context: telemetryContext,
                     stage: finalStage,
@@ -1312,6 +1362,15 @@ final class AnalysisCoordinator {
             }
             let recoveryStage = await progressStore.checkpoint(for: audioFile)?.recoveryStage ?? .none
             await MainActor.run {
+                if let createGenerationStartedAt {
+                    UsageAnalytics.shared.createGenerationFailed(
+                        .audioSession,
+                        duration: ProcessingTimeBucket(
+                            seconds: Date().timeIntervalSince(createGenerationStartedAt)
+                        ),
+                        failure: finalStage == .persistence ? .persistence : .generation
+                    )
+                }
                 UsageAnalytics.shared.audioAnalysisFailed(
                     context: telemetryContext,
                     stage: finalStage,
@@ -1321,6 +1380,10 @@ final class AnalysisCoordinator {
                 analysisManager.currentAnalysis?.stage = .failed
                 analysisManager.currentAnalysis?.errorMessage = msg
                 analysisManager.removeFromQueue(audioFile: audioFile)
+                if shouldRetry,
+                   analysisManager.analysisQueue.contains(where: { $0.id == audioFile.id }) == false {
+                    analysisManager.analysisQueue.append(audioFile)
+                }
                 analysisManager.recordFailure(
                     FailedAnalysis(
                         audioFile: audioFile,

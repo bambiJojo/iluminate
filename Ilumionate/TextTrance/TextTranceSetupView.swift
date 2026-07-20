@@ -12,6 +12,7 @@ struct TextTranceSetupView: View {
     @State private var arc: ScriptArc
     @State private var speedMultiplier: Double = 1.0
     @State private var speedTraining: ReaderSpeedTrainingSettings = .standard
+    @State private var pacingPreset: ReaderPacingPreset = .balanced
     @State private var displayPreferences: ReaderDisplayPreferences = .standard
     @State private var lightEnabled = true
     @State private var binauralEnabled = false
@@ -21,6 +22,7 @@ struct TextTranceSetupView: View {
     @State private var resumeIndex = 0
     @State private var activePlayerSession: TextTranceSession?
     @State private var loadedPreset = false
+    @State private var showingAdvancedOptions = false
 
     private let progressStore = ReaderProgressStore.shared
     private let presetStore = ReaderPresetStore.shared
@@ -51,15 +53,31 @@ struct TextTranceSetupView: View {
                 VStack(spacing: TranceSpacing.cardMargin) {
                     ScriptOverviewCard(script: script)
                     ArcCard(script: script, arc: $arc)
-                    LayersCard(
-                        arc: arc,
-                        lightEnabled: $lightEnabled,
-                        binauralEnabled: $binauralEnabled
-                    )
-                    AttentionGateCard(enabled: $attentionGateEnabled)
-                    SpeedTrainingCard(settings: $speedTraining)
-                    ReaderDisplayCard(preferences: $displayPreferences)
-                    SubliminalCard(enabled: $subliminalEnabled, speed: $subliminalSpeed)
+                    ReaderPacingPresetCard(selection: pacingPreset) { preset in
+                        pacingPreset = preset
+                        speedTraining = preset.settings
+                        speedMultiplier = preset.settings.targetSpeedMultiplier
+                    }
+
+                    LiminalCard {
+                        DisclosureGroup("Advanced options", isExpanded: $showingAdvancedOptions) {
+                            VStack(spacing: TranceSpacing.cardMargin) {
+                                LayersCard(
+                                    arc: arc,
+                                    lightEnabled: $lightEnabled,
+                                    binauralEnabled: $binauralEnabled
+                                )
+                                AttentionGateCard(enabled: $attentionGateEnabled)
+                                SpeedTrainingCard(settings: $speedTraining)
+                                ReaderDisplayCard(preferences: $displayPreferences)
+                                SubliminalCard(enabled: $subliminalEnabled, speed: $subliminalSpeed)
+                            }
+                            .padding(.top, TranceSpacing.list)
+                        }
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(Color.textPrimary)
+                        .tint(Color.roseGold)
+                    }
                 }
                 .padding(TranceSpacing.screen)
             }
@@ -168,6 +186,7 @@ struct TextTranceSetupView: View {
         arc = s.settings.arc
         speedMultiplier = s.settings.speedMultiplier
         speedTraining = normalizedSpeedTraining(from: s.settings)
+        pacingPreset = ReaderPacingPreset.closest(to: speedTraining)
         lightEnabled = s.settings.lightEnabled
         binauralEnabled = s.settings.binauralEnabled
         subliminalEnabled = s.settings.subliminalEnabled
@@ -181,6 +200,7 @@ struct TextTranceSetupView: View {
         loadedPreset = true
         let preset = presetStore.preset(forScriptId: script.id)
         speedTraining = preset.speedTraining
+        pacingPreset = ReaderPacingPreset.closest(to: preset.speedTraining)
         speedMultiplier = preset.speedTraining.targetSpeedMultiplier
         displayPreferences = preset.displayPreferences
     }

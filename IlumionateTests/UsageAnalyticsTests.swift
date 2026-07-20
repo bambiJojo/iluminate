@@ -298,6 +298,48 @@ struct UsageAnalyticsTests {
     }
 
     @Test
+    func createFunnelUsesStableModeAndDurationBuckets() {
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(captured: { captured.append($0) })
+
+        analytics.createModeSelected(.bilateral)
+        analytics.createStarted(.bilateral)
+        analytics.createCompleted(.bilateral, duration: .fiveToFifteenMinutes)
+
+        #expect(captured == [
+            AnalyticsEvent("create.modeSelected", ["mode": "bilateral"]),
+            AnalyticsEvent("create.started", ["mode": "bilateral"]),
+            AnalyticsEvent("create.completed", [
+                "mode": "bilateral",
+                "duration": "fiveToFifteenMinutes",
+            ]),
+        ])
+    }
+
+    @Test
+    func sevenDayReturnEmitsOnceForTheActiveDay() {
+        let defaults = makeEnabledDefaults()
+        var currentDate = Date(timeIntervalSince1970: 86_400 * 10)
+        var captured: [AnalyticsEvent] = []
+        let analytics = makeAnalytics(
+            defaults: defaults,
+            now: { currentDate },
+            captured: { captured.append($0) }
+        )
+
+        analytics.appBecameActive(calendar: Calendar(identifier: .gregorian))
+        currentDate = currentDate.addingTimeInterval(3 * 86_400)
+        analytics.appBecameActive(calendar: Calendar(identifier: .gregorian))
+        analytics.appBecameActive(calendar: Calendar(identifier: .gregorian))
+
+        #expect(captured == [
+            AnalyticsEvent("retention.appActive", ["returnWindow": "firstSeen"]),
+            AnalyticsEvent("retention.appActive", ["returnWindow": "oneToSevenDays"]),
+            AnalyticsEvent("retention.sevenDayReturn"),
+        ])
+    }
+
+    @Test
     func readyAnalysisPlayActionContainsNoFileMetadata() {
         var captured: [AnalyticsEvent] = []
         let analytics = makeAnalytics(captured: { captured.append($0) })

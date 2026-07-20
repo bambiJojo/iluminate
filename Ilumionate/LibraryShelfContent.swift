@@ -69,6 +69,39 @@ nonisolated enum LibraryShelfContent {
         Array(files.sorted { $0.createdDate > $1.createdDate }.prefix(shelfCap))
     }
 
+    /// Chooses a small next-listen set using only local behavior. Matching the
+    /// most recent creator/content type wins, followed by favorites and items
+    /// the listener has not played yet.
+    static func recommendedNext(from files: [AudioFile], limit: Int = 3) -> [AudioFile] {
+        guard files.isEmpty == false else { return [] }
+        let mostRecent = files
+            .filter { $0.lastPlayedDate != nil }
+            .max { ($0.lastPlayedDate ?? .distantPast) < ($1.lastPlayedDate ?? .distantPast) }
+
+        return Array(
+            files
+                .filter { $0.id != mostRecent?.id }
+                .sorted { lhs, rhs in
+                    let lhsScore = recommendationScore(lhs, relativeTo: mostRecent)
+                    let rhsScore = recommendationScore(rhs, relativeTo: mostRecent)
+                    if lhsScore == rhsScore { return lhs.createdDate > rhs.createdDate }
+                    return lhsScore > rhsScore
+                }
+                .prefix(max(0, limit))
+        )
+    }
+
+    private static func recommendationScore(_ file: AudioFile, relativeTo recent: AudioFile?) -> Int {
+        var score = 0
+        if file.lastPlayedDate == nil { score += 3 }
+        if file.favorite { score += 2 }
+        if file.isAnalyzed { score += 1 }
+        if file.creatorDisplayName != nil,
+           file.creatorDisplayName == recent?.creatorDisplayName { score += 4 }
+        if file.analysisResult?.contentType == recent?.analysisResult?.contentType { score += 3 }
+        return score
+    }
+
     /// Full-list sorting for the Audio Files screen (uncapped).
     static func sortedFiles(from files: [AudioFile], by option: LibrarySortOption) -> [AudioFile] {
         files.sorted { lhs, rhs in

@@ -82,6 +82,10 @@ final class UnifiedPlayerViewModel {
     private let analysisManager: AnalysisStateManager
     private let sessionHistory: SessionHistoryManager
     private let haptics: TranceHaptics
+    private let mindMachineEntryPoint: MindMachineEntryPoint?
+    private let configuredMindMachineMode: MindMachineMode?
+    private let playbackProgressStore: PlaybackProgressStore
+    private let savedSessionStore: SavedSessionStore
 
     // MARK: - Universal Playback State
 
@@ -94,6 +98,8 @@ final class UnifiedPlayerViewModel {
     var showingSafetyWarning = false
     var showingLightSyncWarning = false
     private(set) var interruptionNotice: String?
+    private(set) var isCurrentSessionSaved = false
+    private(set) var recommendedNextMode: PlayerMode?
 
     // MARK: - Countdown Setting
 
@@ -178,6 +184,8 @@ final class UnifiedPlayerViewModel {
     private var analyticsLifecycle = PlaybackAnalyticsLifecycle()
     private var playbackStartType: PlaybackStartType = .fresh
     private var hasRecordedHistoryForAttempt = false
+    private var hasReportedCreateOutcome = false
+    private var didPrepareRecommendation = false
     private var lastPersistedProgressSecond = -1
     @ObservationIgnored private let userDefaults: UserDefaults
 
@@ -194,6 +202,10 @@ final class UnifiedPlayerViewModel {
         analysisManager: AnalysisStateManager? = nil,
         sessionHistory: SessionHistoryManager? = nil,
         haptics: TranceHaptics? = nil,
+        mindMachineEntryPoint: MindMachineEntryPoint? = nil,
+        mindMachineMode: MindMachineMode? = nil,
+        playbackProgressStore: PlaybackProgressStore? = nil,
+        savedSessionStore: SavedSessionStore? = nil,
         userDefaults: UserDefaults = .standard
     ) {
         self.mode = mode
@@ -202,15 +214,21 @@ final class UnifiedPlayerViewModel {
         self.analysisManager = analysisManager ?? .shared
         self.sessionHistory = sessionHistory ?? .shared
         self.haptics = haptics ?? .shared
+        self.mindMachineEntryPoint = mindMachineEntryPoint
+        self.configuredMindMachineMode = mindMachineMode
+        self.playbackProgressStore = playbackProgressStore ?? .shared
+        self.savedSessionStore = savedSessionStore ?? .shared
         self.userDefaults = userDefaults
         self.lightSession = initialLightSession
 
         if case .flashMode(let freq, _, let colorTemp, _, _, _, _, _) = mode {
             flashFrequency = freq
             flashColorTemperature = colorTemp
+            bilateralMode = mindMachineMode == .bilateral
         }
 
         showingSafetyWarning = mode.requiresSafetyWarning && !hasSeenFlashWarning
+        isCurrentSessionSaved = Self.isSaved(mode: mode, savedSessionStore: self.savedSessionStore)
     }
 
     // MARK: - Lifecycle
@@ -222,6 +240,7 @@ final class UnifiedPlayerViewModel {
         if !hasStarted {
             setupMode()
         }
+        prepareRecommendedNextModeIfNeeded()
         startUIUpdateTimer()
         nowPlaying.activate(
             mode: mode,
@@ -239,6 +258,7 @@ final class UnifiedPlayerViewModel {
             // Keep this exact player alive so the mini-player can resume it.
             nowPlaying.updatePlaybackState(playbackState)
         } else {
+            reportPlayerLifecycle(.dismissed)
             stopAll(reason: .dismissed)
         }
     }
@@ -281,6 +301,20 @@ final class UnifiedPlayerViewModel {
         cancelPendingStart(message: "Start cancelled while the app was inactive")
     }
 
+    func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            reportPlayerLifecycle(.foregrounded)
+        case .background:
+            persistProgressForBackground()
+            reportPlayerLifecycle(.backgrounded)
+        case .inactive:
+            persistProgressForBackground()
+        @unknown default:
+            persistProgressForBackground()
+        }
+    }
+
     func dismissInterruptionNotice() {
         interruptionNotice = nil
     }
@@ -306,6 +340,43 @@ final class UnifiedPlayerViewModel {
         seek(to: 0)
         currentTime = 0
         startCountdownAndPlay()
+    }
+
+    func saveCompletedSession() {
+        guard playbackState == .complete else { return }
+        switch mode {
+        case .session(let session, let audioFile):
+            if let audioFile {
+                Task { await AudioLibraryStore.setFavorite(true, audioFileID: audioFile.id) }
+            } else {
+                savedSessionStore.save(session.id.uuidString)
+            }
+        case .audioLight(let audioFile):
+            Task { await AudioLibraryStore.setFavorite(true, audioFileID: audioFile.id) }
+        case .flashMode, .colorPulse, .playlist:
+            return
+        }
+        isCurrentSessionSaved = true
+        UsageAnalytics.shared.sessionCompletionAction(
+            .save,
+            source: sessionSource,
+            category: sessionCategory
+        )
+    }
+
+    var canSaveCompletedSession: Bool {
+        switch mode {
+        case .session, .audioLight: true
+        case .flashMode, .colorPulse, .playlist: false
+        }
+    }
+
+    func recordNextSessionSelection() {
+        UsageAnalytics.shared.sessionCompletionAction(
+            .next,
+            source: sessionSource,
+            category: sessionCategory
+        )
     }
 
     func seek(to time: TimeInterval) {
@@ -535,8 +606,8 @@ final class UnifiedPlayerViewModel {
         let resumeDecision = PlaybackResumeDecision(
             sessionID: session.id.uuidString,
             duration: session.duration_sec,
-            storedSessionID: lastSessionId,
-            storedProgress: lastSessionProgress
+            storedSessionID: storedResumeID(for: session.id.uuidString),
+            storedProgress: storedResumeProgress(for: session.id.uuidString)
         )
         playbackStartType = resumeDecision.startType
         currentTime = resumeDecision.startTime
@@ -591,8 +662,8 @@ final class UnifiedPlayerViewModel {
                 let resumeDecision = PlaybackResumeDecision(
                     sessionID: audioFile.id.uuidString,
                     duration: player.duration,
-                    storedSessionID: lastSessionId,
-                    storedProgress: lastSessionProgress
+                    storedSessionID: storedResumeID(for: audioFile.id.uuidString),
+                    storedProgress: storedResumeProgress(for: audioFile.id.uuidString)
                 )
                 playbackStartType = resumeDecision.startType
                 currentTime = resumeDecision.startTime
@@ -623,6 +694,7 @@ final class UnifiedPlayerViewModel {
     private func startCountdownAndPlay() {
         analyticsLifecycle.prepareForNewAttempt()
         hasRecordedHistoryForAttempt = false
+        hasReportedCreateOutcome = false
         lastPersistedProgressSecond = -1
         interruptionNotice = nil
 
@@ -678,6 +750,20 @@ final class UnifiedPlayerViewModel {
                 category: sessionCategory,
                 startType: playbackStartType
             )
+            if let mindMachineMode {
+                UsageAnalytics.shared.mindMachineStarted(
+                    mode: mindMachineMode,
+                    entryPoint: mindMachineEntryPoint ?? .create
+                )
+                if mindMachineEntryPoint == .create {
+                    UsageAnalytics.shared.createStarted(createMode)
+                }
+            }
+            if case .audioLight(let audioFile) = mode {
+                Task { await AudioLibraryStore.recordPlayback(audioFileID: audioFile.id) }
+            } else if case .session(_, let audioFile?) = mode {
+                Task { await AudioLibraryStore.recordPlayback(audioFileID: audioFile.id) }
+            }
         }
 
         switch mode {
@@ -793,6 +879,7 @@ final class UnifiedPlayerViewModel {
     }
 
     private func handlePlaybackInterruption() {
+        reportPlayerLifecycle(.interrupted)
         switch PlaybackRetentionPolicy.interruptionAction(for: playbackState) {
         case .pause:
             pause()
@@ -871,6 +958,60 @@ final class UnifiedPlayerViewModel {
             endReason: resolvedReason,
             fraction: fraction
         )
+        reportCreateOutcomeIfNeeded()
+    }
+
+    private func reportPlayerLifecycle(_ transition: PlaybackLifecycleTransition) {
+        guard analyticsLifecycle.hasStarted else { return }
+        UsageAnalytics.shared.playerLifecycle(
+            transition,
+            source: sessionSource,
+            category: sessionCategory
+        )
+    }
+
+    private func reportCreateOutcomeIfNeeded() {
+        guard hasReportedCreateOutcome == false,
+              let mindMachineMode else { return }
+        hasReportedCreateOutcome = true
+
+        let elapsedBucket = ProcessingTimeBucket(seconds: currentTime)
+        let meaningful = MindMachineRetentionPolicy.isMeaningful(
+            elapsed: currentTime,
+            duration: duration
+        )
+        if meaningful {
+            UsageAnalytics.shared.mindMachineCompleted(
+                mode: mindMachineMode,
+                duration: elapsedBucket
+            )
+        }
+        guard mindMachineEntryPoint == .create else { return }
+        if meaningful {
+            UsageAnalytics.shared.createCompleted(createMode, duration: elapsedBucket)
+        } else {
+            UsageAnalytics.shared.createCancelled(createMode, duration: elapsedBucket)
+        }
+    }
+
+    private var mindMachineMode: MindMachineMode? {
+        if let configuredMindMachineMode { return configuredMindMachineMode }
+        switch mode {
+        case .flashMode:
+            return bilateralMode ? MindMachineMode.bilateral : MindMachineMode.flash
+        case .colorPulse:
+            return MindMachineMode.colorPulse
+        case .session, .audioLight, .playlist:
+            return nil
+        }
+    }
+
+    private var createMode: CreateMode {
+        switch mindMachineMode {
+        case .bilateral: .bilateral
+        case .colorPulse: .colorPulse
+        case .flash, .none: .flash
+        }
     }
 
     // MARK: - Private: Timer
@@ -979,9 +1120,35 @@ final class UnifiedPlayerViewModel {
         if prog > 0.01 && prog < 0.99 {
             lastSessionId = contentID
             lastSessionProgress = prog
+            playbackProgressStore.save(
+                contentID: contentID,
+                kind: resumableContentKind,
+                title: mode.title,
+                progress: prog,
+                duration: duration
+            )
         } else if prog >= 0.99 {
-            lastSessionId = ""
-            lastSessionProgress = 0.0
+            playbackProgressStore.clear(contentID: contentID)
+            if lastSessionId == contentID {
+                lastSessionId = ""
+                lastSessionProgress = 0.0
+            }
+        }
+    }
+
+    private func storedResumeID(for contentID: String) -> String {
+        playbackProgressStore.snapshot(for: contentID) != nil ? contentID : lastSessionId
+    }
+
+    private func storedResumeProgress(for contentID: String) -> Double {
+        playbackProgressStore.snapshot(for: contentID)?.progress
+            ?? (lastSessionId == contentID ? lastSessionProgress : 0)
+    }
+
+    private var resumableContentKind: ResumablePlaybackKind {
+        switch mode {
+        case .audioLight: .audio
+        case .session, .flashMode, .colorPulse, .playlist: .session
         }
     }
 
@@ -1002,6 +1169,47 @@ final class UnifiedPlayerViewModel {
         case .flashMode, .colorPulse, .playlist:
             return nil
         }
+    }
+
+    private static func isSaved(mode: PlayerMode, savedSessionStore: SavedSessionStore) -> Bool {
+        switch mode {
+        case .session(let session, let audioFile):
+            audioFile?.favorite ?? savedSessionStore.contains(session.id.uuidString)
+        case .audioLight(let audioFile):
+            audioFile.favorite
+        case .flashMode, .colorPulse, .playlist:
+            false
+        }
+    }
+
+    private func prepareRecommendedNextModeIfNeeded() {
+        guard didPrepareRecommendation == false else { return }
+        didPrepareRecommendation = true
+
+        switch mode {
+        case .audioLight(let currentFile), .session(_, let currentFile?):
+            Task { [weak self] in
+                let files = await AudioLibraryStore.loadRepairingStoredFiles()
+                guard let next = LibraryShelfContent
+                    .recommendedNext(from: files)
+                    .first(where: { $0.id != currentFile.id }) else { return }
+                self?.recommendedNextMode = .audioLight(audioFile: next)
+            }
+        case .session(let currentSession, nil):
+            recommendedNextMode = recommendedBuiltInSession(excluding: currentSession.id)
+                .map { .session(session: $0, audioFile: nil) }
+        case .flashMode, .colorPulse, .playlist:
+            recommendedNextMode = recommendedBuiltInSession(excluding: nil)
+                .map { .session(session: $0, audioFile: nil) }
+        }
+    }
+
+    private func recommendedBuiltInSession(excluding excludedID: UUID?) -> LightSession? {
+        let sessions = LightScoreReader.discoverBundledSessions().compactMap {
+            try? LightScoreReader.loadSession(named: $0)
+        }
+        let candidates = sessions.filter { $0.id != excludedID }
+        return PortalRecommender.recommend(from: candidates) ?? candidates.first
     }
 
     private func recordSessionHistoryIfNeeded() {

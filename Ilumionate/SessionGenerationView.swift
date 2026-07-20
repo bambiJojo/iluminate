@@ -84,6 +84,7 @@ struct SessionGenerationView: View {
             }
             .onAppear {
                 config = AnalysisPreferences.shared.generationConfig
+                UsageAnalytics.shared.createModeSelected(.audioSession)
                 generateSession()
             }
             .fullScreenCover(isPresented: $showingPlayer) {
@@ -284,10 +285,16 @@ struct SessionGenerationView: View {
     // MARK: - Logic
     
     private func generateSession() {
+        let startedAt = Date()
+        UsageAnalytics.shared.createStarted(.audioSession)
         generatedSession = generator.generateSession(
             from: audioFile,
             analysis: analysis,
             config: config
+        )
+        UsageAnalytics.shared.createCompleted(
+            .audioSession,
+            duration: ProcessingTimeBucket(seconds: Date().timeIntervalSince(startedAt))
         )
     }
     

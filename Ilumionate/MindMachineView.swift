@@ -201,7 +201,9 @@ struct MindMachineView: View {
                             frequency: model.frequency,
                             intensity: model.intensity
                         ),
-                        engine: engine
+                        engine: engine,
+                        mindMachineEntryPoint: .create,
+                        mindMachineMode: analyticsMode(model.selectedVisualMode)
                     )
                 default:
                     UnifiedPlayerView(
@@ -214,15 +216,9 @@ struct MindMachineView: View {
                             binauralCarrier: model.binauralCarrierFrequency,
                             binauralVolume: model.binauralVolume
                         ),
-                        engine: engine
-                    )
-                }
-            }
-            .onChange(of: showingFlashMode) { _, isShowing in
-                if isShowing {
-                    UsageAnalytics.shared.mindMachineStarted(
-                        mode: analyticsMode(model.selectedVisualMode),
-                        entryPoint: .create
+                        engine: engine,
+                        mindMachineEntryPoint: .create,
+                        mindMachineMode: analyticsMode(model.selectedVisualMode)
                     )
                 }
             }
@@ -406,11 +402,20 @@ private struct VisualModeCard: View {
                         isSelected: model.selectedVisualMode == mode
                     ) {
                         model.selectedVisualMode = mode
+                        UsageAnalytics.shared.createModeSelected(createMode(mode))
                         TranceHaptics.shared.selection()
                     }
                 }
             }
         }
+    }
+}
+
+private func createMode(_ mode: MindMachineModel.VisualMode) -> CreateMode {
+    switch mode {
+    case .fullScreenFlash: .flash
+    case .colorPulse: .colorPulse
+    case .bilateralFlash: .bilateral
     }
 }
 

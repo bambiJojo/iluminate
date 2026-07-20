@@ -203,16 +203,10 @@ struct HomeView: View {
                     binauralVolume: flashBinauralVolume,
                     goalDuration: flashGoalDuration
                 ),
-                engine: engine
+                engine: engine,
+                mindMachineEntryPoint: .homePreset,
+                mindMachineMode: .flash
             )
-        }
-        .onChange(of: showingFlashMode) { _, isShowing in
-            if isShowing {
-                UsageAnalytics.shared.mindMachineStarted(
-                    mode: .flash,
-                    entryPoint: .homePreset
-                )
-            }
         }
         .fullScreenCover(item: $playerFile) { file in
             UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)

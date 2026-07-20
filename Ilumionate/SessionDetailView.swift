@@ -38,9 +38,6 @@ struct SessionDetailView: View {
                         if let phases, !phases.isEmpty {
                             phaseTimelineSection(phases)
                         }
-                        if let transcript, !transcript.isEmpty {
-                            transcriptPreviewSection(transcript)
-                        }
                         if let lightSession {
                             lightScorePreviewSection(lightSession)
                         }
@@ -48,7 +45,11 @@ struct SessionDetailView: View {
                             expertAnalysisSection
                         }
                         analysisInsightsSection
-                    } else {
+                    }
+                    if let transcript, !transcript.isEmpty {
+                        transcriptPreviewSection(transcript)
+                    }
+                    if audioFile.isAnalyzed == false {
                         // Generic session-arc preview when there is no analyzed
                         // phase data yet (the real PhaseTimelineBar shows once analyzed).
                         LiminalCard(label: "Phases") {
@@ -85,6 +86,9 @@ struct SessionDetailView: View {
         .onChange(of: AnalysisStateManager.shared.completedAnalyses.count) {
             refreshAudioFile()
             loadLightSession()
+        }
+        .onChange(of: AnalysisStateManager.shared.partialResultsRevision) {
+            refreshAudioFile()
         }
     }
 
@@ -154,6 +158,14 @@ struct SessionDetailView: View {
                                 .font(TranceTypography.caption)
                                 .foregroundStyle(Color.textSecondary)
                         }
+                    }
+                } else if audioFile.hasTranscription {
+                    HStack(spacing: TranceSpacing.inner) {
+                        Image(systemName: "text.quote")
+                            .foregroundStyle(Color.bwAlpha)
+                        Text("Transcript ready · analysis continuing")
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.bwAlpha)
                     }
                 } else {
                     HStack(spacing: TranceSpacing.inner) {

@@ -50,6 +50,42 @@ nonisolated enum AudioLibraryStore {
         await persistence.save(files, defaults: ThreadSafeUserDefaults(defaults))
     }
 
+    static func recordPlayback(
+        audioFileID: UUID,
+        at date: Date = .now,
+        defaults: UserDefaults = .standard
+    ) async {
+        await persistence.recordPlayback(
+            audioFileID: audioFileID,
+            at: date,
+            defaults: ThreadSafeUserDefaults(defaults)
+        )
+    }
+
+    static func setFavorite(
+        _ isFavorite: Bool,
+        audioFileID: UUID,
+        defaults: UserDefaults = .standard
+    ) async {
+        await persistence.setFavorite(
+            isFavorite,
+            audioFileID: audioFileID,
+            defaults: ThreadSafeUserDefaults(defaults)
+        )
+    }
+
+    static func savePartialTranscription(
+        _ transcription: String,
+        audioFileID: UUID,
+        defaults: UserDefaults = .standard
+    ) async {
+        await persistence.savePartialTranscription(
+            transcription,
+            audioFileID: audioFileID,
+            defaults: ThreadSafeUserDefaults(defaults)
+        )
+    }
+
     @concurrent
     private static func discoverUnregisteredDocumentFiles(
         existingFiles: [AudioFile],
@@ -131,6 +167,40 @@ private actor AudioLibraryPersistence {
         }
 
         defaults.value.set(data, forKey: AnalysisStateManager.audioFilesUserDefaultsKey)
+    }
+
+    func recordPlayback(audioFileID: UUID, at date: Date, defaults: ThreadSafeUserDefaults) {
+        guard var files = decode(defaults),
+              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return }
+        files[index].lastPlayedDate = date
+        files[index].playCount = (files[index].playCount ?? 0) + 1
+        save(files, defaults: defaults)
+    }
+
+    func setFavorite(_ isFavorite: Bool, audioFileID: UUID, defaults: ThreadSafeUserDefaults) {
+        guard var files = decode(defaults),
+              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return }
+        files[index].isFavorite = isFavorite
+        save(files, defaults: defaults)
+    }
+
+    func savePartialTranscription(
+        _ transcription: String,
+        audioFileID: UUID,
+        defaults: ThreadSafeUserDefaults
+    ) {
+        guard transcription.isEmpty == false,
+              var files = decode(defaults),
+              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return }
+        files[index].transcription = transcription
+        save(files, defaults: defaults)
+    }
+
+    private func decode(_ defaults: ThreadSafeUserDefaults) -> [AudioFile]? {
+        guard let data = defaults.value.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey) else {
+            return nil
+        }
+        return try? JSONDecoder().decode([AudioFile].self, from: data)
     }
 }
 

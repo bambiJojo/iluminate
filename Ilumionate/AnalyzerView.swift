@@ -157,7 +157,7 @@ private struct AnalyzerLiveStatusSection: View {
                             .font(TranceTypography.sectionTitle)
                             .foregroundStyle(Color.textPrimary)
                             .lineLimit(1)
-                        Text(stageName(active.stage))
+                        Text(AnalysisStageFeedback.stageSummary(active.stage))
                             .font(TranceTypography.caption)
                             .foregroundStyle(active.stage == .failed ? .red : Color.roseGold)
                         if active.stage == .failed {
@@ -173,6 +173,17 @@ private struct AnalyzerLiveStatusSection: View {
                 ProgressView(value: active.progress)
                     .tint(Color.roseGold)
                     .animation(.easeInOut(duration: 0.3), value: active.progress)
+                TimelineView(.periodic(from: .now, by: 5)) { context in
+                    if let estimate = AnalysisStageFeedback.estimatedRemainingText(
+                        progress: active.progress,
+                        elapsed: context.date.timeIntervalSince(active.startedAt)
+                    ) {
+                        Text("\(estimate). You can leave this screen; processing continues in the background.")
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
                 HStack {
                     Text("\(Int(active.progress * 100))% complete")
                         .font(TranceTypography.caption)

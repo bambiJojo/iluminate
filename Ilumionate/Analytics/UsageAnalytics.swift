@@ -29,6 +29,7 @@ final class UsageAnalytics {
     static let optOutKey = legacyPreferenceKey
     static let activationStartKey = "analyticsActivationStart"
     static let activationCompletedKey = "analyticsActivationCompleted"
+    static let lastActiveDayKey = "analyticsLastActiveDay"
     private static var isTelemetryDeckConfigured = false
     #if canImport(TelemetryDeck)
     private static var telemetryDeckConfig: TelemetryDeck.Config?
@@ -208,6 +209,18 @@ final class UsageAnalytics {
         ]))
     }
 
+    func playerLifecycle(
+        _ transition: PlaybackLifecycleTransition,
+        source: SessionSource,
+        category: String
+    ) {
+        send(AnalyticsEvent("player.lifecycle", [
+            "transition": transition.rawValue,
+            "source": source.rawValue,
+            "category": category,
+        ]))
+    }
+
     func onboardingCompletionAction(_ action: OnboardingCompletionAction) {
         send(AnalyticsEvent("onboarding.completionAction", [
             "action": action.rawValue,
@@ -296,6 +309,65 @@ final class UsageAnalytics {
             "mode": mode.rawValue,
             "entryPoint": entryPoint.rawValue,
         ]))
+    }
+
+    func mindMachineCompleted(mode: MindMachineMode, duration: ProcessingTimeBucket) {
+        send(AnalyticsEvent("mindMachine.completed", [
+            "mode": mode.rawValue,
+            "duration": duration.rawValue,
+        ]))
+    }
+
+    func createModeSelected(_ mode: CreateMode) {
+        send(AnalyticsEvent("create.modeSelected", ["mode": mode.rawValue]))
+    }
+
+    func createStarted(_ mode: CreateMode) {
+        send(AnalyticsEvent("create.started", ["mode": mode.rawValue]))
+    }
+
+    func createCompleted(_ mode: CreateMode, duration: ProcessingTimeBucket) {
+        send(AnalyticsEvent("create.completed", [
+            "mode": mode.rawValue,
+            "duration": duration.rawValue,
+        ]))
+    }
+
+    func createCancelled(_ mode: CreateMode, duration: ProcessingTimeBucket) {
+        send(AnalyticsEvent("create.cancelled", [
+            "mode": mode.rawValue,
+            "duration": duration.rawValue,
+        ]))
+    }
+
+    func createGenerationFailed(
+        _ mode: CreateMode,
+        duration: ProcessingTimeBucket,
+        failure: CreateFailureBucket
+    ) {
+        send(AnalyticsEvent("create.generationFailed", [
+            "mode": mode.rawValue,
+            "duration": duration.rawValue,
+            "failure": failure.rawValue,
+        ], kind: .error(.appState)))
+    }
+
+    /// Emits at most once per calendar day. The explicit return window makes a
+    /// seven-day return rate measurable without sending timestamps.
+    func appBecameActive(calendar: Calendar = .current) {
+        let today = calendar.startOfDay(for: now())
+        let previous = defaults.object(forKey: Self.lastActiveDayKey) as? Date
+        guard previous != today else { return }
+
+        let days = previous.flatMap {
+            calendar.dateComponents([.day], from: calendar.startOfDay(for: $0), to: today).day
+        }
+        let window = ReturnWindow(days: days)
+        send(AnalyticsEvent("retention.appActive", ["returnWindow": window.rawValue]))
+        if window == .oneToSevenDays {
+            send(AnalyticsEvent("retention.sevenDayReturn"))
+        }
+        defaults.set(today, forKey: Self.lastActiveDayKey)
     }
 
     func textTranceStarted() {

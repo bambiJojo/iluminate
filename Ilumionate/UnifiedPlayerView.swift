@@ -17,11 +17,19 @@ struct UnifiedPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    init(mode: PlayerMode, engine: LightEngine, initialLightSession: LightSession? = nil) {
+    init(
+        mode: PlayerMode,
+        engine: LightEngine,
+        initialLightSession: LightSession? = nil,
+        mindMachineEntryPoint: MindMachineEntryPoint? = nil,
+        mindMachineMode: MindMachineMode? = nil
+    ) {
         _viewModel = State(initialValue: UnifiedPlayerViewModel(
             mode: mode,
             engine: engine,
-            initialLightSession: initialLightSession
+            initialLightSession: initialLightSession,
+            mindMachineEntryPoint: mindMachineEntryPoint,
+            mindMachineMode: mindMachineMode
         ))
     }
 
@@ -73,7 +81,12 @@ struct UnifiedPlayerView: View {
                 PlayerCompletionOverlay(
                     title: viewModel.mode.title,
                     duration: viewModel.duration,
+                    isSaved: viewModel.isCurrentSessionSaved,
+                    canSave: viewModel.canSaveCompletedSession,
+                    nextTitle: viewModel.recommendedNextMode?.title,
                     onReplay: viewModel.replayCompletedSession,
+                    onSave: viewModel.saveCompletedSession,
+                    onNext: startRecommendedNextSession,
                     onDone: finishSession
                 )
                 .transition(.opacity)
@@ -105,9 +118,7 @@ struct UnifiedPlayerView: View {
         .onAppear { UsageAnalytics.shared.screen(.player) }
         .onDisappear { viewModel.onDisappear() }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active {
-                viewModel.persistProgressForBackground()
-            }
+            viewModel.handleScenePhase(phase)
         }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) {
             viewModel.handleAudioSessionInterruption($0)
@@ -155,6 +166,16 @@ struct UnifiedPlayerView: View {
         } message: {
             Text("Light Sync uses rapidly flashing light patterns. If you have photosensitive epilepsy or are sensitive to flashing lights, do not enable this feature.")
         }
+    }
+
+    private func startRecommendedNextSession() {
+        guard let nextMode = viewModel.recommendedNextMode else { return }
+        viewModel.recordNextSessionSelection()
+        viewModel.stopAll(reason: .completed)
+        let nextViewModel = UnifiedPlayerViewModel(mode: nextMode, engine: viewModel.engine)
+        viewModel = nextViewModel
+        nextViewModel.onAppear()
+        controlsVisibility.registerInteraction()
     }
 
     // MARK: - Background Layer
