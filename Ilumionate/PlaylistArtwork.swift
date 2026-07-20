@@ -44,21 +44,37 @@ struct PlaylistArtworkView: View {
     let types: [AudioContentType]
     var cornerRadius: CGFloat = TranceRadius.thumbnail
     var iconSize: CGFloat? = nil
+    /// A chosen motif overrides the content-derived mosaic.
+    var style: PlaylistArtworkStyle = .automatic
+    var motifLineWidth: CGFloat = 3
 
     var body: some View {
         ZStack {
-            switch types.count {
-            case 0:
-                PlaylistArtwork.gradient(for: nil)
-                icon("music.note.list")
-            case 1:
-                PlaylistArtwork.gradient(for: types[0])
-                icon(ContentTypeStyle.icon(for: types[0]))
-            default:
-                quadrants
+            if style.motif == .auto {
+                mosaic
+            } else {
+                PlaylistMotifArtwork(
+                    motif: style.motif,
+                    palette: style.palette,
+                    lineWidth: motifLineWidth
+                )
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+    }
+
+    @ViewBuilder
+    private var mosaic: some View {
+        switch types.count {
+        case 0:
+            PlaylistArtwork.gradient(for: nil)
+            icon("music.note.list")
+        case 1:
+            PlaylistArtwork.gradient(for: types[0])
+            icon(ContentTypeStyle.icon(for: types[0]))
+        default:
+            quadrants
+        }
     }
 
     // 2 types → 2 columns; 3-4 types → 2x2 grid (3rd type fills the bottom row).

@@ -16,7 +16,10 @@ struct PlaylistGridTile: View {
     var body: some View {
         Button(action: onEdit) {
             VStack(alignment: .leading, spacing: TranceSpacing.inner) {
-                PlaylistArtworkView(types: types, iconSize: 22)
+                PlaylistArtworkView(types: types,
+                                    iconSize: 22,
+                                    style: playlist.artwork,
+                                    motifLineWidth: 2.5)
                     .frame(height: 84)
                     .frame(maxWidth: .infinity)
                     .overlay(alignment: .bottomTrailing) {

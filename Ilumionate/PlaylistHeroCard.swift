@@ -17,7 +17,10 @@ struct PlaylistHeroCard: View {
     var body: some View {
         Button(action: onEdit) {
             ZStack(alignment: .bottomLeading) {
-                PlaylistArtworkView(types: types, cornerRadius: TranceRadius.glassCard)
+                PlaylistArtworkView(types: types,
+                                    cornerRadius: TranceRadius.glassCard,
+                                    style: playlist.artwork,
+                                    motifLineWidth: 4)
 
                 LinearGradient(
                     colors: [Color.bgPrimary.opacity(0.85), .clear],

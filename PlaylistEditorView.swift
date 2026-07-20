@@ -29,6 +29,7 @@ struct PlaylistEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showingSessionPicker = false
+    @State private var showingArtworkPicker = false
     @State private var availableAudioFiles: [AudioFile] = []
     @State private var storedAudioFiles: [AudioFile] = []
     // IDs of files that already have a generated light session, so the picker
@@ -141,6 +142,12 @@ struct PlaylistEditorView: View {
                     }
                 )
             }
+            .sheet(isPresented: $showingArtworkPicker) {
+                PlaylistArtworkPickerView(
+                    types: dominantContentTypes,
+                    selection: artworkStyleBinding
+                )
+            }
             .alert(item: $quickAnalysisAlert) { alert in
                 Alert(
                     title: Text(alert.title),
@@ -159,11 +166,26 @@ struct PlaylistEditorView: View {
 
     private var artworkHeader: some View {
         VStack(spacing: TranceSpacing.content) {
-            // Gradient artwork
-            artworkView
-                .frame(width: 200, height: 200)
-                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.pattern))
-                .shadow(color: artworkTopColor.opacity(0.35), radius: 20, x: 0, y: 10)
+            // Tap the artwork to choose a motif and colorway.
+            Button {
+                TranceHaptics.shared.light()
+                showingArtworkPicker = true
+            } label: {
+                artworkView
+                    .frame(width: 200, height: 200)
+                    .clipShape(RoundedRectangle(cornerRadius: TranceRadius.pattern))
+                    .shadow(color: artworkTopColor.opacity(0.35), radius: 20, x: 0, y: 10)
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "paintbrush.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.textPrimary)
+                            .padding(TranceSpacing.inner)
+                            .background(.ultraThinMaterial, in: .circle)
+                            .padding(TranceSpacing.inner)
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Change artwork")
 
             // Editable name
             TextField("Playlist Name", text: $playlist.name, axis: .vertical)
@@ -194,7 +216,16 @@ struct PlaylistEditorView: View {
     private var artworkView: some View {
         PlaylistArtworkView(types: dominantContentTypes,
                             cornerRadius: TranceRadius.pattern,
-                            iconSize: 56)
+                            iconSize: 56,
+                            style: playlist.artwork,
+                            motifLineWidth: 5)
+    }
+
+    private var artworkStyleBinding: Binding<PlaylistArtworkStyle> {
+        Binding(
+            get: { playlist.artwork },
+            set: { playlist.artworkStyle = $0 }
+        )
     }
 
     private var dominantContentTypes: [AnalysisResult.ContentType] {
@@ -206,7 +237,11 @@ struct PlaylistEditorView: View {
     }
 
     private var artworkTopColor: Color {
-        PlaylistArtwork.dominantColor(for: dominantContentTypes)
+        // A chosen motif drives its own glow; Auto follows the content types.
+        let style = playlist.artwork
+        return style.motif == .auto
+            ? PlaylistArtwork.dominantColor(for: dominantContentTypes)
+            : style.palette.glow
     }
 
     // MARK: - Whole Session Analysis

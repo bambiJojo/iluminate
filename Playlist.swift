@@ -15,6 +15,8 @@ struct Playlist: Identifiable, Codable {
     var smartTransitions: Bool
     var wholeSessionAnalysis: PlaylistWholeSessionAnalysis?
     let createdDate: Date
+    /// Optional so playlists saved before artwork selection existed still decode.
+    var artworkStyle: PlaylistArtworkStyle?
 
     init(
         id: UUID = UUID(),
@@ -22,7 +24,8 @@ struct Playlist: Identifiable, Codable {
         items: [PlaylistItem] = [],
         smartTransitions: Bool = true,
         wholeSessionAnalysis: PlaylistWholeSessionAnalysis? = nil,
-        createdDate: Date = Date()
+        createdDate: Date = Date(),
+        artworkStyle: PlaylistArtworkStyle? = nil
     ) {
         self.id = id
         self.name = name
@@ -30,6 +33,12 @@ struct Playlist: Identifiable, Codable {
         self.smartTransitions = smartTransitions
         self.wholeSessionAnalysis = wholeSessionAnalysis
         self.createdDate = createdDate
+        self.artworkStyle = artworkStyle
+    }
+
+    /// The artwork to render — falls back to the content-derived mosaic.
+    var artwork: PlaylistArtworkStyle {
+        artworkStyle ?? .automatic
     }
 
     // MARK: - Computed Properties
