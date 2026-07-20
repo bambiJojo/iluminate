@@ -160,7 +160,16 @@ struct TranceSpacing {
     /// Bottom clearance needed so content/toolbars don't hide under the floating tab bar
     /// (and optionally the mini-player).
     @MainActor static var tabBarClearance: CGFloat {
-        let extra = NowPlayingState.shared.isActive ? miniPlayerHeight + inner : 0
+        var extra: CGFloat = 0
+        if NowPlayingState.shared.isActive {
+            extra += miniPlayerHeight + inner
+        }
+        // The analysis overlay sits above the mini-player while files are being
+        // analyzed; without this, screen CTAs render underneath it.
+        let overlayHeight = BottomChromeMetrics.shared.analysisOverlayHeight
+        if overlayHeight > 0 {
+            extra += overlayHeight + inner
+        }
         return tabBarBase + extra
     }
 }

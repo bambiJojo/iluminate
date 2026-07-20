@@ -83,19 +83,28 @@ struct ContentView: View {
 
             // Analysis overlay + Mini-player + tab bar stack
             VStack(spacing: TranceSpacing.inner) {
-                if let analysis = analysisManager.currentAnalysis {
-                    AnalysisStatusOverlay(
-                        analysis: analysis,
-                        queueCount: analysisManager.analysisQueue.count
-                    ) {
-                        showingAnalysisQueue = true
+                // Measured so screens can reserve space for it — its height
+                // grows with the stage/estimate/reassurance text.
+                Group {
+                    if let analysis = analysisManager.currentAnalysis {
+                        AnalysisStatusOverlay(
+                            analysis: analysis,
+                            queueCount: analysisManager.analysisQueue.count
+                        ) {
+                            showingAnalysisQueue = true
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if let failure = analysisManager.failedAnalyses.last {
+                        AnalysisRecoveryStatusOverlay(failure: failure) {
+                            showingAnalysisQueue = true
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                } else if let failure = analysisManager.failedAnalyses.last {
-                    AnalysisRecoveryStatusOverlay(failure: failure) {
-                        showingAnalysisQueue = true
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    BottomChromeMetrics.shared.analysisOverlayHeight = height
                 }
 
                 if nowPlaying.isActive {
