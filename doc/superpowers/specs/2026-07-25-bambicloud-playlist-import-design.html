@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BambiCloud Playlist Import — Finishing Design</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --surface: #121722;
+    --surface-2: #182030;
+    --border: #263040;
+    --text: #e6ebf2;
+    --text-dim: #9aa7b8;
+    --accent: #3fd2c7;
+    --accent-2: #5b9dff;
+    --rose: #e8a87c;
+    --warn: #f2b8b5;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 70% -10%, #14202e 0%, var(--bg) 55%);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 0 0 6rem;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 1.25rem; }
+  header.hero { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); }
+  .kicker { color: var(--accent); font-size: .8rem; letter-spacing: .18em; text-transform: uppercase; font-weight: 600; }
+  h1 { font-size: clamp(1.8rem, 3.5vw, 2.6rem); margin: .4rem 0 .6rem; line-height: 1.15; }
+  h3 { font-size: 1rem; margin: 1.4rem 0 .4rem; color: var(--text); }
+  .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+  .chip { font-size: .78rem; padding: .25rem .7rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); }
+  .chip strong { color: var(--text); font-weight: 600; }
+  .chip.ok { border-color: rgba(63,210,199,.4); color: var(--accent); }
+
+  nav.toc { margin: 2rem 0; padding: 1rem 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  nav.toc h2 { font-size: .8rem; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); margin: 0 0 .5rem; }
+  nav.toc ol { margin: 0; padding-left: 1.2rem; columns: 2; column-gap: 2rem; }
+  nav.toc li { margin: .2rem 0; break-inside: avoid; }
+  nav.toc a { color: var(--text); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+  @media (max-width: 640px) { nav.toc ol { columns: 1; } }
+
+  details.section { margin: 1rem 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  details.section > summary { cursor: pointer; list-style: none; padding: 1rem 1.25rem; font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: .7rem; user-select: none; }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before { content: "›"; color: var(--accent); font-size: 1.3rem; line-height: 1; transition: transform .18s ease; }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+  details.section > .body { padding: 0 1.25rem 1.25rem; border-top: 1px solid var(--border); }
+
+  p, li { color: var(--text); }
+  .dim { color: var(--text-dim); }
+  code { font-family: var(--mono); font-size: .85em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: .1em .4em; }
+  pre { background: #0d1420; border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; overflow-x: auto; font-family: var(--mono); font-size: .84rem; line-height: 1.55; }
+  pre code { background: none; border: 0; padding: 0; }
+
+  ol.decisions { counter-reset: d; list-style: none; padding: 0; }
+  ol.decisions li { counter-increment: d; position: relative; padding: .8rem 1rem .8rem 3rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; margin: .6rem 0; }
+  ol.decisions li::before { content: counter(d); position: absolute; left: .9rem; top: .85rem; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #06131c; font-weight: 700; font-size: .8rem; }
+
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: .8rem 0; font-size: .9rem; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-dim); font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; }
+  td:first-child { color: var(--accent-2); font-family: var(--mono); font-weight: 700; white-space: nowrap; }
+  table.plain td:first-child { color: var(--text); font-family: inherit; font-weight: 400; white-space: normal; }
+  .tag { font-size: .68rem; font-weight: 700; border-radius: 4px; padding: .1rem .35rem; vertical-align: middle; }
+  .tag.fix { background: rgba(63,210,199,.18); color: var(--accent); }
+  .tag.same { background: rgba(154,167,184,.16); color: var(--text-dim); }
+  .file-new::after, .file-mod::after {
+    font-size: .68rem; font-weight: 700; border-radius: 4px; padding: .1rem .35rem; margin-left: .45rem;
+  }
+  .file-new::after { content: "NEW"; background: rgba(63,210,199,.18); color: var(--accent); }
+  .file-mod::after { content: "MODIFIED"; background: rgba(232,168,124,.16); color: var(--rose); }
+
+  .callout { display: flex; gap: .7rem; padding: .8rem 1rem; margin: 1rem 0; background: rgba(91,157,255,.08); border: 1px solid rgba(91,157,255,.3); border-radius: 10px; font-size: .93rem; }
+  .callout .icon { color: var(--accent-2); }
+  .callout.warn { background: rgba(242,184,181,.07); border-color: rgba(242,184,181,.28); }
+  .callout.warn .icon { color: var(--warn); }
+  ul.check { list-style: none; padding: 0; }
+  ul.check li { padding-left: 1.6rem; position: relative; margin: .35rem 0; }
+  ul.check li::before { content: "☐"; position: absolute; left: 0; color: var(--accent); }
+  footer { margin-top: 3rem; color: var(--text-dim); font-size: .85rem; text-align: center; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Design Spec · Ilumionate / LumeSync</div>
+  <h1>BambiCloud Playlist Import</h1>
+  <p class="dim">Verify and finish the existing untracked importer that maps a shared BambiCloud playlist onto audio the user already owns. Nothing is downloaded. This is a finishing design — link validation, the fetch client, and the security model are verified sound and out of scope for change.</p>
+  <div class="meta">
+    <span class="chip"><strong>Date</strong> 2026-07-25</span>
+    <span class="chip"><strong>Branch</strong> main</span>
+    <span class="chip ok">Approved by user</span>
+    <span class="chip"><strong>Basis</strong> 13 untracked files, ~950 lines</span>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#context">Context</a></li>
+    <li><a href="#verification">Verification Results</a></li>
+    <li><a href="#gaps">Gaps to Fix</a></li>
+    <li><a href="#matcher">AudioTitleMatcher</a></li>
+    <li><a href="#behavior">Expected Behavior</a></li>
+    <li><a href="#rest">Remaining Changes</a></li>
+    <li><a href="#testing">Testing</a></li>
+    <li><a href="#e2e">End-to-End</a></li>
+    <li><a href="#scope">Out of Scope</a></li>
+    <li><a href="#done">Definition of Done</a></li>
+  </ol>
+</nav>
+
+<details class="section" id="context" open>
+  <summary>Context</summary>
+  <div class="body">
+    <p>A prior session built an end-to-end BambiCloud playlist importer. It was never committed, never specced, and never validated against the live service. This document records what verification found and specifies the remaining work.</p>
+    <p>Entry point: <code>LibraryView.swift:109</code> → Playlists sheet → <code>PlaylistLibraryView</code> <code>+</code> menu → “Import from Link” → <code>BambiCloudPlaylistImportView</code>.</p>
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>File</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td>BambiCloudPlaylistLink</td><td>Validates a pasted link, rebuilds the API URL</td></tr>
+        <tr><td>BambiCloudPlaylistClient</td><td>Fetches public playlist metadata</td></tr>
+        <tr><td>BambiCloudPlaylist</td><td>Decodes the response subset used for import</td></tr>
+        <tr><td>BambiCloudPlaylistImporter</td><td>Scores and matches tracks to local audio</td></tr>
+        <tr><td>BambiCloudPlaylistImportPlan</td><td>Reviewable track→file mapping</td></tr>
+        <tr><td>…ImportViewModel</td><td>Load / select / build playlist</td></tr>
+        <tr><td>…ImportView</td><td>Sheet host, entry ↔ review states</td></tr>
+        <tr><td>…LinkEntryView</td><td>Link paste UI</td></tr>
+        <tr><td>…ReviewView / …MatchRow</td><td>Match review list and rows</td></tr>
+        <tr><td>LocalAudioMatchPicker</td><td>Manual file selection</td></tr>
+        <tr><td>PlaylistLinkImportError</td><td>User-facing error copy</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</details>
+
+<details class="section" id="verification" open>
+  <summary>Verification Results (2026-07-25)</summary>
+  <div class="body">
+    <div class="tablewrap">
+    <table class="plain">
+      <thead><tr><th>Check</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Build, <code>Ilumionate</code> scheme, iOS Simulator</td><td><strong>BUILD SUCCEEDED</strong> — 0 errors, 0 warnings in new files</td></tr>
+        <tr><td>Tests, iPhone 17 / iOS 26.5, serial</td><td><strong>TEST SUCCEEDED</strong> — 6/6 pass</td></tr>
+        <tr><td>UI reachability</td><td>Confirmed reachable from Library</td></tr>
+        <tr><td>Live API contract</td><td><strong>Confirmed</strong> — HTTP 200, 21KB JSON</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Live contract confirmation</h3>
+    <pre><code>GET https://api.bambicloud.com/playlists?uuid=&lt;uuid&gt;
+
+{ playlists: [ { uuid, name, description, expLevel, files: [ … ] } ],
+  totalItems, pageSize, pageOffset }</code></pre>
+    <p>Each file carries <code>uuid</code>, <code>name</code>, <code>duration</code>, <code>fileType</code>, <code>trackNum</code> — every field the decoder requires.</p>
+    <ul>
+      <li><strong>Durations are milliseconds.</strong> <code>154000</code> = 2:34. The decoder’s <code>/1000</code> is correct.</li>
+      <li><strong>Extra fields are additive</strong> (<code>totalItems</code>, <code>creator</code>, <code>audioURL</code>, <code>scriptURL</code>, <code>triggers</code>, <code>warnings</code>, …). Ignoring them is safe.</li>
+      <li><strong>Array order matched <code>trackNum</code> order</strong>, but <code>trackNum</code> is <em>not dense</em> — the observed playlist numbered <code>[0,1,2,3,4,5,7]</code>. Relying on array order is correct; assuming a contiguous index is not.</li>
+      <li><code>playlist.order</code> was <code>null</code> and carries no ordering information.</li>
+    </ul>
+
+    <h3>Security posture (verified, unchanged by this work)</h3>
+    <ul>
+      <li>Host allowlist: <code>bambicloud.com</code> / <code>www.bambicloud.com</code> only; https-only.</li>
+      <li>The API URL is <strong>rebuilt from the parsed UUID</strong>, never followed from the pasted link, so a lookalike host cannot redirect the importer.</li>
+      <li>2MB response cap, 15s timeout.</li>
+      <li><code>audioURL</code> and friends are never requested. Nothing is downloaded.</li>
+    </ul>
+  </div>
+</details>
+
+<details class="section" id="gaps" open>
+  <summary>Gaps to Fix</summary>
+  <div class="body">
+    <div class="callout"><span class="icon">ℹ</span><div>Gaps 1, 2 and 6 were derived from code reading. Each is to be proven by a failing test before being fixed.</div></div>
+    <ol class="decisions">
+      <li><strong>Short titles are all-or-nothing.</strong> <code>titleSimilarity</code> returns 0 unless <code>min(tokenCount) &gt;= 3</code>, with exact equality the only escape hatch. Two of the seven real tracks are two-token names. A local <code>Bimbodoll Sleepener 320.mp3</code> scores 0 → <code>.missing</code>: the user is told they don’t own a file they own, with no manual-pick prompt.</li>
+      <li><strong>Extra local tokens are punished hard.</strong> Coverage divides by <code>max(remote, local)</code>. Local <code>Instant Bimbo Sleepdoll - Bambi Sleep.mp3</code> (5 tokens) against a 3-token remote title yields <code>3/5 = 0.6</code>, below the 0.65 floor → <code>.missing</code>. Artist and collection suffixes are common, so this misfires routinely.</li>
+      <li><strong>Unmatched tracks disappear with no record.</strong> <code>makePlaylist()</code> silently drops them. <em>Decision: keep drop-silently, but state it before it happens.</em> No persistence, no <code>Playlist</code> model change.</li>
+      <li><strong>No contract regression test.</strong> All six tests are mocked; no fixture guards the decoder against the API changing shape.</li>
+      <li><strong>Dead code.</strong> <code>ImportViewModel.canImport</code> is unused; the view inlines <code>matchedCount == 0</code>.</li>
+      <li><strong>O(tracks × files) catalog scans on the main actor.</strong> <code>matchScore</code> calls <code>KnownAudioCatalog.shared.match(audioFile:)</code> per pair; that method linearly scans 54 entries / 218 aliases. For 7 tracks × 300 files that is ~2,100 scans (~1M string ops) inside <code>@MainActor loadPlaylist()</code>. The catalog title per file is invariant across tracks, so the work is redundant.</li>
+    </ol>
+  </div>
+</details>
+
+<details class="section" id="matcher" open>
+  <summary>Design · Extract AudioTitleMatcher</summary>
+  <div class="body">
+    <p><span class="file-new">AudioTitleMatcher.swift</span> — ~110 lines. <code>BambiCloudPlaylistImporter.swift</code> currently mixes plan building, ranking, tiers and normalization in 199 lines. Normalization and similarity move into a pure type with no knowledge of playlist models, testable in isolation; the importer drops to ~90 lines with no knowledge of string munging.</p>
+    <p class="dim">Boundary: the matcher takes two strings and returns a similarity in 0…0.94. It does not know about <code>AudioFile</code>, <code>BambiCloudPlaylist</code>, tiers, or durations.</p>
+    <p>Normalization carries over unchanged: case/diacritic folding, non-alphanumerics to spaces, drop a leading all-digit token of ≤3 characters, drop trailing disposable suffixes (<code>audio</code>, <code>final</code>, <code>hq</code>, <code>official</code>, <code>remastered</code>, <code>mp3</code>, <code>m4a</code>, <code>wav</code>, <code>aac</code>, <code>flac</code>, <code>v2</code>, <code>320kbps</code>).</p>
+
+    <h3>Three signals, take the maximum</h3>
+    <div class="tablewrap">
+    <table class="plain">
+      <thead><tr><th>Signal</th><th>Score</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>Exact normalized equality</td><td>0.94</td><td>Preserves current behavior</td></tr>
+        <tr><td>Space-stripped equality</td><td>0.92</td><td><code>Bimbo Doll Sleepener</code> ↔ <code>Bimbodoll Sleepener</code></td></tr>
+        <tr><td>Asymmetric token containment</td><td>0.70–0.88</td><td>Gaps 1 and 2</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <pre><code>remoteCoverage = |remote ∩ local| / |remote|
+extraPenalty   = min(0.06, 0.02 × (|local| − |remote ∩ local|))
+score          = base(remoteCoverage, |remote|) − extraPenalty</code></pre>
+    <p><code>remoteCoverage</code> asks <em>how much of the remote title the local file contains</em>, so extra local tokens reduce the score mildly instead of failing a hard gate.</p>
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Remote tokens</th><th>Rule</th><th>Base</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Containment disabled — exact/stripped signals only</td><td>—</td></tr>
+        <tr><td>2</td><td>Requires <code>remoteCoverage == 1.0</code></td><td>0.80</td></tr>
+        <tr><td>≥3</td><td><code>remoteCoverage == 1.0</code></td><td>0.88</td></tr>
+        <tr><td>≥3</td><td><code>remoteCoverage &gt;= 0.80</code></td><td>0.80</td></tr>
+        <tr><td>≥3</td><td><code>remoteCoverage &gt;= 0.65</code></td><td>0.70</td></tr>
+        <tr><td>≥3</td><td>otherwise</td><td>0</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout"><span class="icon">ℹ</span><div>The single-token exclusion is deliberate: it prevents a title like “Sleep” from matching every file containing that word. The two-token full-coverage requirement fixes Gap 1 without opening that door.</div></div>
+
+    <h3>Unchanged: guards, tiers, duration bonus</h3>
+    <ul>
+      <li>A normalized remote title shorter than 4 characters scores 0; a title score below 0.55 is discarded before the duration bonus is considered.</li>
+      <li>Candidate floor 0.55; duration bonus <code>+0.06</code> within <code>max(3s, 1%)</code>, <code>+0.03</code> within <code>max(10s, 3%)</code>, else 0. Duration can only corroborate, never carry a match.</li>
+      <li><code>.exact</code> ≥ 0.98 and margin ≥ 0.04; <code>.probable</code> ≥ 0.90 and margin ≥ 0.08; <code>.needsReview</code> ≥ 0.75; else <code>.missing</code>.</li>
+      <li>Each local file is auto-selected at most once.</li>
+    </ul>
+  </div>
+</details>
+
+<details class="section" id="behavior" open>
+  <summary>Expected Behavior Against the Real Playlist</summary>
+  <div class="body">
+    <div class="tablewrap">
+    <table class="plain">
+      <thead><tr><th>Local filename</th><th>Score</th><th>Status</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td><code>08 - Bimbodoll Sleepener.m4a</code></td><td>1.00</td><td><code>.exact</code></td><td><span class="tag same">UNCHANGED</span> existing test</td></tr>
+        <tr><td><code>Bimbo Doll Sleepener.mp3</code></td><td>0.98</td><td><code>.exact</code></td><td><span class="tag fix">was .missing</span></td></tr>
+        <tr><td><code>Instant Bimbo Sleepdoll - Bambi Sleep.mp3</code></td><td>0.90</td><td><code>.probable</code></td><td><span class="tag fix">Gap 2</span></td></tr>
+        <tr><td><code>Bimbodoll Sleepener 320.mp3</code></td><td>0.84</td><td><code>.needsReview</code></td><td><span class="tag fix">Gap 1</span></td></tr>
+        <tr><td>Wipeout Doll vs Dumbdown Doll</td><td>0</td><td>no candidate</td><td><span class="tag same">GUARD HOLDS</span></td></tr>
+        <tr><td>Two identical local titles</td><td>margin 0</td><td><code>.needsReview</code></td><td><span class="tag same">UNCHANGED</span> existing test</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout warn"><span class="icon">▲</span><div>The last two rows are the regression anchors: the change must not create cross-matches between same-family titles, and must not auto-resolve ambiguity.</div></div>
+  </div>
+</details>
+
+<details class="section" id="rest" open>
+  <summary>Remaining Changes</summary>
+  <div class="body">
+    <h3>Precompute local candidates once</h3>
+    <p>Build, once per import, an array of <code>(id, normalizedTitles, duration)</code> folding in filename, <code>displayName</code>, <code>userTitle</code>, <code>trackMetadata.embeddedTitle</code>, <code>trackMetadata.generatedTitle</code> and the <code>KnownAudioCatalog</code> title. Score every track against that array. One catalog lookup per file instead of one per pair; per-pair work becomes set intersections. <em>Fixes Gap 6.</em></p>
+
+    <h3>Honest skip confirmation</h3>
+    <p>When <code>unresolvedCount &gt; 0</code>, the Import action raises a cancellable confirmation before building the playlist:</p>
+    <pre><code>Import 5 of 7 tracks?
+2 tracks aren't in your library and will be skipped.</code></pre>
+    <p>Behavior on confirm is identical to today. When <code>unresolvedCount == 0</code> import proceeds without a prompt. <em>Fixes Gap 3.</em></p>
+
+    <h3>Contract fixture test</h3>
+    <p>Commit the live response <strong>trimmed to only the fields the decoder reads</strong> — <code>audioURL</code>, <code>scriptURL</code>, <code>hapticsURL</code>, <code>uploaderId</code>, <code>patreonTiers</code> and <code>creator</code> stripped rather than committed, so no media URLs or creator data enter the repository. Real names and durations retained (existing tests already use them). Asserts 7 tracks decode, order preserved, ms→s conversion, non-dense <code>trackNum</code> tolerated, unknown keys ignored. <em>Fixes Gap 4.</em></p>
+
+    <h3>Remove dead <code>canImport</code></h3>
+    <p><em>Fixes Gap 5.</em></p>
+  </div>
+</details>
+
+<details class="section" id="testing" open>
+  <summary>Testing</summary>
+  <div class="body">
+    <p>TDD — one failing test before each fix:</p>
+    <ol>
+      <li>Two-token remote title with a decorated local filename → <code>.needsReview</code>, not <code>.missing</code> (Gap 1)</li>
+      <li>Extra local tokens with full remote coverage → <code>.probable</code>, not <code>.missing</code> (Gap 2)</li>
+      <li>Space-stripped equivalence → <code>.exact</code></li>
+      <li>Single-token remote title does <strong>not</strong> match an unrelated file containing that token</li>
+      <li>Same-family titles do not cross-match (regression guard)</li>
+      <li>Catalog lookups occur once per file, not per pair (Gap 6)</li>
+      <li>Contract fixture decode (Gap 4)</li>
+      <li>Confirmation appears only when <code>unresolvedCount &gt; 0</code> (Gap 3)</li>
+    </ol>
+    <div class="callout warn"><span class="icon">▲</span><div>The existing six tests must continue to pass <strong>unmodified</strong> — they encode the <code>.exact</code> and ambiguity behaviors this change must preserve.</div></div>
+    <p>Full suite run serially (<code>-parallel-testing-enabled NO</code>) in the real working copy. Per the known-flakiness notes, three main-actor latency tests and <code>KeywordPipelineEvaluationTests/timelineMetricsOverCorpus</code> fail for environmental reasons and are not regressions.</p>
+  </div>
+</details>
+
+<details class="section" id="e2e">
+  <summary>End-to-End Verification</summary>
+  <div class="body">
+    <p>Seed a simulator library with files shaped like the real track names, deliberately including the decorated and word-split variants that expose Gaps 1 and 2, then drive the import sheet and capture the review screen.</p>
+    <div class="callout warn"><span class="icon">▲</span><div><strong>Risk:</strong> seeding may require writing <code>AudioLibraryStore</code>’s JSON directly rather than going through the normal import path. To be confirmed early; if it turns fiddly, report rather than silently substituting a weaker check.</div></div>
+    <div class="callout warn"><span class="icon">▲</span><div><strong>Risk:</strong> generated audio needs plausible durations, since duration feeds the tier bonuses. Silent files at the real durations (154s, 876s, 1390s, …) suffice.</div></div>
+  </div>
+</details>
+
+<details class="section" id="scope">
+  <summary>Out of Scope</summary>
+  <div class="body">
+    <ul>
+      <li>Downloading audio. The importer maps to owned files only.</li>
+      <li>Persisting the source link or unmatched tracks for later re-sync (Gap 3 alternative, deferred).</li>
+      <li>Any change to link validation, the fetch client, or the security model.</li>
+      <li>Character-level fuzzy matching (trigram Dice) for typos — not justified by observed failures; revisit if the three signals prove insufficient.</li>
+    </ul>
+  </div>
+</details>
+
+<details class="section" id="done" open>
+  <summary>Definition of Done</summary>
+  <div class="body">
+    <ul class="check">
+      <li>Each gap has a test that failed before its fix</li>
+      <li>Six original tests pass unmodified</li>
+      <li>Build clean, no new warnings</li>
+      <li>Full suite green apart from the four known environmental failures</li>
+      <li>Import verified in the simulator against a seeded library</li>
+      <li><code>Ilumionate/PlaylistImport/</code> and its tests committed</li>
+    </ul>
+  </div>
+</details>
+
+<footer>
+  Ilumionate / LumeSync · Design spec companion to
+  <a href="2026-07-25-bambicloud-playlist-import-design.md">2026-07-25-bambicloud-playlist-import-design.md</a>
+</footer>
+
+</div>
+</body>
+</html>
