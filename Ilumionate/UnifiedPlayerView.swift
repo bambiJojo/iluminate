@@ -17,6 +17,11 @@ struct UnifiedPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Briefly emphasises the "swipe up" hint after a bare tap.
+    @State private var isHintingReveal = false
+    @State private var hintTask: Task<Void, Never>?
 
     init(
         mode: PlayerMode,
@@ -222,7 +227,7 @@ struct UnifiedPlayerView: View {
 
     private var minimalOverlay: some View {
         Button {
-            controlsVisibility.registerInteraction()
+            pulseRevealHint()
         } label: {
             VStack {
                 VStack(spacing: TranceSpacing.micro) {
@@ -241,16 +246,36 @@ struct UnifiedPlayerView: View {
                     Spacer()
                 }
 
-                Text("Tap or swipe up to show controls")
+                Text("Swipe up to show controls")
                     .font(TranceTypography.caption)
-                    .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.5))
+                    .foregroundStyle(
+                        viewModel.secondaryLabelColor.opacity(isHintingReveal ? 0.95 : 0.5)
+                    )
+                    .scaleEffect(reduceMotion || !isHintingReveal ? 1 : 1.06)
                     .padding(.bottom, TranceSpacing.statusBar)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Show controls")
+        .accessibilityLabel("Swipe up to show controls")
+        // VoiceOver intercepts swipes, so without this override there would be
+        // no way for a VoiceOver user to reach the controls at all.
+        .accessibilityAction { controlsVisibility.registerInteraction() }
+    }
+
+    /// A stray touch must not light up the chrome mid-session, but silently
+    /// swallowing it would read as a broken screen. Pulse the hint instead: it
+    /// acknowledges the touch and teaches the gesture that does work.
+    private func pulseRevealHint() {
+        hintTask?.cancel()
+        let motion = reduceMotion ? Animation.easeInOut(duration: 0.2) : LiminalMotion.touch
+        withAnimation(motion) { isHintingReveal = true }
+        hintTask = Task {
+            try? await Task.sleep(for: .seconds(0.9))
+            guard !Task.isCancelled else { return }
+            withAnimation(motion) { isHintingReveal = false }
+        }
     }
 
     // MARK: - Controls Overlay
