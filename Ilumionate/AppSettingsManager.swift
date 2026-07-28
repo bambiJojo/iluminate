@@ -18,6 +18,7 @@ enum AppSettingsManager {
         static let autoLockEnabled = "autoLockEnabled"
         static let userFrequencyMultiplier = "userFrequencyMultiplier"
         static let countdownDuration = "countdownDuration"
+        static let mindMachineEnabled = "mindMachineEnabled"
         static let listeningHistoryEnabled = "listeningHistoryEnabled"
         static let nsfwSourcesEnabled = "nsfwSourcesEnabled"
         static let audioFiles = "audioFiles"
@@ -62,6 +63,7 @@ enum AppSettingsManager {
         let userFrequencyMultiplier: Double
         let countdownDuration: Int
         let listeningHistoryEnabled: Bool
+        let mindMachineEnabled: Bool
     }
 
     struct ExportAudioLibrary: Codable, Sendable {
@@ -102,6 +104,10 @@ enum AppSettingsManager {
         return [3, 7, 10].contains(value) ? value : 3
     }
 
+    static func isMindMachineEnabled(defaults: UserDefaults = .standard) -> Bool {
+        bool(forKey: Key.mindMachineEnabled, default: true, defaults: defaults)
+    }
+
     static func exportSnapshot(
         defaults: UserDefaults = .standard,
         fileManager: FileManager = .default,
@@ -124,7 +130,8 @@ enum AppSettingsManager {
                     forKey: Key.listeningHistoryEnabled,
                     default: false,
                     defaults: defaults
-                )
+                ),
+                mindMachineEnabled: isMindMachineEnabled(defaults: defaults)
             ),
             analysisPreferences: analysisPreferencesSnapshot ?? AnalysisPreferences.shared.snapshot,
             sessionHistory: sessionHistory(defaults: defaults),
@@ -158,6 +165,7 @@ enum AppSettingsManager {
         defaults.set(true, forKey: Key.autoLockEnabled)
         defaults.set(1.0, forKey: Key.userFrequencyMultiplier)
         defaults.set(3, forKey: Key.countdownDuration)
+        defaults.set(true, forKey: Key.mindMachineEnabled)
         defaults.set(false, forKey: Key.listeningHistoryEnabled)
         defaults.set(false, forKey: Key.nsfwSourcesEnabled)
 
