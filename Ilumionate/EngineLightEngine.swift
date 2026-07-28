@@ -55,6 +55,37 @@ final class LightEngine {
     /// Whether the engine is paused (running but not updating brightness)
     private(set) var isPaused: Bool = false
 
+    /// Whether the display loop is actually driving light output.
+    /// Invariant: `isDrivingOutput == (isRunning && mindMachineEnabled)`.
+    private(set) var isDrivingOutput: Bool = false
+
+    /// Master switch for light output. When false the engine produces no
+    /// light at all: the display link is suspended and every brightness
+    /// output is pinned to 0. `isRunning` continues to record intent, so
+    /// re-enabling restores the loop without the caller re-attaching anything.
+    ///
+    /// The gate lives here, at the single choke point, so that callers which
+    /// attach sessions — notably playlist track changes — cannot re-arm the
+    /// lights behind the user's choice.
+    var mindMachineEnabled: Bool = true {
+        didSet {
+            guard oldValue != mindMachineEnabled else { return }
+            if mindMachineEnabled {
+                guard isRunning else { return }
+                // Re-prime the tick: a stale timestamp would produce a huge
+                // deltaTime and blow up the phase accumulator on the first frame.
+                phase = 0.0
+                lastTimestamp = 0.0
+                startDisplayLink()
+            } else {
+                stopDisplayLink()
+                brightness = 0.0
+                brightnessLeft = 0.0
+                brightnessRight = 0.0
+            }
+        }
+    }
+
     /// The instantaneous frequency being output (may differ from targetFrequency
     /// during a ramp).
     private(set) var currentFrequency: Double = 10.0
@@ -297,6 +328,32 @@ final class LightEngine {
         isRunning = true
         isPaused = false
 
+        if mindMachineEnabled {
+            startDisplayLink()
+        } else {
+            Log.engine.info("🚀 Light engine started with output gated off")
+        }
+    }
+
+    /// Stop the display loop and reset state.
+    func stop() {
+        guard isRunning else { return }
+
+        stopDisplayLink()
+        isRunning = false
+        isPaused = false
+        brightness = 0.0
+        brightnessLeft = 0.0
+        brightnessRight = 0.0
+        phase = 0.0
+        lastTimestamp = 0.0
+        activeRamp = nil
+        currentFrequency = targetFrequency
+    }
+
+    /// Create and schedule the CADisplayLink. Sole owner of `displayLink`,
+    /// `proxy`, and `isDrivingOutput` going true.
+    private func startDisplayLink() {
         // Use a proxy to avoid retaining self in the display link target.
         // Clear any existing proxy first to prevent memory leaks
         proxy = nil
@@ -319,27 +376,18 @@ final class LightEngine {
 
         link.add(to: .main, forMode: .common)
         displayLink = link
+        isDrivingOutput = true
 
-        Log.engine.info("🚀 Light engine started with adaptive refresh rate: \(self.targetRefreshRate)Hz")
+        Log.engine.info("🚀 Light engine driving output at adaptive refresh rate: \(self.targetRefreshRate)Hz")
         Log.engine.info("   Therapeutic frequency: \(String(format: "%.1f", self.currentFrequency))Hz")
     }
 
-    /// Stop the display loop and reset state.
-    func stop() {
-        guard isRunning else { return }
-
+    /// Tear down the CADisplayLink. Sole owner of `isDrivingOutput` going false.
+    private func stopDisplayLink() {
         displayLink?.invalidate()
         displayLink = nil
         proxy = nil
-        isRunning = false
-        isPaused = false
-        brightness = 0.0
-        brightnessLeft = 0.0
-        brightnessRight = 0.0
-        phase = 0.0
-        lastTimestamp = 0.0
-        activeRamp = nil
-        currentFrequency = targetFrequency
+        isDrivingOutput = false
     }
 
     /// Pause the engine (keep running but freeze brightness at 0)
