@@ -113,7 +113,6 @@ final class UnifiedPlayerViewModel {
     private var lightScorePlayer: LightScorePlayer?
     private var audioSync: AudioSyncController?
     var currentPhase = "Induction Phase"
-    var isSyncEnabled = true
 
     // MARK: - Flash Mode State
 
@@ -180,6 +179,9 @@ final class UnifiedPlayerViewModel {
     private var uiUpdateTask: Task<Void, Never>?
     private var countdownTask: Task<Void, Never>?
     private var savedBrightness: CGFloat = 1.0
+    /// Guards `savedBrightness` so the player's own forced 1.0 can never be
+    /// captured as the user's preferred level.
+    private var hasCapturedBrightness = false
     private var hasStarted = false
     private var analyticsLifecycle = PlaybackAnalyticsLifecycle()
     private var playbackStartType: PlaybackStartType = .fresh
@@ -236,10 +238,13 @@ final class UnifiedPlayerViewModel {
     func onAppear() {
         let isFreshPresentation = playbackState == .idle && currentTime == 0
         dismissToMiniPlayer = false
+        captureScreenBrightnessIfNeeded()
+        applyStoredMindMachinePreference()
         UIApplication.shared.isIdleTimerDisabled = AppSettingsManager.keepsScreenAwakeDuringSessions()
         if !hasStarted {
             setupMode()
         }
+        applyMindMachineScreenPolicy()
         prepareRecommendedNextModeIfNeeded()
         startUIUpdateTimer()
         nowPlaying.activate(
@@ -249,6 +254,14 @@ final class UnifiedPlayerViewModel {
             viewModel: self,
             resetProgress: isFreshPresentation
         )
+    }
+
+    /// Records the user's own screen brightness exactly once per presentation,
+    /// before the player forces it to 1.0.
+    private func captureScreenBrightnessIfNeeded() {
+        guard !hasCapturedBrightness else { return }
+        savedBrightness = activeScreen?.brightness ?? 1.0
+        hasCapturedBrightness = true
     }
 
     func onDisappear() {
@@ -492,6 +505,53 @@ final class UnifiedPlayerViewModel {
         return .unavailable
     }
 
+    // MARK: - Mind Machine Gate (Session / Playlist)
+
+    /// Whether light output is running. Turning this off drops to audio-only:
+    /// the engine stops driving output, the screen returns to the user's own
+    /// brightness, and the device is allowed to sleep.
+    var mindMachineEnabled: Bool {
+        get { engine.mindMachineEnabled }
+        set {
+            guard newValue != engine.mindMachineEnabled else { return }
+            engine.mindMachineEnabled = newValue
+            if mode.hasMindMachineToggle {
+                userDefaults.set(newValue, forKey: AppSettingsManager.Key.mindMachineEnabled)
+            }
+            applyMindMachineScreenPolicy()
+        }
+    }
+
+    func toggleMindMachine() {
+        haptics.medium()
+        mindMachineEnabled.toggle()
+    }
+
+    /// Lights on: hold the screen bright and awake for entrainment.
+    /// Lights off: hand the screen back so the phone can go in a pocket.
+    private func applyMindMachineScreenPolicy() {
+        guard mode.hasMindMachineToggle else { return }
+        if engine.mindMachineEnabled {
+            if playbackState == .playing || playbackState == .countdown {
+                activeScreen?.brightness = 1.0
+            }
+            UIApplication.shared.isIdleTimerDisabled =
+                AppSettingsManager.keepsScreenAwakeDuringSessions(defaults: userDefaults)
+        } else {
+            activeScreen?.brightness = savedBrightness
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+    }
+
+    /// Apply the stored preference for modes that own it. Modes that do not
+    /// (notably `.audioLight`, which has its own Light Sync control) must get
+    /// an ungated engine so their own toggle still works.
+    private func applyStoredMindMachinePreference() {
+        engine.mindMachineEnabled = mode.hasMindMachineToggle
+            ? AppSettingsManager.isMindMachineEnabled(defaults: userDefaults)
+            : true
+    }
+
     // MARK: - Bilateral / Binaural (Flash Mode)
 
     func toggleBilateral() {
@@ -698,9 +758,11 @@ final class UnifiedPlayerViewModel {
         lastPersistedProgressSecond = -1
         interruptionNotice = nil
 
-        // Maximise screen brightness
-        savedBrightness = activeScreen?.brightness ?? 1.0
-        activeScreen?.brightness = 1.0
+        // Maximise screen brightness — but only when lights are actually running.
+        captureScreenBrightnessIfNeeded()
+        if engine.mindMachineEnabled {
+            activeScreen?.brightness = 1.0
+        }
 
         let count = countdownDuration
         countdownMessage = "Close your eyes and relax in\u{2026}"
