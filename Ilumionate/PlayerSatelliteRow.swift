@@ -21,9 +21,8 @@ struct PlayerSatelliteRow: View {
     private var showLight: Bool { viewModel.mode.hasBrightnessControl }
     private var showLightSync: Bool { viewModel.mode.hasLightSyncToggle }
     private var showOverflow: Bool {
-        viewModel.mode.hasSyncOptions || viewModel.mode.hasBilateralToggle
-            || viewModel.mode.hasBinauralToggle || viewModel.mode.hasSmartTransitions
-            || viewModel.mode.hasTrackList
+        viewModel.mode.hasBilateralToggle || viewModel.mode.hasBinauralToggle
+            || viewModel.mode.hasSmartTransitions || viewModel.mode.hasTrackList
     }
     private var hasAny: Bool { showVolume || showLight || showLightSync || showOverflow }
 

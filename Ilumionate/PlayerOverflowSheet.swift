@@ -20,12 +20,6 @@ struct PlayerOverflowSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: TranceSpacing.cardMargin) {
-                if viewModel.mode.hasSyncOptions {
-                    GlassCard(label: "SYNC OPTIONS") {
-                        SyncToggle(isOn: $viewModel.isSyncEnabled)
-                    }
-                }
-
                 if viewModel.mode.hasBilateralToggle || viewModel.mode.hasBinauralToggle {
                     GlassCard(label: "LIGHT & AUDIO") {
                         HStack(spacing: 32) {

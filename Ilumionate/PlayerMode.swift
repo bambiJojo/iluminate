@@ -200,9 +200,13 @@ enum PlayerMode: Identifiable {
         }
     }
 
-    var hasSyncOptions: Bool {
+    /// Whether this mode can drop to audio-only playback. True for the modes
+    /// that drive the light engine alongside audio; `.audioLight` is excluded
+    /// because it has its own Light Sync control.
+    var hasMindMachineToggle: Bool {
         switch self {
         case .session(_, let audioFile): return audioFile != nil
+        case .playlist: return true
         default: return false
         }
     }
