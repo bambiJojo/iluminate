@@ -1,20 +1,11 @@
 //
-//  SyncToggle.swift
+//  RoseToggleStyle.swift
 //  Ilumionate
 //
-//  Custom toggle with rose-gold styling for Mind Machine sync
+//  Shared rose-gold toggle styling used across settings and player surfaces.
 //
 
 import SwiftUI
-
-struct SyncToggle: View {
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Toggle("Sync Mind Machine", isOn: $isOn)
-            .toggleStyle(RoseToggleStyle())
-    }
-}
 
 struct RoseToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -47,16 +38,18 @@ struct RoseToggleStyle: ToggleStyle {
 // MARK: - Preview
 
 #Preview {
-    struct SyncTogglePreview: View {
-        @State private var isSync1 = false
-        @State private var isSync2 = true
+    struct RoseTogglePreview: View {
+        @State private var isOn1 = false
+        @State private var isOn2 = true
 
         var body: some View {
             VStack(spacing: TranceSpacing.cardMargin) {
-                GlassCard(label: "Sync Options") {
+                GlassCard(label: "Toggles") {
                     VStack(spacing: TranceSpacing.list) {
-                        SyncToggle(isOn: $isSync1)
-                        SyncToggle(isOn: $isSync2)
+                        Toggle("Off by default", isOn: $isOn1)
+                            .toggleStyle(RoseToggleStyle())
+                        Toggle("On by default", isOn: $isOn2)
+                            .toggleStyle(RoseToggleStyle())
                     }
                 }
             }
@@ -65,5 +58,5 @@ struct RoseToggleStyle: ToggleStyle {
         }
     }
 
-    return SyncTogglePreview()
+    return RoseTogglePreview()
 }
