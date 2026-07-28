@@ -15,45 +15,79 @@ import QuartzCore
 /// interpolates frequency, intensity, and other parameters based on
 /// the current playback time.
 ///
-/// The engine queries this player each frame to get the target state,
-/// which is then smoothly ramped to by the LightEngine.
+/// Playback position is *derived* from a clock anchor on every read rather
+/// than stored and pumped by a caller. That means the position is correct
+/// whether or not anything is ticking the player — the light engine can
+/// suspend its display link and this player stays truthful.
 @Observable
 @MainActor
 class LightScorePlayer {
+
+    // MARK: - Clock
+
+    /// The clock's entire state. Position is derived from this, never stored,
+    /// so "playing but with a stale time" is not representable.
+    private enum Clock {
+        case idle
+        case running(anchor: CFTimeInterval, offset: Double)
+        case held(at: Double)
+    }
 
     // MARK: - Public State
 
     /// The loaded session being played
     let session: LightSession
 
+    private var clock: Clock = .idle
+
     /// Current playback time in seconds from session start
-    private(set) var currentTime: Double = 0.0
+    var currentTime: Double {
+        switch clock {
+        case .idle:
+            return 0
+        case .held(let time):
+            return time
+        case .running(let anchor, let offset):
+            return min(offset + (now() - anchor), session.duration_sec)
+        }
+    }
 
-    /// Whether playback is active
-    private(set) var isPlaying: Bool = false
+    /// Whether the session has run past its end
+    var isComplete: Bool {
+        session.duration_sec > 0 && currentTime >= session.duration_sec
+    }
 
-    /// Whether the session has completed
-    private(set) var isComplete: Bool = false
+    /// Whether playback is active. A completed session is not playing.
+    var isPlaying: Bool {
+        guard case .running = clock else { return false }
+        return !isComplete
+    }
 
     // MARK: - Private State
+
+    /// Injectable clock so timing behaviour is testable without sleeps.
+    private let now: () -> CFTimeInterval
 
     /// Sorted moments for efficient lookup
     private let moments: [LightMoment]
 
-    /// Start time reference (CACurrentMediaTime)
-    private var startTime: CFTimeInterval = 0.0
+    /// Performance optimization: cached last search index.
+    /// Observation-ignored — mutated on the 120Hz read path.
+    @ObservationIgnored private var lastSearchIndex: Int = 0
 
-    /// Performance optimization: cached last search index
-    private var lastSearchIndex: Int = 0
-
-    /// Performance optimization: cached last interpolation result
-    private var cachedState: (time: Double, state: SessionState)?
+    /// Performance optimization: cached last interpolation result.
+    /// Observation-ignored — mutated on the 120Hz read path.
+    @ObservationIgnored private var cachedState: (time: Double, state: SessionState)?
 
     // MARK: - Initialization
 
-    init(session: LightSession) {
+    init(
+        session: LightSession,
+        now: @escaping () -> CFTimeInterval = CACurrentMediaTime
+    ) {
         self.session = session
         self.moments = session.light_score.sorted { $0.time < $1.time }
+        self.now = now
     }
 
     // MARK: - Playback Control
@@ -61,52 +95,31 @@ class LightScorePlayer {
     /// Start or resume playback
     func play() {
         guard !isPlaying else { return }
-        startTime = CACurrentMediaTime() - currentTime
-        isPlaying = true
-        isComplete = false
+        clock = .running(anchor: now(), offset: currentTime)
     }
 
     /// Pause playback at current position
     func pause() {
-        guard isPlaying else { return }
-        isPlaying = false
+        guard case .running = clock else { return }
+        clock = .held(at: currentTime)   // reads before it writes — cannot go stale
     }
 
     /// Stop and reset to beginning
     func stop() {
-        isPlaying = false
-        currentTime = 0.0
-        startTime = 0.0
-        isComplete = false
+        clock = .idle
     }
 
     /// Seek to a specific time
     func seek(to time: Double) {
-        let clampedTime = max(0.0, min(time, session.duration_sec))
-        currentTime = clampedTime
-        if isPlaying {
-            startTime = CACurrentMediaTime() - clampedTime
+        let clamped = max(0.0, min(time, session.duration_sec))
+        if case .running = clock {
+            clock = .running(anchor: now(), offset: clamped)
+        } else {
+            clock = .held(at: clamped)
         }
-        isComplete = clampedTime >= session.duration_sec
     }
 
     // MARK: - State Query
-
-    /// Update the current time based on real clock time.
-    /// Call this from your CADisplayLink tick.
-    func updateTime() {
-        guard isPlaying else { return }
-
-        let elapsed = CACurrentMediaTime() - startTime
-        currentTime = elapsed
-
-        // Check for session completion
-        if currentTime >= session.duration_sec {
-            currentTime = session.duration_sec
-            isPlaying = false
-            isComplete = true
-        }
-    }
 
     /// Returns the interpolated state at the current playback time.
     /// This is what the LightEngine should target.

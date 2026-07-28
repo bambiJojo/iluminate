@@ -501,7 +501,6 @@ final class LightEngine {
     /// Applies state from the attached session player if one is active.
     private func applySessionState() {
         guard let player = sessionPlayer else { return }
-        player.updateTime()
         let state = player.currentState()
 
         waveform = state.waveform
