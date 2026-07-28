@@ -305,7 +305,7 @@ struct UnifiedPlayerView: View {
                 onInteraction: controlsVisibility.registerInteraction
             )
 
-            PlayerSatelliteRow(
+            PlayerControlTray(
                 viewModel: viewModel,
                 engine: viewModel.engine,
                 showingOverflow: $showingOverflow,

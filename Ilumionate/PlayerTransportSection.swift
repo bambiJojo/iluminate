@@ -23,7 +23,7 @@ struct PlayerButtonStyle: ButtonStyle {
 
 struct PlayerTransportSection: View {
     @Bindable var viewModel: UnifiedPlayerViewModel
-    /// Restarts the controls idle timer — see `PlayerSatelliteRow.onInteraction`.
+    /// Restarts the controls idle timer — see `PlayerControlTray.onInteraction`.
     var onInteraction: () -> Void = {}
 
     var body: some View {
