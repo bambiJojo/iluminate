@@ -26,6 +26,9 @@ struct SatelliteButton: View {
             .overlay(Circle().strokeBorder(
                 active ? Color.roseGold.opacity(0.5) : Color.glassBorder, lineWidth: 1))
             .clipShape(.circle)
+            // Keep the 36pt visual but meet the 44pt minimum touch target.
+            .frame(width: 44, height: 44)
+            .contentShape(.circle)
             .buttonStyle(PlayerButtonStyle())
     }
 }
