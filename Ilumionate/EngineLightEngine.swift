@@ -59,6 +59,23 @@ final class LightEngine {
     /// Invariant: `isDrivingOutput == (isRunning && mindMachineEnabled)`.
     private(set) var isDrivingOutput: Bool = false
 
+    /// Whether the engine must emit no light this frame.
+    ///
+    /// True when explicitly paused, or when the score player driving the engine
+    /// is not playing. The second condition matters because pausing the engine
+    /// is not something every caller remembers to do: `AudioLightSyncPlayer`
+    /// and `PlaylistPlayerController` pause the audio and the score but never
+    /// the engine, which would otherwise leave the oscillator free-running at
+    /// whatever frequency the frozen score last reported.
+    ///
+    /// With no score attached the engine is under manual control (previews,
+    /// direct `targetFrequency` use) and is never suspended by this rule.
+    var isOutputSuspended: Bool {
+        if isPaused { return true }
+        guard let sessionPlayer else { return false }
+        return !sessionPlayer.isPlaying
+    }
+
     /// Master switch for light output. When false the engine produces no
     /// light at all: the display link is suspended and every brightness
     /// output is pinned to 0. `isRunning` continues to record intent, so
@@ -423,8 +440,10 @@ final class LightEngine {
         let deltaTime = link.timestamp - lastTimestamp
         lastTimestamp = link.timestamp
 
-        // Early return when paused — keep timestamp fresh to prevent phase jump on resume.
-        if isPaused {
+        // Early return when output is suspended — either an explicit pause or a
+        // score player that is not playing. The timestamp is already refreshed
+        // above, which prevents a phase jump on resume.
+        if isOutputSuspended {
             brightness = 0.0
             brightnessLeft = 0.0
             brightnessRight = 0.0
