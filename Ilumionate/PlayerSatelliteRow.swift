@@ -13,6 +13,11 @@ struct PlayerSatelliteRow: View {
     @Bindable var viewModel: UnifiedPlayerViewModel
     @Bindable var engine: LightEngine
     @Binding var showingOverflow: Bool
+    /// Called on every tap and every slider movement so the parent can restart
+    /// the controls idle timer. Without it the overlay fades out from under the
+    /// user mid-tap or mid-drag, because pressing a control is not otherwise
+    /// counted as an interaction.
+    var onInteraction: () -> Void = {}
 
     enum Panel { case volume, light }
     @State private var bloom = BloomState<Panel>()
@@ -57,14 +62,20 @@ struct PlayerSatelliteRow: View {
                             systemImage: viewModel.mindMachineEnabled
                                 ? "lightbulb.fill" : "lightbulb",
                             active: viewModel.mindMachineEnabled
-                        ) { viewModel.toggleMindMachine() }
+                        ) {
+                            onInteraction()
+                            viewModel.toggleMindMachine()
+                        }
                     }
                     if showLightSync {
                         SatelliteButton(
                             label: viewModel.lightSyncEnabled ? "Light sync on" : "Light sync off",
                             systemImage: viewModel.lightSyncEnabled ? "lightbulb.fill" : "lightbulb",
                             active: viewModel.lightSyncEnabled
-                        ) { viewModel.toggleLightSync() }
+                        ) {
+                            onInteraction()
+                            viewModel.toggleLightSync()
+                        }
                     }
                     if showVolume {
                         SatelliteButton(
@@ -83,6 +94,7 @@ struct PlayerSatelliteRow: View {
                     }
                     if showOverflow {
                         SatelliteButton(label: "More options", systemImage: "ellipsis") {
+                            onInteraction()
                             showingOverflow = true
                         }
                     }
@@ -93,10 +105,14 @@ struct PlayerSatelliteRow: View {
             .onChange(of: viewModel.mindMachineEnabled) { _, enabled in
                 if !enabled, bloom.isOpen(.light) { bloom.toggle(.light) }
             }
+            // Dragging a bloom slider must keep the overlay alive.
+            .onChange(of: viewModel.volume) { _, _ in onInteraction() }
+            .onChange(of: engine.userBrightnessMultiplier) { _, _ in onInteraction() }
         }
     }
 
     private func toggle(_ panel: Panel) {
+        onInteraction()
         TranceHaptics.shared.light()
         bloom.toggle(panel)
     }

@@ -23,16 +23,20 @@ struct PlayerButtonStyle: ButtonStyle {
 
 struct PlayerTransportSection: View {
     @Bindable var viewModel: UnifiedPlayerViewModel
+    /// Restarts the controls idle timer — see `PlayerSatelliteRow.onInteraction`.
+    var onInteraction: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 28) {
             if viewModel.mode.hasTrackNavigation {
                 ClusterGhostButton(label: "Previous", systemImage: "backward.fill") {
+                    onInteraction()
                     Task { await viewModel.skipPrevious() }
                 }
                 .disabled(viewModel.isFirstTrack && viewModel.currentTime < 3)
             } else if viewModel.mode.hasSkipControls {
                 ClusterGhostButton(label: "Back 15 seconds", systemImage: "gobackward.15") {
+                    onInteraction()
                     viewModel.skipBack15()
                 }
             }
@@ -41,16 +45,19 @@ struct PlayerTransportSection: View {
                 label: viewModel.isPlaying ? "Pause" : "Play",
                 systemImage: viewModel.isPlaying ? "pause.fill" : "play.fill"
             ) {
+                onInteraction()
                 viewModel.togglePlayPause()
             }
 
             if viewModel.mode.hasTrackNavigation {
                 ClusterGhostButton(label: "Next", systemImage: "forward.fill") {
+                    onInteraction()
                     Task { await viewModel.skipNext() }
                 }
                 .disabled(viewModel.isLastTrack)
             } else if viewModel.mode.hasSkipControls {
                 ClusterGhostButton(label: "Forward 15 seconds", systemImage: "goforward.15") {
+                    onInteraction()
                     viewModel.skipForward15()
                 }
             }

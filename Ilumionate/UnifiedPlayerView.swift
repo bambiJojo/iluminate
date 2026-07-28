@@ -16,6 +16,7 @@ struct UnifiedPlayerView: View {
     @State private var isScrubbing = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     init(
         mode: PlayerMode,
@@ -256,6 +257,11 @@ struct UnifiedPlayerView: View {
 
     private var isHeroMode: Bool { viewModel.mode.hasAudioScrubber }
 
+    /// Landscape on iPhone. The hero orb alone is 240pt plus padding, which
+    /// pushes the transport and satellite rows off the bottom of a ~380pt
+    /// canvas and makes them untappable, so the orb is dropped here.
+    private var isCompactHeight: Bool { verticalSizeClass == .compact }
+
     private var controlsOverlay: some View {
         VStack(spacing: 0) {
             PlayerTopBar(
@@ -273,10 +279,14 @@ struct UnifiedPlayerView: View {
 
             Spacer()
 
-            // Now-playing hero: orb + title block (session / audio / playlist)
+            // Now-playing hero: orb + title block (session / audio / playlist).
+            // The orb is dropped in compact height so the controls below it
+            // stay on screen and reachable.
             if isHeroMode {
-                PlayerHeroOrb(engine: viewModel.engine, isPlaying: viewModel.isPlaying)
-                    .padding(.vertical, TranceSpacing.content)
+                if !isCompactHeight {
+                    PlayerHeroOrb(engine: viewModel.engine, isPlaying: viewModel.isPlaying)
+                        .padding(.vertical, TranceSpacing.content)
+                }
                 PlayerTitleBlock(viewModel: viewModel)
                 Spacer()
             }
@@ -290,12 +300,16 @@ struct UnifiedPlayerView: View {
 
     private var bottomControls: some View {
         VStack(spacing: TranceSpacing.cardMargin) {
-            PlayerTransportSection(viewModel: viewModel)
+            PlayerTransportSection(
+                viewModel: viewModel,
+                onInteraction: controlsVisibility.registerInteraction
+            )
 
             PlayerSatelliteRow(
                 viewModel: viewModel,
                 engine: viewModel.engine,
-                showingOverflow: $showingOverflow
+                showingOverflow: $showingOverflow,
+                onInteraction: controlsVisibility.registerInteraction
             )
             .opacity(isScrubbing ? 0 : 1)
 
