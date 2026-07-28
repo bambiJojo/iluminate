@@ -18,13 +18,19 @@ struct PlayerSatelliteRow: View {
     @State private var bloom = BloomState<Panel>()
 
     private var showVolume: Bool { viewModel.mode.hasVolumeControl }
-    private var showLight: Bool { viewModel.mode.hasBrightnessControl }
+    /// A brightness slider is meaningless with no light output.
+    private var showLight: Bool {
+        viewModel.mode.hasBrightnessControl && viewModel.mindMachineEnabled
+    }
     private var showLightSync: Bool { viewModel.mode.hasLightSyncToggle }
+    private var showMindMachine: Bool { viewModel.mode.hasMindMachineToggle }
     private var showOverflow: Bool {
         viewModel.mode.hasBilateralToggle || viewModel.mode.hasBinauralToggle
             || viewModel.mode.hasSmartTransitions || viewModel.mode.hasTrackList
     }
-    private var hasAny: Bool { showVolume || showLight || showLightSync || showOverflow }
+    private var hasAny: Bool {
+        showVolume || showLight || showLightSync || showMindMachine || showOverflow
+    }
 
     var body: some View {
         if hasAny {
@@ -44,6 +50,15 @@ struct PlayerSatelliteRow: View {
                 }
 
                 HStack(spacing: TranceSpacing.small) {
+                    if showMindMachine {
+                        SatelliteButton(
+                            label: viewModel.mindMachineEnabled
+                                ? "Mind Machine on" : "Mind Machine off",
+                            systemImage: viewModel.mindMachineEnabled
+                                ? "lightbulb.fill" : "lightbulb",
+                            active: viewModel.mindMachineEnabled
+                        ) { viewModel.toggleMindMachine() }
+                    }
                     if showLightSync {
                         SatelliteButton(
                             label: viewModel.lightSyncEnabled ? "Light sync on" : "Light sync off",
@@ -75,6 +90,9 @@ struct PlayerSatelliteRow: View {
             }
             .padding(.horizontal, TranceSpacing.screen)
             .animation(.easeInOut(duration: 0.2), value: bloom.open)
+            .onChange(of: viewModel.mindMachineEnabled) { _, enabled in
+                if !enabled, bloom.isOpen(.light) { bloom.toggle(.light) }
+            }
         }
     }
 
