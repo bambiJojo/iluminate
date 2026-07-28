@@ -89,12 +89,15 @@ struct ColorPulseBackground: View {
 // MARK: - Audio Light Background
 
 /// Switches between bgPrimary and SessionView based on light sync state.
-struct AudioLightBackground: View {
+/// The entrainment backdrop: the driven light field when lights are running,
+/// a flat surface when they are not. Shared by every mode that can run
+/// audio without lights.
+struct EntrainmentBackground: View {
     let engine: LightEngine
-    let lightSyncEnabled: Bool
+    let isActive: Bool
 
     var body: some View {
-        if lightSyncEnabled {
+        if isActive {
             SessionView(engine: engine)
         } else {
             Color.bgPrimary.ignoresSafeArea()

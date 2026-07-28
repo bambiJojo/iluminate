@@ -184,7 +184,10 @@ struct UnifiedPlayerView: View {
     private var backgroundLayer: some View {
         switch viewModel.mode {
         case .session:
-            SessionView(engine: viewModel.engine)
+            EntrainmentBackground(
+                engine: viewModel.engine,
+                isActive: viewModel.mindMachineEnabled
+            )
 
         case .flashMode(_, _, let colorTemp, _, _, _, _, _):
             if let controller = viewModel.flashController {
@@ -201,13 +204,16 @@ struct UnifiedPlayerView: View {
             )
 
         case .audioLight:
-            AudioLightBackground(
+            EntrainmentBackground(
                 engine: viewModel.engine,
-                lightSyncEnabled: viewModel.lightSyncEnabled
+                isActive: viewModel.lightSyncEnabled
             )
 
         case .playlist:
-            SessionView(engine: viewModel.engine)
+            EntrainmentBackground(
+                engine: viewModel.engine,
+                isActive: viewModel.mindMachineEnabled
+            )
         }
     }
 
