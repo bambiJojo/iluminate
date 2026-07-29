@@ -53,3 +53,10 @@ Tools/CorpusGenerator/.build/
 # Generated artifacts: Python bytecode caches and the graphify knowledge-graph output (regenerable via graphify update)
 __pycache__/
 /graphify-out/
+
+# Design docs and plans live in doc/ and are intentionally not tracked.
+/doc/
+
+# Coverage and SwiftPM build output that escaped the patterns above.
+default.profraw
+Tools/CorpusGenerator/build/
