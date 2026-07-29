@@ -18,9 +18,10 @@ enum MinimalOverlayGesture {
     /// pull target is drawn at — the affordance and the threshold are the same
     /// number so the picture never lies about the gesture.
     ///
-    /// Sized for a comfortable thumb pull. Short enough to be easy, long enough
-    /// that brushing the screen mid-session cannot reach it.
-    static let revealThreshold: CGFloat = 72
+    /// Sized so the target clears the hand that is doing the pulling — at 72pt
+    /// it sat under the user's own finger and could not be seen. Still an easy
+    /// thumb travel, and far beyond anything a brush could reach.
+    static let revealThreshold: CGFloat = 150
 
     /// How far through the pull the user is: 0 at rest, 1 on arrival.
     /// Clamped, and downward or sideways movement contributes nothing.
