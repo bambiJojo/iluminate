@@ -25,6 +25,8 @@ struct UnifiedPlayerView: View {
     @State private var pullOrigin: CGPoint?
     @State private var pullProgress: Double = 0
     @State private var hasRevealedThisPull = false
+    /// Overlay size, so the pull target can be aimed at the centre line.
+    @State private var overlaySize: CGSize = .zero
 
     init(
         mode: PlayerMode,
@@ -271,10 +273,15 @@ struct UnifiedPlayerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(.rect)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { overlaySize = $0 }
         .overlay {
             if let pullOrigin {
-                PullToRevealAffordance(origin: pullOrigin, progress: pullProgress)
-                    .transition(.opacity)
+                PullToRevealAffordance(
+                    origin: pullOrigin,
+                    containerSize: overlaySize,
+                    progress: pullProgress
+                )
+                .transition(.opacity)
             }
         }
         .gesture(
@@ -285,7 +292,11 @@ struct UnifiedPlayerView: View {
                             pullOrigin = value.startLocation
                         }
                     }
-                    pullProgress = MinimalOverlayGesture.progress(for: value.translation)
+                    pullProgress = MinimalOverlayGesture.progress(
+                        for: value.translation,
+                        from: value.startLocation,
+                        in: overlaySize
+                    )
 
                     // Commit on arrival, not on release: eyes shut, the user
                     // wants confirmation the moment the gesture succeeds.
