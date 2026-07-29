@@ -19,9 +19,12 @@ struct UnifiedPlayerView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Briefly emphasises the "swipe up" hint after a bare tap.
-    @State private var isHintingReveal = false
-    @State private var hintTask: Task<Void, Never>?
+    /// Live pull-to-reveal state. Held here rather than in a child view
+    /// because revealing removes the minimal overlay mid-gesture, so `onEnded`
+    /// may never fire and this has to be resettable from outside.
+    @State private var pullOrigin: CGPoint?
+    @State private var pullProgress: Double = 0
+    @State private var hasRevealedThisPull = false
 
     init(
         mode: PlayerMode,
@@ -133,7 +136,13 @@ struct UnifiedPlayerView: View {
             withAnimation(LiminalMotion.fade) { viewModel.showingControls = visible }
         }
         .onChange(of: viewModel.showingControls) { _, showing in
-            if showing { controlsVisibility.registerInteraction() }
+            if showing {
+                controlsVisibility.registerInteraction()
+                // Revealing removes the minimal overlay, so its gesture's
+                // onEnded never fires — clear the pull here or a stale puck
+                // reappears the next time the controls hide.
+                endPull()
+            }
         }
         .onChange(of: viewModel.showingTrackList) { _, open in
             controlsVisibility.isDrawerOpen = open || showingOverflow
@@ -231,41 +240,62 @@ struct UnifiedPlayerView: View {
         // swipe attached to the ZStack above. This owns its own gesture so
         // nothing competes for the touch.
         VStack {
-                VStack(spacing: TranceSpacing.micro) {
-                    if viewModel.mode.hasFrequencyDisplay || viewModel.mode.hasAudioScrubber {
-                        Text(viewModel.formatTime(viewModel.currentTime))
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
-                    }
+            VStack(spacing: TranceSpacing.micro) {
+                if viewModel.mode.hasFrequencyDisplay || viewModel.mode.hasAudioScrubber {
+                    Text(viewModel.formatTime(viewModel.currentTime))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
                 }
-                .padding(.top, TranceSpacing.statusBar)
+            }
+            .padding(.top, TranceSpacing.statusBar)
 
+            Spacer()
+
+            if viewModel.mode.hasMandalaVisualizer {
+                MandalaVisualizer(
+                    size: 250,
+                    brightness: viewModel.engine.brightness,
+                    isPlaying: viewModel.isPlaying
+                )
                 Spacer()
+            }
 
-                if viewModel.mode.hasMandalaVisualizer {
-                    MandalaVisualizer(size: 250, brightness: viewModel.engine.brightness, isPlaying: viewModel.isPlaying)
-                    Spacer()
-                }
-
-                Text("Swipe up to show controls")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(
-                        viewModel.secondaryLabelColor.opacity(isHintingReveal ? 0.95 : 0.5)
-                    )
-                .scaleEffect(reduceMotion || !isHintingReveal ? 1 : 1.06)
+            // Fades out as the pull begins — the affordance takes over the
+            // job of saying what to do.
+            Text("Swipe up to show controls")
+                .font(TranceTypography.caption)
+                .foregroundStyle(
+                    viewModel.secondaryLabelColor.opacity(0.5 * (1 - pullProgress))
+                )
                 .padding(.bottom, TranceSpacing.statusBar)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(.rect)
+        .overlay {
+            if let pullOrigin {
+                PullToRevealAffordance(origin: pullOrigin, progress: pullProgress)
+                    .transition(.opacity)
+            }
+        }
         .gesture(
             DragGesture(minimumDistance: 0)
-                .onEnded { value in
-                    switch MinimalOverlayGesture.from(translation: value.translation) {
-                    case .reveal: controlsVisibility.registerInteraction()
-                    case .hint:   pulseRevealHint()
-                    case .ignore: break
+                .onChanged { value in
+                    if pullOrigin == nil {
+                        withAnimation(reduceMotion ? nil : LiminalMotion.touch) {
+                            pullOrigin = value.startLocation
+                        }
+                    }
+                    pullProgress = MinimalOverlayGesture.progress(for: value.translation)
+
+                    // Commit on arrival, not on release: eyes shut, the user
+                    // wants confirmation the moment the gesture succeeds.
+                    if pullProgress >= 1, !hasRevealedThisPull {
+                        hasRevealedThisPull = true
+                        TranceHaptics.shared.medium()
+                        controlsVisibility.registerInteraction()
                     }
                 }
+                .onEnded { _ in endPull() }
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Swipe up to show controls")
@@ -275,17 +305,14 @@ struct UnifiedPlayerView: View {
         .accessibilityAction { controlsVisibility.registerInteraction() }
     }
 
-    /// A stray touch must not light up the chrome mid-session, but silently
-    /// swallowing it would read as a broken screen. Pulse the hint instead: it
-    /// acknowledges the touch and teaches the gesture that does work.
-    private func pulseRevealHint() {
-        hintTask?.cancel()
-        let motion = reduceMotion ? Animation.easeInOut(duration: 0.2) : LiminalMotion.touch
-        withAnimation(motion) { isHintingReveal = true }
-        hintTask = Task {
-            try? await Task.sleep(for: .seconds(0.9))
-            guard !Task.isCancelled else { return }
-            withAnimation(motion) { isHintingReveal = false }
+    /// Spring the puck back and clear the affordance. Safe to call more than
+    /// once — revealing tears the overlay down mid-gesture, so this also runs
+    /// from the `showingControls` observer.
+    private func endPull() {
+        hasRevealedThisPull = false
+        withAnimation(reduceMotion ? nil : LiminalMotion.touch) {
+            pullProgress = 0
+            pullOrigin = nil
         }
     }
 

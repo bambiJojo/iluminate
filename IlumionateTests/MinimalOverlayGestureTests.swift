@@ -7,46 +7,68 @@ import Testing
 
 struct MinimalOverlayGestureTests {
 
-    @Test("A deliberate upward swipe reveals the controls")
-    func upwardSwipeReveals() {
-        #expect(MinimalOverlayGesture.from(translation: CGSize(width: 0, height: -80)) == .reveal)
-        #expect(MinimalOverlayGesture.from(translation: CGSize(width: 12, height: -120)) == .reveal)
+    private let threshold = MinimalOverlayGesture.revealThreshold
+
+    // MARK: - Progress
+
+    @Test("Progress is zero at rest")
+    func zeroAtRest() {
+        #expect(MinimalOverlayGesture.progress(for: .zero) == 0)
     }
 
-    @Test("A swipe just past the threshold still reveals")
-    func thresholdBoundary() {
-        #expect(MinimalOverlayGesture.from(translation: CGSize(width: 0, height: -41)) == .reveal)
-        // Exactly at the threshold is not past it.
-        #expect(MinimalOverlayGesture.from(translation: CGSize(width: 0, height: -40)) != .reveal)
+    @Test("Progress reaches one exactly at the threshold")
+    func oneAtThreshold() {
+        let p = MinimalOverlayGesture.progress(for: CGSize(width: 0, height: -threshold))
+        #expect(abs(p - 1) < 0.0001)
     }
 
-    @Test("A stationary touch only pulses the hint")
-    func tapHints() {
-        #expect(MinimalOverlayGesture.from(translation: .zero) == .hint)
-        #expect(MinimalOverlayGesture.from(translation: CGSize(width: 4, height: 5)) == .hint)
+    @Test("Progress is linear across the pull")
+    func linearProgress() {
+        let half = MinimalOverlayGesture.progress(for: CGSize(width: 0, height: -threshold / 2))
+        #expect(abs(half - 0.5) < 0.0001)
     }
 
-    /// The whole point of the change: brushing the screen mid-session must not
-    /// light up the chrome.
-    @Test("A brush or small drift never reveals")
-    func smallMovementNeverReveals() {
-        for h in stride(from: -39.0, through: 39.0, by: 13.0) {
-            let result = MinimalOverlayGesture.from(translation: CGSize(width: 0, height: h))
-            #expect(result != .reveal)
+    @Test("Progress clamps at both ends")
+    func progressClamps() {
+        #expect(MinimalOverlayGesture.progress(for: CGSize(width: 0, height: -1000)) == 1)
+        #expect(MinimalOverlayGesture.progress(for: CGSize(width: 0, height: 1000)) == 0)
+    }
+
+    @Test("Sideways movement contributes nothing")
+    func sidewaysIgnored() {
+        #expect(MinimalOverlayGesture.progress(for: CGSize(width: 500, height: 0)) == 0)
+        // A diagonal pull is judged only on its vertical component.
+        let diagonal = MinimalOverlayGesture.progress(
+            for: CGSize(width: 300, height: -threshold)
+        )
+        #expect(abs(diagonal - 1) < 0.0001)
+    }
+
+    // MARK: - Reveal decision
+
+    @Test("Reveal fires exactly when progress completes")
+    func revealAgreesWithProgress() {
+        let justShort = CGSize(width: 0, height: -(threshold - 1))
+        let exactly = CGSize(width: 0, height: -threshold)
+
+        #expect(MinimalOverlayGesture.isReveal(translation: justShort) == false)
+        #expect(MinimalOverlayGesture.isReveal(translation: exactly))
+        // The affordance filling up and the controls appearing must never disagree.
+        #expect(MinimalOverlayGesture.progress(for: exactly) >= 1)
+    }
+
+    /// The property the whole design rests on: brushing the screen mid-session
+    /// must never reach the threshold.
+    @Test("No small or downward movement ever reveals")
+    func brushNeverReveals() {
+        for h in stride(from: -(threshold - 1), through: threshold, by: 9.0) {
+            let t = CGSize(width: 0, height: h)
+            #expect(MinimalOverlayGesture.isReveal(translation: t) == false)
         }
     }
 
-    @Test("Downward and sideways drags are ignored")
-    func otherDirectionsIgnored() {
-        #expect(MinimalOverlayGesture.from(translation: CGSize(width: 0, height: 90)) == .ignore)
-        #expect(MinimalOverlayGesture.from(translation: CGSize(width: 120, height: 0)) == .ignore)
-        #expect(MinimalOverlayGesture.from(translation: CGSize(width: -120, height: 2)) == .ignore)
-    }
-
-    /// A mostly-sideways swipe that happens to clear the vertical threshold is
-    /// still a reveal — fingers wander when the eyes are shut.
-    @Test("A sloppy diagonal swipe still reveals")
-    func sloppyDiagonalReveals() {
-        #expect(MinimalOverlayGesture.from(translation: CGSize(width: 90, height: -60)) == .reveal)
+    @Test("Downward drags never reveal")
+    func downwardNeverReveals() {
+        #expect(MinimalOverlayGesture.isReveal(translation: CGSize(width: 0, height: 300)) == false)
     }
 }

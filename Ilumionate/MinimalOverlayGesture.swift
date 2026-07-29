@@ -12,23 +12,27 @@
 
 import CoreGraphics
 
-enum MinimalOverlayGesture: Equatable {
-    /// A deliberate upward swipe: show the controls.
-    case reveal
-    /// A stationary touch: pulse the hint, but keep the chrome hidden so a
-    /// stray brush mid-session does not interrupt.
-    case hint
-    /// Movement that is neither — a sideways or downward drag. Do nothing.
-    case ignore
+enum MinimalOverlayGesture {
 
-    /// Upward travel required to count as a deliberate reveal.
-    static let revealThreshold: CGFloat = 40
-    /// Movement below this in both axes still counts as a tap.
-    static let tapSlop: CGFloat = 10
+    /// Upward travel required to reveal the controls, and the distance the
+    /// pull target is drawn at — the affordance and the threshold are the same
+    /// number so the picture never lies about the gesture.
+    ///
+    /// Sized for a comfortable thumb pull. Short enough to be easy, long enough
+    /// that brushing the screen mid-session cannot reach it.
+    static let revealThreshold: CGFloat = 72
 
-    static func from(translation: CGSize) -> MinimalOverlayGesture {
-        if translation.height < -revealThreshold { return .reveal }
-        if abs(translation.height) < tapSlop && abs(translation.width) < tapSlop { return .hint }
-        return .ignore
+    /// How far through the pull the user is: 0 at rest, 1 on arrival.
+    /// Clamped, and downward or sideways movement contributes nothing.
+    static func progress(for translation: CGSize) -> Double {
+        guard revealThreshold > 0 else { return 0 }
+        let pulled = -translation.height
+        return min(1, max(0, Double(pulled / revealThreshold)))
+    }
+
+    /// Single source of truth for the commit decision, so the affordance
+    /// filling up and the controls appearing can never disagree.
+    static func isReveal(translation: CGSize) -> Bool {
+        progress(for: translation) >= 1
     }
 }
