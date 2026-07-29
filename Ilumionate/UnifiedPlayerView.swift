@@ -226,10 +226,11 @@ struct UnifiedPlayerView: View {
     // MARK: - Minimal Overlay (Pure Void whisper — auto-fades)
 
     private var minimalOverlay: some View {
-        Button {
-            pulseRevealHint()
-        } label: {
-            VStack {
+        // Deliberately not a Button. A full-screen Button claims every touch
+        // sequence that begins on it, which silently swallowed the reveal
+        // swipe attached to the ZStack above. This owns its own gesture so
+        // nothing competes for the touch.
+        VStack {
                 VStack(spacing: TranceSpacing.micro) {
                     if viewModel.mode.hasFrequencyDisplay || viewModel.mode.hasAudioScrubber {
                         Text(viewModel.formatTime(viewModel.currentTime))
@@ -251,14 +252,24 @@ struct UnifiedPlayerView: View {
                     .foregroundStyle(
                         viewModel.secondaryLabelColor.opacity(isHintingReveal ? 0.95 : 0.5)
                     )
-                    .scaleEffect(reduceMotion || !isHintingReveal ? 1 : 1.06)
-                    .padding(.bottom, TranceSpacing.statusBar)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(.rect)
+                .scaleEffect(reduceMotion || !isHintingReveal ? 1 : 1.06)
+                .padding(.bottom, TranceSpacing.statusBar)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(.rect)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onEnded { value in
+                    switch MinimalOverlayGesture.from(translation: value.translation) {
+                    case .reveal: controlsVisibility.registerInteraction()
+                    case .hint:   pulseRevealHint()
+                    case .ignore: break
+                    }
+                }
+        )
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("Swipe up to show controls")
+        .accessibilityAddTraits(.isButton)
         // VoiceOver intercepts swipes, so without this override there would be
         // no way for a VoiceOver user to reach the controls at all.
         .accessibilityAction { controlsVisibility.registerInteraction() }
