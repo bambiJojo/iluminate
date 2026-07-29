@@ -140,9 +140,11 @@ struct UnifiedPlayerView: View {
         .onChange(of: viewModel.showingControls) { _, showing in
             if showing {
                 controlsVisibility.registerInteraction()
-                // Revealing removes the minimal overlay, so its gesture's
-                // onEnded never fires — clear the pull here or a stale puck
-                // reappears the next time the controls hide.
+            } else {
+                // Reset as the minimal overlay comes back, not as it leaves.
+                // Revealing tears the overlay down mid-gesture so its onEnded
+                // may never fire; clearing on the way in guarantees a clean
+                // slate rather than a puck stranded from the previous pull.
                 endPull()
             }
         }
@@ -287,6 +289,11 @@ struct UnifiedPlayerView: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
+                    // Once a pull has fired, ignore the rest of it. The finger
+                    // is usually still down, and without this the next event
+                    // would re-create the puck that the reveal just cleared.
+                    guard !hasRevealedThisPull else { return }
+
                     if pullOrigin == nil {
                         withAnimation(reduceMotion ? nil : LiminalMotion.touch) {
                             pullOrigin = value.startLocation
@@ -304,6 +311,9 @@ struct UnifiedPlayerView: View {
                         hasRevealedThisPull = true
                         TranceHaptics.shared.medium()
                         controlsVisibility.registerInteraction()
+                        // Drop the puck immediately rather than leaving it
+                        // rendered at full progress during the fade-out.
+                        pullOrigin = nil
                     }
                 }
                 .onEnded { _ in endPull() }
