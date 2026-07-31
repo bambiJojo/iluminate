@@ -153,8 +153,23 @@ Development and debugging tools:
 ### From Command Line
 
 ```bash
-xcodebuild test -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 15 Pro'
+# Native macOS
+xcodebuild -project Ilumionate.xcodeproj \
+  -scheme Ilumionate \
+  -destination 'platform=macOS,arch=arm64' \
+  test -only-testing:IlumionateTests
+
+# iOS Simulator
+xcodebuild -project Ilumionate.xcodeproj \
+  -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests
 ```
+
+iOS and native macOS are first-class targets and should both be exercised for
+shared app changes. Mac Catalyst should continue to build as the compatibility
+destination. Replace the example simulator with a locally installed device when
+needed.
 
 ### Selective Testing
 
@@ -188,12 +203,12 @@ All tests should pass with:
 
 ### Issue: Display Link Timing in Tests
 
-**Problem**: CADisplayLink only runs when attached to run loop, making real timing tests difficult.
+**Problem**: The native display link only runs when attached to a run loop, making real timing tests difficult on both iOS and macOS.
 
 **Solution**: 
 - Test configuration and state transitions, not real-time behavior
 - Use simulation for frame advancement
-- Trust that CADisplayLink timing is correct (it's a system API)
+- Exercise the iOS and macOS display-link adapters in platform smoke tests
 
 ### Issue: Floating Point Precision
 
@@ -337,14 +352,21 @@ name: Tests
 on: [push, pull_request]
 jobs:
   test:
+    strategy:
+      matrix:
+        destination:
+          - 'platform=macOS,arch=arm64'
+          - 'platform=iOS Simulator,name=iPhone 17 Pro'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
       - name: Run tests
         run: |
           xcodebuild test \
+            -project Ilumionate.xcodeproj \
             -scheme Ilumionate \
-            -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+            -destination '${{ matrix.destination }}' \
+            -only-testing:IlumionateTests \
             -resultBundlePath TestResults
       - name: Upload results
         uses: actions/upload-artifact@v2

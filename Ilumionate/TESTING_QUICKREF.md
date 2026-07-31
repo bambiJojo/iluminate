@@ -4,7 +4,9 @@
 
 | Action | Shortcut | Command Line |
 |--------|----------|--------------|
-| Run all tests | `⌘U` | `xcodebuild test -scheme Ilumionate` |
+| Run native Mac unit tests | `⌘U` with My Mac selected | `xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests` |
+| Run iOS unit tests | `⌘U` with a simulator selected | `xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests` |
+| Check Mac Catalyst build | Build with Catalyst selected | `xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,variant=Mac Catalyst,arch=arm64' build` |
 | Run single test | Click diamond | N/A |
 | Debug test | Click diamond + hold | N/A |
 

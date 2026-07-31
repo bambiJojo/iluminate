@@ -1,12 +1,20 @@
 # LumeSync (Ilumionate) — Unified Development Plan
 
-> Consolidated from all planning documents. Last updated: 2026-04-01.
+> Consolidated from all planning documents. Last updated: 2026-07-31.
 
 ---
 
 ## Project Vision
 
-A premium iOS light therapy (photoentrainment) app that synchronizes adaptive visual patterns with audio content — using on-device AI to analyze hypnosis, meditation, and music files and generate personalized light sessions.
+A premium Apple-platform light therapy (photoentrainment) app for iOS and native macOS that synchronizes adaptive visual patterns with audio content — using on-device AI to analyze hypnosis, meditation, and music files and generate personalized light sessions.
+
+### Platform Status
+
+- iOS 26+ and native macOS 26+ are first-class destinations of the shared `Ilumionate` target.
+- iOS uses the compact four-tab shell; macOS uses a resizable native window, sidebar navigation, and a Settings scene.
+- Feature models, stores, analysis, playback, and views are shared so fixes stay aligned across platforms.
+- Mac Catalyst remains available as a compatibility destination.
+- App data is currently local to each installation; cross-device library and settings sync is separate future work.
 
 ---
 
@@ -27,7 +35,7 @@ A premium iOS light therapy (photoentrainment) app that synchronizes adaptive vi
 ## FOUNDATION — Light Engine & Core System
 
 ### Light Engine
-- ✅ CADisplayLink-based brightness calculation with waveform generation
+- ✅ Native display-link brightness calculation with waveform generation on iOS and macOS
 - ✅ Bilateral mode (independent left/right field stimulation)
 - ✅ Frequency ramping with configurable curves
 - ✅ Color temperature support (warm/cool interpolation)
@@ -58,8 +66,8 @@ A premium iOS light therapy (photoentrainment) app that synchronizes adaptive vi
 - ✅ Full-screen FlashView, BilateralFlashView, ColorPulseView
 
 ### Navigation
-- ✅ Tab bar with Home, Library, Machine, Store, Profile
-- ✅ NavigationStack on each tab, fullScreenCover for player/flash
+- ✅ Compact tab navigation on iOS and native sidebar navigation on macOS
+- ✅ Shared feature destinations with platform-appropriate stacks and modal presentation
 
 ---
 

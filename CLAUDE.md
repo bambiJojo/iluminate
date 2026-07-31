@@ -11,18 +11,29 @@ Never mark a task as "done" in the plan.md the task has been fully implemented a
 
 ## Project Overview
 
-LumeSync is a SwiftUI iOS app that provides light therapy (photoentrainment) sessions synchronized with audio content. It combines AI-powered audio analysis with customizable light patterns to create personalized therapeutic experiences.
+LumeSync is a SwiftUI app for iOS and native macOS that provides light therapy (photoentrainment) sessions synchronized with audio content. Both platforms are first-class destinations built from one shared feature target. The app combines AI-powered audio analysis with customizable light patterns to create personalized therapeutic experiences.
 
 ## Build Commands
 
-**Build the project:**
+**Build native macOS:**
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' build
 ```
 
-**Run tests:**
+**Build iOS Simulator:**
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate test -destination 'platform=iOS Simulator,name=iPhone 15'
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+```
+
+**Build Mac Catalyst compatibility destination:**
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,variant=Mac Catalyst,arch=arm64' build
+```
+
+**Run shared unit tests on both first-class platforms:**
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests
 ```
 
 **Clean build:**
@@ -35,7 +46,7 @@ xcodebuild -project Ilumionate.xcodeproj clean
 ### Core Components
 
 **Light Engine (`EngineLightEngine.swift`)**
-- The heart of the app that drives visual entrainment using CADisplayLink
+- The heart of the app that drives visual entrainment using the native display-link API on each platform
 - Handles real-time brightness calculations and waveform generation
 - Supports bilateral mode (independent left/right field stimulation)
 - Observable class that publishes brightness values to SwiftUI views
@@ -67,6 +78,8 @@ xcodebuild -project Ilumionate.xcodeproj clean
 
 **Dependency Management**: Uses Swift Package Manager with WhisperKit for audio transcription.
 
+**Platform Strategy**: iOS and native macOS share the `Ilumionate` app target and feature sources. `ContentView` selects a compact tab shell on iOS and a native sidebar shell on macOS. Keep conditional compilation in narrow platform adapters or lifecycle/presentation seams; do not fork feature implementations. Mac Catalyst remains a compatibility build, not the primary Mac experience.
+
 ## Development Guidelines
 
 ### File Organization
@@ -74,6 +87,7 @@ xcodebuild -project Ilumionate.xcodeproj clean
 - Test files in `IlumionateTests/` and `IlumionateUITests/`
 - Session JSON files are included as app bundle resources
 - Root-level Swift files (Playlist*.swift) handle playlist functionality
+- Platform-specific behavior is isolated in `Platform*.swift` adapters and the app/navigation shell
 
 ### Testing Strategy
 - `LightEngineTests.swift`: Unit tests for core light engine functionality
@@ -93,7 +107,7 @@ xcodebuild -project Ilumionate.xcodeproj clean
 ### Audio Requirements
 - Supports M4A and MP3 formats
 - WhisperKit integration for speech recognition (requires speech recognition permission)
-- Audio session configured for playback and recording capabilities
+- AVAudioSession is configured on iOS; macOS uses native AVFoundation playback without an iOS audio session
 
 ## Common Development Tasks
 
@@ -119,16 +133,18 @@ This repository contains an Xcode project written with Swift and SwiftUI. Please
 
 ## Role
 
-You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
+You are a **Senior Apple Platforms Engineer**, specializing in SwiftUI, SwiftData, and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
 
 
 ## Core instructions
 
-- Target iOS 26.0 or later. (Yes, it definitely exists.)
+- Target iOS 26.0 and macOS 26.0 or later. (Yes, they definitely exist.)
 - Swift 6.2 or later, using modern Swift concurrency. Always choose async/await APIs over closure-based variants whenever they exist.
 - SwiftUI backed up by `@Observable` classes for shared data.
 - Do not introduce third-party frameworks without asking first.
 - Avoid UIKit unless requested.
+- Treat iOS and native macOS as first-class. Build and test both destinations for shared app changes; also keep Mac Catalyst compiling as a compatibility destination.
+- Prefer shared feature code. Use `#if os(...)` only at platform boundaries such as lifecycle, permissions, input, window presentation, or framework adapters.
 
 
 ## Swift instructions

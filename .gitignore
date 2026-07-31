@@ -60,3 +60,11 @@ __pycache__/
 # Coverage and SwiftPM build output that escaped the patterns above.
 default.profraw
 Tools/CorpusGenerator/build/
+
+# Support site is a separate Next.js app with its own dependencies and build
+# output (~760 MB); it is not part of the Xcode project.
+/lumesync-support-site/
+
+# Downloaded third-party reference PDFs (transcriptions of published audio).
+# Reference material only — never committed, same policy as Corpus/real.
+/Download */
