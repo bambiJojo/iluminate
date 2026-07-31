@@ -30,6 +30,9 @@ struct PlaylistEditorView: View {
 
     @State private var showingSessionPicker = false
     @State private var showingArtworkPicker = false
+    @State private var importRequest: PlaylistImportRequest?
+    @State private var showingLinkBrowser = false
+    @State private var pendingImportLink: String?
     @State private var availableAudioFiles: [AudioFile] = []
     @State private var storedAudioFiles: [AudioFile] = []
     // IDs of files that already have a generated light session, so the picker
@@ -126,11 +129,11 @@ struct PlaylistEditorView: View {
                     }
                 }
             }
-            .listStyle(.insetGrouped)
+            .platformInsetGroupedListStyle()
             .scrollContentBackground(.hidden)
             .background(Color.bgPrimary.ignoresSafeArea())
-            .environment(\.editMode, .constant(playlist.items.isEmpty ? .inactive : .active))
-            .navigationBarTitleDisplayMode(.inline)
+            .platformEditMode(isActive: !playlist.items.isEmpty)
+            .platformInlineNavigationTitle()
             .toolbar { toolbarContent }
             .sheet(isPresented: $showingSessionPicker) {
                 SessionPickerView(
@@ -140,6 +143,22 @@ struct PlaylistEditorView: View {
                     onAddFiles: { files in
                         for file in files { addItem(from: file) }
                     }
+                )
+            }
+            .platformFullScreenCover(
+                isPresented: $showingLinkBrowser,
+                onDismiss: startPendingImport
+            ) {
+                PlaylistLinkBrowserView { pendingImportLink = $0 }
+            }
+            .sheet(item: $importRequest) { request in
+                // The request carries its own library snapshot; an isPresented
+                // sheet would build the importer from the pre-update body and
+                // hand it an empty library.
+                BambiCloudPlaylistImportView(
+                    audioFiles: request.audioFiles,
+                    initialLink: request.initialLink,
+                    onImport: mergeImportedPlaylist
                 )
             }
             .sheet(isPresented: $showingArtworkPicker) {
@@ -193,7 +212,7 @@ struct PlaylistEditorView: View {
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
                 .foregroundColor(.textPrimary)
-                .submitLabel(.done)
+                .platformDoneSubmitLabel()
                 .onSubmit { nameFieldFocused = false }
                 .onChange(of: playlist.name) { _, newValue in
                     // Multiline TextFields swallow Return as a newline instead
@@ -463,6 +482,10 @@ struct PlaylistEditorView: View {
             Button("Cancel") { dismiss() }
                 .foregroundColor(.roseGold)
         }
+        ToolbarItem(placement: .primaryAction) {
+            Button("Import", systemImage: "globe", action: showImporter)
+                .foregroundColor(.roseGold)
+        }
         ToolbarItem(placement: .confirmationAction) {
             Button("Done") {
                 onSave(playlist)
@@ -480,6 +503,39 @@ struct PlaylistEditorView: View {
         guard !playlist.items.contains(where: { $0.audioFileId == file.id }) else { return }
         let item = PlaylistItem(audioFileId: file.id, filename: file.filename, duration: file.duration)
         playlist.items.append(item)
+    }
+
+    private func showImporter() {
+        TranceHaptics.shared.light()
+        showingLinkBrowser = true
+    }
+
+    /// Runs once the browser has fully dismissed. Presenting the importer while
+    /// the cover is still going away drops the sheet.
+    private func startPendingImport() {
+        guard let link = pendingImportLink else { return }
+        pendingImportLink = nil
+
+        let files = AudioLibraryStore.load()
+        storedAudioFiles = files
+        availableAudioFiles = files
+        importRequest = PlaylistImportRequest(
+            audioFiles: files,
+            initialLink: link
+        )
+    }
+
+    /// Folds a link import into the draft rather than replacing it, so tracks
+    /// already staged here survive. Nothing persists until Done.
+    private func mergeImportedPlaylist(_ imported: Playlist) {
+        if playlist.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            playlist.name = imported.name
+        }
+
+        for item in imported.items
+        where !playlist.items.contains(where: { $0.audioFileId == item.audioFileId }) {
+            playlist.items.append(item)
+        }
     }
 
     private func moveItems(from source: IndexSet, to destination: Int) {
@@ -753,7 +809,7 @@ struct SessionPickerView: View {
                 }
             }
             .navigationTitle("Add Sessions")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
