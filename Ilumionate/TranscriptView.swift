@@ -69,9 +69,9 @@ struct TranscriptView: View {
         }
         .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle("Transcript")
-        .navigationBarTitleDisplayMode(.inline)
+        .platformInlineNavigationTitle()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 NavigationLink {
                     PhraseLibraryView()
                 } label: {

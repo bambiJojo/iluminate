@@ -9,7 +9,10 @@ import Foundation
 import os
 import QuartzCore
 import Observation
-import UIKit
+
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// Lightweight proxy that breaks the CADisplayLink → LightEngine retain cycle.
 /// CADisplayLink strongly retains its target, so we give it this proxy which
@@ -378,7 +381,17 @@ final class LightEngine {
         linkProxy.engine = self
         proxy = linkProxy
 
+        #if os(macOS)
+        guard let link = (NSScreen.main ?? NSScreen.screens.first)?.displayLink(
+            target: linkProxy,
+            selector: #selector(DisplayLinkProxy.tick(_:))
+        ) else {
+            Log.engine.error("Could not create a display link for the active Mac display")
+            return
+        }
+        #else
         let link = CADisplayLink(target: linkProxy, selector: #selector(DisplayLinkProxy.tick(_:)))
+        #endif
 
         // Start with adaptive refresh rate based on current frequency
         targetRefreshRate = calculateOptimalRefreshRate()
@@ -460,7 +473,7 @@ final class LightEngine {
         // instead of advancing the oscillator, so the light never strobes for
         // motion-sensitive users. Checked every frame, so a mid-session toggle
         // of the system setting is respected.
-        if UIAccessibility.isReduceMotionEnabled {
+        if PlatformAccessibility.isReduceMotionEnabled {
             let steady = max(0.0, min(1.0, maximumBrightness))
             brightness = steady
             brightnessLeft = steady

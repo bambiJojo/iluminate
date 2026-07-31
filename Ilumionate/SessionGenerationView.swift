@@ -70,7 +70,7 @@ struct SessionGenerationView: View {
                 }
             }
             .navigationTitle("Session Designer")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -87,7 +87,7 @@ struct SessionGenerationView: View {
                 UsageAnalytics.shared.createModeSelected(.audioSession)
                 generateSession()
             }
-            .fullScreenCover(isPresented: $showingPlayer) {
+            .platformFullScreenCover(isPresented: $showingPlayer) {
                 if let session = generatedSession {
                     UnifiedPlayerView(
                         mode: .session(session: session, audioFile: audioFile),

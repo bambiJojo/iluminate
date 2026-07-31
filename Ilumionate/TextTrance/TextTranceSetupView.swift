@@ -84,7 +84,7 @@ struct TextTranceSetupView: View {
             .scrollIndicators(.hidden)
         }
         .navigationTitle(script.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .platformInlineNavigationTitle()
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: TranceSpacing.list) {
                 if let resume = validResume {
@@ -127,7 +127,7 @@ struct TextTranceSetupView: View {
                 .ignoresSafeArea(edges: .bottom)
             }
         }
-        .fullScreenCover(item: $activePlayerSession, onDismiss: handlePlayerDismiss) { session in
+        .platformFullScreenCover(item: $activePlayerSession, onDismiss: handlePlayerDismiss) { session in
             TextTrancePlayerView(session: session, startIndex: resumeIndex)
         }
         .onAppear { loadPresetIfNeeded() }

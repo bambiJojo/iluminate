@@ -7,16 +7,32 @@
 
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
 // MARK: - Dynamic Color Helper
 
 extension Color {
     /// Creates a color that adapts between light and dark mode.
     init(light: Color, dark: Color) {
+        #if canImport(UIKit)
         self.init(UIColor { traits in
             traits.userInterfaceStyle == .dark
                 ? UIColor(dark)
                 : UIColor(light)
         })
+        #elseif canImport(AppKit)
+        let adaptive = NSColor(name: nil) { appearance in
+            let match = appearance.bestMatch(from: [.darkAqua, .aqua])
+            return NSColor(match == .darkAqua ? dark : light)
+        }
+        self.init(nsColor: adaptive)
+        #else
+        self = light
+        #endif
     }
 }
 
@@ -323,34 +339,52 @@ struct GlassBackground: ViewModifier {
 final class TranceHaptics {
     static let shared = TranceHaptics()
 
+    #if canImport(UIKit)
     private let lightImpact = UIImpactFeedbackGenerator(style: .light)
     private let mediumImpact = UIImpactFeedbackGenerator(style: .medium)
     private let heavyImpact = UIImpactFeedbackGenerator(style: .heavy)
     private let selectionFeedback = UISelectionFeedbackGenerator()
+    #endif
 
     private init() {}
 
     // Tab switch
     func light() {
         guard AppSettingsManager.isHapticFeedbackEnabled() else { return }
+        #if canImport(UIKit)
         lightImpact.impactOccurred()
+        #elseif canImport(AppKit)
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        #endif
     }
 
     // Play/Pause, Start Session
     func medium() {
         guard AppSettingsManager.isHapticFeedbackEnabled() else { return }
+        #if canImport(UIKit)
         mediumImpact.impactOccurred()
+        #elseif canImport(AppKit)
+        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+        #endif
     }
 
     // Enter Flash
     func heavy() {
         guard AppSettingsManager.isHapticFeedbackEnabled() else { return }
+        #if canImport(UIKit)
         heavyImpact.impactOccurred()
+        #elseif canImport(AppKit)
+        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+        #endif
     }
 
     // Color dot select
     func selection() {
         guard AppSettingsManager.isHapticFeedbackEnabled() else { return }
+        #if canImport(UIKit)
         selectionFeedback.selectionChanged()
+        #elseif canImport(AppKit)
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        #endif
     }
 }

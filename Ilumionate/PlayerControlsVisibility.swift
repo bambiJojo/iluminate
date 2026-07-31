@@ -7,7 +7,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 @MainActor
 @Observable
@@ -30,7 +29,7 @@ final class PlayerControlsVisibility {
     private var hideTask: Task<Void, Never>?
 
     init(
-        voiceOverActive: @escaping @MainActor () -> Bool = { UIAccessibility.isVoiceOverRunning },
+        voiceOverActive: @escaping @MainActor () -> Bool = { PlatformAccessibility.isVoiceOverRunning },
         autoHideDelay: Double = LiminalMotion.controlsAutoHideDelay
     ) {
         self.voiceOverActive = voiceOverActive

@@ -200,9 +200,7 @@ struct SessionLockView: View {
     }
 
     private func performUnlock() {
-        // Haptic feedback
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+        TranceHaptics.shared.medium()
 
         // Trigger unlock
         onUnlock()

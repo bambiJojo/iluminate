@@ -32,13 +32,13 @@ struct ProfileView: View {
             }
             .background(Color.bgPrimary.ignoresSafeArea())
             .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.large)
+            .platformLargeNavigationTitle()
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                         .foregroundStyle(Color.roseGold)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button("Settings", systemImage: "gearshape") {
                         TranceHaptics.shared.light()
                         showingSettings = true

@@ -50,7 +50,7 @@ struct ReaderHistorySheet: View {
                 }
             }
             .navigationTitle("Continue Reading")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

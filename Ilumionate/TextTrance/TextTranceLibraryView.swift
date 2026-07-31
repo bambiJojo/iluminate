@@ -567,11 +567,11 @@ struct WebTextImportSheet: View {
             Form {
                 Section("Page") {
                     TextField("URL", text: $urlString)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                        .platformURLKeyboard()
+                        .platformNeverAutocapitalized()
+                        .platformAutocorrectionDisabled()
                     TextField("Title", text: $title)
-                        .textInputAutocapitalization(.words)
+                        .platformWordsAutocapitalized()
                 }
 
                 Section {
@@ -615,9 +615,9 @@ struct WebTextImportSheet: View {
                 }
             }
             .navigationTitle("Import Webpage")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .disabled(importState.isImporting)
                 }

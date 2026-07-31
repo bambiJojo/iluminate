@@ -39,7 +39,7 @@ struct AudioAnalyzerView: View {
                 }
             }
             .navigationTitle("Audio Analyzer")
-            .navigationBarTitleDisplayMode(.large)
+            .platformLargeNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {

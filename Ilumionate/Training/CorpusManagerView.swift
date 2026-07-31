@@ -29,7 +29,7 @@ struct CorpusManagerView: View {
             }
             .navigationTitle("Training Corpus")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button("Import", systemImage: "plus.circle.fill") {
                         showingImporter = true
                     }

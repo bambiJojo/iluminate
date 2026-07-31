@@ -9,6 +9,12 @@
 import SwiftUI
 import os
 
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
 extension ProfileSettingsView {
 
     // MARK: - Reusable Setting Rows
@@ -303,7 +309,7 @@ extension ProfileSettingsView {
                 }
             }
             .navigationTitle("Edit Profile")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { isEditingProfile = false }
@@ -372,7 +378,7 @@ extension ProfileSettingsView {
                 }
             }
             .navigationTitle("About")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { showAbout = false }
@@ -433,6 +439,7 @@ extension ProfileSettingsView {
     }
 
     private func presentShareSheet(items: [Any]) {
+        #if canImport(UIKit)
         let activityVC = UIActivityViewController(
             activityItems: items,
             applicationActivities: nil
@@ -446,5 +453,11 @@ extension ProfileSettingsView {
         var topVC = rootVC
         while let presented = topVC.presentedViewController { topVC = presented }
         topVC.present(activityVC, animated: true)
+        #elseif canImport(AppKit)
+        guard let contentView = NSApp.keyWindow?.contentView else { return }
+        let picker = NSSharingServicePicker(items: items)
+        let anchor = NSRect(x: contentView.bounds.midX, y: contentView.bounds.midY, width: 1, height: 1)
+        picker.show(relativeTo: anchor, of: contentView, preferredEdge: .minY)
+        #endif
     }
 }

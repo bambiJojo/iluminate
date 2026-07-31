@@ -14,6 +14,7 @@
 //
 
 import AVFoundation
+import CoreAudio
 import os
 import Synchronization
 
@@ -83,7 +84,9 @@ final class BinauralBeatsEngine {
         // Restore amplitude — stop() zeros it, so every start must recalculate.
         renderState.targetAmplitude.store(Float(max(0, min(1, volume))) * 0.35, ordering: .relaxed)
         do {
+            #if os(iOS)
             try AVAudioSession.sharedInstance().setActive(true)
+            #endif
             try audioEngine.start()
             isPlaying = true
         } catch {
@@ -135,11 +138,13 @@ final class BinauralBeatsEngine {
     private func setUp() {
         // Configure audio session BEFORE building the engine graph so the
         // output-node format reflects the correct hardware configuration.
+        #if os(iOS)
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
         } catch {
             Log.audio.info("[BinauralBeats] AVAudioSession setup error: \(error)")
         }
+        #endif
 
         let sampleRate: Double = 44100
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else { return }

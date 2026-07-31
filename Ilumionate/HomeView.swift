@@ -191,7 +191,7 @@ struct HomeView: View {
                 }
             )
         }
-        .fullScreenCover(isPresented: $showingFlashMode) {
+        .platformFullScreenCover(isPresented: $showingFlashMode) {
             UnifiedPlayerView(
                 mode: .flashMode(
                     frequency: flashFrequency,
@@ -208,7 +208,7 @@ struct HomeView: View {
                 mindMachineMode: .flash
             )
         }
-        .fullScreenCover(item: $playerFile) { file in
+        .platformFullScreenCover(item: $playerFile) { file in
             UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
         }
         } // end ZStack
@@ -778,7 +778,7 @@ struct CategorySessionSheet: View {
                 }
             }
             .navigationTitle("\(category.emoji) \(category.rawValue)")
-            .navigationBarTitleDisplayMode(.large)
+            .platformLargeNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {

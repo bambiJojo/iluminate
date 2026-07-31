@@ -43,17 +43,15 @@ struct ReadingSourceDirectoryView: View {
                     scriptsContent.tag(ReadingDirectoryMode.scripts)
                     sitesContent.tag(ReadingDirectoryMode.sites)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+                .platformPagedTabViewStyle()
             }
         }
         .navigationTitle("Reading Sources")
         // Keep search attached to the navigation bar; the default bottom
         // placement puts the field underneath the app's floating tab bar.
-        .searchable(text: $searchText,
-                    placement: .navigationBarDrawer(displayMode: .automatic),
-                    prompt: searchPrompt)
+        .platformSearchable(text: $searchText, prompt: searchPrompt)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 Button("Add custom source", systemImage: "plus") {
                     TranceHaptics.shared.light()
                     showingAddSource = true
@@ -64,7 +62,7 @@ struct ReadingSourceDirectoryView: View {
         .sheet(isPresented: $showingAddSource) {
             AddReadingSourceSheet(store: store)
         }
-        .fullScreenCover(item: $browserDestination) { destination in
+        .platformFullScreenCover(item: $browserDestination) { destination in
             SafariBrowserView(
                 url: destination.url,
                 suggestedTitle: destination.suggestedTitle,
@@ -694,11 +692,11 @@ private struct AddReadingSourceSheet: View {
             Form {
                 Section("Source") {
                     TextField("Name", text: $title)
-                        .textInputAutocapitalization(.words)
+                        .platformWordsAutocapitalized()
                     TextField("Website", text: $urlString)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                        .platformURLKeyboard()
+                        .platformNeverAutocapitalized()
+                        .platformAutocorrectionDisabled()
                     TextField("Note", text: $summary, axis: .vertical)
                         .lineLimit(2...4)
                 }
@@ -712,12 +710,12 @@ private struct AddReadingSourceSheet: View {
                 }
             }
             .navigationTitle("Add Source")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button("Save") { save() }
                         .fontWeight(.semibold)
                         .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

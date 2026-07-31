@@ -10,6 +10,7 @@ import SwiftUI
 struct StreamingSettingsView: View {
     let manager: StreamingManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     @State private var soundCloudClientId = ""
     @State private var soundCloudSecret = ""
@@ -23,7 +24,7 @@ struct StreamingSettingsView: View {
                 actionsSection
             }
             .navigationTitle("SoundCloud Setup")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -68,7 +69,7 @@ struct StreamingSettingsView: View {
 
                 Button("Register at: soundcloud.com/you/apps/new") {
                     if let url = URL(string: "https://soundcloud.com/you/apps/new") {
-                        UIApplication.shared.open(url)
+                        openURL(url)
                     }
                 }
                 .font(TranceTypography.caption)

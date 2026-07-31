@@ -9,7 +9,10 @@ import Foundation
 import os
 import AVFoundation
 import Observation
+
+#if canImport(UIKit)
 import UIKit
+#endif
 
 nonisolated enum BackgroundTaskPolicy {
     /// UIKit background assertions are short-lived and are not appropriate for
@@ -274,10 +277,12 @@ actor MemoryMonitor {
         await performModerateCleanup()
 
         await MainActor.run {
+            #if canImport(UIKit)
             NotificationCenter.default.post(
                 name: UIApplication.didReceiveMemoryWarningNotification,
                 object: nil
             )
+            #endif
         }
     }
 

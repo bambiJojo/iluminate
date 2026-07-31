@@ -50,7 +50,7 @@ struct AnalysisProgressView: View {
                 .padding()
             }
             .navigationTitle("Analyzing Audio")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {

@@ -41,9 +41,9 @@ struct PhaseLabelingView: View {
         }
         .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle("Label Phases")
-        .navigationBarTitleDisplayMode(.inline)
+        .platformInlineNavigationTitle()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 HStack {
                     Button(isRefineMode ? "Quick Label" : "Refine") {
                         isRefineMode.toggle()

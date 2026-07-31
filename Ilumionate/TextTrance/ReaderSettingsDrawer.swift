@@ -76,7 +76,7 @@ struct ReaderSettingsDrawer: View {
             .background(Color.bgPrimary.ignoresSafeArea())
             .tint(.roseGold)
             .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

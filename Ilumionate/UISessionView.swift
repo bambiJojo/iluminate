@@ -35,11 +35,11 @@ struct SessionView: View {
         .onAppear {
             Log.ui.info("👁 SessionView appeared")
             Log.ui.info("  Initial brightness: \(engine.brightness)")
-            UIApplication.shared.isIdleTimerDisabled = AppSettingsManager.keepsScreenAwakeDuringSessions()
+            PlatformApplication.keepsScreenAwake = AppSettingsManager.keepsScreenAwakeDuringSessions()
         }
         .onDisappear {
             Log.ui.info("👁 SessionView disappeared")
-            UIApplication.shared.isIdleTimerDisabled = false
+            PlatformApplication.keepsScreenAwake = false
         }
     }
 

@@ -42,13 +42,13 @@ struct ReaderSectionNavigatorSheet: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .listStyle(.insetGrouped)
+                    .platformInsetGroupedListStyle()
                     .scrollContentBackground(.hidden)
                 }
             }
             .background(Color.bgPrimary.ignoresSafeArea())
             .navigationTitle("Sections")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .searchable(text: $searchText, prompt: "Find section")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

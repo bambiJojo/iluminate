@@ -84,9 +84,9 @@ struct InAppBrowserView: View {
                 }
             }
             .navigationTitle("Browse Audio")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                         .foregroundStyle(.roseGold)
                 }
@@ -222,10 +222,10 @@ struct FloatingAddressBar: View {
                     TextField("Search or enter website", text: $urlText)
                         .font(TranceTypography.body)
                         .foregroundStyle(.textPrimary)
-                        .keyboardType(.URL)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                        .submitLabel(.go)
+                        .platformURLKeyboard()
+                        .platformNeverAutocapitalized()
+                        .platformAutocorrectionDisabled()
+                        .platformGoSubmitLabel()
                         .focused($isFocused)
                         .onSubmit {
                             onSubmit(urlText)
@@ -298,7 +298,13 @@ struct FloatingAddressBar: View {
 
 // MARK: - WKWebView Wrapper
 
-struct BrowserWebView: UIViewRepresentable {
+#if os(macOS)
+private typealias BrowserViewRepresentable = NSViewRepresentable
+#else
+private typealias BrowserViewRepresentable = UIViewRepresentable
+#endif
+
+struct BrowserWebView: BrowserViewRepresentable {
     let initialURL: String
     @Binding var urlText: String
     @Binding var isLoading: Bool
@@ -322,9 +328,11 @@ struct BrowserWebView: UIViewRepresentable {
         )
     }
 
-    func makeUIView(context: Context) -> WKWebView {
+    private func makeWebView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        #if !os(macOS)
         config.allowsInlineMediaPlayback = true
+        #endif
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         
@@ -343,11 +351,27 @@ struct BrowserWebView: UIViewRepresentable {
         return webView
     }
 
+    #if os(macOS)
+    func makeNSView(context: Context) -> WKWebView {
+        makeWebView(context: context)
+    }
+
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
+
+    static func dismantleNSView(_ nsView: WKWebView, coordinator: BrowserWebViewCoordinator) {
+        coordinator.removeObservers(from: nsView)
+    }
+    #else
+    func makeUIView(context: Context) -> WKWebView {
+        makeWebView(context: context)
+    }
+
     func updateUIView(_ uiView: WKWebView, context: Context) {}
     
     static func dismantleUIView(_ uiView: WKWebView, coordinator: BrowserWebViewCoordinator) {
         coordinator.removeObservers(from: uiView)
     }
+    #endif
 }
 
 // MARK: - Coordinator (WKNavigationDelegate + WKDownloadDelegate)

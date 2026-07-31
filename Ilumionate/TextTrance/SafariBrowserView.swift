@@ -311,7 +311,13 @@ private struct BrowserErrorOverlay: View {
     }
 }
 
-private struct ReadingBrowserWebView: UIViewRepresentable {
+#if os(macOS)
+private typealias ReadingBrowserRepresentable = NSViewRepresentable
+#else
+private typealias ReadingBrowserRepresentable = UIViewRepresentable
+#endif
+
+private struct ReadingBrowserWebView: ReadingBrowserRepresentable {
     let initialURL: URL
 
     @Binding var webView: WKWebView?
@@ -333,14 +339,18 @@ private struct ReadingBrowserWebView: UIViewRepresentable {
         )
     }
 
-    func makeUIView(context: Context) -> WKWebView {
+    private func makeWebView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        #if !os(macOS)
         configuration.allowsInlineMediaPlayback = true
+        #endif
 
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = context.coordinator
         view.allowsBackForwardNavigationGestures = true
+        #if !os(macOS)
         view.scrollView.contentInsetAdjustmentBehavior = .never
+        #endif
         view.load(URLRequest(url: initialURL))
 
         DispatchQueue.main.async {
@@ -351,11 +361,27 @@ private struct ReadingBrowserWebView: UIViewRepresentable {
         return view
     }
 
+    #if os(macOS)
+    func makeNSView(context: Context) -> WKWebView {
+        makeWebView(context: context)
+    }
+
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
+
+    static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
+        nsView.navigationDelegate = nil
+    }
+    #else
+    func makeUIView(context: Context) -> WKWebView {
+        makeWebView(context: context)
+    }
+
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
         uiView.navigationDelegate = nil
     }
+    #endif
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         @Binding private var currentURL: URL?

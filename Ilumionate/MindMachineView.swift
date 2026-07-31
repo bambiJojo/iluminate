@@ -178,7 +178,7 @@ struct MindMachineView: View {
                 MindMachineStartBar(model: model, onStart: startMindMachine)
             }
             .navigationTitle("Create")
-            .navigationBarTitleDisplayMode(.large)
+            .platformLargeNavigationTitle()
             .navigationDestination(for: String.self) { destination in
                 if destination == "browseSessions" {
                     BrowseSessionsView(
@@ -187,13 +187,13 @@ struct MindMachineView: View {
                     )
                 }
             }
-            .fullScreenCover(item: $selectedSession) { session in
+            .platformFullScreenCover(item: $selectedSession) { session in
                 UnifiedPlayerView(
                     mode: .session(session: session, audioFile: nil),
                     engine: engine
                 )
             }
-            .fullScreenCover(isPresented: $showingFlashMode) {
+            .platformFullScreenCover(isPresented: $showingFlashMode) {
                 switch model.selectedVisualMode {
                 case .colorPulse:
                     UnifiedPlayerView(

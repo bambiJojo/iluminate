@@ -35,7 +35,7 @@ struct PlaylistArtworkPickerView: View {
                 .scrollIndicators(.hidden)
             }
             .navigationTitle("Artwork")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

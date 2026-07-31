@@ -77,7 +77,7 @@ extension AudioLibraryView {
                     .frame(height: isSelectionMode ? TranceSpacing.tabBarClearance + 80 : TranceSpacing.tabBarClearance)
             }
         }
-        .fullScreenCover(item: $playerFile) { file in
+        .platformFullScreenCover(item: $playerFile) { file in
             UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
         }
     }
@@ -265,7 +265,7 @@ extension AudioLibraryView {
             .scrollContentBackground(.hidden)
             .background(Color.bgPrimary.ignoresSafeArea())
             .navigationTitle("Filters")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { showingFilters = false }

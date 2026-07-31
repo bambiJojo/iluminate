@@ -10,8 +10,13 @@
 //
 
 import SwiftUI
-import UIKit
 import QuartzCore
+
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// High-precision flash controller using CADisplayLink.
 @MainActor
@@ -47,14 +52,18 @@ final class FlashController: Sendable {
     // Private engine state
     private var displayLink: CADisplayLink?
     private var startTime: CFTimeInterval = 0
+    #if canImport(UIKit)
     private var originalBrightness: CGFloat = 0.5
+    #endif
     private var bilateralDriftPhase: Double = 0.0
 
+    #if canImport(UIKit)
     private var currentScreen: UIScreen? {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first?.screen
     }
+    #endif
 
     init(frequency: Double, intensity: Double, pattern: MindMachineModel.LightPattern) {
         self.frequency = frequency
@@ -74,12 +83,25 @@ final class FlashController: Sendable {
         sessionDuration = 0
         TranceHaptics.shared.heavy()
 
+        #if canImport(UIKit)
         if let screen = currentScreen {
             originalBrightness = screen.brightness
             screen.brightness = 1.0
         }
+        #endif
 
+        #if os(macOS)
+        displayLink = (NSScreen.main ?? NSScreen.screens.first)?.displayLink(
+            target: self,
+            selector: #selector(tick)
+        )
+        #else
         displayLink = CADisplayLink(target: self, selector: #selector(tick))
+        #endif
+        guard displayLink != nil else {
+            isFlashing = false
+            return
+        }
         displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         displayLink?.add(to: .main, forMode: .common)
         startTime = CACurrentMediaTime()
@@ -104,7 +126,9 @@ final class FlashController: Sendable {
         isFlashing = false
         displayLink?.invalidate()
         displayLink = nil
+        #if canImport(UIKit)
         currentScreen?.brightness = originalBrightness
+        #endif
         leftOpacity = 0.0
         rightOpacity = 0.0
     }
@@ -123,7 +147,7 @@ final class FlashController: Sendable {
 
         // Reduce Motion: hold a steady mid-brightness "on" state instead of
         // pulsing, so the flash never strobes for motion-sensitive users.
-        if UIAccessibility.isReduceMotionEnabled {
+        if PlatformAccessibility.isReduceMotionEnabled {
             leftOpacity = intensity
             rightOpacity = intensity
             return

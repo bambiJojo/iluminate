@@ -44,9 +44,9 @@ struct AnalyzerView: View {
             }
         }
         .navigationTitle("Analysis Queue")
-        .navigationBarTitleDisplayMode(.large)
+        .platformLargeNavigationTitle()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 if analysisManager.currentAnalysis != nil || !analysisManager.analysisQueue.isEmpty {
                     Button(role: .destructive) { showingClearQueueConfirm = true } label: {
                         Label("Clear Queue", systemImage: "xmark.circle")
@@ -69,7 +69,7 @@ struct AnalyzerView: View {
         .onChange(of: analysisManager.completedAnalyses.count) {
             Task { await loadAudioFiles() }
         }
-        .fullScreenCover(item: $readyPlayerItem) { item in
+        .platformFullScreenCover(item: $readyPlayerItem) { item in
             if let session = item.lightSession {
                 UnifiedPlayerView(
                     mode: .session(session: session, audioFile: item.audioFile),

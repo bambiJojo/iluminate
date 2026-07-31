@@ -240,7 +240,7 @@ final class UnifiedPlayerViewModel {
         dismissToMiniPlayer = false
         captureScreenBrightnessIfNeeded()
         applyStoredMindMachinePreference()
-        UIApplication.shared.isIdleTimerDisabled = AppSettingsManager.keepsScreenAwakeDuringSessions()
+        PlatformApplication.keepsScreenAwake = AppSettingsManager.keepsScreenAwakeDuringSessions()
         if !hasStarted {
             setupMode()
         }
@@ -260,13 +260,13 @@ final class UnifiedPlayerViewModel {
     /// before the player forces it to 1.0.
     private func captureScreenBrightnessIfNeeded() {
         guard !hasCapturedBrightness else { return }
-        savedBrightness = activeScreen?.brightness ?? 1.0
+        savedBrightness = PlatformApplication.screenBrightness
         hasCapturedBrightness = true
     }
 
     func onDisappear() {
         stopUIUpdateTimer()
-        UIApplication.shared.isIdleTimerDisabled = false
+        PlatformApplication.keepsScreenAwake = false
         if dismissToMiniPlayer {
             // Keep this exact player alive so the mini-player can resume it.
             nowPlaying.updatePlaybackState(playbackState)
@@ -298,10 +298,7 @@ final class UnifiedPlayerViewModel {
     /// Pause safely when the system interrupts the app (for example, a phone
     /// call). Playback never resumes automatically after an interruption.
     func handleAudioSessionInterruption(_ notification: Notification) {
-        guard
-            let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-            AVAudioSession.InterruptionType(rawValue: rawType) == .began
-        else { return }
+        guard PlatformAudioSession.interruptionBegan(notification) else { return }
 
         handlePlaybackInterruption()
     }
@@ -533,13 +530,13 @@ final class UnifiedPlayerViewModel {
         guard mode.hasMindMachineToggle else { return }
         if engine.mindMachineEnabled {
             if playbackState == .playing || playbackState == .countdown {
-                activeScreen?.brightness = 1.0
+                PlatformApplication.screenBrightness = 1.0
             }
-            UIApplication.shared.isIdleTimerDisabled =
+            PlatformApplication.keepsScreenAwake =
                 AppSettingsManager.keepsScreenAwakeDuringSessions(defaults: userDefaults)
         } else {
-            activeScreen?.brightness = savedBrightness
-            UIApplication.shared.isIdleTimerDisabled = false
+            PlatformApplication.screenBrightness = savedBrightness
+            PlatformApplication.keepsScreenAwake = false
         }
     }
 
@@ -742,15 +739,6 @@ final class UnifiedPlayerViewModel {
 
     // MARK: - Private: Countdown & Play
 
-    /// The screen backing the app's active foreground scene.
-    /// Replaces the deprecated `UIScreen.main`.
-    private var activeScreen: UIScreen? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }?
-            .screen
-    }
-
     private func startCountdownAndPlay() {
         analyticsLifecycle.prepareForNewAttempt()
         hasRecordedHistoryForAttempt = false
@@ -761,7 +749,7 @@ final class UnifiedPlayerViewModel {
         // Maximise screen brightness — but only when lights are actually running.
         captureScreenBrightnessIfNeeded()
         if engine.mindMachineEnabled {
-            activeScreen?.brightness = 1.0
+            PlatformApplication.screenBrightness = 1.0
         }
 
         let count = countdownDuration
@@ -907,7 +895,7 @@ final class UnifiedPlayerViewModel {
     func stopAll(reason: PlaybackEndReason = .userStopped) {
         countdownTask?.cancel()
         countdownTask = nil
-        activeScreen?.brightness = savedBrightness
+        PlatformApplication.screenBrightness = savedBrightness
         countdownValue = nil
         countdownMessage = nil
         reportSessionEndedIfNeeded(reason: reason)
@@ -960,7 +948,7 @@ final class UnifiedPlayerViewModel {
     private func cancelPendingStart(message: String) {
         countdownTask?.cancel()
         countdownTask = nil
-        activeScreen?.brightness = savedBrightness
+        PlatformApplication.screenBrightness = savedBrightness
         countdownValue = nil
         countdownMessage = nil
         playbackState = .idle
@@ -973,7 +961,7 @@ final class UnifiedPlayerViewModel {
 
         currentTime = duration
         playbackState = .complete
-        activeScreen?.brightness = savedBrightness
+        PlatformApplication.screenBrightness = savedBrightness
         reportSessionEndedIfNeeded(reason: .completed)
         recordSessionHistoryIfNeeded()
         persistPlaybackProgress()

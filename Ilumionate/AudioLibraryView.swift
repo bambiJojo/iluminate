@@ -163,7 +163,7 @@ struct AudioLibraryView: View {
                 SessionDetailView(audioFile: file, engine: engine)
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     if !audioFiles.isEmpty {
                         Button(isSelectionMode ? "Done" : "Select") {
                             TranceHaptics.shared.light()
@@ -177,7 +177,7 @@ struct AudioLibraryView: View {
                     }
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: TranceSpacing.small) {
                         // Queue badge
                         if analysisManager.currentAnalysis != nil || analysisAttentionCount > 0 {

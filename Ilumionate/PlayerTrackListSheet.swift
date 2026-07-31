@@ -54,7 +54,7 @@ struct PlayerTrackListSheet: View {
                 }
             }
             .navigationTitle("Tracks")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

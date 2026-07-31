@@ -8,8 +8,15 @@
 import SwiftUI
 import os
 
+enum AppNavigationPresentation: Equatable {
+    case compactTabs
+    case macSidebar
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
+
+    let navigationPresentation: AppNavigationPresentation
 
     // MARK: - State Management (Trance navigation system)
     @State private var selectedTab: TranceTab = .home
@@ -33,55 +40,160 @@ struct ContentView: View {
     @AppStorage("userFrequencyMultiplier") private var userFrequencyMultiplierPref = 1.0
     @AppStorage("appearanceMode") private var appearanceModeRaw = ThemeMode.system.rawValue
 
+    init(navigationPresentation: AppNavigationPresentation = .compactTabs) {
+        self.navigationPresentation = navigationPresentation
+    }
+
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // Main content area — fills full screen; bottom padding reserves space for floating bar.
-            // Using if/else-if inside a ZStack so SwiftUI sees the view being inserted/removed
-            // and can apply the .transition crossfade during the animation.
-            // ZStack + .animation drives the 0.25 s opacity crossfade whenever
-            // selectedTab changes. Each branch carries .transition(.opacity) so
-            // SwiftUI fades out the leaving view and fades in the arriving view.
-            ZStack {
-                if selectedTab == .home {
-                    NavigationStack {
-                        HomeView(
-                            showingAudioLibrary: $showingAudioLibrary,
-                            showingSessionPlayer: $showingSessionPlayer,
-                            selectedSession: $selectedSession,
-                            sessions: sessions,
-                            audioFiles: audioFiles,
-                            engine: engine,
-                            onRefresh: loadSessions,
-                            onOpenReader: { selectedTab = .read }
-                        )
-                    }
-                    .transition(.opacity)
-                } else if selectedTab == .library {
-                    // LibraryView owns its own NavigationStack
-                    LibraryView(
-                        engine: engine,
-                        onContinueReading: {
-                            selectedTab = .read
-                            readerQuickStartTrigger += 1
+        mainLayout
+        .task {
+            await analysisManager.restoreManualRecoveries()
+            loadSessions()
+            await loadAudioFiles()
+            checkForFirstLaunch()
+            checkForAnalyticsConsentPrompt()
+            engine.userFrequencyMultiplier = userFrequencyMultiplierPref
+            UsageAnalytics.shared.appBecameActive()
+            UsageAnalytics.shared.screen(screen(for: selectedTab))
+        }
+        .onChange(of: userFrequencyMultiplierPref) { _, newValue in
+            engine.userFrequencyMultiplier = newValue
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            UsageAnalytics.shared.screen(screen(for: newTab))
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                UsageAnalytics.shared.appBecameActive()
+                BackgroundAnalysisScheduler.shared.resumeWhenForegrounded()
+            }
+        }
+        .onOpenURL { url in
+            handleDeepLink(url)
+        }
+        .platformFullScreenCover(item: $selectedSession) { session in
+            UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
+        }
+        .sheet(isPresented: $showingAudioLibrary) {
+            AudioLibraryView(engine: engine)
+        }
+        .platformFullScreenCover(isPresented: $showingResumedPlayer) {
+            if let resumedViewModel = nowPlaying.viewModel {
+                UnifiedPlayerView(viewModel: resumedViewModel)
+            } else if let mode = nowPlaying.currentMode, let playerEngine = nowPlaying.engine {
+                UnifiedPlayerView(mode: mode, engine: playerEngine)
+            }
+        }
+        .platformFullScreenCover(isPresented: $showingOnboarding) {
+            OnboardingView()
+        }
+        .sheet(isPresented: $showingAnalysisQueue) {
+            NavigationStack {
+                AnalyzerView(engine: engine)
+            }
+        }
+        .alert("Help Improve LumeSync", isPresented: $showingAnalyticsConsentPrompt) {
+            Button("Not Now", role: .cancel) {
+                UsageAnalytics.shared.setEnabled(false)
+            }
+            Button("Share Anonymous Analytics") {
+                UsageAnalytics.shared.setEnabled(true)
+            }
+        } message: {
+            Text("Share anonymous usage analytics so we can understand what works, find problems, and improve the app. This never includes audio, transcripts, generated session text, imported documents, or reading-source URLs.")
+        }
+        .preferredColorScheme(ThemeMode(persisted: appearanceModeRaw).colorScheme)
+    }
+
+    @ViewBuilder
+    private var mainLayout: some View {
+        if navigationPresentation == .macSidebar {
+            NavigationSplitView {
+                List(selection: sidebarSelection) {
+                    Section("LumeSync") {
+                        ForEach(TranceTab.allCases, id: \.self) { tab in
+                            Label(tab.title, systemImage: tab.sfSymbol)
+                                .tag(tab)
                         }
-                    )
-                        .transition(.opacity)
-                } else if selectedTab == .read {
-                    TextTranceRootView(
-                        sharedImportTrigger: readerSharedImportTrigger,
-                        quickStartTrigger: readerQuickStartTrigger
-                    )
-                        .transition(.opacity)
-                } else if selectedTab == .create {
-                    NavigationStack {
-                        MindMachineView(engine: engine, sessions: sessions)
                     }
-                    .transition(.opacity)
+
+                    #if os(macOS)
+                    Section("Application") {
+                        SettingsLink {
+                            Label("Settings", systemImage: "gearshape")
+                        }
+                    }
+                    #endif
+                }
+                .navigationTitle("LumeSync")
+                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
+            } detail: {
+                ZStack(alignment: .bottom) {
+                    featureContent
+                    bottomChrome(showsTabBar: false)
+                        .padding(TranceSpacing.inner)
                 }
             }
-            .animation(.easeInOut(duration: 0.25), value: selectedTab)
+            .navigationSplitViewStyle(.balanced)
+        } else {
+            ZStack(alignment: .bottom) {
+                featureContent
+                bottomChrome(showsTabBar: true)
+            }
+        }
+    }
 
-            // Analysis overlay + Mini-player + tab bar stack
+    private var sidebarSelection: Binding<TranceTab?> {
+        Binding(
+            get: { selectedTab },
+            set: { if let newValue = $0 { selectedTab = newValue } }
+        )
+    }
+
+    @ViewBuilder
+    private var featureContent: some View {
+        ZStack {
+            if selectedTab == .home {
+                NavigationStack {
+                    HomeView(
+                        showingAudioLibrary: $showingAudioLibrary,
+                        showingSessionPlayer: $showingSessionPlayer,
+                        selectedSession: $selectedSession,
+                        sessions: sessions,
+                        audioFiles: audioFiles,
+                        engine: engine,
+                        onRefresh: loadSessions,
+                        onOpenReader: { selectedTab = .read }
+                    )
+                }
+                .transition(.opacity)
+            } else if selectedTab == .library {
+                LibraryView(
+                    engine: engine,
+                    onContinueReading: {
+                        selectedTab = .read
+                        readerQuickStartTrigger += 1
+                    }
+                )
+                .transition(.opacity)
+            } else if selectedTab == .read {
+                TextTranceRootView(
+                    sharedImportTrigger: readerSharedImportTrigger,
+                    quickStartTrigger: readerQuickStartTrigger
+                )
+                .transition(.opacity)
+            } else if selectedTab == .create {
+                NavigationStack {
+                    MindMachineView(engine: engine, sessions: sessions)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: selectedTab)
+    }
+
+    private func bottomChrome(showsTabBar: Bool) -> some View {
+        ZStack(alignment: .bottom) {
             VStack(spacing: TranceSpacing.inner) {
                 // Measured so screens can reserve space for it — its height
                 // grows with the stage/estimate/reassurance text.
@@ -114,68 +226,14 @@ struct ContentView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
-                TranceTabBar(selected: $selectedTab)
+                if showsTabBar {
+                    TranceTabBar(selected: $selectedTab)
+                }
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: nowPlaying.isActive)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.currentAnalysis)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.failedAnalyses.count)
         }
-        .task {
-            await analysisManager.restoreManualRecoveries()
-            loadSessions()
-            await loadAudioFiles()
-            checkForFirstLaunch()
-            checkForAnalyticsConsentPrompt()
-            engine.userFrequencyMultiplier = userFrequencyMultiplierPref
-            UsageAnalytics.shared.appBecameActive()
-            UsageAnalytics.shared.screen(screen(for: selectedTab))
-        }
-        .onChange(of: userFrequencyMultiplierPref) { _, newValue in
-            engine.userFrequencyMultiplier = newValue
-        }
-        .onChange(of: selectedTab) { _, newTab in
-            UsageAnalytics.shared.screen(screen(for: newTab))
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                UsageAnalytics.shared.appBecameActive()
-            }
-        }
-        .onOpenURL { url in
-            handleDeepLink(url)
-        }
-        .fullScreenCover(item: $selectedSession) { session in
-            UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
-        }
-        .sheet(isPresented: $showingAudioLibrary) {
-            AudioLibraryView(engine: engine)
-        }
-        .fullScreenCover(isPresented: $showingResumedPlayer) {
-            if let resumedViewModel = nowPlaying.viewModel {
-                UnifiedPlayerView(viewModel: resumedViewModel)
-            } else if let mode = nowPlaying.currentMode, let playerEngine = nowPlaying.engine {
-                UnifiedPlayerView(mode: mode, engine: playerEngine)
-            }
-        }
-        .fullScreenCover(isPresented: $showingOnboarding) {
-            OnboardingView()
-        }
-        .sheet(isPresented: $showingAnalysisQueue) {
-            NavigationStack {
-                AnalyzerView(engine: engine)
-            }
-        }
-        .alert("Help Improve LumeSync", isPresented: $showingAnalyticsConsentPrompt) {
-            Button("Not Now", role: .cancel) {
-                UsageAnalytics.shared.setEnabled(false)
-            }
-            Button("Share Anonymous Analytics") {
-                UsageAnalytics.shared.setEnabled(true)
-            }
-        } message: {
-            Text("Share anonymous usage analytics so we can understand what works, find problems, and improve the app. This never includes audio, transcripts, generated session text, imported documents, or reading-source URLs.")
-        }
-        .preferredColorScheme(ThemeMode(persisted: appearanceModeRaw).colorScheme)
     }
 
     // MARK: - Actions

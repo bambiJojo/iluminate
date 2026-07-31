@@ -27,12 +27,12 @@ struct SessionLibraryView: View {
             }
         }
         .navigationTitle("Session Library")
-        .navigationBarTitleDisplayMode(.large)
+        .platformLargeNavigationTitle()
         .onAppear {
             loadSessions()
             UsageAnalytics.shared.screen(.sessionLibrary)
         }
-        .fullScreenCover(item: $selectedSession) { session in
+        .platformFullScreenCover(item: $selectedSession) { session in
             UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
         }
         .searchable(text: $searchText, prompt: "Search sessions...")

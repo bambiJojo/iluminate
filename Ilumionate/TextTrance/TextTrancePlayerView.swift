@@ -141,7 +141,7 @@ struct TextTrancePlayerView: View {
             preparePresentation()
             startPlaybackIfNeeded()
         }
-        .statusBarHidden(!controlsVisibility.isVisible)
+        .platformStatusBarHidden(!controlsVisibility.isVisible)
         .onChange(of: activeSheet) { _, sheet in
             controlsVisibility.isDrawerOpen = sheet != nil
         }

@@ -131,7 +131,7 @@ struct UnifiedPlayerView: View {
         .onChange(of: scenePhase) { _, phase in
             viewModel.handleScenePhase(phase)
         }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) {
+        .onReceive(NotificationCenter.default.publisher(for: PlatformAudioSession.interruptionNotification)) {
             viewModel.handleAudioSessionInterruption($0)
         }
         .onChange(of: controlsVisibility.isVisible) { _, visible in
@@ -154,7 +154,7 @@ struct UnifiedPlayerView: View {
         .onChange(of: showingOverflow) { _, open in
             controlsVisibility.isDrawerOpen = open || viewModel.showingTrackList
         }
-        .statusBarHidden(!viewModel.showingControls)
+        .platformStatusBarHidden(!viewModel.showingControls)
         .gesture(
             DragGesture(minimumDistance: 20)
                 .onEnded { value in

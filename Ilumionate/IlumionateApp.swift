@@ -7,6 +7,9 @@
 
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+
 class AppDelegate: NSObject, UIApplicationDelegate {
     static var orientationLock = UIInterfaceOrientationMask.all
 
@@ -35,10 +38,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return AppDelegate.orientationLock
     }
 }
+#endif
 
 @main
 struct IlumionateApp: App {
+    #if canImport(UIKit)
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    #endif
 
     init() {
         // Opt-out, default-on: listening history powers the Home streak/momentum
@@ -48,11 +54,40 @@ struct IlumionateApp: App {
             AppSettingsManager.Key.listeningHistoryEnabled: true
         ])
         UsageAnalytics.configure()
+        #if os(macOS)
+        BackgroundAnalysisScheduler.shared.register()
+        #endif
     }
 
     var body: some Scene {
         WindowGroup {
+            #if os(macOS)
+            ContentView(navigationPresentation: .macSidebar)
+                .frame(minWidth: 760, minHeight: 560)
+            #elseif targetEnvironment(macCatalyst)
             ContentView()
+                .frame(minWidth: 760, minHeight: 560)
+            #else
+            ContentView()
+            #endif
         }
+        #if os(macOS)
+        .defaultSize(width: 1_100, height: 760)
+        .windowResizability(.contentMinSize)
+        .windowToolbarStyle(.unified)
+        .commands {
+            SidebarCommands()
+        }
+        #elseif targetEnvironment(macCatalyst)
+        .defaultSize(width: 1_100, height: 760)
+        .windowResizability(.contentMinSize)
+        #endif
+
+        #if os(macOS)
+        Settings {
+            ProfileSettingsView()
+                .frame(minWidth: 640, minHeight: 620)
+        }
+        #endif
     }
 }

@@ -40,16 +40,16 @@ struct QueueManagementView: View {
                 }
             }
             .navigationTitle("Analysis Queue")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
                         dismiss()
                     }
                     .glassButtonStyleIfAvailable()
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     if !analysisManager.analysisQueue.isEmpty {
                         Button("Clear All") {
                             analysisManager.clearQueue()

@@ -52,7 +52,7 @@ struct PlayerOverflowSheet: View {
             .padding(TranceSpacing.screen)
             .background(Color.bgPrimary.ignoresSafeArea())
             .navigationTitle("Options")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

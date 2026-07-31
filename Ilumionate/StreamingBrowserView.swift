@@ -45,7 +45,7 @@ struct StreamingBrowserView: View {
                 }
             }
             .navigationTitle("Streaming")
-            .navigationBarTitleDisplayMode(.large)
+            .platformLargeNavigationTitle()
             .toolbar { toolbarContent }
             .searchable(text: $searchText, prompt: "Search for meditation, ambient, therapy...")
             .onSubmit(of: .search) {
@@ -74,7 +74,7 @@ struct StreamingBrowserView: View {
             Button("Done") { dismiss() }
         }
 
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .primaryAction) {
             Button {
                 showingSettings = true
             } label: {

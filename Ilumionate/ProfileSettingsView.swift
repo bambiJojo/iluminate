@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import StoreKit
 
 // MARK: - ProfileSettingsView
 
@@ -15,6 +16,7 @@ struct ProfileSettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) var openURL
+    @Environment(\.requestReview) var requestReview
 
     // Profile
     @AppStorage("profileName") var profileName = ""
@@ -89,7 +91,7 @@ struct ProfileSettingsView: View {
                 }
             }
             .navigationTitle("Profile & Settings")
-            .navigationBarTitleDisplayMode(.large)
+            .platformLargeNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }

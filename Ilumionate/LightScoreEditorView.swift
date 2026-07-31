@@ -33,7 +33,7 @@ struct LightScoreEditorView: View {
         }
         .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle("Light Score")
-        .navigationBarTitleDisplayMode(.inline)
+        .platformInlineNavigationTitle()
         .onAppear { UsageAnalytics.shared.screen(.lightScoreEditor) }
     }
 

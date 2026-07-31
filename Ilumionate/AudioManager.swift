@@ -33,6 +33,7 @@ class AudioManager: NSObject {
 
     private func setupAudioSession() {
         guard !isAudioSessionConfigured else { return }
+        #if os(iOS)
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
@@ -42,6 +43,9 @@ class AudioManager: NSObject {
         } catch {
             Log.audio.info("❌ Failed to setup audio session: \(error)")
         }
+        #else
+        isAudioSessionConfigured = true
+        #endif
     }
 
     // MARK: - Playback

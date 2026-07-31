@@ -111,7 +111,7 @@ struct OnboardingView: View {
                 UsageAnalytics.shared.onboardingCompleted()
             }
         }
-        .fullScreenCover(isPresented: $showWelcomeSession, onDismiss: finishWelcomeSession) {
+        .platformFullScreenCover(isPresented: $showWelcomeSession, onDismiss: finishWelcomeSession) {
             if let welcomeSession {
                 UnifiedPlayerView(
                     mode: .session(session: welcomeSession, audioFile: nil),
@@ -119,13 +119,17 @@ struct OnboardingView: View {
                 )
             }
         }
-        .persistentSystemOverlays(.hidden)
-        .statusBarHidden()
+        .platformPersistentSystemOverlaysHidden()
+        .platformStatusBarHidden()
         .onAppear {
+            #if canImport(UIKit)
             AppDelegate.orientationLock = UIInterfaceOrientationMask.portrait
+            #endif
         }
         .onDisappear {
+            #if canImport(UIKit)
             AppDelegate.orientationLock = UIInterfaceOrientationMask.all
+            #endif
         }
     }
     

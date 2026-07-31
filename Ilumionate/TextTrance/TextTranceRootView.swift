@@ -89,7 +89,7 @@ struct TextTranceRootView: View {
                 pendingHistoryScript = script
             }
         }
-        .fullScreenCover(item: $browsingSource) { destination in
+        .platformFullScreenCover(item: $browsingSource) { destination in
             SafariBrowserView(
                 url: destination.source.url,
                 suggestedTitle: destination.source.title,
@@ -100,7 +100,7 @@ struct TextTranceRootView: View {
                 }
             )
         }
-        .fullScreenCover(
+        .platformFullScreenCover(
             item: $activeQuickStartSession,
             onDismiss: handleQuickStartDismiss
         ) { session in

@@ -163,7 +163,7 @@ struct PhraseLibraryView: View {
         }
         .background(Color.bgPrimary.ignoresSafeArea())
         .navigationTitle("Phrase Library")
-        .navigationBarTitleDisplayMode(.inline)
+        .platformInlineNavigationTitle()
         .searchable(text: $searchText, prompt: "Search phrases, phases, or sources")
         .onAppear { UsageAnalytics.shared.screen(.phraseLibrary) }
     }
