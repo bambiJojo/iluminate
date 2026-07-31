@@ -80,6 +80,35 @@ struct AudioLibraryStoreTests {
         #expect(files.first?.id == existing.id)
     }
 
+    @Test func loadingLibraryAutomaticallyAppliesRecognizedGoldReview() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+
+        let url = fixture.documentsURL.appending(path: "04 Giggledoll.mp3")
+        try Data("test audio placeholder".utf8).write(to: url)
+        let existing = AudioFile(
+            filename: url.lastPathComponent,
+            duration: 394.031,
+            fileSize: 1_024
+        )
+        await AudioLibraryStore.save([existing], defaults: fixture.defaults)
+
+        let files = await AudioLibraryStore.loadRepairingStoredFiles(
+            defaults: fixture.defaults,
+            documentsURL: fixture.documentsURL
+        )
+        let recognized = try #require(files.first)
+
+        #expect(recognized.isAnalyzed)
+        #expect(recognized.analysisResult?.expertAnalysis?.verdict == .productionReady)
+        #expect(recognized.trackMetadata?.preferredTitle == "Giggledoll")
+        #expect(
+            AudioLibraryStore.load(defaults: fixture.defaults)
+                .first?.analysisResult?.recommendedPreset
+                == "Giggledoll — Gold Light Score"
+        )
+    }
+
     @Test func playbackUpdatesRecencyAndPlayCount() async throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }

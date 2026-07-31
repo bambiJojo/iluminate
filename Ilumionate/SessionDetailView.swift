@@ -20,6 +20,13 @@ struct SessionDetailView: View {
     private var analysis: AnalysisResult? { audioFile.analysisResult }
     private var phases: [PhaseSegment]? { analysis?.hypnosisMetadata?.phases }
     private var transcript: String? { audioFile.transcription }
+    private var catalogEntry: KnownAudioCatalogEntry? {
+        KnownAudioCatalog.shared.match(audioFile: audioFile)?.entry
+    }
+    private var hasReviewedGoldScore: Bool {
+        guard let catalogEntry else { return false }
+        return catalogEntry.goldLightScore.evidenceKind != .catalogMetadata
+    }
 
     init(audioFile: AudioFile, engine: LightEngine) {
         self.engine = engine
@@ -64,8 +71,8 @@ struct SessionDetailView: View {
             }
         }
         .navigationTitle(audioFile.displayName)
-        .navigationBarTitleDisplayMode(.large)
-        .fullScreenCover(isPresented: $showingPlayer) {
+        .platformLargeNavigationTitle()
+        .platformFullScreenCover(isPresented: $showingPlayer) {
             if let session = lightSession {
                 UnifiedPlayerView(
                     mode: .session(session: session, audioFile: audioFile),
@@ -147,7 +154,11 @@ struct SessionDetailView: View {
                     HStack(spacing: TranceSpacing.inner) {
                         Image(systemName: "checkmark.seal.fill")
                             .foregroundStyle(Color.roseGold)
-                        Text("AI Analyzed")
+                        Text(
+                            hasReviewedGoldScore
+                                ? "Gold Standard"
+                                : (catalogEntry == nil ? "AI Analyzed" : "Catalog Template")
+                        )
                             .font(TranceTypography.caption)
                             .foregroundStyle(Color.roseGold)
 
@@ -257,7 +268,11 @@ struct SessionDetailView: View {
     // MARK: - Light Score Preview
 
     private func lightScorePreviewSection(_ session: LightSession) -> some View {
-        LiminalCard(label: "Light Score") {
+        LiminalCard(
+            label: catalogEntry.map {
+                "Gold Light Score · v\($0.goldLightScore.scoreVersion)"
+            } ?? "Light Score"
+        ) {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 // Mini frequency curve
                 LightScoreMiniGraph(moments: session.light_score, duration: session.duration_sec)
@@ -318,7 +333,9 @@ struct SessionDetailView: View {
                                 Text(expert.verdict.displayName)
                                     .font(TranceTypography.body.weight(.semibold))
                                     .foregroundStyle(Color.textPrimary)
-                                Text("\(expert.qualityScore, format: .percent.precision(.fractionLength(0))) analyzer quality")
+                                Text(
+                                    "\(expert.qualityScore, format: .percent.precision(.fractionLength(0))) \(catalogEntry == nil ? "analyzer quality" : "score quality")"
+                                )
                                     .font(TranceTypography.caption)
                                     .foregroundStyle(Color.textSecondary)
                             }
@@ -381,7 +398,11 @@ struct SessionDetailView: View {
     }
 
     private var analysisInsightsSection: some View {
-        LiminalCard(label: "AI Insights") {
+        LiminalCard(
+            label: hasReviewedGoldScore
+                ? "Gold Review"
+                : (catalogEntry == nil ? "AI Insights" : "Catalog Review")
+        ) {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 if let summary = analysis?.aiSummary, !summary.isEmpty {
                     Text(summary)
@@ -436,7 +457,7 @@ struct SessionDetailView: View {
 
     private var reanalyzeSection: some View {
         Group {
-            if audioFile.isAnalyzed {
+            if audioFile.isAnalyzed && catalogEntry == nil {
                 Button {
                     TranceHaptics.shared.light()
                     Task {

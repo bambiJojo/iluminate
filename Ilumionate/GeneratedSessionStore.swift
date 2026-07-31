@@ -12,6 +12,7 @@ final class GeneratedSessionStore {
 
     private let directoryURL: URL
     private let onSessionSaved: () -> Void
+    private let goldSessionProvider: (AudioFile) -> LightSession?
 
     init(
         directoryURL: URL = URL.documentsDirectory.appending(
@@ -20,10 +21,14 @@ final class GeneratedSessionStore {
         ),
         onSessionSaved: @escaping () -> Void = {
             UsageAnalytics.shared.sessionGenerated()
+        },
+        goldSessionProvider: @escaping (AudioFile) -> LightSession? = {
+            KnownAudioCatalog.shared.goldLightSession(for: $0)
         }
     ) {
         self.directoryURL = directoryURL
         self.onSessionSaved = onSessionSaved
+        self.goldSessionProvider = goldSessionProvider
     }
 
     func sessionURL(forAudioFileID id: UUID) -> URL {
@@ -35,6 +40,11 @@ final class GeneratedSessionStore {
     }
 
     func save(_ session: LightSession, for audioFile: AudioFile) throws {
+        guard goldSessionProvider(audioFile) == nil else {
+            Log.analysis.info("🏅 Preserved bundled gold light score for \(audioFile.filename)")
+            return
+        }
+
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
 
         let encoder = JSONEncoder()
@@ -48,6 +58,10 @@ final class GeneratedSessionStore {
     }
 
     func load(for audioFile: AudioFile) -> LightSession? {
+        if let goldSession = goldSessionProvider(audioFile) {
+            return goldSession
+        }
+
         let url = sessionURL(forAudioFileID: audioFile.id)
         if let session = decodeSession(at: url) {
             return session

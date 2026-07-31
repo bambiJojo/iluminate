@@ -298,14 +298,16 @@ private final class FakeTrainingWorkflowEngine: TrainingWorkflowEngine {
         self.measureDelayNanoseconds = measureDelayNanoseconds
     }
 
-    func loadDataset() throws -> AnalyzerOptimizationDataset {
+    func loadDataset() async throws -> AnalyzerOptimizationDataset {
         if let loadError {
             throw loadError
         }
         return dataset
     }
 
-    func inspectTranscriptCoverage(dataset: AnalyzerOptimizationDataset) throws -> TrainingTranscriptCoverage {
+    func inspectTranscriptCoverage(
+        dataset: AnalyzerOptimizationDataset
+    ) async throws -> TrainingTranscriptCoverage {
         prepareCalls > 0 ? postCoverage : initialCoverage
     }
 

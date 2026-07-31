@@ -34,6 +34,25 @@ final class LumeLabelUITests: XCTestCase {
     }
 
     @MainActor
+    func testImportAudioPresentsFilePicker() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let addMenu = app.menuButtons["Add"]
+        XCTAssertTrue(addMenu.waitForExistence(timeout: 5))
+        addMenu.click()
+
+        let importAudio = app.menuItems["Import Audio"]
+        XCTAssertTrue(importAudio.waitForExistence(timeout: 2))
+        importAudio.click()
+
+        XCTAssertTrue(
+            app.buttons["Open"].waitForExistence(timeout: 3),
+            "Choosing Import Audio should present the system audio file picker."
+        )
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

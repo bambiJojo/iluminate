@@ -293,8 +293,8 @@ struct TrainingWorkflowDatasetSnapshot: Sendable {
 
 @MainActor
 protocol TrainingWorkflowEngine: AnyObject {
-    func loadDataset() throws -> AnalyzerOptimizationDataset
-    func inspectTranscriptCoverage(dataset: AnalyzerOptimizationDataset) throws -> TrainingTranscriptCoverage
+    func loadDataset() async throws -> AnalyzerOptimizationDataset
+    func inspectTranscriptCoverage(dataset: AnalyzerOptimizationDataset) async throws -> TrainingTranscriptCoverage
     func loadOptimizationCheckpoint() throws -> AnalyzerOptimizer.Checkpoint?
     func prepareTranscripts(
         for dataset: AnalyzerOptimizationDataset,
@@ -336,6 +336,7 @@ final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
     }
 
     private let optimizer: AnalyzerOptimizer
+    private let corpusDirectory: URL
     private let audioAnalyzer: AudioAnalyzer
     private let runControl = RunControl()
 
@@ -344,6 +345,7 @@ final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
         outputDirectory: URL = URL.documentsDirectory.appending(path: "TrainingOutput"),
         audioAnalyzer: AudioAnalyzer? = nil
     ) {
+        self.corpusDirectory = corpusDirectory
         self.optimizer = AnalyzerOptimizer(
             corpusDirectory: corpusDirectory,
             outputDirectory: outputDirectory
@@ -351,12 +353,19 @@ final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
         self.audioAnalyzer = audioAnalyzer ?? AudioAnalyzer()
     }
 
-    func loadDataset() throws -> AnalyzerOptimizationDataset {
-        try optimizer.loadDataset()
+    func loadDataset() async throws -> AnalyzerOptimizationDataset {
+        let corpusDirectory = corpusDirectory
+        return try await Task.detached(priority: .userInitiated) {
+            try AnalyzerOptimizationDataset.load(from: corpusDirectory)
+        }.value
     }
 
-    func inspectTranscriptCoverage(dataset: AnalyzerOptimizationDataset) throws -> TrainingTranscriptCoverage {
-        try TrainingTranscriptCoverageInspector.inspect(dataset: dataset)
+    func inspectTranscriptCoverage(
+        dataset: AnalyzerOptimizationDataset
+    ) async throws -> TrainingTranscriptCoverage {
+        try await Task.detached(priority: .utility) {
+            try TrainingTranscriptCoverageInspector.inspect(dataset: dataset)
+        }.value
     }
 
     func loadOptimizationCheckpoint() throws -> AnalyzerOptimizer.Checkpoint? {
@@ -367,15 +376,13 @@ final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
         for dataset: AnalyzerOptimizationDataset,
         progress: @escaping @MainActor (_ current: Int, _ total: Int, _ filename: String) -> Void
     ) async throws -> TrainingTranscriptCoverage {
-        let coverage = try inspectTranscriptCoverage(dataset: dataset)
+        let coverage = try await inspectTranscriptCoverage(dataset: dataset)
         guard !coverage.missingExamples.isEmpty else {
             return coverage
         }
 
         let cache = AnalyzerTranscriptCache(cacheDirectory: dataset.transcriptCacheDirectory)
         let total = coverage.missingExamples.count
-
-        try await audioAnalyzer.prepareModel()
 
         for (index, example) in coverage.missingExamples.enumerated() {
             try Task.checkCancellation()
@@ -390,7 +397,7 @@ final class DefaultTrainingWorkflowEngine: TrainingWorkflowEngine {
         }
 
         try Task.checkCancellation()
-        return try inspectTranscriptCoverage(dataset: dataset)
+        return try await inspectTranscriptCoverage(dataset: dataset)
     }
 
     func measure(
@@ -495,7 +502,9 @@ enum TrainingTranscriptCoverageInspector {
         let transcription: AudioTranscriptionResult
     }
 
-    static func inspect(dataset: AnalyzerOptimizationDataset) throws -> TrainingTranscriptCoverage {
+    nonisolated static func inspect(
+        dataset: AnalyzerOptimizationDataset
+    ) throws -> TrainingTranscriptCoverage {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
@@ -559,8 +568,8 @@ final class TrainingWorkflowController {
 
     func refreshSnapshot() async {
         do {
-            let dataset = try engine.loadDataset()
-            let coverage = try engine.inspectTranscriptCoverage(dataset: dataset)
+            let dataset = try await engine.loadDataset()
+            let coverage = try await engine.inspectTranscriptCoverage(dataset: dataset)
             datasetSnapshot = TrainingWorkflowDatasetSnapshot(dataset: dataset, coverage: coverage)
             if let checkpoint = try engine.loadOptimizationCheckpoint(),
                checkpoint.datasetHash == dataset.datasetHash {
@@ -642,8 +651,8 @@ final class TrainingWorkflowController {
             )
             try Task.checkCancellation()
 
-            let dataset = try engine.loadDataset()
-            let coverage = try engine.inspectTranscriptCoverage(dataset: dataset)
+            let dataset = try await engine.loadDataset()
+            let coverage = try await engine.inspectTranscriptCoverage(dataset: dataset)
             datasetSnapshot = TrainingWorkflowDatasetSnapshot(dataset: dataset, coverage: coverage)
 
             guard !dataset.examples.isEmpty else {

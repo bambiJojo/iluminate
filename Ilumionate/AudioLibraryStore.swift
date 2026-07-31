@@ -22,12 +22,21 @@ nonisolated enum AudioLibraryStore {
             documentsURL: documentsURL
         )
         files = repair.existingFiles
+        files.insert(contentsOf: repair.addedFiles, at: 0)
 
-        guard repair.didChange else {
-            return files
+        var didChange = repair.didChange
+        for index in files.indices where needsCatalogHydration(files[index]) {
+            guard let reviewed = KnownAudioCatalog.shared.applyingReviewedAnalysis(
+                to: files[index]
+            ) else {
+                continue
+            }
+            files[index] = reviewed
+            didChange = true
         }
 
-        files.insert(contentsOf: repair.addedFiles, at: 0)
+        guard didChange else { return files }
+
         await save(files, defaults: defaults)
         if !repair.addedFiles.isEmpty {
             Log.audio.info("📦 Registered \(repair.addedFiles.count) audio file(s) discovered in Documents")
@@ -84,6 +93,26 @@ nonisolated enum AudioLibraryStore {
             audioFileID: audioFileID,
             defaults: ThreadSafeUserDefaults(defaults)
         )
+    }
+
+    private static func needsCatalogHydration(_ audioFile: AudioFile) -> Bool {
+        guard let entry = KnownAudioCatalog.shared.match(audioFile: audioFile)?.entry else {
+            return false
+        }
+
+        let expectedPreset = "\(entry.title) — Gold Light Score"
+        let expectedVersion = "version \(entry.goldLightScore.scoreVersion)"
+        let expectedReview = "Catalog review \(KnownAudioCatalog.reviewedAnalysisVersion)"
+        let hasCurrentReview = audioFile.analysisResult?.recommendedPreset == expectedPreset
+            && audioFile.analysisResult?.expertAnalysis?.summary.contains(expectedVersion) == true
+            && audioFile.analysisResult?.expertAnalysis?.summary.contains(expectedReview) == true
+        let hasVerifiedMetadata = audioFile.trackMetadata?.verificationSource != nil
+        let needsTranscript = entry.transcript.isEmpty == false
+            && AudioTranscriptionResult.sanitizedTranscriptText(
+                audioFile.transcription ?? ""
+            ).isEmpty
+
+        return hasCurrentReview == false || hasVerifiedMetadata == false || needsTranscript
     }
 
     @concurrent

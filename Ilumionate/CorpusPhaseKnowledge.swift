@@ -30,6 +30,7 @@ nonisolated final class CorpusPhaseKnowledgeCache: @unchecked Sendable {
     private let loader: @Sendable () -> CorpusPhaseKnowledge
     private var cachedKnowledge: CorpusPhaseKnowledge?
     private var isLoading = false
+    private var loadingThread: pthread_t?
     private var generation = 0
 
     init(
@@ -41,6 +42,11 @@ nonisolated final class CorpusPhaseKnowledgeCache: @unchecked Sendable {
     func knowledge() -> CorpusPhaseKnowledge {
         condition.lock()
         while isLoading {
+            if let loadingThread,
+               pthread_equal(loadingThread, pthread_self()) != 0 {
+                condition.unlock()
+                return .empty
+            }
             condition.wait()
         }
         if let cachedKnowledge {
@@ -49,6 +55,7 @@ nonisolated final class CorpusPhaseKnowledgeCache: @unchecked Sendable {
         }
 
         isLoading = true
+        loadingThread = pthread_self()
         let loadingGeneration = generation
         condition.unlock()
 
@@ -59,6 +66,7 @@ nonisolated final class CorpusPhaseKnowledgeCache: @unchecked Sendable {
             cachedKnowledge = loadedKnowledge
         }
         isLoading = false
+        loadingThread = nil
         let result = cachedKnowledge ?? loadedKnowledge
         condition.broadcast()
         condition.unlock()

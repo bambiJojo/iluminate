@@ -394,6 +394,18 @@ final class LabelingDetailEditor {
     func loadTranscriptIfAvailable() async {
         guard transcription == nil else { return }
 
+        if let bundled = BundledAudioTranscriptCatalog.shared.transcription(
+            filename: draft.audioFilename,
+            duration: draft.audioDuration
+        ) {
+            try? persistTranscript(bundled)
+            applyTranscription(
+                bundled,
+                statusMessage: "Official transcript loaded from the bundled catalog."
+            )
+            return
+        }
+
         let cacheURL = transcriptCacheURL()
         guard FileManager.default.fileExists(atPath: cacheURL.path()) else {
             transcriptStatusMessage = "Generate a transcript to inspect each labeled section."
@@ -427,12 +439,11 @@ final class LabelingDetailEditor {
 
         isTranscriptLoading = true
         transcriptErrorMessage = nil
-        transcriptStatusMessage = "Preparing WhisperKit..."
+        transcriptStatusMessage = "Resolving transcript..."
         defer { isTranscriptLoading = false }
 
         do {
             let analyzer = makeTranscriptAnalyzer()
-            try await analyzer.prepareModel()
             transcriptStatusMessage = "Transcribing \(draft.audioFilename)..."
             let audioFile = try makeAudioFileForTranscription()
             let result = try await analyzer.transcribe(audioFile: audioFile)
@@ -466,36 +477,43 @@ final class LabelingDetailEditor {
         diagnosticsStatusMessage = "Running analyzer comparison..."
         defer { isDiagnosticsLoading = false }
 
-        let keywordAnalyzer = HypnosisPhaseAnalyzer()
-        let wordTimestamps = keywordAnalyzer.approximateWordTimestamps(from: transcription.segments)
-        let keywordPhases = keywordAnalyzer.analyze(
-            wordTimestamps: wordTimestamps,
-            transcription: transcription,
-            techniqueDetection: nil
-        )
-        let chunkedPhases = await ChunkedPhaseAnalyzer.analyze(
-            wordTimestamps: wordTimestamps,
-            duration: transcription.duration
-        )
-        let selection = keywordAnalyzer.selectPreferredPhases(
-            keywordPhases: keywordPhases,
-            chunkedPhases: chunkedPhases,
-            transcription: transcription,
-            techniqueDetection: nil
-        )
-        let techniqueDetection = TechniqueDetectionResult(techniques: [], markers: [])
-        let predictedPhases = selection.phases
+        let draftSnapshot = draft
+        let durationSnapshot = duration
+        let diagnosticsTask = Task.detached(priority: .userInitiated) {
+            let knowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
+            let keywordAnalyzer = HypnosisPhaseAnalyzer(corpusKnowledge: knowledge)
+            let wordTimestamps = HypnosisPhaseAnalyzer.approximateWordTimestamps(
+                from: transcription.segments
+            )
+            let keywordPhases = keywordAnalyzer.analyze(
+                wordTimestamps: wordTimestamps,
+                transcription: transcription,
+                techniqueDetection: nil
+            )
+            let chunkedPhases = await ChunkedPhaseAnalyzer.analyze(
+                wordTimestamps: wordTimestamps,
+                duration: transcription.duration
+            )
+            let selection = keywordAnalyzer.selectPreferredPhases(
+                keywordPhases: keywordPhases,
+                chunkedPhases: chunkedPhases,
+                transcription: transcription,
+                techniqueDetection: nil
+            )
+            let techniqueDetection = TechniqueDetectionResult(techniques: [], markers: [])
 
-        analyzerDiagnostics = Self.buildAnalyzerDiagnostics(
-            draft: draft,
-            duration: duration,
-            transcription: transcription,
-            keywordPhases: keywordPhases,
-            chunkedPhases: chunkedPhases,
-            selectedPhases: predictedPhases,
-            usedChunkedAnalyzer: selection.usedChunkedAnalyzer,
-            techniqueDetection: techniqueDetection
-        )
+            return Self.buildAnalyzerDiagnostics(
+                draft: draftSnapshot,
+                duration: durationSnapshot,
+                transcription: transcription,
+                keywordPhases: keywordPhases,
+                chunkedPhases: chunkedPhases,
+                selectedPhases: selection.phases,
+                usedChunkedAnalyzer: selection.usedChunkedAnalyzer,
+                techniqueDetection: techniqueDetection
+            )
+        }
+        analyzerDiagnostics = await diagnosticsTask.value
         diagnosticsStatusMessage = "Analyzer comparison ready."
         diagnosticsAreStale = false
     }
@@ -514,8 +532,12 @@ final class LabelingDetailEditor {
         suggestionStatusMessage = "Building phrase-driven phase suggestions..."
         defer { isSuggestionLoading = false }
 
-        let analyzer = HypnosisPhaseAnalyzer()
-        let suggestionTimeline = analyzer.suggestPhaseTimeline(for: transcription)
+        let suggestionTask = Task.detached(priority: .userInitiated) {
+            let knowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
+            let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: knowledge)
+            return analyzer.suggestPhaseTimeline(for: transcription)
+        }
+        let suggestionTimeline = await suggestionTask.value
         suggestedPhaseTimeline = suggestionTimeline
 
         if suggestionTimeline.segments.isEmpty {

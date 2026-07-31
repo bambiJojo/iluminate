@@ -75,7 +75,11 @@ final class AnalysisPipeline {
 
         // Stage 1 — Transcription
         onProgress(.init(stage: .transcribing, fraction: 0.0, message: "Transcribing audio…"))
-        let transcription = try await transcriber.transcribe(audioFile: audioFile)
+        let transcription = if let bundled = KnownAudioCatalog.shared.transcription(for: audioFile) {
+            bundled
+        } else {
+            try await transcriber.transcribe(audioFile: audioFile)
+        }
 
         // Stage 2 — Prosody extraction + AI analysis (parallel)
         onProgress(.init(stage: .analyzing, fraction: 0.4, message: "Analysing content…"))

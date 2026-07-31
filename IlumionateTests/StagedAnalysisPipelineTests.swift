@@ -9,8 +9,8 @@ import Testing
 
 @MainActor
 struct StagedAnalysisPipelineTests {
-    @Test("The next file transcribes while the current file is analyzed", .timeLimit(.minutes(1)))
-    func overlapsIndependentFileStagesWithoutRepeatingTranscription() async {
+    @Test("Whisper prefetch waits for content analysis to release on-device ML resources", .timeLimit(.minutes(1)))
+    func keepsWhisperPrefetchOutOfContentAnalysis() async {
         let progressURL = URL.temporaryDirectory
             .appending(path: "AnalysisProgress-\(UUID().uuidString).json")
         let cacheURL = URL.temporaryDirectory
@@ -43,13 +43,20 @@ struct StagedAnalysisPipelineTests {
             await manager.queueForAnalysis([firstFile, secondFile])
         }
 
-        let observedOverlap = await waitUntil {
-            await probe.didObserveAnalysisAndTranscriptionOverlap
+        let analysisStarted = await waitUntil {
+            await probe.hasActiveAnalysis
         }
+        #expect(analysisStarted, "The first file should reach content analysis.")
+
+        try? await Task.sleep(for: .milliseconds(100))
+        let observedOverlap = await probe.didObserveAnalysisAndTranscriptionOverlap
         await probe.releaseFirstAnalysis()
         await processing.value
 
-        #expect(observedOverlap, "The second transcription should begin before the first analysis finishes.")
+        #expect(
+            observedOverlap == false,
+            "Whisper and content analysis must not compete for the on-device ML accelerator."
+        )
         #expect(transcriber.callCount == 2, "Each file should be transcribed exactly once.")
         #expect(analyzer.callCount == 2, "Each file should be analyzed exactly once.")
         #expect(manager.completedAnalyses.count == 2)
@@ -164,6 +171,10 @@ private actor StagedAnalysisProbe {
 
     var didObserveAnalysisAndTranscriptionOverlap: Bool {
         observedOverlap
+    }
+
+    var hasActiveAnalysis: Bool {
+        activeAnalysisCount > 0
     }
 
     func transcriptionStarted() {

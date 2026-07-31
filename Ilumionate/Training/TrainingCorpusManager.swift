@@ -504,6 +504,7 @@ final class TrainingCorpusManager {
             lastLoadIssues = snapshot.issues
             do {
                 try await store.rebuildAnalyzerDataset(for: snapshot.labeledFiles)
+                try await refreshOfficialTranscriptCaches()
             } catch {
                 lastLoadIssues.append(
                     TrainingCorpusLoadIssue(
@@ -517,6 +518,29 @@ final class TrainingCorpusManager {
             lastLoadIssues = [
                 TrainingCorpusLoadIssue(filename: "TrainingCorpus", message: error.localizedDescription)
             ]
+        }
+    }
+
+    /// Replaces legacy/generated transcript cache entries for recognized audio
+    /// as soon as the corpus opens, so every LumeLabel consumer sees the
+    /// official bundled text without requiring the user to open each file.
+    private func refreshOfficialTranscriptCaches() async throws {
+        let corpusDirectory = analyzerDatasetDirectory.deletingLastPathComponent()
+        let dataset = try await Task.detached(priority: .utility) {
+            try AnalyzerOptimizationDataset.load(from: corpusDirectory)
+        }.value
+        let cache = AnalyzerTranscriptCache(
+            cacheDirectory: dataset.transcriptCacheDirectory
+        )
+
+        for example in dataset.examples {
+            guard BundledAudioTranscriptCatalog.shared.transcription(
+                filename: example.originalFilename,
+                duration: example.duration
+            ) != nil else {
+                continue
+            }
+            _ = try await cache.transcription(for: example)
         }
     }
 

@@ -42,8 +42,6 @@ nonisolated struct TranscriptFeatureAnalyzer: Sendable {
         let overall: RawSectionMetrics
     }
 
-    private let phaseAnalyzer = HypnosisPhaseAnalyzer()
-
     func analyze(
         transcription: AudioTranscriptionResult,
         phases: [PhaseSegment]? = nil
@@ -84,7 +82,9 @@ nonisolated struct TranscriptFeatureAnalyzer: Sendable {
     func makeWindowContext(
         transcription: AudioTranscriptionResult
     ) -> WindowContext {
-        let wordTimestamps = phaseAnalyzer.approximateWordTimestamps(from: transcription.segments)
+        let wordTimestamps = HypnosisPhaseAnalyzer.approximateWordTimestamps(
+            from: transcription.segments
+        )
         let overallRaw = buildRawMetrics(
             id: UUID(),
             phase: nil,

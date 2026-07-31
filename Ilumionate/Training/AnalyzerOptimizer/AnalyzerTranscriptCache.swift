@@ -93,6 +93,24 @@ actor AnalyzerTranscriptCache {
         transcribe: (@Sendable (AnalyzerOptimizationDataset.Example) async throws -> AudioTranscriptionResult)?,
         cacheURL: URL
     ) async throws -> PreparedTranscription {
+        if let official = BundledAudioTranscriptCatalog.shared.transcription(
+            filename: example.originalFilename,
+            duration: example.duration
+        ) {
+            let prepared = makePreparedTranscription(from: official)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            try writeCachedTranscription(
+                transcription: official,
+                prepared: prepared,
+                for: example,
+                cacheURL: cacheURL,
+                encoder: encoder
+            )
+            return prepared
+        }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 

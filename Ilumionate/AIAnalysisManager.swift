@@ -67,10 +67,13 @@ actor AIAnalysisManager {
             from: transcription.fullText,
             filename: audioFile.filename
         )
-        async let verifiedMetadata = AudioCatalogMetadataVerifier.verifiedMetadata(
-            for: introductionMetadata,
-            duration: audioFile.duration
-        )
+        let bundledMetadata = KnownAudioCatalog.shared.verifiedMetadata(for: audioFile)
+        async let externalMetadata = bundledMetadata == nil
+            ? AudioCatalogMetadataVerifier.verifiedMetadata(
+                for: introductionMetadata,
+                duration: audioFile.duration
+            )
+            : nil
 
         // Build word timestamps once — shared by both phase analyzers. Some
         // imported transcripts carry full text without timed segments, so give
@@ -99,12 +102,21 @@ actor AIAnalysisManager {
         await onProgress(ProgressInfo(progress: 0.80, message: "Classifying content..."))
 
         guard let aiResponse = try await aiResponseAsync else {
-            return makeKeywordFallbackResult(audioFile: audioFile, detectedPhases: detectedPhases)
+            return makeKeywordFallbackResult(
+                audioFile: audioFile,
+                detectedPhases: detectedPhases,
+                verifiedMetadata: bundledMetadata
+            )
         }
 
         await onProgress(ProgressInfo(progress: 0.92, message: "Verifying track information..."))
 
-        let confirmedMetadata = await verifiedMetadata
+        let confirmedMetadata: AudioTrackMetadata?
+        if let bundledMetadata {
+            confirmedMetadata = bundledMetadata
+        } else {
+            confirmedMetadata = await externalMetadata
+        }
         let result = convertToAnalysisResult(
             aiResponse: aiResponse,
             audioFile: audioFile,
@@ -605,7 +617,8 @@ private extension AIAnalysisManager {
     /// attempts fail. Ensures every file always gets a generated light session.
     func makeKeywordFallbackResult(
         audioFile: AudioFile,
-        detectedPhases: [PhaseSegment]?
+        detectedPhases: [PhaseSegment]?,
+        verifiedMetadata: AudioTrackMetadata? = nil
     ) -> AnalysisResult {
         let contentType = inferContentType(from: audioFile.displayName)
             ?? (hasMeaningfulHypnosisPhaseEvidence(detectedPhases, duration: audioFile.duration) ? .hypnosis : .unknown)
@@ -665,7 +678,8 @@ private extension AIAnalysisManager {
             aiSummary: "Analysis via keyword classification (AI generation failed).",
             recommendedPreset: presetName,
             contentType: contentType,
-            hypnosisMetadata: hypnosisMetadata
+            hypnosisMetadata: hypnosisMetadata,
+            discoveredMetadata: verifiedMetadata
         )
 
         let expertAnalysis = ExpertAnalysisBuilder().build(

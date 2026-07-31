@@ -66,9 +66,10 @@ extension AudioLibraryView {
     }
 
     func addAudioFile(_ file: AudioFile) async {
-        audioFiles.insert(file, at: 0)
+        let reviewedFile = KnownAudioCatalog.shared.applyingReviewedAnalysis(to: file) ?? file
+        audioFiles.insert(reviewedFile, at: 0)
         await saveAudioFiles()
-        Log.audio.info("✅ Added audio file: \(file.filename)")
+        Log.audio.info("✅ Added audio file: \(reviewedFile.filename)")
     }
 
     func deleteFile(_ file: AudioFile) {

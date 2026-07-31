@@ -169,6 +169,10 @@ class AnalysisStateManager {
 
     /// Add a single audio file to queue and start automatic background processing
     func queueForAnalysis(_ audioFile: AudioFile, priority: TaskPriority = .background) async {
+        if await completeReviewedCatalogAnalysisIfAvailable(audioFile) {
+            return
+        }
+
         guard !isQueuedOrActive(audioFile) else {
             Log.analysis.info("📋 File already in queue: \(audioFile.filename)")
             return
@@ -188,6 +192,9 @@ class AnalysisStateManager {
 
         // Add all files to queue (avoid duplicates)
         for audioFile in audioFiles {
+            if await completeReviewedCatalogAnalysisIfAvailable(audioFile) {
+                continue
+            }
             if !isQueuedOrActive(audioFile) {
                 await progressStore.saveQueued(audioFile)
                 analysisQueue.append(audioFile)
@@ -283,13 +290,32 @@ class AnalysisStateManager {
         automaticProcessingTask = nil
 
         if await progressStore.allPending().isEmpty {
-            BackgroundAnalysisScheduler.shared.analysisFinished()
+            await BackgroundAnalysisScheduler.shared.analysisFinished()
         }
     }
 
     private func isQueuedOrActive(_ audioFile: AudioFile) -> Bool {
         analysisQueue.contains { $0.id == audioFile.id }
             || currentAnalysis?.audioFile.id == audioFile.id
+    }
+
+    /// Known files already carry a versioned, human-reviewed result. Completing
+    /// them here keeps import, retry, and bulk-analysis paths from invoking the
+    /// generic on-device language model or replacing the canonical score.
+    private func completeReviewedCatalogAnalysisIfAvailable(
+        _ audioFile: AudioFile
+    ) async -> Bool {
+        guard let completed = KnownAudioCatalog.shared.reviewedCompletion(
+            for: audioFile
+        ) else {
+            return false
+        }
+
+        await progressStore.clear(for: audioFile)
+        completedAnalyses.removeAll { $0.audioFile.id == audioFile.id }
+        await handleAnalysisComplete(audioFile: audioFile, result: completed)
+        Log.analysis.info("🏅 Applied reviewed catalog analysis: \(audioFile.filename)")
+        return true
     }
 
     /// Legacy method for backward compatibility - now delegates to queueForAnalysis
@@ -449,24 +475,26 @@ class AnalysisStateManager {
     /// Builds a transcription result from a saved transcript so re-analysis can
     /// use improved analyzer logic without paying the Whisper cost again.
     nonisolated static func reusableTranscriptionResult(for audioFile: AudioFile) -> AudioTranscriptionResult? {
-        guard let text = audioFile.transcription else { return nil }
-
-        let sanitized = AudioTranscriptionResult.sanitizedTranscriptText(text)
-        guard !sanitized.isEmpty else { return nil }
-
-        return AudioTranscriptionResult(
-            fullText: sanitized,
-            segments: [
-                AudioTranscriptionSegment(
-                    text: sanitized,
-                    timestamp: 0,
-                    duration: max(audioFile.duration, 1),
-                    confidence: 0.85
+        if let text = audioFile.transcription {
+            let sanitized = AudioTranscriptionResult.sanitizedTranscriptText(text)
+            if !sanitized.isEmpty {
+                return AudioTranscriptionResult(
+                    fullText: sanitized,
+                    segments: [
+                        AudioTranscriptionSegment(
+                            text: sanitized,
+                            timestamp: 0,
+                            duration: max(audioFile.duration, 1),
+                            confidence: 0.85
+                        )
+                    ],
+                    duration: audioFile.duration,
+                    detectedLanguage: "en"
                 )
-            ],
-            duration: audioFile.duration,
-            detectedLanguage: "en"
-        )
+            }
+        }
+
+        return KnownAudioCatalog.shared.transcription(for: audioFile)
     }
 
     /// URL of the on-disk analysis cache. Internal so tests can verify the path.
@@ -487,7 +515,9 @@ class AnalysisStateManager {
         Log.analysis.info("🔁 Resuming \(pending.count) interrupted analysis/analyses…")
         var filesToResume: [AudioFile] = []
         for checkpoint in pending {
-            if hasCachedResult(for: checkpoint.audioFile) {
+            if await completeReviewedCatalogAnalysisIfAvailable(checkpoint.audioFile) {
+                continue
+            } else if hasCachedResult(for: checkpoint.audioFile) {
                 await progressStore.clear(for: checkpoint.audioFile)
             } else if !isQueuedOrActive(checkpoint.audioFile) {
                 filesToResume.append(checkpoint.audioFile)
@@ -891,9 +921,10 @@ final class AnalysisCoordinator {
 
     // MARK: - Automatic Queue Processing
 
-    /// Processes the queue as a two-stage pipeline. Content analysis remains
-    /// single-file because `AIContentAnalyzer` owns one cancellable model
-    /// session, while the next file may use the independent transcription lane.
+    /// Processes the queue as a resource-aware pipeline. Whisper transcription
+    /// and Foundation Models analysis remain mutually exclusive because they
+    /// compete for constrained on-device ML resources. The next transcription
+    /// may still overlap the current file's lightweight generation and saving.
     func processQueueAutomatically(
         analysisManager: AnalysisStateManager,
         audioAnalyzer: any AudioTranscribingService,
@@ -1206,10 +1237,6 @@ final class AnalysisCoordinator {
                     for: audioFile
                 )
 
-                // The shared transcriber is now idle. Let the next queued file
-                // occupy it while this file uses the AI/prosody lane.
-                onTranscriptionReady()
-
                 // Stage 2: AI Analysis (skip if checkpoint already has it)
                 telemetryStage = .contentAnalysis
                 let analysisResult: AnalysisResult
@@ -1250,6 +1277,11 @@ final class AnalysisCoordinator {
                     )
                     await progressStore.saveAnalysis(analysisResult, for: audioFile)
                 }
+
+                // WhisperKit and Foundation Models share constrained on-device
+                // ML resources. Start lookahead only after content analysis is
+                // checkpointed; it can still overlap generation and persistence.
+                onTranscriptionReady()
 
                 // Stage 3: Generate Light Session (always run — it's fast)
                 telemetryStage = .generation
@@ -1328,8 +1360,9 @@ final class AnalysisCoordinator {
                     stage: finalStage,
                     processingTime: processingTime
                 )
-                analysisManager.currentAnalysis?.stage = .failed
-                analysisManager.currentAnalysis?.errorMessage = "Cancelled"
+                // Background expiration is a pause, not a user-visible
+                // analysis failure. The checkpoint remains available to resume.
+                analysisManager.currentAnalysis = nil
                 analysisManager.removeFromQueue(audioFile: audioFile)
             }
         } catch {
@@ -1340,7 +1373,13 @@ final class AnalysisCoordinator {
                 seconds: Date().timeIntervalSince(telemetryStartedAt)
             )
             let reason = AnalyticsAnalysisFailureReason(error: error, stage: finalStage)
-            let shouldRetry = reason.supportsAutomaticRetry && attemptNumber < 2
+            let failedAttemptNumber: Int
+            if reason.supportsAutomaticRetry {
+                failedAttemptNumber = await progressStore.recordFailedAttempt(for: audioFile)
+            } else {
+                failedAttemptNumber = 1
+            }
+            let shouldRetry = reason.supportsAutomaticRetry && failedAttemptNumber < 2
             let failedAt = Date()
             let retryState: AnalysisRetryState
             if shouldRetry {

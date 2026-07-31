@@ -9,6 +9,14 @@ import Testing
 import Foundation
 @testable import Ilumionate
 
+private struct AnalyzerTranscriptCacheFixture: Encodable {
+    let schemaVersion: Int
+    let cachedAt: Date
+    let exampleID: UUID
+    let audioSHA256: String
+    let transcription: AudioTranscriptionResult
+}
+
 struct AnalyzerOptimizerTests {
     private actor TranscriptionCallCounter {
         private var count = 0
@@ -529,6 +537,51 @@ struct AnalyzerOptimizerTests {
                 atPath: cacheDirectory.appending(path: "\(example.example.audio.sha256).json").path()
             )
         )
+    }
+
+    @Test
+    func preparedTranscriptCacheReplacesStaleGeneratedTextForRecognizedAudio() async throws {
+        let cacheDirectory = try makeTempDirectory()
+        let file = makeLabeledFile(
+            originalFilename: "10 Bambi Awakens.mp3",
+            storedAudioFilename: "bambi-awakens.mp3",
+            phases: [
+                .init(phase: .emergence, startTime: 0, endTime: 600)
+            ]
+        )
+        let example = AnalyzerOptimizationDataset.Example(
+            example: file.analyzerTrainingExample(
+                exportedAt: Date(timeIntervalSince1970: 1_000),
+                datasetRelativeAudioPath: "AnalyzerDataset/audio/\(file.storedAudioFilename)",
+                datasetRelativeExamplePath: "AnalyzerDataset/examples/\(file.id.uuidString).json"
+            ),
+            audioURL: URL(filePath: "/tmp/\(file.storedAudioFilename)")
+        )
+        let stale = AudioTranscriptionResult(
+            fullText: "Old Whisper transcript with recognition mistakes.",
+            segments: [],
+            duration: example.duration,
+            detectedLanguage: "en"
+        )
+        let fixture = AnalyzerTranscriptCacheFixture(
+            schemaVersion: 1,
+            cachedAt: .now,
+            exampleID: example.id,
+            audioSHA256: example.example.audio.sha256,
+            transcription: stale
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(fixture).write(
+            to: cacheDirectory.appending(path: "\(example.example.audio.sha256).json"),
+            options: .atomic
+        )
+
+        let cache = AnalyzerTranscriptCache(cacheDirectory: cacheDirectory)
+        let result = try await cache.transcription(for: example)
+
+        #expect(result.fullText != stale.fullText)
+        #expect(result.fullText.hasPrefix("Soon it will be time for you to awaken Bambi"))
     }
 
     @Test

@@ -7,9 +7,11 @@
 //  frontmost; processing tasks provide deferred recovery after suspension.
 //
 
-import BackgroundTasks
 import Foundation
 import os
+
+#if os(iOS)
+import BackgroundTasks
 import UIKit
 
 @MainActor
@@ -20,6 +22,9 @@ final class BackgroundAnalysisScheduler {
     static let processingIdentifier = "\(identifierRoot).processing"
     static let continuedIdentifierPrefix = "\(identifierRoot).continued."
     static let continuedIdentifierPattern = "\(continuedIdentifierPrefix)*"
+    #if !targetEnvironment(macCatalyst)
+    static let continuedSubmissionStrategy: BGContinuedProcessingTaskRequest.SubmissionStrategy = .fail
+    #endif
 
     private var hasActiveContinuedRequest = false
     private var continuedRequestIdentifier: String?
@@ -53,6 +58,7 @@ final class BackgroundAnalysisScheduler {
     func schedule(for audioFiles: [AudioFile]) {
         scheduleDeferredProcessing()
 
+        #if !targetEnvironment(macCatalyst)
         guard UIApplication.shared.applicationState == .active else { return }
         guard !hasActiveContinuedRequest else { return }
 
@@ -71,7 +77,7 @@ final class BackgroundAnalysisScheduler {
             title: "Analyzing audio",
             subtitle: count == 1 ? "Preparing your light session" : "Processing \(count) audio files"
         )
-        request.strategy = .queue
+        request.strategy = Self.continuedSubmissionStrategy
 
         do {
             try BGTaskScheduler.shared.submit(request)
@@ -83,6 +89,7 @@ final class BackgroundAnalysisScheduler {
             // is unavailable because of current system load or user settings.
             Log.analysis.info("Continued background analysis unavailable: \(error.localizedDescription)")
         }
+        #endif
     }
 
     func scheduleDeferredProcessing() {
@@ -107,7 +114,7 @@ final class BackgroundAnalysisScheduler {
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.processingIdentifier)
     }
 
-    func analysisFinished() {
+    func analysisFinished() async {
         cancelDeferredProcessing()
         if let continuedRequestIdentifier {
             BGTaskScheduler.shared.cancel(
@@ -116,29 +123,68 @@ final class BackgroundAnalysisScheduler {
         }
         continuedRequestIdentifier = nil
         hasActiveContinuedRequest = false
+        await cancelPendingContinuedRequests()
     }
 
     func resumeWhenForegrounded() {
         Task { @MainActor in
+            // Concrete identifiers are process-local. After a force quit or
+            // relaunch, discover and remove requests whose IDs were lost.
+            if hasActiveContinuedRequest == false {
+                await cancelPendingContinuedRequests()
+            }
+
             let pending = await AnalysisProgressStore.shared.allPending()
-            guard !pending.isEmpty else { return }
+            guard !pending.isEmpty else {
+                await analysisFinished()
+                return
+            }
             schedule(for: pending.map(\.audioFile))
             _ = await AnalysisStateManager.shared.resumeInterruptedAnalyses(priority: .utility)
         }
     }
 
     private func handle(_ task: BGProcessingTask) {
-        runAnalysis(for: task, progressTask: nil)
+        runAnalysis(for: task)
     }
 
+    #if !targetEnvironment(macCatalyst)
     private func handle(_ task: BGContinuedProcessingTask) {
         hasActiveContinuedRequest = true
         continuedRequestIdentifier = task.identifier
-        runAnalysis(for: task, progressTask: task)
+        runAnalysis(
+            for: task,
+            progress: task.progress,
+            updateTitle: task.updateTitle
+        )
     }
+    #endif
 
     static func makeContinuedIdentifier(id: UUID = UUID()) -> String {
         continuedIdentifierPrefix + id.uuidString
+    }
+
+    static func continuedRequestIdentifiers(from identifiers: [String]) -> [String] {
+        identifiers.filter { $0.hasPrefix(continuedIdentifierPrefix) }
+    }
+
+    private func cancelPendingContinuedRequests() async {
+        let identifiers = await withCheckedContinuation { continuation in
+            BGTaskScheduler.shared.getPendingTaskRequests { requests in
+                continuation.resume(returning: requests.map(\.identifier))
+            }
+        }
+        let continuedIdentifiers = Self.continuedRequestIdentifiers(from: identifiers)
+
+        for identifier in continuedIdentifiers {
+            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
+        }
+
+        if continuedIdentifiers.isEmpty == false {
+            Log.analysis.info(
+                "Cancelled \(continuedIdentifiers.count) stale continued analysis request(s)"
+            )
+        }
     }
 
     /// Continued-processing handlers must be registered for each concrete
@@ -151,6 +197,9 @@ final class BackgroundAnalysisScheduler {
             return false
         }
 
+        #if targetEnvironment(macCatalyst)
+        return false
+        #else
         return BGTaskScheduler.shared.register(
             forTaskWithIdentifier: identifier,
             using: .main
@@ -161,11 +210,13 @@ final class BackgroundAnalysisScheduler {
             }
             self?.handle(continuedTask)
         }
+        #endif
     }
 
     private func runAnalysis(
         for systemTask: BGTask,
-        progressTask: BGContinuedProcessingTask?
+        progress: Progress? = nil,
+        updateTitle: ((String, String) -> Void)? = nil
     ) {
         let operation = Task { @MainActor [weak self] in
             let initialPendingCount = max(
@@ -173,8 +224,8 @@ final class BackgroundAnalysisScheduler {
                 1
             )
             let reporter = Task { @MainActor in
-                guard let progressTask else { return }
-                progressTask.progress.totalUnitCount = 1_000
+                guard let progress else { return }
+                progress.totalUnitCount = 1_000
                 var greatestReportedFraction = 0.0
 
                 while !Task.isCancelled {
@@ -186,12 +237,12 @@ final class BackgroundAnalysisScheduler {
                         0.999
                     )
                     greatestReportedFraction = max(greatestReportedFraction, overallFraction)
-                    progressTask.progress.completedUnitCount = Int64(greatestReportedFraction * 1_000)
+                    progress.completedUnitCount = Int64(greatestReportedFraction * 1_000)
 
                     if let filename = AnalysisStateManager.shared.currentAnalysis?.audioFile.filename {
-                        progressTask.updateTitle(
+                        updateTitle?(
                             "Analyzing audio",
-                            subtitle: filename
+                            filename
                         )
                     }
                     try? await Task.sleep(for: .milliseconds(500))
@@ -202,16 +253,17 @@ final class BackgroundAnalysisScheduler {
                 .resumeInterruptedAnalyses(priority: .utility)
             reporter.cancel()
 
-            if let progressTask, succeeded {
-                progressTask.progress.completedUnitCount = progressTask.progress.totalUnitCount
+            if let progress, succeeded {
+                progress.completedUnitCount = progress.totalUnitCount
             }
             systemTask.setTaskCompleted(success: succeeded)
 
             if succeeded {
-                self?.analysisFinished()
+                await self?.analysisFinished()
             } else {
                 self?.continuedRequestIdentifier = nil
                 self?.hasActiveContinuedRequest = false
+                await self?.cancelPendingContinuedRequests()
                 self?.scheduleDeferredProcessing()
             }
         }
@@ -227,3 +279,53 @@ final class BackgroundAnalysisScheduler {
         }
     }
 }
+
+#else
+
+/// Native macOS keeps analysis in the app process. The durable progress store
+/// still restores interrupted work when the app becomes active again.
+@MainActor
+final class BackgroundAnalysisScheduler {
+    static let shared = BackgroundAnalysisScheduler()
+
+    static let identifierRoot = "\(Bundle.main.bundleIdentifier ?? "com.byronquine.lumenSync").analysis"
+    static let processingIdentifier = "\(identifierRoot).processing"
+    static let continuedIdentifierPrefix = "\(identifierRoot).continued."
+    static let continuedIdentifierPattern = "\(continuedIdentifierPrefix)*"
+
+    private init() {}
+
+    func register() {}
+
+    func schedule(for audioFiles: [AudioFile]) {
+        _ = audioFiles
+    }
+
+    func scheduleDeferredProcessing() {}
+    func cancelDeferredProcessing() {}
+    func analysisFinished() async {}
+
+    func resumeWhenForegrounded() {
+        Task { @MainActor in
+            let pending = await AnalysisProgressStore.shared.allPending()
+            guard !pending.isEmpty else { return }
+            _ = await AnalysisStateManager.shared.resumeInterruptedAnalyses(priority: .utility)
+        }
+    }
+
+    static func makeContinuedIdentifier(id: UUID = UUID()) -> String {
+        continuedIdentifierPrefix + id.uuidString
+    }
+
+    static func continuedRequestIdentifiers(from identifiers: [String]) -> [String] {
+        identifiers.filter { $0.hasPrefix(continuedIdentifierPrefix) }
+    }
+
+    @discardableResult
+    func registerContinuedHandler(for identifier: String) -> Bool {
+        _ = identifier
+        return false
+    }
+}
+
+#endif

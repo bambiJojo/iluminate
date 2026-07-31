@@ -164,6 +164,12 @@ struct PlaylistWholeSessionAnalyzer: Sendable {
     }
 
     private func inferRole(for track: AnalyzedTrack, trackCount: Int) -> (role: PlaylistSessionRole, usedFilenameSignal: Bool) {
+        if let catalogRole = KnownAudioCatalog.shared
+            .match(audioFile: track.audioFile)?
+            .entry.role {
+            return (catalogRole, true)
+        }
+
         let roleText = [
             track.item.filename,
             track.audioFile.displayName

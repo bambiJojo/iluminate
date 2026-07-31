@@ -9,11 +9,29 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct CorpusSidebarView: View {
+    private enum ImportRequest {
+        case audio
+        case folder(TrancePhase)
+
+        var allowedContentTypes: [UTType] {
+            switch self {
+            case .audio: [.audio]
+            case .folder: [.folder]
+            }
+        }
+
+        var allowsMultipleSelection: Bool {
+            switch self {
+            case .audio: true
+            case .folder: false
+            }
+        }
+    }
+
     @Environment(TrainingCorpusManager.self) private var corpus
     @Binding var selectedFileID: LabeledFile.ID?
-    @State private var isImporting = false
-    @State private var isBatchImporting = false
-    @State private var batchImportPhase: TrancePhase = .induction
+    @State private var isFileImporterPresented = false
+    @State private var importRequest: ImportRequest = .audio
     @State private var alertTitle = "Corpus Error"
     @State private var alertMessage: String?
     @State private var workflow = TrainingWorkflowController()
@@ -54,14 +72,15 @@ struct CorpusSidebarView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu("Import", systemImage: "plus") {
                     Button("Import Audio", systemImage: "waveform") {
-                        isImporting = true
+                        importRequest = .audio
+                        isFileImporterPresented = true
                     }
 
                     Menu("Batch Label Folder", systemImage: "folder.badge.plus") {
                         ForEach(TrancePhase.orderedHypnosisPhases, id: \.rawValue) { phase in
                             Button(phase.displayName) {
-                                batchImportPhase = phase
-                                isBatchImporting = true
+                                importRequest = .folder(phase)
+                                isFileImporterPresented = true
                             }
                         }
                     }
@@ -69,18 +88,11 @@ struct CorpusSidebarView: View {
             }
         }
         .fileImporter(
-            isPresented: $isImporting,
-            allowedContentTypes: [.audio],
-            allowsMultipleSelection: true
+            isPresented: $isFileImporterPresented,
+            allowedContentTypes: importRequest.allowedContentTypes,
+            allowsMultipleSelection: importRequest.allowsMultipleSelection
         ) { result in
-            handleImport(result)
-        }
-        .fileImporter(
-            isPresented: $isBatchImporting,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            handleBatchImport(result)
+            handleImport(result, request: importRequest)
         }
         .dropDestination(for: URL.self) { urls, _ in
             guard !urls.isEmpty else { return false }
@@ -118,21 +130,19 @@ struct CorpusSidebarView: View {
             .joined(separator: "|")
     }
 
-    private func handleImport(_ result: Result<[URL], Error>) {
+    private func handleImport(
+        _ result: Result<[URL], Error>,
+        request: ImportRequest
+    ) {
         switch result {
         case .success(let urls):
-            Task { await importURLs(urls) }
-        case .failure(let error):
-            alertTitle = "Corpus Error"
-            alertMessage = error.localizedDescription
-        }
-    }
-
-    private func handleBatchImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let folderURL = urls.first else { return }
-            Task { await importFolder(folderURL, phase: batchImportPhase) }
+            switch request {
+            case .audio:
+                Task { await importURLs(urls) }
+            case .folder(let phase):
+                guard let folderURL = urls.first else { return }
+                Task { await importFolder(folderURL, phase: phase) }
+            }
         case .failure(let error):
             alertTitle = "Corpus Error"
             alertMessage = error.localizedDescription

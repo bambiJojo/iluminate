@@ -30,6 +30,21 @@ struct CorpusPhaseKnowledgeCacheTests {
 
         #expect(counter.value == 2)
     }
+
+    @Test func recursiveLoaderUsesEmptyBootstrapKnowledge() {
+        let holder = KnowledgeCacheHolder()
+        let cache = CorpusPhaseKnowledgeCache {
+            let bootstrap = holder.cache.knowledge()
+            holder.sawEmptyBootstrap = bootstrap.keywordWeights.isEmpty
+            return CorpusPhaseKnowledge(keywordWeights: [.induction: ["breathe": 2.0]])
+        }
+        holder.cache = cache
+
+        let knowledge = cache.knowledge()
+
+        #expect(holder.sawEmptyBootstrap)
+        #expect(knowledge.keywordWeights[.induction]?["breathe"] == 2.0)
+    }
 }
 
 private nonisolated final class LockedCounter: @unchecked Sendable {
@@ -42,5 +57,21 @@ private nonisolated final class LockedCounter: @unchecked Sendable {
 
     func increment() {
         lock.withLock { storage += 1 }
+    }
+}
+
+private nonisolated final class KnowledgeCacheHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cacheStorage: CorpusPhaseKnowledgeCache?
+    private var sawEmptyBootstrapStorage = false
+
+    var cache: CorpusPhaseKnowledgeCache {
+        get { lock.withLock { cacheStorage! } }
+        set { lock.withLock { cacheStorage = newValue } }
+    }
+
+    var sawEmptyBootstrap: Bool {
+        get { lock.withLock { sawEmptyBootstrapStorage } }
+        set { lock.withLock { sawEmptyBootstrapStorage = newValue } }
     }
 }

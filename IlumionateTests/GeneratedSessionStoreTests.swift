@@ -41,6 +41,55 @@ struct GeneratedSessionStoreTests {
         #expect(store.exists(for: audioFile))
     }
 
+    @Test func recognizedAudioAutomaticallyLoadsGoldSessionWithoutDiskState() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let audioFile = makeAudioFile(filename: "recognized.mp3")
+        let goldSession = makeSession(name: "Catalog Gold")
+        let store = GeneratedSessionStore(
+            directoryURL: directory,
+            goldSessionProvider: { file in
+                file.id == audioFile.id ? goldSession : nil
+            }
+        )
+
+        #expect(store.load(for: audioFile)?.session_name == "Catalog Gold")
+        #expect(store.exists(for: audioFile))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: store.sessionURL(forAudioFileID: audioFile.id).path
+            ) == false
+        )
+    }
+
+    @Test func generatedSessionCannotShadowRecognizedGoldSession() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let audioFile = makeAudioFile(filename: "recognized.mp3")
+        let goldSession = makeSession(name: "Catalog Gold")
+        var savedCount = 0
+        let store = GeneratedSessionStore(
+            directoryURL: directory,
+            onSessionSaved: { savedCount += 1 },
+            goldSessionProvider: { file in
+                file.id == audioFile.id ? goldSession : nil
+            }
+        )
+
+        try store.save(
+            makeSession(name: "Generic Generated"),
+            for: audioFile
+        )
+
+        #expect(store.load(for: audioFile)?.session_name == "Catalog Gold")
+        #expect(savedCount == 0)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: store.sessionURL(forAudioFileID: audioFile.id).path
+            ) == false
+        )
+    }
+
     @Test func loadMigratesLegacyDisplayNameSessionFile() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

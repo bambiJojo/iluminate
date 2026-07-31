@@ -208,6 +208,19 @@ class AudioAnalyzer: Sendable {
 
     /// Transcribe an audio file using modern async/await patterns
     func transcribe(audioFile: AudioFile) async throws -> AudioTranscriptionResult {
+        try await AudioTranscriptResolver().transcribe(
+            filename: audioFile.filename,
+            duration: audioFile.duration
+        ) {
+            try await self.transcribeWithWhisperKit(audioFile: audioFile)
+        }
+    }
+
+    /// Uses WhisperKit only after the bundled transcript resolver has declined
+    /// the file.
+    private func transcribeWithWhisperKit(
+        audioFile: AudioFile
+    ) async throws -> AudioTranscriptionResult {
         // A cancelled task keeps running until it cooperates. Wait for the old
         // operation to finish before allowing a new one to reuse WhisperKit.
         if let previousTask = currentTask {

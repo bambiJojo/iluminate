@@ -32,6 +32,9 @@ nonisolated struct AnalysisCheckpoint: Codable, Sendable {
     /// Optional for backwards-compatible decoding of checkpoints written by
     /// versions that did not track attempts.
     var attemptCount: Int? = nil
+    /// Counts genuine pipeline errors separately from starts/resumes. Normal
+    /// lifecycle interruption must not consume the automatic retry budget.
+    var failureCount: Int? = nil
     /// A terminal retryable failure is kept on disk until the user explicitly
     /// asks to retry. Keeping it separate prevents BackgroundTasks from
     /// repeatedly launching work that already exhausted its automatic retry.
@@ -118,6 +121,7 @@ actor AnalysisProgressStore {
             guard checkpoint.manualRecovery != nil else { return }
             checkpoint.manualRecovery = nil
             checkpoint.attemptCount = 0
+            checkpoint.failureCount = 0
             checkpoint.lastUpdated = Date()
             checkpoints[audioFile.id] = checkpoint
             persist()
@@ -130,7 +134,8 @@ actor AnalysisProgressStore {
             analysis: nil,
             startedAt: Date(),
             lastUpdated: Date(),
-            attemptCount: 0
+            attemptCount: 0,
+            failureCount: 0
         )
         persist()
         Log.analysis.info("💾 Checkpoint: queued \(audioFile.filename)")
@@ -152,6 +157,22 @@ actor AnalysisProgressStore {
         checkpoints[audioFile.id] = cp
         persist()
         return attempt
+    }
+
+    /// Records only an actual pipeline error. A task cancellation caused by
+    /// background expiration deliberately never calls this method.
+    func recordFailedAttempt(for audioFile: AudioFile) -> Int {
+        var checkpoint = checkpoints[audioFile.id] ?? AnalysisCheckpoint(
+            audioFile: audioFile,
+            startedAt: Date(),
+            lastUpdated: Date()
+        )
+        let failure = (checkpoint.failureCount ?? 0) + 1
+        checkpoint.failureCount = failure
+        checkpoint.lastUpdated = Date()
+        checkpoints[audioFile.id] = checkpoint
+        persist()
+        return failure
     }
 
     func saveTranscription(_ transcription: AudioTranscriptionResult, for audioFile: AudioFile) {
