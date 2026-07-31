@@ -40,8 +40,8 @@ struct LibraryCreatorsView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(creators, id: \.name) { group in
                             NavigationLink {
-                                CreatorDetailView(
-                                    creatorName: group.name,
+                                LibraryBrowseView(
+                                    title: group.name,
                                     audioFiles: group.files,
                                     engine: engine
                                 )
@@ -96,7 +96,6 @@ struct LibraryCreatorsView: View {
         .padding(TranceSpacing.screen)
     }
 }
-
 // MARK: - CreatorRow
 
 private struct CreatorRow: View {
@@ -130,56 +129,5 @@ private struct CreatorRow: View {
                 .foregroundStyle(.textLight)
         }
         .padding(.vertical, TranceSpacing.card)
-    }
-}
-
-// MARK: - CreatorDetailView
-
-struct CreatorDetailView: View {
-    let creatorName: String
-    let audioFiles: [AudioFile]
-    @Bindable var engine: LightEngine
-
-    @State private var syncPlayerItem: SyncPlayerItem?
-
-    var body: some View {
-        ZStack {
-            Color.bgPrimary.ignoresSafeArea()
-
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(audioFiles) { file in
-                        LibrarySessionRow(file: file) { playWithLights(file) }
-                        if file.id != audioFiles.last?.id {
-                            Rectangle().fill(Color.glassBorder.opacity(0.3)).frame(height: 1)
-                                .padding(.leading, 56)
-                        }
-                    }
-                    Color.clear.frame(height: TranceSpacing.tabBarClearance)
-                }
-                .padding(.horizontal, TranceSpacing.screen)
-                .padding(.top, TranceSpacing.card)
-                .background(Color.bgCard)
-                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.glassCard))
-                .overlay(RoundedRectangle(cornerRadius: TranceRadius.glassCard).strokeBorder(Color.glassBorder, lineWidth: 1))
-                .padding(.horizontal, TranceSpacing.screen)
-                .padding(.top, TranceSpacing.content)
-            }
-        }
-        .navigationTitle(creatorName)
-        .fullScreenCover(item: $syncPlayerItem) { item in
-            UnifiedPlayerView(
-                mode: .audioLight(audioFile: item.audioFile),
-                engine: engine,
-                initialLightSession: item.lightSession
-            )
-        }
-    }
-
-    private func playWithLights(_ file: AudioFile) {
-        syncPlayerItem = SyncPlayerItem(
-            audioFile: file,
-            lightSession: GeneratedSessionStore.shared.load(for: file)
-        )
     }
 }

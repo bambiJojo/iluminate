@@ -37,6 +37,9 @@ struct LibraryView: View {
     @State private var cachedAnalyzedFiles: [AudioFile] = []
     @State private var cachedAllFiles: [AudioFile] = []
     @State private var cachedRecommendedFiles: [AudioFile] = []
+    @State private var cachedFilterChips: [LibraryFilterChip] = []
+    @State private var searchText = ""
+    @State private var quickFilter: LibraryQuickFilter = .all
     @State private var readingContinuation: LibraryReadingContinuation?
     @State private var playbackProgressStore = PlaybackProgressStore.shared
     @State private var savedSessionStore = SavedSessionStore.shared
@@ -64,97 +67,19 @@ struct LibraryView: View {
                         }
                         .padding(.horizontal, TranceSpacing.screen)
 
-                        LibraryContinuationSection(
-                            listening: listeningContinuations,
-                            reading: readingContinuation,
-                            onContinueListening: continueListening,
-                            onContinueReading: onContinueReading
-                        )
-                        .padding(.horizontal, TranceSpacing.screen)
-
-                        LibraryAnalysisStatusSection(
-                            manager: analysisManager,
-                            partialFiles: partialAnalysisFiles,
-                            onOpen: openAnalysisQueue
-                        )
-                        .padding(.horizontal, TranceSpacing.screen)
-
-                        if audioFiles.isEmpty {
-                            LibraryEmptyCard()
+                        if audioFiles.isEmpty == false {
+                            LibrarySearchField(text: $searchText)
                                 .padding(.horizontal, TranceSpacing.screen)
-                        }
 
-                        if !recentFiles.isEmpty {
-                            LibraryShelfSectionHeader(title: "Recently Played")
-                                .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: recentFiles, onPlay: playWithLights, onOpenInfo: openFileInfo)
-                        }
-
-                        if !recommendedFiles.isEmpty {
-                            LibraryShelfSectionHeader(title: "Recommended Next")
-                                .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: recommendedFiles, onPlay: playWithLights, onOpenInfo: openFileInfo)
-                        }
-
-                        if !favoriteFiles.isEmpty {
-                            LibraryShelfSectionHeader(title: "Favorites") {
-                                navPath.append(LibraryDestination.favorites)
-                            }
-                            .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: favoriteFiles, showsHeart: true, onPlay: playWithLights, onOpenInfo: openFileInfo)
-                        }
-
-                        LibraryShelfSectionHeader(title: "Playlists") {
-                            TranceHaptics.shared.light()
-                            showingPlaylists = true
-                        }
-                        .padding(.horizontal, TranceSpacing.screen)
-                        LibraryPlaylistShelf(
-                            playlists: shelfPlaylists,
-                            onPlay: { playPlaylist($0) },
-                            onCreate: { editingPlaylist = Playlist(name: "") },
-                            onOpenLibrary: { showingPlaylists = true }
-                        )
-
-                        if !artists.isEmpty {
-                            LibraryShelfSectionHeader(title: "Artists") {
-                                navPath.append(LibraryDestination.artists)
-                            }
-                            .padding(.horizontal, TranceSpacing.screen)
-                            LibraryArtistShelf(artists: artists) { artist in
-                                navPath.append(LibraryDestination.artist(artist.name))
+                            if cachedFilterChips.isEmpty == false {
+                                LibraryFilterChipRow(chips: cachedFilterChips, selection: $quickFilter)
                             }
                         }
 
-                        if !analyzedFiles.isEmpty {
-                            LibraryShelfSectionHeader(title: "Analyzed")
-                                .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: analyzedFiles, showsAnalyzedSeal: true, onPlay: playWithLights, onOpenInfo: openFileInfo)
-                        }
-
-                        if !allFilesShelf.isEmpty {
-                            LibraryShelfSectionHeader(title: "All Files") {
-                                navPath.append(LibraryDestination.allFiles)
-                            }
-                            .padding(.horizontal, TranceSpacing.screen)
-                            LibraryAudioShelf(files: allFilesShelf, onPlay: playWithLights, onOpenInfo: openFileInfo)
-                        }
-
-                        if !shelfSessions.isEmpty {
-                            LibraryShelfSectionHeader(title: "Built-in Sessions") {
-                                navPath.append(LibraryDestination.builtInSessions)
-                            }
-                            .padding(.horizontal, TranceSpacing.screen)
-                            LibraryBuiltInSessionShelf(sessions: shelfSessions) {
-                                playSession($0)
-                            }
-                        }
-
-
-                        if !savedSessions.isEmpty {
-                            LibraryShelfSectionHeader(title: "Saved Sessions")
-                                .padding(.horizontal, TranceSpacing.screen)
-                            LibraryBuiltInSessionShelf(sessions: savedSessions, onPlay: playSession)
+                        if isNarrowed {
+                            searchResultsSection
+                        } else {
+                            browseShelves
                         }
 
                         bottomSpacer
@@ -163,23 +88,32 @@ struct LibraryView: View {
                 }
                 .scrollIndicators(.hidden)
             }
-            .toolbar(.hidden, for: .navigationBar)
+            .platformNavigationBarHidden()
             .navigationDestination(for: LibraryDestination.self) { destination in
                 switch destination {
                 case .favorites:
-                    LibraryFavoritesView(audioFiles: audioFiles, engine: engine)
+                    LibraryBrowseView(
+                        title: "Favorites",
+                        audioFiles: audioFiles,
+                        engine: engine,
+                        initialFilter: .favorites
+                    )
                 case .builtInSessions:
                     SessionLibraryView(engine: engine)
                 case .artists:
                     LibraryCreatorsView(audioFiles: audioFiles, engine: engine)
                 case .artist(let name):
-                    CreatorDetailView(
-                        creatorName: name,
+                    LibraryBrowseView(
+                        title: name,
                         audioFiles: audioFiles.filter { $0.creatorDisplayName == name },
                         engine: engine
                     )
                 case .allFiles:
-                    LibraryAllFilesView(audioFiles: audioFiles, engine: engine)
+                    LibraryBrowseView(
+                        title: "Audio Files",
+                        audioFiles: audioFiles,
+                        engine: engine
+                    )
                 }
             }
             .navigationDestination(for: AudioFile.self) { file in
@@ -196,15 +130,15 @@ struct LibraryView: View {
                     AnalyzerView(engine: engine)
                 }
             }
-            .fullScreenCover(item: $playerFile, onDismiss: {
+            .platformFullScreenCover(item: $playerFile, onDismiss: {
                 Task { await loadAudioFiles() }
             }) { file in
                 UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
             }
-            .fullScreenCover(item: $playingPlaylist) { playlist in
+            .platformFullScreenCover(item: $playingPlaylist) { playlist in
                 UnifiedPlayerView(mode: .playlist(playlist: playlist), engine: engine)
             }
-            .fullScreenCover(item: $playingSession) { session in
+            .platformFullScreenCover(item: $playingSession) { session in
                 UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
             }
             .sheet(item: $fileForPlaylist) { file in
@@ -233,7 +167,181 @@ struct LibraryView: View {
         }
     }
 
+    // MARK: - Browse Shelves
+
+    /// The default shelf stack. "Analyzed" is deliberately absent — it duplicated
+    /// All Files card-for-card, and every card now carries its own analyzed seal.
+    @ViewBuilder
+    private var browseShelves: some View {
+        LibraryContinuationSection(
+            listening: listeningContinuations,
+            reading: readingContinuation,
+            onContinueListening: continueListening,
+            onContinueReading: onContinueReading
+        )
+        .padding(.horizontal, TranceSpacing.screen)
+
+        LibraryAnalysisStatusSection(
+            manager: analysisManager,
+            partialFiles: partialAnalysisFiles,
+            onOpen: openAnalysisQueue
+        )
+        .padding(.horizontal, TranceSpacing.screen)
+
+        if audioFiles.isEmpty {
+            LibraryEmptyCard()
+                .padding(.horizontal, TranceSpacing.screen)
+        }
+
+        if !recentFiles.isEmpty {
+            LibraryShelfSectionHeader(title: "Recently Played")
+                .padding(.horizontal, TranceSpacing.screen)
+            LibraryAudioShelf(files: recentFiles, onPlay: playWithLights, onOpenInfo: openFileInfo)
+        }
+
+        if !recommendedFiles.isEmpty {
+            LibraryShelfSectionHeader(title: "Recommended Next")
+                .padding(.horizontal, TranceSpacing.screen)
+            LibraryAudioShelf(files: recommendedFiles, onPlay: playWithLights, onOpenInfo: openFileInfo)
+        }
+
+        if !favoriteFiles.isEmpty {
+            LibraryShelfSectionHeader(title: "Favorites") {
+                navPath.append(LibraryDestination.favorites)
+            }
+            .padding(.horizontal, TranceSpacing.screen)
+            LibraryAudioShelf(files: favoriteFiles, showsHeart: true, onPlay: playWithLights, onOpenInfo: openFileInfo)
+        }
+
+        LibraryShelfSectionHeader(title: "Playlists") {
+            TranceHaptics.shared.light()
+            showingPlaylists = true
+        }
+        .padding(.horizontal, TranceSpacing.screen)
+        LibraryPlaylistShelf(
+            playlists: shelfPlaylists,
+            onPlay: { playPlaylist($0) },
+            onCreate: { editingPlaylist = Playlist(name: "") },
+            onOpenLibrary: { showingPlaylists = true }
+        )
+
+        if !artists.isEmpty {
+            LibraryShelfSectionHeader(title: "Artists") {
+                navPath.append(LibraryDestination.artists)
+            }
+            .padding(.horizontal, TranceSpacing.screen)
+            LibraryArtistShelf(artists: artists) { artist in
+                navPath.append(LibraryDestination.artist(artist.name))
+            }
+        }
+
+        if !allFilesShelf.isEmpty {
+            LibraryShelfSectionHeader(title: "All Files") {
+                navPath.append(LibraryDestination.allFiles)
+            }
+            .padding(.horizontal, TranceSpacing.screen)
+            LibraryAudioShelf(files: allFilesShelf, onPlay: playWithLights, onOpenInfo: openFileInfo)
+        }
+
+        if !shelfSessions.isEmpty {
+            LibraryShelfSectionHeader(title: "Built-in Sessions") {
+                navPath.append(LibraryDestination.builtInSessions)
+            }
+            .padding(.horizontal, TranceSpacing.screen)
+            LibraryBuiltInSessionShelf(sessions: shelfSessions) {
+                playSession($0)
+            }
+        }
+
+        if !savedSessions.isEmpty {
+            LibraryShelfSectionHeader(title: "Saved Sessions")
+                .padding(.horizontal, TranceSpacing.screen)
+            LibraryBuiltInSessionShelf(sessions: savedSessions, onPlay: playSession)
+        }
+    }
+
+    // MARK: - Search Results
+
+    /// Replaces the shelves the moment the listener types or taps a chip — a
+    /// flat, dense answer rather than ten carousels to swipe through.
+    @ViewBuilder
+    private var searchResultsSection: some View {
+        if searchResults.isEmpty && playlistResults.isEmpty {
+            LibraryNoResultsView(query: searchText, onClear: clearNarrowing)
+        } else {
+            if playlistResults.isEmpty == false {
+                LibraryShelfSectionHeader(title: "Playlists")
+                    .padding(.horizontal, TranceSpacing.screen)
+
+                LazyVStack(spacing: 0) {
+                    ForEach(playlistResults) { playlist in
+                        LibraryPlaylistResultRow(playlist: playlist) { playPlaylist(playlist) }
+                        if playlist.id != playlistResults.last?.id {
+                            LibraryRowSeparator()
+                        }
+                    }
+                }
+                .padding(.horizontal, TranceSpacing.card)
+                .padding(.vertical, TranceSpacing.inner)
+                .liminalSurface()
+                .padding(.horizontal, TranceSpacing.screen)
+            }
+
+            if searchResults.isEmpty == false {
+                HStack {
+                    Text("Sessions")
+                        .font(TranceTypography.sectionTitle)
+                        .fontWeight(.bold)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    LibraryResultSummary(shown: searchResults.count, total: audioFiles.count)
+                }
+                .padding(.horizontal, TranceSpacing.screen)
+
+                LazyVStack(spacing: 0) {
+                    ForEach(searchResults) { file in
+                        LibraryFileResultRow(
+                            file: file,
+                            onPlay: { playWithLights(file) },
+                            onOpenInfo: { openFileInfo(file) },
+                            onAddToPlaylist: { fileForPlaylist = file }
+                        )
+                        if file.id != searchResults.last?.id {
+                            LibraryRowSeparator()
+                        }
+                    }
+                }
+                .padding(.horizontal, TranceSpacing.card)
+                .padding(.vertical, TranceSpacing.inner)
+                .liminalSurface()
+                .padding(.horizontal, TranceSpacing.screen)
+            }
+        }
+    }
+
     // MARK: - Helpers
+
+    private var isNarrowed: Bool {
+        LibraryBrowseFilter.isSearching(query: searchText, filter: quickFilter)
+    }
+
+    private var searchResults: [AudioFile] {
+        LibraryBrowseFilter.apply(to: audioFiles, query: searchText, filter: quickFilter)
+    }
+
+    /// Playlists only join the results for a typed query — a content-type chip
+    /// says nothing about a playlist.
+    private var playlistResults: [Playlist] {
+        guard searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            return []
+        }
+        return LibraryBrowseFilter.apply(to: playlists, query: searchText)
+    }
+
+    private func clearNarrowing() {
+        searchText = ""
+        quickFilter = .all
+    }
 
     private var recentFiles: [AudioFile] { cachedRecentFiles }
     private var favoriteFiles: [AudioFile] { cachedFavoriteFiles }
@@ -259,7 +367,6 @@ struct LibraryView: View {
     private var partialAnalysisFiles: [AudioFile] {
         audioFiles.filter { $0.hasTranscription && $0.isAnalyzed == false }
     }
-
     private func recomputeDerivedCollections() {
         cachedRecentFiles = LibraryShelfContent.recents(from: audioFiles)
         cachedFavoriteFiles = LibraryShelfContent.favorites(from: audioFiles)
@@ -267,6 +374,10 @@ struct LibraryView: View {
         cachedAnalyzedFiles = LibraryShelfContent.analyzed(from: audioFiles)
         cachedAllFiles = LibraryShelfContent.allFiles(from: audioFiles)
         cachedRecommendedFiles = LibraryShelfContent.recommendedNext(from: audioFiles)
+        cachedFilterChips = LibraryBrowseFilter.chips(for: audioFiles)
+        if cachedFilterChips.contains(where: { $0.filter == quickFilter }) == false {
+            quickFilter = .all
+        }
     }
 
     private func upsertPlaylist(_ playlist: Playlist) {
@@ -332,6 +443,13 @@ struct LibraryView: View {
     private func openAnalysisQueue() {
         TranceHaptics.shared.light()
         showingAnalysisQueue = true
+    }
+
+    private func analyze(_ file: AudioFile) {
+        Task {
+            analysisManager.evictCachedResult(for: file)
+            await analysisManager.queueForAnalysis(file)
+        }
     }
 
     private func loadReadingContinuation() {
@@ -431,130 +549,4 @@ struct LibrarySessionRow: View {
         .buttonStyle(PlainButtonStyle())
     }
 
-}
-
-// MARK: - LibrarySessionRowLabel (for NavigationLink usage)
-
-struct LibrarySessionRowLabel: View {
-    let file: AudioFile
-
-    var body: some View {
-        HStack(spacing: TranceSpacing.list) {
-            SessionGlowDot(contentType: file.analysisResult?.contentType, size: 40)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(file.displayName)
-                    .font(TranceTypography.body)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-
-                HStack(spacing: 6) {
-                    if let creator = file.creatorDisplayName {
-                        Text(creator)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.roseGold)
-                    }
-                    Text(file.durationFormatted)
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.textLight)
-                    if file.isAnalyzed {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color.roseGold)
-                    }
-                }
-            }
-
-            Spacer()
-
-            if file.favorite {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "E85D75"))
-            }
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.textLight)
-        }
-        .padding(.vertical, TranceSpacing.card)
-    }
-
-}
-
-// MARK: - Favorites Sub-View
-
-struct LibraryFavoritesView: View {
-    let audioFiles: [AudioFile]
-    @Bindable var engine: LightEngine
-    @State private var syncPlayerItem: SyncPlayerItem?
-    @State private var fileForPlaylist: AudioFile?
-    @State private var favorites: [AudioFile] = []
-
-    var body: some View {
-        ZStack {
-            AuroraBackground()
-            if favorites.isEmpty {
-                VStack(spacing: TranceSpacing.card) {
-                    Image(systemName: "heart")
-                        .font(.system(size: 56, weight: .ultraLight))
-                        .foregroundStyle(LinearGradient(colors: [.roseGold, .roseDeep], startPoint: .top, endPoint: .bottom))
-                    Text("No Favorites Yet")
-                        .font(TranceTypography.greeting)
-                        .foregroundStyle(.textPrimary)
-                    Text("Heart a session to find it here")
-                        .font(TranceTypography.body)
-                        .foregroundStyle(.textSecondary)
-                }
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(favorites) { file in
-                            LibrarySessionRow(file: file, onPlay: { playWithLights(file) }, onAddToPlaylist: { fileForPlaylist = file })
-                            if file.id != favorites.last?.id {
-                                Rectangle().fill(Color.glassBorder.opacity(0.3)).frame(height: 1)
-                                    .padding(.leading, 56)
-                            }
-                        }
-                        Color.clear.frame(height: TranceSpacing.tabBarClearance)
-                    }
-                    .padding(.horizontal, TranceSpacing.screen)
-                }
-            }
-        }
-        .navigationTitle("Favorites")
-        .onAppear {
-            favorites = audioFiles.filter { $0.favorite }.sorted { $0.filename < $1.filename }
-        }
-        .onChange(of: audioFiles) { _, new in
-            favorites = new.filter { $0.favorite }.sorted { $0.filename < $1.filename }
-        }
-        .fullScreenCover(item: $syncPlayerItem) { item in
-            UnifiedPlayerView(
-                mode: .audioLight(audioFile: item.audioFile),
-                engine: engine,
-                initialLightSession: item.lightSession
-            )
-        }
-        .sheet(item: $fileForPlaylist) { file in
-            AddToPlaylistSheet(itemTitle: file.displayName) { playlist in
-                addFile(file, to: playlist)
-            }
-        }
-    }
-
-    private func playWithLights(_ file: AudioFile) {
-        syncPlayerItem = SyncPlayerItem(
-            audioFile: file,
-            lightSession: GeneratedSessionStore.shared.load(for: file)
-        )
-    }
-
-    private func addFile(_ file: AudioFile, to playlist: Playlist) {
-        var playlists = PlaylistStore.load()
-        guard let index = playlists.firstIndex(where: { $0.id == playlist.id }) else { return }
-        let item = PlaylistItem(audioFileId: file.id, filename: file.filename, duration: file.duration)
-        playlists[index].items.append(item)
-        PlaylistStore.save(playlists)
-    }
 }

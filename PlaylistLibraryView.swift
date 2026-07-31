@@ -14,9 +14,12 @@ struct PlaylistLibraryView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var playlists: [Playlist] = []
+    @State private var searchText = ""
+    @State private var sortOption: PlaylistSortOption = .newest
     @State private var availableAudioFiles: [AudioFile] = []
     @State private var editingPlaylist: Playlist?
     @State private var playingPlaylist: Playlist?
+    @State private var importRequest: PlaylistImportRequest?
 
     var body: some View {
         NavigationStack {
@@ -33,9 +36,15 @@ struct PlaylistLibraryView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        TranceHaptics.shared.light()
-                        createNewPlaylist()
+                    Menu {
+                        Button("New Playlist", systemImage: "plus") {
+                            TranceHaptics.shared.light()
+                            createNewPlaylist()
+                        }
+
+                        Button("Import from Link", systemImage: "link") {
+                            showPlaylistImporter()
+                        }
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .symbolRenderingMode(.hierarchical)
@@ -45,7 +54,7 @@ struct PlaylistLibraryView: View {
                                                startPoint: .topLeading, endPoint: .bottomTrailing)
                             )
                     }
-                    .accessibilityLabel("Create New Playlist")
+                    .accessibilityLabel("Playlist Actions")
                 }
             }
             .onAppear {
@@ -63,7 +72,16 @@ struct PlaylistLibraryView: View {
                     }
                 )
             }
-            .fullScreenCover(item: $playingPlaylist) { playlist in
+            .sheet(item: $importRequest) { request in
+                // The request carries its own library snapshot; an isPresented
+                // sheet would build the importer from the pre-update body and
+                // hand it an empty library.
+                BambiCloudPlaylistImportView(
+                    audioFiles: request.audioFiles,
+                    onImport: savePlaylist
+                )
+            }
+            .platformFullScreenCover(item: $playingPlaylist) { playlist in
                 UnifiedPlayerView(mode: .playlist(playlist: playlist), engine: engine)
             }
         }
@@ -73,6 +91,13 @@ struct PlaylistLibraryView: View {
 
     private func createNewPlaylist() {
         editingPlaylist = Playlist(name: "")
+    }
+
+    private func showPlaylistImporter() {
+        let files = AudioLibraryStore.load()
+        availableAudioFiles = files
+        TranceHaptics.shared.light()
+        importRequest = PlaylistImportRequest(audioFiles: files)
     }
 
     private func editPlaylist(_ playlist: Playlist) {
@@ -99,9 +124,7 @@ struct PlaylistLibraryView: View {
     }
 
     private func loadAudioFiles() {
-        guard let data = UserDefaults.standard.data(forKey: "audioFiles"),
-              let files = try? JSONDecoder().decode([AudioFile].self, from: data) else { return }
-        availableAudioFiles = files
+        availableAudioFiles = AudioLibraryStore.load()
     }
 
     /// Content types driving a playlist's generated artwork. Falls back to the
@@ -119,18 +142,47 @@ struct PlaylistLibraryView: View {
 
     // MARK: - Bento Layout
 
+    /// Playlists after search + sort — everything below derives from this so the
+    /// hero and the grid always agree with what the listener asked for.
+    private var visiblePlaylists: [Playlist] {
+        sortOption.sorted(LibraryBrowseFilter.apply(to: playlists, query: searchText))
+    }
+
+    private var isSearching: Bool {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    /// The hero is a browsing flourish, not a search result — while searching,
+    /// every match earns an equal-sized tile instead.
     private var heroPlaylist: Playlist? {
-        playlists.first { !$0.isEmpty } ?? playlists.first
+        guard isSearching == false else { return nil }
+        return visiblePlaylists.first { !$0.isEmpty } ?? visiblePlaylists.first
     }
 
     private var gridPlaylists: [Playlist] {
-        playlists.filter { $0.id != heroPlaylist?.id }
+        visiblePlaylists.filter { $0.id != heroPlaylist?.id }
     }
 
     private var bentoLayout: some View {
         ScrollView {
             LazyVStack(spacing: TranceSpacing.card) {
                 statsHeader
+
+                LibrarySearchField(text: $searchText, prompt: "Search playlists and tracks")
+
+                HStack {
+                    LibraryResultSummary(
+                        shown: visiblePlaylists.count,
+                        total: playlists.count,
+                        noun: "playlists"
+                    )
+                    Spacer()
+                    playlistSortMenu
+                }
+
+                if visiblePlaylists.isEmpty {
+                    LibraryNoResultsView(query: searchText) { searchText = "" }
+                }
 
                 if let hero = heroPlaylist {
                     PlaylistHeroCard(
@@ -176,6 +228,28 @@ struct PlaylistLibraryView: View {
             .padding(.vertical, TranceSpacing.list)
         }
         .scrollContentBackground(.hidden)
+    }
+
+    private var playlistSortMenu: some View {
+        Menu {
+            Picker("Sort By", selection: $sortOption) {
+                ForEach(PlaylistSortOption.allCases, id: \.self) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+        } label: {
+            HStack(spacing: TranceSpacing.micro) {
+                Image(systemName: "arrow.up.arrow.down")
+                Text(sortOption.label)
+            }
+            .font(TranceTypography.caption)
+            .fontWeight(.medium)
+            .foregroundStyle(Color.textSecondary)
+            .padding(.horizontal, TranceSpacing.list)
+            .padding(.vertical, TranceSpacing.inner)
+            .liminalGlass(.capsule, glow: false)
+        }
+        .accessibilityLabel("Sort playlists by \(sortOption.label)")
     }
 
     @ViewBuilder
@@ -297,6 +371,14 @@ struct PlaylistLibraryView: View {
             }
             .buttonStyle(.plain)
 
+            Button(
+                "Import Playlist Link",
+                systemImage: "link",
+                action: showPlaylistImporter
+            )
+            .buttonStyle(.bordered)
+            .tint(.roseGold)
+
             HStack(spacing: TranceSpacing.inner) {
                 Image(systemName: "lightbulb.fill")
                     .symbolRenderingMode(.hierarchical)
@@ -396,12 +478,12 @@ struct AddToPlaylistSheet: View {
                                 .foregroundStyle(.textSecondary)
                         }
                     }
-                    .listStyle(.insetGrouped)
+                    .platformInsetGroupedListStyle()
                     .scrollContentBackground(.hidden)
                 }
             }
             .navigationTitle("Add to Playlist")
-            .navigationBarTitleDisplayMode(.inline)
+            .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

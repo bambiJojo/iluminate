@@ -29,10 +29,14 @@ struct PlaylistGridTile: View {
                         }
                     }
 
+                // Two lines, reserved whether or not they are used: playlists with
+                // shared prefixes are indistinguishable when truncated to one, and
+                // a fixed reservation keeps the 2-up grid rows aligned.
                 Text(playlist.name)
                     .font(TranceTypography.body)
                     .foregroundStyle(.textPrimary)
-                    .lineLimit(1)
+                    .lineLimit(2, reservesSpace: true)
+                    .multilineTextAlignment(.leading)
 
                 HStack(spacing: TranceSpacing.inner) {
                     Text("\(playlist.itemCount) tracks · \(playlist.totalDurationFormatted)")

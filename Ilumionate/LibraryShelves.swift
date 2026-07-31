@@ -119,34 +119,34 @@ struct LibraryAudioShelf: View {
     var onOpenInfo: ((AudioFile) -> Void)? = nil
 
     var body: some View {
-        CarouselRow(items: files) { file in
-            // The info control is a sibling of the play button, not nested in
-            // its label — a button inside another button's label won't receive taps.
-            ZStack(alignment: .bottomTrailing) {
-                Button {
-                    onPlay(file)
-                } label: {
-                    AudioShelfCard(file: file, showsHeart: showsHeart, showsAnalyzedSeal: showsAnalyzedSeal)
-                }
-                .buttonStyle(.plain)
-
+        CarouselRow(items: files, cardWidthFraction: LibraryShelfMetrics.cardWidthFraction) { file in
+            Button {
+                onPlay(file)
+            } label: {
+                AudioShelfCard(file: file, showsHeart: showsHeart, showsAnalyzedSeal: showsAnalyzedSeal)
+            }
+            .buttonStyle(.plain)
+            // The compact card has no room for an info control, so the detail
+            // route moves to a long press — the same destination, one gesture in.
+            .contextMenu {
+                Button("Play", systemImage: "play.fill") { onPlay(file) }
                 if let onOpenInfo {
-                    Button {
-                        TranceHaptics.shared.light()
-                        onOpenInfo(file)
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 18))
-                            .foregroundStyle(Color.textSecondary)
-                            .padding(TranceSpacing.list)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("About \(file.displayName)")
+                    Button("Session Info", systemImage: "info.circle") { onOpenInfo(file) }
                 }
             }
         }
     }
+}
+
+/// Shared sizing for the Library shelves. Cards are deliberately narrow enough
+/// that a second card and a peek of a third are always visible — a full-width
+/// card turns a 144-file library into a one-item-at-a-time carousel.
+enum LibraryShelfMetrics {
+    static let cardWidthFraction: CGFloat = 0.46
+    /// Tall enough for a two-line title plus a meta line — at a narrow width most
+    /// session names wrap, and truncating them defeats the point of the shelf.
+    static let audioCardHeight: CGFloat = 118
+    static let artistCardHeight: CGFloat = 72
 }
 
 private struct AudioShelfCard: View {
@@ -154,43 +154,51 @@ private struct AudioShelfCard: View {
     var showsHeart = false
     var showsAnalyzedSeal = false
 
+    /// Creator carries more signal than duration when scanning a shelf, so it
+    /// leads the meta line and duration follows.
+    private var metaLine: String {
+        guard let creator = file.creatorDisplayName else { return file.durationFormatted }
+        return "\(creator) · \(file.durationFormatted)"
+    }
+
     var body: some View {
-        LiminalCard {
-            VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                HStack(spacing: TranceSpacing.list) {
-                    SessionGlowDot(contentType: file.analysisResult?.contentType, size: 40)
+        VStack(alignment: .leading, spacing: TranceSpacing.inner) {
+            HStack(spacing: TranceSpacing.icon) {
+                SessionGlowDot(contentType: file.analysisResult?.contentType, size: 26)
 
-                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                        Text(file.displayName)
-                            .font(TranceTypography.sectionTitle)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(1)
-                        Text(file.durationFormatted)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(1)
-                    }
+                Spacer(minLength: 0)
 
-                    Spacer()
-
-                    if showsHeart {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color(hex: "E85D75"))
-                    }
-
-                    if showsAnalyzedSeal {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color.roseGold)
-                    }
+                if showsHeart || file.favorite {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(hex: "E85D75"))
                 }
 
-                ShelfPlayPill()
+                if showsAnalyzedSeal || file.isAnalyzed {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.roseGold)
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            Text(file.displayName)
+                .font(TranceTypography.body)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+
+            Text(metaLine)
+                .font(TranceTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
         }
-        .frame(height: 128)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(TranceSpacing.list)
+        .frame(height: LibraryShelfMetrics.audioCardHeight)
+        .liminalSurface()
     }
 }
 
@@ -204,12 +212,14 @@ struct LibraryPlaylistShelf: View {
     let onCreate: () -> Void
     let onOpenLibrary: () -> Void
 
+    /// The create card trails the shelf so real playlists occupy the first
+    /// slots — leading with it hid every playlist behind a swipe.
     private var items: [PlaylistShelfItem] {
-        [.create] + playlists.map(PlaylistShelfItem.playlist)
+        playlists.map(PlaylistShelfItem.playlist) + [.create]
     }
 
     var body: some View {
-        CarouselRow(items: items) { item in
+        CarouselRow(items: items, cardWidthFraction: LibraryShelfMetrics.cardWidthFraction) { item in
             switch item {
             case .create:
                 Button {
@@ -254,16 +264,17 @@ private enum PlaylistShelfItem: Identifiable {
 /// Dashed "New Playlist" affordance leading the playlists shelf.
 private struct NewPlaylistCard: View {
     var body: some View {
-        VStack(spacing: TranceSpacing.list) {
+        VStack(spacing: TranceSpacing.inner) {
             Image(systemName: "plus.circle.fill")
-                .font(.system(size: 30, weight: .semibold))
+                .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(Color.roseGold)
             Text("New Playlist")
-                .font(TranceTypography.sectionTitle)
+                .font(TranceTypography.caption)
+                .fontWeight(.semibold)
                 .foregroundStyle(Color.textPrimary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(height: 128)
+        .frame(height: LibraryShelfMetrics.audioCardHeight)
         .background(Color.glassBorder.opacity(0.10),
                     in: .rect(cornerRadius: TranceRadius.glassCard))
         .overlay {
@@ -278,37 +289,36 @@ private struct PlaylistShelfCard: View {
     let playlist: Playlist
 
     var body: some View {
-        LiminalCard {
-            VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                HStack(spacing: TranceSpacing.list) {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.roseGold.opacity(0.18))
-                        .frame(width: 40, height: 40)
-                        .overlay {
-                            Image(systemName: "music.note.list")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(Color.roseGold)
-                        }
-
-                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                        Text(playlist.name)
-                            .font(TranceTypography.sectionTitle)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(1)
-                        Text("\(playlist.itemCount) tracks · \(playlist.totalDurationFormatted)")
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer()
+        VStack(alignment: .leading, spacing: TranceSpacing.inner) {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color.roseGold.opacity(0.18))
+                .frame(width: 26, height: 26)
+                .overlay {
+                    Image(systemName: "music.note.list")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.roseGold)
                 }
 
-                ShelfPlayPill()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            Text(playlist.name)
+                .font(TranceTypography.body)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+
+            Text(playlist.isEmpty
+                 ? "Empty"
+                 : "\(playlist.itemCount) tracks · \(playlist.totalDurationFormatted)")
+                .font(TranceTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
         }
-        .frame(height: 128)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(TranceSpacing.list)
+        .frame(height: LibraryShelfMetrics.audioCardHeight)
+        .liminalSurface()
     }
 }
 
@@ -320,7 +330,7 @@ struct LibraryBuiltInSessionShelf: View {
     let onPlay: (LightSession) -> Void
 
     var body: some View {
-        CarouselRow(items: sessions) { session in
+        CarouselRow(items: sessions, cardWidthFraction: LibraryShelfMetrics.cardWidthFraction) { session in
             Button {
                 onPlay(session)
             } label: {
@@ -335,37 +345,34 @@ private struct BuiltInSessionShelfCard: View {
     let session: LightSession
 
     var body: some View {
-        LiminalCard {
-            VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                HStack(spacing: TranceSpacing.list) {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.bwGamma.opacity(0.18))
-                        .frame(width: 40, height: 40)
-                        .overlay {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(Color.bwGamma)
-                        }
-
-                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                        Text(session.displayName)
-                            .font(TranceTypography.sectionTitle)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(1)
-                        Text(session.durationFormatted)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer()
+        VStack(alignment: .leading, spacing: TranceSpacing.inner) {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color.bwGamma.opacity(0.18))
+                .frame(width: 26, height: 26)
+                .overlay {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.bwGamma)
                 }
 
-                ShelfPlayPill()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            Text(session.displayName)
+                .font(TranceTypography.body)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+
+            Text(session.durationFormatted)
+                .font(TranceTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
         }
-        .frame(height: 128)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(TranceSpacing.list)
+        .frame(height: LibraryShelfMetrics.audioCardHeight)
+        .liminalSurface()
     }
 }
 
@@ -377,7 +384,7 @@ struct LibraryArtistShelf: View {
     let onOpen: (LibraryArtist) -> Void
 
     var body: some View {
-        CarouselRow(items: artists) { artist in
+        CarouselRow(items: artists, cardWidthFraction: LibraryShelfMetrics.cardWidthFraction) { artist in
             Button {
                 TranceHaptics.shared.light()
                 onOpen(artist)
@@ -393,36 +400,36 @@ private struct ArtistShelfCard: View {
     let artist: LibraryArtist
 
     var body: some View {
-        LiminalCard {
-            HStack(spacing: TranceSpacing.list) {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.roseDeep.opacity(0.18))
-                    .frame(width: 40, height: 40)
-                    .overlay {
-                        Image(systemName: "music.mic")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Color.roseDeep)
-                    }
-
-                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                    Text(artist.name)
-                        .font(TranceTypography.sectionTitle)
-                        .foregroundStyle(Color.textPrimary)
-                        .lineLimit(1)
-                    Text("\(artist.fileCount) sessions")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
+        HStack(spacing: TranceSpacing.inner) {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color.roseDeep.opacity(0.18))
+                .frame(width: 26, height: 26)
+                .overlay {
+                    Image(systemName: "music.mic")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.roseDeep)
                 }
 
-                Spacer()
-
-                Image(systemName: "chevron.right")
+            // No chevron: at this width it stole the room full creator names need,
+            // and the card's only action is already to open that creator.
+            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                Text(artist.name)
+                    .font(TranceTypography.body)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text("\(artist.fileCount) sessions")
                     .font(TranceTypography.caption)
                     .foregroundStyle(Color.textSecondary)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+
+            Spacer(minLength: 0)
         }
-        .frame(height: 88)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(TranceSpacing.list)
+        .frame(height: LibraryShelfMetrics.artistCardHeight)
+        .liminalSurface()
     }
 }
 
@@ -450,21 +457,53 @@ struct LibraryEmptyCard: View {
     }
 }
 
-// MARK: - Shared Pill
+// MARK: - Playlist Result Row
 
-/// Gradient "Play" pill shared by all shelf cards (mirrors the reader's
-/// Resume pill on Continue Reading cards).
-private struct ShelfPlayPill: View {
+/// Dense playlist row used in search results, where a 2-up artwork grid would
+/// bury the handful of actual matches.
+struct LibraryPlaylistResultRow: View {
+    let playlist: Playlist
+    let onPlay: () -> Void
+
     var body: some View {
-        Label("Play", systemImage: "play.fill")
-            .font(TranceTypography.caption.weight(.semibold))
-            .foregroundStyle(Color.bgDeep)
-            .padding(.horizontal, TranceSpacing.list)
-            .padding(.vertical, TranceSpacing.icon)
-            .background(
-                LinearGradient(colors: [.roseGold, .roseDeep],
-                               startPoint: .leading, endPoint: .trailing),
-                in: .capsule
-            )
+        Button(action: onPlay) {
+            HStack(spacing: TranceSpacing.list) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.roseGold.opacity(0.18))
+                    .frame(width: 36, height: 36)
+                    .overlay {
+                        Image(systemName: "music.note.list")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color.roseGold)
+                    }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    // Two lines: several playlists here share a long prefix, and
+                    // one truncated line makes them impossible to tell apart.
+                    Text(playlist.name)
+                        .font(TranceTypography.body)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text(playlist.isEmpty
+                         ? "Empty"
+                         : "\(playlist.itemCount) tracks · \(playlist.totalDurationFormatted)")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+
+                Spacer(minLength: 0)
+
+                if playlist.isEmpty == false {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.roseGold)
+                }
+            }
+            .padding(.vertical, TranceSpacing.inner)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(playlist.isEmpty)
     }
 }

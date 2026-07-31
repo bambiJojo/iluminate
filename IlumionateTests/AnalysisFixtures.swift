@@ -105,6 +105,21 @@ enum AnalysisFixtures {
         )
     )
 
+    /// A minimal analysis carrying a specific content type — for tests that only
+    /// care about classification, not the light score.
+    static func analysis(contentType: AudioContentType) -> AnalysisResult {
+        AnalysisResult(
+            mood: .meditative,
+            energyLevel: 0.3,
+            suggestedFrequencyRange: 6.0...10.0,
+            suggestedIntensity: 0.5,
+            keyMoments: [],
+            aiSummary: "Fixture analysis for \(contentType.displayName).",
+            recommendedPreset: "Fixture",
+            contentType: contentType
+        )
+    }
+
     static let meditationAnalysis = AnalysisResult(
         mood: .meditative,
         energyLevel: 0.15,

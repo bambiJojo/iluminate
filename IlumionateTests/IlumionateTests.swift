@@ -63,9 +63,13 @@ struct PlaylistModelTests {
         playlist.items = [PlaylistItem(audioFileId: UUID(), filename: "a.mp3", duration: 59)]
         #expect(playlist.totalDurationFormatted == "0:59")
 
-        // Large duration (over 1 hour)
+        // Over an hour rolls into hours instead of running the minutes up.
         playlist.items = [PlaylistItem(audioFileId: UUID(), filename: "a.mp3", duration: 3661)]
-        #expect(playlist.totalDurationFormatted == "61:01")
+        #expect(playlist.totalDurationFormatted == "1h 1m")
+
+        // A multi-hour playlist stays readable.
+        playlist.items = [PlaylistItem(audioFileId: UUID(), filename: "a.mp3", duration: 15_676)]
+        #expect(playlist.totalDurationFormatted == "4h 21m")
     }
 
     @Test func playlistCodable() throws {

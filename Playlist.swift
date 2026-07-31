@@ -47,10 +47,14 @@ struct Playlist: Identifiable, Codable {
         items.reduce(0) { $0 + $1.duration }
     }
 
+    /// Playlists routinely run for hours, so minutes roll into hours rather than
+    /// accumulating into an unreadable "261:16".
     var totalDurationFormatted: String {
-        let minutes = Int(totalDuration) / 60
-        let seconds = Int(totalDuration) % 60
-        return String(format: "%d:%02d", minutes, seconds)
+        let duration = Duration.seconds(totalDuration.rounded())
+        guard totalDuration >= 3600 else {
+            return duration.formatted(.time(pattern: .minuteSecond))
+        }
+        return duration.formatted(.units(allowed: [.hours, .minutes], width: .narrow))
     }
 
     var itemCount: Int { items.count }
