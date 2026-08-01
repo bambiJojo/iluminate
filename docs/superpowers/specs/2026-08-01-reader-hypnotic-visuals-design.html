@@ -1,0 +1,192 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reader Hypnotic Visuals — Design</title><style>
+:root{--bg:#fbfaf9;--fg:#1c1b22;--mut:#63616f;--line:#e3e0dc;--card:#fff;
+--accent:#9a6b3f;--codebg:#f5f3f0;--codefg:#25242c}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0f14;--fg:#e9e7ef;--mut:#9895a6;
+--line:#2a2933;--card:#16161d;--accent:#d9a56b;--codebg:#14141b;--codefg:#dcdae4}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+-webkit-font-smoothing:antialiased}
+.shell{display:grid;grid-template-columns:250px minmax(0,1fr);gap:44px;
+max-width:1180px;margin:0 auto;padding:52px 28px 96px}
+nav{position:sticky;top:52px;align-self:start;font-size:13.5px;
+border-left:2px solid var(--line);padding-left:16px}
+nav a{display:block;color:var(--mut);text-decoration:none;padding:5px 0}
+nav a:hover{color:var(--accent)}
+main{min-width:0}
+h1{font-size:2rem;line-height:1.2;margin:0 0 8px;letter-spacing:-.02em}
+h2{font-size:1.18rem;margin:0;display:inline;letter-spacing:-.01em}
+h3{font-size:1rem;margin:26px 0 8px;color:var(--fg)}
+h4{font-size:.9rem;margin:20px 0 6px;color:var(--mut);text-transform:uppercase;
+letter-spacing:.06em}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+details{background:var(--card);border:1px solid var(--line);border-radius:12px;
+margin:16px 0;overflow:hidden}
+summary{cursor:pointer;padding:15px 20px;list-style:none;display:flex;
+align-items:center;gap:10px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"›";color:var(--accent);font-size:1.15rem;
+transition:transform .16s ease;display:inline-block}
+details[open] summary::before{transform:rotate(90deg)}
+summary:hover{background:color-mix(in oklab,var(--card) 92%,var(--accent))}
+.body{padding:2px 20px 20px;border-top:1px solid var(--line)}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin:5px 0}
+code{background:var(--codebg);color:var(--codefg);padding:.13em .38em;
+border-radius:5px;font:.86em ui-monospace,SFMono-Regular,Menlo,monospace}
+figure.code{margin:0 0 16px;position:relative;background:var(--codebg);
+border:1px solid var(--line);border-radius:10px}
+figure.code pre{margin:0;padding:15px 16px;overflow-x:auto}
+figure.code code{background:none;padding:0;font-size:12.9px;line-height:1.62}
+.lang{position:absolute;top:0;right:0;font:11px ui-monospace,monospace;
+color:var(--mut);padding:5px 10px;text-transform:lowercase}
+.tablewrap{overflow-x:auto;margin:0 0 18px;border:1px solid var(--line);
+border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14.2px}
+th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line);
+vertical-align:top}
+th{background:var(--codebg);font-weight:600;font-size:12.4px;
+text-transform:uppercase;letter-spacing:.045em;color:var(--mut)}
+tr:last-child td{border-bottom:none}
+@media (max-width:820px){.shell{grid-template-columns:1fr;gap:22px;padding:32px 18px 72px}
+nav{position:static;border-left:none;border-top:1px solid var(--line);
+padding:14px 0 0;columns:2}}
+</style></head><body><div class="shell"><nav><a href="#goal">Goal</a><a href="#context">Context</a><a href="#decisions">Decisions</a><a href="#architecture">Architecture</a><a href="#error-handling">Error handling</a><a href="#testing">Testing</a><a href="#files">Files</a><a href="#risks">Risks</a><a href="#out-of-scope">Out of scope</a></nav><main><h1>Reader Hypnotic Visuals — Design</h1>
+<p><strong>Date:</strong> 2026-08-01 <strong>Status:</strong> Approved, ready for implementation planning <strong>Surface:</strong> TextTrance reader (<code>Ilumionate/TextTrance/</code>)</p>
+<details open id="goal"><summary><h2>Goal</h2></summary><div class="body">
+<p>Give the RSVP reader animated hypnotic backgrounds with a user-adjustable opacity, without ever compromising the legibility of the word being read.</p>
+<p>Reference for the visual vocabulary: <code>https://hypno.nimja.com/visual</code> — a catalogue of 150+ effects (spirals, tunnels, moiré, particles, waves). We are deliberately not matching its breadth.</p>
+</div></details>
+<details open id="context"><summary><h2>Context</h2></summary><div class="body">
+<p>The reader is an <strong>RSVP player</strong>: one word at a time, its pivot letter anchored to a fixed horizontal centre (<a href="../../../Ilumionate/TextTrance/TextTrancePlayerView.swift"><code>TextTrancePlayerView</code></a>, <code>AnchoredWord</code>). Two consequences shape the whole design:</p>
+<ol><li>Only a small, <strong>fixed</strong> region of the screen ever holds text, so a local readability guard is cheap and reliable.</li><li>There is a per-word timer running. Anything on screen competes with it for frame budget.</li></ol>
+<p>Today's background stack, back to front:</p>
+<div class="tablewrap"><table><thead><tr><th>Layer</th><th>Source</th></tr></thead><tbody><tr><td>Flat theme colour</td><td><code>displayPrefs.adjustedBackground</code></td></tr><tr><td>Phase-tinted radial glow, 4s breath cycle</td><td><code>RadialGradient</code> + <code>backgroundPulse</code></td></tr><tr><td>Word</td><td><code>wordLayer</code> / <code>AnchoredWord</code></td></tr><tr><td>Controls, scrub line</td><td><code>ReaderControlCluster</code>, <code>ScrubWhisperLine</code></td></tr></tbody></table></div>
+<p><code>ReaderDisplayPreferences</code> already owns theme, <code>backgroundBrightness</code>, <code>fontScale</code>, <code>colorMode</code>, and friends, and already decodes newer fields with <code>decodeIfPresent</code> so older stored preferences keep loading. <code>TextTrancePlayerView</code> already reads <code>accessibilityReduceMotion</code> and already maps reading phase to colour via <code>phaseColor</code>.</p>
+</div></details>
+<details open id="decisions"><summary><h2>Decisions</h2></summary><div class="body">
+<div class="tablewrap"><table><thead><tr><th>Decision</th><th>Choice</th><th>Rationale</th></tr></thead><tbody><tr><td>Library size</td><td><strong>Curated: 4 effects + none + breath</strong></td><td>Each effect gets hand-tuned and perf-checked. A broad catalogue would need a data-driven effect system and would leave most effects barely tuned.</td></tr><tr><td>Phase behaviour</td><td><strong>Chosen shape stays fixed; phase modulates tint, speed, amplitude only</strong></td><td>User correction during review: the visual should shift <em>slightly</em> with phase, not swap. Removes all cross-fade/transition machinery.</td></tr><tr><td>Readability guard</td><td><strong>Centre fade, computed in the renderer</strong></td><td>Theme-agnostic (no dark scrim to invert on Paper/Sepia/Dawn), no extra compositing layer, no muddy blob. Works because the word's anchor is fixed.</td></tr><tr><td>Safety</td><td><strong>Capped by construction; freeze on Reduce Motion</strong></td><td>No effect can strobe, so no consent gate is needed in a reading surface.</td></tr><tr><td>Renderer</td><td><strong>Metal fragment shaders via SwiftUI <code>.colorEffect</code></strong></td><td>Chosen for visual ceiling — true moiré interference and smooth gradients beat stroked lines. Accepted trade-off: shaders are not unit-testable and this is the project's first Metal code. See Risks.</td></tr></tbody></table></div>
+<h3>Renderer trade-off, recorded</h3>
+<p><code>TimelineView</code> + <code>Canvas</code> was recommended instead, because it matches existing patterns (<code>AuroraBackground</code>, <code>LumeOrb</code>, <code>PlayerBackgrounds</code>), keeps geometry as pure testable Swift, and needs no <code>#if os</code>. Metal was chosen anyway for output quality. The cost is real and is mitigated, not eliminated:</p>
+<ul><li>Shader source cannot be unit-tested → coverage comes from the parameter layer (§3).</li><li><code>ShaderLibrary</code> name and uniform mismatches fail at <strong>runtime</strong>, not build time → identical uniform list across all four effects, and a feasibility spike first.</li></ul>
+</div></details>
+<details open id="architecture"><summary><h2>Architecture</h2></summary><div class="body">
+<figure class="code"><pre><code>ReaderDisplayPreferences          visual: ReaderVisual, visualOpacity: Double
+        │                         (persisted, back-compat decoded)
+        ▼
+ReaderVisualModulator             pure: (phase, speedMultiplier, reduceMotion)
+        │                               → ReaderVisualModulation
+        │                         ← all safety caps enforced here
+        ▼
+ReaderVisualLayer                 SwiftUI: TimelineView + Rectangle.colorEffect
+        │
+        ▼
+ReaderVisuals.metal               4 × [[stitchable]] half4, each × centreFade()</code></pre></figure>
+<h3>1 · Data model</h3>
+<figure class="code"><span class="lang">swift</span><pre><code>enum ReaderVisual: String, Codable, CaseIterable, Identifiable, Sendable {
+    case none, breath, spiral, tunnel, moire, drift
+
+    var id: String { rawValue }
+    var displayName: String            // "None", "Breath", "Spiral", …
+    var shaderName: String?            // nil for .none and .breath
+}</code></pre></figure>
+<p>Added to <code>ReaderDisplayPreferences</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>var visual: ReaderVisual = .breath
+var visualOpacity: Double = 0.35
+
+static let visualOpacityRange: ClosedRange&lt;Double&gt; = 0.05...0.85
+var clampedVisualOpacity: Double     // mirrors clampedBackgroundBrightness</code></pre></figure>
+<p>Both decoded with <code>decodeIfPresent</code>, following the precedent set by <code>colorMode</code>.</p>
+<p><strong>The default is <code>.breath</code></strong> — a name for the phase glow that already exists. Existing readers see no visual change until they opt in, and <code>.breath</code> keeps rendering the current <code>RadialGradient</code> rather than going through a shader.</p>
+<h3>2 · Effect roster</h3>
+<div class="tablewrap"><table><thead><tr><th>Case</th><th>Look</th><th>Shader</th></tr></thead><tbody><tr><td><code>.none</code></td><td>Flat theme colour only</td><td>—</td></tr><tr><td><code>.breath</code></td><td>Today's phase-tinted radial glow, 4s cycle</td><td>— (existing <code>RadialGradient</code>)</td></tr><tr><td><code>.spiral</code></td><td>Rotating Archimedean arms</td><td><code>readerSpiral</code></td></tr><tr><td><code>.tunnel</code></td><td>Concentric rings falling inward; depth without rotation</td><td><code>readerTunnel</code></td></tr><tr><td><code>.moire</code></td><td>Two offset ring sets interfering; slow shimmer</td><td><code>readerMoire</code></td></tr><tr><td><code>.drift</code></td><td>Particles on a slow vortex; calmest option</td><td><code>readerDrift</code></td></tr></tbody></table></div>
+<h3>3 · Phase modulation — the testable core</h3>
+<figure class="code"><span class="lang">swift</span><pre><code>struct ReaderVisualModulation: Equatable, Sendable {
+    let tint: Color        // from the existing phaseColor mapping
+    let speed: Double      // clamped to the safe band
+    let amplitude: Double  // density / intensity, 0…1
+}
+
+enum ReaderVisualModulator {
+    static func modulation(for phase: TrancePhase,
+                           speedMultiplier: Double,
+                           reduceMotion: Bool) -&gt; ReaderVisualModulation
+}</code></pre></figure>
+<p><code>TrancePhase</code> is the CorpusKit enum already used by <code>TextTranceSession.currentPhase</code> (12 cases including <code>.transitional</code>). <code>speedMultiplier</code> is the session's existing property — the session exposes no WPM value.</p>
+<p>Behaviour:</p>
+<ul><li><strong>Tint</strong> reuses the same phase→colour mapping as <code>phaseColor</code>, so the background and the word's glow always agree. This requires a small refactor: <code>phaseColor</code> is currently a private computed property on <code>TextTrancePlayerView</code>. It moves to a shared <code>TrancePhase</code> extension (or alongside the modulator) and the player view calls that, so there is exactly one phase→colour table.</li><li><strong>Speed</strong> scales gently with <code>speedMultiplier</code> and with phase depth (deepening and fractionation slightly faster than pre-talk), then is clamped to the safe band.</li><li><strong>Amplitude</strong> rises through induction → deepening, easing back for emergence.</li><li><code>reduceMotion == true</code> forces <code>speed == 0</code>, which is the signal the view layer uses to stop redrawing entirely.</li></ul>
+<p><strong>All safety limits live in this function, not in the shader</strong>, so they are unit-testable:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>static let speedBand: ClosedRange&lt;Double&gt; = 0.05...0.45</code></pre></figure>
+<p><code>speed</code> is a <strong>normalised scalar</strong>, not a physical rate — each shader defines what it means for its own geometry (revolutions/sec for <code>.spiral</code>, ring crossings/sec for <code>.tunnel</code>, and so on). The band is chosen so that at the upper bound, every effect's slowest-moving repeating feature crosses any fixed pixel <strong>below 3 Hz</strong>. That invariant is a property of each shader's constants, so it is recorded as a comment beside each effect's period constant and re-checked during the visual verification pass — the unit test can only assert that <code>speed</code> never leaves the band.</p>
+<h3>4 · Shader layer</h3>
+<p><code>Ilumionate/TextTrance/Visuals/ReaderVisuals.metal</code> — one <code>[[stitchable]] half4</code> function per effect, with a shared helper that makes the readability guard intrinsic:</p>
+<figure class="code"><span class="lang">metal</span><pre><code>static half centreFade(float2 pos, float2 size) {
+    float2 d = (pos - size * 0.5) / (size * 0.5);
+    d.y /= 0.46;                                 // elliptical, word-shaped
+    return half(smoothstep(0.35, 1.0, length(d)));
+}</code></pre></figure>
+<p>Every effect multiplies its alpha by <code>centreFade(...)</code>. The word's protection is therefore one line per effect rather than a compositing layer, and it cannot be forgotten without the effect visibly bleeding into the text.</p>
+<p>Uniform list, <strong>identical across all four</strong> to avoid runtime mismatch:</p>
+<figure class="code"><pre><code>float2 size, float time, float3 tint, float speed, float amplitude</code></pre></figure>
+<h3>5 · SwiftUI wrapper</h3>
+<figure class="code"><span class="lang">swift</span><pre><code>struct ReaderVisualLayer: View {
+    let visual: ReaderVisual
+    let modulation: ReaderVisualModulation
+    let opacity: Double
+
+    var body: some View {
+        if let name = visual.shaderName {
+            TimelineView(.animation(paused: modulation.speed == 0)) { timeline in
+                Rectangle()
+                    .foregroundStyle(.black)
+                    .colorEffect(shader(name, at: timeline.date))
+            }
+            .opacity(opacity)
+            .allowsHitTesting(false)
+            .ignoresSafeArea()
+        }
+    }
+}</code></pre></figure>
+<p><code>paused:</code> is the whole Reduce Motion story: the schedule stops firing, so the shader is evaluated once and never again. That is an accessibility win and a battery win with no separate code path.</p>
+<p>Insertion into <code>TextTrancePlayerView.body</code>, between the flat background and the word:</p>
+<figure class="code"><pre><code>displayPrefs.adjustedBackground
+ReaderVisualLayer(...)              ← new; renders nothing for .none / .breath
+RadialGradient (breath)             ← unchanged; still gated on showsPhaseAtmosphere
+wordLayer
+controls / scrub line</code></pre></figure>
+<h3>6 · Settings UI</h3>
+<p><code>ReaderSettingsDrawer</code> gains a <strong>Visual</strong> section:</p>
+<ul><li>A labelled chip row over <code>ReaderVisual.allCases</code>, reusing the drawer's existing chip idiom.</li><li>An opacity slider bound to <code>visualOpacity</code>, shown only when <code>visual != .none</code>.</li></ul>
+<p>No preview thumbnails. The drawer is a sheet presented over the live player, so the chosen effect is already animating behind it while the slider moves — the real thing beats a thumbnail and costs nothing.</p>
+</div></details>
+<details open id="error-handling"><summary><h2>Error handling</h2></summary><div class="body">
+<ul><li><strong>Missing or renamed shader function.</strong> <code>ShaderLibrary</code> resolves lazily and fails at runtime. <code>ReaderVisual.shaderName</code> is the single place names are written, and the <code>ReaderVisualTests</code> case-coverage test asserts every shader-backed case has one. A failed lookup renders nothing, which degrades to the flat theme background rather than crashing or showing a black screen.</li><li><strong>Legacy preferences.</strong> Absent <code>visual</code> / <code>visualOpacity</code> keys decode to <code>.breath</code> / <code>0.35</code>. Covered by test.</li><li><strong>Out-of-range opacity</strong> (hand-edited or from a future build) clamps via <code>clampedVisualOpacity</code> rather than being trusted.</li></ul>
+</div></details>
+<details open id="testing"><summary><h2>Testing</h2></summary><div class="body">
+<div class="tablewrap"><table><thead><tr><th>Suite</th><th>Covers</th></tr></thead><tbody><tr><td><code>ReaderVisualModulatorTests</code></td><td>phase→tint mapping; speed always within the safe band for every <code>TrancePhase</code> × extreme <code>speedMultiplier</code>; <code>reduceMotion</code> ⇒ speed 0; amplitude monotonic through the arc</td></tr><tr><td><code>ReaderDisplayPreferencesTests</code></td><td>new fields round-trip; legacy JSON lacking both keys decodes to <code>.breath</code>/0.35; opacity clamps at both bounds</td></tr><tr><td><code>ReaderVisualTests</code></td><td>every case has a non-empty <code>displayName</code>; shader-backed cases have a <code>shaderName</code>; <code>.none</code>/<code>.breath</code> do not</td></tr></tbody></table></div>
+<p>Swift Testing (<code>@Test</code>/<code>#expect</code>), matching the project's existing suites.</p>
+<p><strong>Not unit-tested:</strong> the shader source itself. Verification is visual, on the iOS simulator and the native macOS build, against a checklist: legibility of the word at 0.85 opacity for each effect and each of the six themes; no visible seam at the centre-fade boundary; Reduce Motion produces a still frame.</p>
+</div></details>
+<details open id="files"><summary><h2>Files</h2></summary><div class="body">
+<p>New:</p>
+<figure class="code"><pre><code>Ilumionate/TextTrance/Visuals/ReaderVisual.swift             ~60
+Ilumionate/TextTrance/Visuals/ReaderVisualModulation.swift   ~90
+Ilumionate/TextTrance/Visuals/ReaderVisualLayer.swift        ~80
+Ilumionate/TextTrance/Visuals/ReaderVisuals.metal           ~140
+IlumionateTests/ReaderVisualModulatorTests.swift             ~90
+IlumionateTests/ReaderVisualTests.swift                      ~40</code></pre></figure>
+<p>Modified:</p>
+<figure class="code"><pre><code>Ilumionate/TextTrance/ReaderDisplayPreferences.swift     +~15
+Ilumionate/TextTrance/TextTrancePlayerView.swift          +~8
+Ilumionate/TextTrance/ReaderSettingsDrawer.swift         +~40
+IlumionateTests/…ReaderDisplayPreferences coverage       +~30</code></pre></figure>
+<p>All well inside the 200–400 line norm and nowhere near the 800-line cap.</p>
+</div></details>
+<details open id="risks"><summary><h2>Risks</h2></summary><div class="body">
+<ol><li><strong>First <code>.metal</code> file in the project</strong> — highest risk, and the reason for step 1 below. No Metal source, <code>import Metal</code>, or <code>ShaderLibrary</code> usage exists today. Xcode's file-system-synchronized groups <em>should</em> compile a <code>.metal</code> file into the default library automatically, but if they do not, the failure is a silent runtime lookup miss.</li><li><strong>Two shipping platforms.</strong> <code>.colorEffect</code> is supported on both, but the project builds native macOS as a first-class destination, so the spike must pass on both.</li><li><strong>Frame budget.</strong> Shaders should be effectively free, but the reader runs a per-word timer; the spike measures rather than assumes.</li></ol>
+<p><strong>Mitigation — the plan's first step is a throwaway spike</strong>: one trivial shader (a solid colour that varies with <code>time</code>), rendered via <code>.colorEffect</code>, confirmed on the iOS simulator <em>and</em> the native macOS build, before any effect is written. If it fails, fall back to <code>TimelineView</code> + <code>Canvas</code>, which changes §4 and §5 but leaves §1–§3, §6 and the whole test plan intact.</p>
+</div></details>
+<details open id="out-of-scope"><summary><h2>Out of scope</h2></summary><div class="body">
+<ul><li>Effects beyond the six listed. The roster is deliberately closed.</li><li>Strobe, flicker, or any effect needing a photosensitivity consent gate.</li><li>Reader-visual settings syncing to the audio player's light modes.</li><li>Per-script saved visual choices. Visual lives in <code>ReaderDisplayPreferences</code>, which <code>ReaderPresetStore</code> already persists per script as a side effect — no new mechanism.</li></ul>
+</div></details></main></div></body></html>
