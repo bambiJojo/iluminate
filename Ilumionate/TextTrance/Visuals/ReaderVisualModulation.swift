@@ -10,10 +10,13 @@ import SwiftUI
 struct ReaderVisualModulation: Equatable, Sendable {
     /// Phase tint, from the shared `TrancePhase.atmosphereColor` table.
     let tint: Color
-    /// Normalised motion rate. Each shader interprets this for its own geometry;
-    /// see the per-effect rate comments in ReaderVisuals.metal.
+    /// Normalised motion rate, always within `ReaderVisualModulator.speedBand`.
+    /// Each shader interprets it for its own geometry — a revolution rate for a
+    /// spiral, a ring-crossing rate for a tunnel — so the same value produces
+    /// different physical rates per effect.
     let speed: Double
-    /// Pattern strength, 0…1.
+    /// Pattern strength, always within `ReaderVisualModulator.amplitudeBand`
+    /// (currently floored at 0.25, never 0 — a selected effect stays visible).
     let amplitude: Double
 
     static let still = ReaderVisualModulation(tint: .phaseIntro, speed: 0, amplitude: 0.25)
@@ -21,8 +24,15 @@ struct ReaderVisualModulation: Equatable, Sendable {
 
 enum ReaderVisualModulator {
 
-    /// Upper bound chosen so that every shader's fastest repeating feature stays
-    /// under 3 Hz at a fixed pixel — see the rate arithmetic beside each effect.
+    /// The motion budget every effect must fit inside.
+    ///
+    /// The safety target is that no effect makes a repeating feature cross a
+    /// fixed pixel at 3 Hz or more, since that is where flicker starts to carry
+    /// photosensitivity risk. This band is the *input* budget; it does not by
+    /// itself guarantee the target. Each shader multiplies `speed` by its own
+    /// feature count, so meeting the target is a per-effect obligation: pick
+    /// constants such that `featureCount * speedBand.upperBound < 3.0`, and
+    /// record that arithmetic beside the constant.
     static let speedBand: ClosedRange<Double> = 0.05...0.45
     static let amplitudeBand: ClosedRange<Double> = 0.25...1.0
 

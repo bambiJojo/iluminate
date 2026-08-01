@@ -40,11 +40,24 @@ struct ReaderVisualTests {
 
     // MARK: - Phase Atmosphere
 
-    @Test("Every phase resolves to an atmosphere colour")
-    func everyPhaseHasAtmosphere() {
-        for phase in TrancePhase.allCases {
-            #expect(phase.atmosphereColor != Color.clear)
-        }
+    @Test("Phases that share a colour group stay grouped")
+    func phaseColorGrouping() {
+        #expect(TrancePhase.preTalk.atmosphereColor == TrancePhase.transitional.atmosphereColor)
+        #expect(TrancePhase.fractionation.atmosphereColor == TrancePhase.confusion.atmosphereColor)
+        #expect(TrancePhase.suggestions.atmosphereColor == TrancePhase.therapy.atmosphereColor)
+        #expect(TrancePhase.suggestions.atmosphereColor == TrancePhase.eroticSuggestions.atmosphereColor)
+        #expect(TrancePhase.suggestions.atmosphereColor == TrancePhase.conditioning.atmosphereColor)
+        #expect(TrancePhase.suggestions.atmosphereColor == TrancePhase.brainwashing.atmosphereColor)
+    }
+
+    @Test("The six colour groups are visually distinct from each other")
+    func phaseColorGroupsAreDistinct() {
+        // One representative per group. If two groups collapse to the same
+        // colour the reader loses its phase signal, which no other test catches.
+        let representatives: [TrancePhase] = [
+            .preTalk, .induction, .deepening, .fractionation, .suggestions, .emergence
+        ]
+        #expect(Set(representatives.map(\.atmosphereColor)).count == representatives.count)
     }
 
     @Test("Structural phases keep their established colours")

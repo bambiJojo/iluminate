@@ -62,6 +62,28 @@ struct ReaderVisualModulatorTests {
         #expect(amp(.emergence) < amp(.deepening))
     }
 
+    @Test("Amplitude ordering pins the whole depth table, not just a few phases")
+    func amplitudeOrderingCoversEveryPhase() {
+        func amp(_ phase: TrancePhase) -> Double {
+            ReaderVisualModulator.modulation(
+                for: phase, speedMultiplier: 1.0, reduceMotion: false
+            ).amplitude
+        }
+        // Every phase, in intended ascending depth order. Because amplitude is
+        // monotonic in depth, asserting this order pins all 12 table entries —
+        // band-membership alone cannot, since the modulator clamps regardless.
+        let ascendingDepth: [TrancePhase] = [
+            .preTalk, .emergence, .induction, .transitional,
+            .suggestions, .therapy, .eroticSuggestions, .conditioning,
+            .deepening, .brainwashing, .confusion, .fractionation
+        ]
+        let amplitudes = ascendingDepth.map(amp)
+        #expect(amplitudes == amplitudes.sorted())
+        // Two deliberate ties (suggestions/therapy, eroticSuggestions/conditioning)
+        // leave 10 distinct values. A collapsed or duplicated row breaks this.
+        #expect(Set(amplitudes).count == 10)
+    }
+
     @Test("A faster reading pace yields a faster visual")
     func paceRaisesSpeed() {
         let slow = ReaderVisualModulator.modulation(
