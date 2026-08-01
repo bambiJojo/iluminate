@@ -312,17 +312,7 @@ struct TextTrancePlayerView: View {
     }
 
     /// Atmosphere + word-glow color for the current reading phase.
-    private var phaseColor: Color {
-        switch session.currentPhase {
-        case .preTalk, .transitional:    return .phaseIntro
-        case .induction:                 return .phaseInduction
-        case .deepening:                 return .phaseDeepener
-        case .fractionation, .confusion: return .phaseFractionation
-        case .suggestions, .therapy, .eroticSuggestions, .conditioning, .brainwashing:
-            return .phaseSuggestion
-        case .emergence:                 return .phaseAwakening
-        }
-    }
+    private var phaseColor: Color { session.currentPhase.atmosphereColor }
 
     /// Snap to full opacity for every word, then fade breath/drift words out
     /// across their hold so sentence-ends and ellipses "breathe".

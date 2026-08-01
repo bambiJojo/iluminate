@@ -4,6 +4,7 @@
 //
 
 import Testing
+import SwiftUI
 @testable import Ilumionate
 
 struct ReaderVisualTests {
@@ -35,5 +36,22 @@ struct ReaderVisualTests {
     func rawValues() {
         #expect(ReaderVisual.allCases.map(\.rawValue)
                 == ["none", "breath", "spiral", "tunnel", "moire", "drift"])
+    }
+
+    // MARK: - Phase Atmosphere
+
+    @Test("Every phase resolves to an atmosphere colour")
+    func everyPhaseHasAtmosphere() {
+        for phase in TrancePhase.allCases {
+            #expect(phase.atmosphereColor != Color.clear)
+        }
+    }
+
+    @Test("Structural phases keep their established colours")
+    func knownPhaseColors() {
+        #expect(TrancePhase.induction.atmosphereColor == Color.phaseInduction)
+        #expect(TrancePhase.deepening.atmosphereColor == Color.phaseDeepener)
+        #expect(TrancePhase.emergence.atmosphereColor == Color.phaseAwakening)
+        #expect(TrancePhase.preTalk.atmosphereColor == Color.phaseIntro)
     }
 }
