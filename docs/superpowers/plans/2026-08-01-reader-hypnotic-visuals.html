@@ -1,0 +1,956 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reader Hypnotic Visuals — Design</title><style>
+:root{--bg:#fbfaf9;--fg:#1c1b22;--mut:#63616f;--line:#e3e0dc;--card:#fff;
+--accent:#9a6b3f;--codebg:#f5f3f0;--codefg:#25242c}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0f14;--fg:#e9e7ef;--mut:#9895a6;
+--line:#2a2933;--card:#16161d;--accent:#d9a56b;--codebg:#14141b;--codefg:#dcdae4}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+-webkit-font-smoothing:antialiased}
+.shell{display:grid;grid-template-columns:250px minmax(0,1fr);gap:44px;
+max-width:1180px;margin:0 auto;padding:52px 28px 96px}
+nav{position:sticky;top:52px;align-self:start;font-size:13.5px;
+border-left:2px solid var(--line);padding-left:16px}
+nav a{display:block;color:var(--mut);text-decoration:none;padding:5px 0}
+nav a:hover{color:var(--accent)}
+main{min-width:0}
+h1{font-size:2rem;line-height:1.2;margin:0 0 8px;letter-spacing:-.02em}
+h2{font-size:1.18rem;margin:0;display:inline;letter-spacing:-.01em}
+h3{font-size:1rem;margin:26px 0 8px;color:var(--fg)}
+h4{font-size:.9rem;margin:20px 0 6px;color:var(--mut);text-transform:uppercase;
+letter-spacing:.06em}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+details{background:var(--card);border:1px solid var(--line);border-radius:12px;
+margin:16px 0;overflow:hidden}
+summary{cursor:pointer;padding:15px 20px;list-style:none;display:flex;
+align-items:center;gap:10px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"›";color:var(--accent);font-size:1.15rem;
+transition:transform .16s ease;display:inline-block}
+details[open] summary::before{transform:rotate(90deg)}
+summary:hover{background:color-mix(in oklab,var(--card) 92%,var(--accent))}
+.body{padding:2px 20px 20px;border-top:1px solid var(--line)}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin:5px 0}
+code{background:var(--codebg);color:var(--codefg);padding:.13em .38em;
+border-radius:5px;font:.86em ui-monospace,SFMono-Regular,Menlo,monospace}
+figure.code{margin:0 0 16px;position:relative;background:var(--codebg);
+border:1px solid var(--line);border-radius:10px}
+figure.code pre{margin:0;padding:15px 16px;overflow-x:auto}
+figure.code code{background:none;padding:0;font-size:12.9px;line-height:1.62}
+.lang{position:absolute;top:0;right:0;font:11px ui-monospace,monospace;
+color:var(--mut);padding:5px 10px;text-transform:lowercase}
+.tablewrap{overflow-x:auto;margin:0 0 18px;border:1px solid var(--line);
+border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14.2px}
+th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line);
+vertical-align:top}
+th{background:var(--codebg);font-weight:600;font-size:12.4px;
+text-transform:uppercase;letter-spacing:.045em;color:var(--mut)}
+tr:last-child td{border-bottom:none}
+@media (max-width:820px){.shell{grid-template-columns:1fr;gap:22px;padding:32px 18px 72px}
+nav{position:static;border-left:none;border-top:1px solid var(--line);
+padding:14px 0 0;columns:2}}
+</style></head><body><div class="shell"><nav><a href="#before-you-start">Before You Start</a><a href="#file-structure">File Structure</a><a href="#task-1-metal-feasibility-spike-throwaway">Task 1: Metal feasibility spike (throwaway)</a><a href="#task-2-readervisual-enum">Task 2: `ReaderVisual` enum</a><a href="#task-3-persist-the-visual-choice-and-its-opacity">Task 3: Persist the visual choice and its opacity</a><a href="#task-4-extract-the-phase-colour-table">Task 4: Extract the phase→colour table</a><a href="#task-5-phase-modulation-and-safety-caps">Task 5: Phase modulation and safety caps</a><a href="#task-6-the-four-shaders">Task 6: The four shaders</a><a href="#task-7-the-swiftui-layer">Task 7: The SwiftUI layer</a><a href="#task-8-wire-the-layer-into-the-player">Task 8: Wire the layer into the player</a><a href="#task-9-settings">Task 9: Settings</a><a href="#task-10-on-device-verification">Task 10: On-device verification</a><a href="#self-review">Self-Review</a></nav><main><h1>Reader Hypnotic Visuals Implementation Plan</h1>
+<p>&gt; <strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+<p><strong>Goal:</strong> Give the TextTrance RSVP reader four Metal-shader hypnotic backgrounds with a user-adjustable opacity, where the word stays legible because each shader fades itself out of a word-shaped ellipse.</p>
+<p><strong>Architecture:</strong> <code>ReaderDisplayPreferences</code> stores the chosen <code>ReaderVisual</code> and its opacity. A pure <code>ReaderVisualModulator</code> turns the session's current <code>TrancePhase</code> and <code>speedMultiplier</code> into a <code>ReaderVisualModulation</code> (tint, speed, amplitude) and enforces every safety cap. <code>ReaderVisualLayer</code> feeds that into one of four <code>[[stitchable]]</code> fragment shaders via <code>TimelineView</code> + <code>.colorEffect</code>, and sits between the reader's flat background and its word layer.</p>
+<p><strong>Tech Stack:</strong> SwiftUI (iOS 26 / macOS 26), Metal fragment shaders via SwiftUI's <code>Shader</code> API, Swift Testing, <code>xcodebuild</code>.</p>
+<p><strong>Spec:</strong> <a href="../specs/2026-08-01-reader-hypnotic-visuals-design.md"><code>docs/superpowers/specs/2026-08-01-reader-hypnotic-visuals-design.md</code></a></p>
+<p>---</p>
+<details open id="before-you-start"><summary><h2>Before You Start</h2></summary><div class="body">
+<h3>Corrections to the spec</h3>
+<p>The spec has one inaccuracy, found while writing this plan. <strong>Follow this plan, not the spec, where they disagree:</strong></p>
+<ul><li>Spec §6 says the settings UI uses "a labelled chip row reusing the drawer's existing chip idiom". That is wrong. <code>ReaderSettingsDrawer</code> is a SwiftUI <code>Form</code> of <code>Section</code>s built from <code>Picker</code>, <code>Slider</code>, and <code>LabeledContent</code> (see <code>ReaderDisplayFormSection</code>). Task 9 uses a <code>Picker</code> + <code>Slider</code> to match. There is no chip idiom in that file.</li></ul>
+<h3>Commands you will use</h3>
+<p>Simulator destinations are <strong>ambiguous by name</strong> on this machine — there are 5 devices called <code>iPhone 17</code> and 5 called <code>iPhone 17 Pro</code>. If <code>xcodebuild</code> errors on ambiguity, get a concrete UDID:</p>
+<figure class="code"><span class="lang">bash</span><pre><code>xcrun simctl list devices available | grep "iPhone 17"</code></pre></figure>
+<p>and substitute <code>-destination 'platform=iOS Simulator,id=&lt;UDID&gt;'</code>.</p>
+<figure class="code"><span class="lang">bash</span><pre><code># iOS unit tests (single suite)
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/&lt;SuiteName&gt; 2&gt;&amp;1 | grep -E "Test case|TEST (SUCCEEDED|FAILED)|error:"
+
+# iOS build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build 2&gt;&amp;1 | grep -E "error:|BUILD"
+
+# Native macOS build — REQUIRED, this project ships macOS as first-class
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=macOS,arch=arm64' build 2&gt;&amp;1 | grep -E "error:|BUILD"</code></pre></figure>
+<h3>Known pre-existing test failures — do not chase these</h3>
+<p>Running the whole <code>IlumionateTests</code> suite shows 5 failures that are timing-sensitive and pass in isolation, unrelated to this work: <code>PlayerControlsVisibilityTests/idleTimerHides</code>, <code>.../closingDrawerReArmsTimer</code>, <code>.../interactionPostponesHide</code>, <code>AudioImportWorkerTests/slowFileTransferDoesNotBlockMainActor</code>, <code>AudioLibraryStoreTests/savingLargeLibraryDoesNotBlockMainActor</code>, <code>StagedAnalysisPipelineTests/keepsWhisperPrefetchOutOfContentAnalysis</code>. Prefer <code>-only-testing:</code> on your own suites.</p>
+<h3>Branch first</h3>
+<p>You are likely on <code>main</code>. Create a branch before Task 1:</p>
+<figure class="code"><span class="lang">bash</span><pre><code>git checkout -b feature/reader-hypnotic-visuals</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="file-structure"><summary><h2>File Structure</h2></summary><div class="body">
+<p><strong>Create:</strong></p>
+<div class="tablewrap"><table><thead><tr><th>Path</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>Ilumionate/TextTrance/Visuals/ReaderVisual.swift</code></td><td>The effect enum: cases, display names, shader names</td></tr><tr><td><code>Ilumionate/TextTrance/Visuals/TrancePhase+Atmosphere.swift</code></td><td>The single phase→colour table, extracted from the player view</td></tr><tr><td><code>Ilumionate/TextTrance/Visuals/ReaderVisualModulation.swift</code></td><td>Pure modulation + all safety caps</td></tr><tr><td><code>Ilumionate/TextTrance/Visuals/ReaderVisualLayer.swift</code></td><td>SwiftUI wrapper feeding the shaders</td></tr><tr><td><code>Ilumionate/TextTrance/Visuals/ReaderVisuals.metal</code></td><td>Four fragment shaders + the shared <code>centreFade</code></td></tr><tr><td><code>IlumionateTests/ReaderVisualTests.swift</code></td><td>Enum metadata invariants</td></tr><tr><td><code>IlumionateTests/ReaderVisualModulatorTests.swift</code></td><td>Modulation + safety caps</td></tr></tbody></table></div>
+<p><strong>Modify:</strong></p>
+<div class="tablewrap"><table><thead><tr><th>Path</th><th>Change</th></tr></thead><tbody><tr><td><code>Ilumionate/TextTrance/ReaderDisplayPreferences.swift</code></td><td>Add <code>visual</code>, <code>visualOpacity</code>, range, clamp, back-compat decode</td></tr><tr><td><code>Ilumionate/TextTrance/TextTrancePlayerView.swift</code></td><td>Insert the layer; delete local <code>phaseColor</code>, call the extracted one</td></tr><tr><td><code>Ilumionate/TextTrance/ReaderSettingsDrawer.swift</code></td><td>Add the Visual section</td></tr><tr><td><code>IlumionateTests/ReaderColorModeTests.swift</code></td><td>Extend legacy-decode coverage for the new fields</td></tr></tbody></table></div>
+<p>---</p>
+</div></details>
+<details open id="task-1-metal-feasibility-spike-throwaway"><summary><h2>Task 1: Metal feasibility spike (throwaway)</h2></summary><div class="body">
+<p>This project has <strong>no <code>.metal</code> file, no <code>import Metal</code>, and no <code>ShaderLibrary</code> usage</strong>. A missing shader function fails at <em>runtime</em>, not build time, so prove the toolchain works before writing four effects.</p>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>Ilumionate/TextTrance/Visuals/SpikeShader.metal</code> (deleted in step 7)</li><li>Create: <code>Ilumionate/TextTrance/Visuals/SpikeShaderView.swift</code> (deleted in step 7)</li></ul>
+<ul><li>[ ] <strong>Step 1: Create the directory and a trivial shader</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>mkdir -p Ilumionate/TextTrance/Visuals</code></pre></figure>
+<p><code>Ilumionate/TextTrance/Visuals/SpikeShader.metal</code>:</p>
+<figure class="code"><span class="lang">metal</span><pre><code>#include &lt;metal_stdlib&gt;
+#include &lt;SwiftUI/SwiftUI_Metal.h&gt;
+using namespace metal;
+
+// Throwaway: proves .metal files compile into this target and that
+// ShaderLibrary can resolve a stitchable function at runtime.
+[[ stitchable ]] half4 spikeFill(float2 pos, half4 color, float2 size, float time) {
+    float2 uv = pos / size;
+    half v = half(0.5 + 0.5 * sin(time + uv.x * 6.0));
+    return half4(v, v * 0.4h, 1.0h - v, 1.0h);
+}</code></pre></figure>
+<ul><li>[ ] <strong>Step 2: Create a temporary preview host</strong></li></ul>
+<p><code>Ilumionate/TextTrance/Visuals/SpikeShaderView.swift</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>import SwiftUI
+
+/// Throwaway spike host. Deleted at the end of Task 1.
+struct SpikeShaderView: View {
+    var body: some View {
+        GeometryReader { proxy in
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                Rectangle()
+                    .foregroundStyle(.black)
+                    .colorEffect(
+                        ShaderLibrary.spikeFill(
+                            .float2(proxy.size),
+                            .float(Float(t.truncatingRemainder(dividingBy: 3600)))
+                        )
+                    )
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+#Preview { SpikeShaderView() }</code></pre></figure>
+<ul><li>[ ] <strong>Step 3: Build for iOS</strong></li></ul>
+<p>Run:</p>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build 2&gt;&amp;1 | grep -E "error:|BUILD"</code></pre></figure>
+<p>Expected: <code>** BUILD SUCCEEDED **</code>.</p>
+<p>If you instead see an error about <code>SwiftUI_Metal.h</code> not being found, the header include is wrong for this SDK — try <code>#include &lt;SwiftUI/SwiftUI.h&gt;</code> removed entirely and keep only <code>metal_stdlib</code>, since <code>[[stitchable]]</code> needs no extra header on iOS 26. Re-run.</p>
+<ul><li>[ ] <strong>Step 4: Build for native macOS</strong></li></ul>
+<p>Run:</p>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=macOS,arch=arm64' build 2&gt;&amp;1 | grep -E "error:|BUILD"</code></pre></figure>
+<p>Expected: <code>** BUILD SUCCEEDED **</code>.</p>
+<ul><li>[ ] <strong>Step 5: Confirm the shader actually resolves at runtime</strong></li></ul>
+<p>A build success does <strong>not</strong> prove <code>ShaderLibrary</code> can find the function. Verify visually.</p>
+<p>Temporarily render the spike as the reader background by adding it as the first child of the <code>ZStack</code> in <code>TextTrancePlayerView.body</code> (line 53), directly after <code>displayPrefs.adjustedBackground.ignoresSafeArea()</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>SpikeShaderView()</code></pre></figure>
+<p>Then build, install, launch, open the Read tab, and start any script. Take a screenshot.</p>
+<p>Expected: an animated blue/orange vertical gradient behind the word.</p>
+<p><strong>If the screen is black instead:</strong> <code>ShaderLibrary</code> did not resolve <code>spikeFill</code>. The <code>.metal</code> file is not being compiled into the target. Stop and report — the fallback is the <code>TimelineView</code> + <code>Canvas</code> approach from the spec's Risks section, which changes Tasks 6 and 7 only.</p>
+<ul><li>[ ] <strong>Step 6: Remove the temporary line from the player view</strong></li></ul>
+<p>Delete the <code>SpikeShaderView()</code> line you added in step 5.</p>
+<ul><li>[ ] <strong>Step 7: Delete the spike files and commit the directory decision</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>rm Ilumionate/TextTrance/Visuals/SpikeShader.metal
+rm Ilumionate/TextTrance/Visuals/SpikeShaderView.swift</code></pre></figure>
+<p>Nothing to commit yet — the spike leaves no trace. Record in your notes that Metal works, then proceed.</p>
+<p>---</p>
+</div></details>
+<details open id="task-2-readervisual-enum"><summary><h2>Task 2: <code>ReaderVisual</code> enum</h2></summary><div class="body">
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>Ilumionate/TextTrance/Visuals/ReaderVisual.swift</code></li><li>Test: <code>IlumionateTests/ReaderVisualTests.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Write the failing test</strong></li></ul>
+<p><code>IlumionateTests/ReaderVisualTests.swift</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>//
+//  ReaderVisualTests.swift
+//  IlumionateTests
+//
+
+import Testing
+@testable import Ilumionate
+
+struct ReaderVisualTests {
+
+    @Test("Every case has a non-empty display name")
+    func displayNames() {
+        for visual in ReaderVisual.allCases {
+            #expect(visual.displayName.isEmpty == false)
+        }
+    }
+
+    @Test("Only shader-backed cases carry a shader name")
+    func shaderNames() {
+        #expect(ReaderVisual.none.shaderName == nil)
+        #expect(ReaderVisual.breath.shaderName == nil)
+        #expect(ReaderVisual.spiral.shaderName == "readerSpiral")
+        #expect(ReaderVisual.tunnel.shaderName == "readerTunnel")
+        #expect(ReaderVisual.moire.shaderName == "readerMoire")
+        #expect(ReaderVisual.drift.shaderName == "readerDrift")
+    }
+
+    @Test("Shader names are unique")
+    func shaderNamesUnique() {
+        let names = ReaderVisual.allCases.compactMap(\.shaderName)
+        #expect(Set(names).count == names.count)
+    }
+
+    @Test("Raw values are stable for persistence")
+    func rawValues() {
+        #expect(ReaderVisual.allCases.map(\.rawValue)
+                == ["none", "breath", "spiral", "tunnel", "moire", "drift"])
+    }
+}</code></pre></figure>
+<ul><li>[ ] <strong>Step 2: Run the test to verify it fails</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/ReaderVisualTests 2&gt;&amp;1 | grep -E "error:|TEST"</code></pre></figure>
+<p>Expected: build failure, <code>cannot find 'ReaderVisual' in scope</code>.</p>
+<ul><li>[ ] <strong>Step 3: Write the implementation</strong></li></ul>
+<p><code>Ilumionate/TextTrance/Visuals/ReaderVisual.swift</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>//  ReaderVisual.swift
+//  Ilumionate
+//
+//  The reader's animated background choices. `.none` and `.breath` are handled
+//  without a shader — `.breath` is the phase-tinted radial glow the reader has
+//  always had, kept as a named option so it can stay the default.
+
+import Foundation
+
+enum ReaderVisual: String, Codable, CaseIterable, Identifiable, Sendable {
+    case none
+    case breath
+    case spiral
+    case tunnel
+    case moire
+    case drift
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none:   return "None"
+        case .breath: return "Breath"
+        case .spiral: return "Spiral"
+        case .tunnel: return "Tunnel"
+        case .moire:  return "Moiré"
+        case .drift:  return "Drift"
+        }
+    }
+
+    /// The `[[stitchable]]` Metal function backing this visual, or nil when the
+    /// effect is rendered without a shader. This is the ONLY place shader names
+    /// are written — `ShaderLibrary` resolves them at runtime, so a typo here is
+    /// a blank background rather than a build error.
+    var shaderName: String? {
+        switch self {
+        case .none, .breath: return nil
+        case .spiral:        return "readerSpiral"
+        case .tunnel:        return "readerTunnel"
+        case .moire:         return "readerMoire"
+        case .drift:         return "readerDrift"
+        }
+    }
+
+    /// A one-line description for the settings row.
+    var summary: String {
+        switch self {
+        case .none:   return "Flat background"
+        case .breath: return "Slow phase-tinted glow"
+        case .spiral: return "Rotating arms"
+        case .tunnel: return "Rings falling inward"
+        case .moire:  return "Interfering rings"
+        case .drift:  return "Particles on a slow vortex"
+        }
+    }
+}</code></pre></figure>
+<ul><li>[ ] <strong>Step 4: Run the test to verify it passes</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/ReaderVisualTests 2&gt;&amp;1 | grep -E "Test case|TEST"</code></pre></figure>
+<p>Expected: 4 tests pass, <code>** TEST SUCCEEDED **</code>.</p>
+<ul><li>[ ] <strong>Step 5: Commit</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>git add Ilumionate/TextTrance/Visuals/ReaderVisual.swift IlumionateTests/ReaderVisualTests.swift
+git commit -m "feat(reader): add ReaderVisual effect enum"</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="task-3-persist-the-visual-choice-and-its-opacity"><summary><h2>Task 3: Persist the visual choice and its opacity</h2></summary><div class="body">
+<p><strong>Files:</strong></p>
+<ul><li>Modify: <code>Ilumionate/TextTrance/ReaderDisplayPreferences.swift</code></li><li>Test: <code>IlumionateTests/ReaderColorModeTests.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Write the failing tests</strong></li></ul>
+<p>Append inside the <code>ReaderColorModeTests</code> struct in <code>IlumionateTests/ReaderColorModeTests.swift</code>, before the closing brace:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>    // MARK: - Reader Visuals
+
+    @Test("Default visual is breath at 0.35 opacity")
+    func visualDefaults() {
+        #expect(ReaderDisplayPreferences.standard.visual == .breath)
+        #expect(ReaderDisplayPreferences.standard.visualOpacity == 0.35)
+    }
+
+    @Test("Legacy persisted JSON without visual fields decodes to the defaults")
+    func legacyVisualDecoding() throws {
+        let legacy = """
+        {"theme":"void","font":"monospaced","fontScale":1.0,"lineSpacing":1.0,
+         "orpColor":"teal","backgroundBrightness":0.5,"hideControls":false,
+         "dyslexiaFriendly":false,"colorMode":"followApp"}
+        """.data(using: .utf8)!
+        let prefs = try JSONDecoder().decode(ReaderDisplayPreferences.self, from: legacy)
+        #expect(prefs.visual == .breath)
+        #expect(prefs.visualOpacity == 0.35)
+    }
+
+    @Test("Visual fields round-trip through Codable")
+    func visualRoundTrip() throws {
+        var prefs = ReaderDisplayPreferences.standard
+        prefs.visual = .moire
+        prefs.visualOpacity = 0.7
+        let data = try JSONEncoder().encode(prefs)
+        let decoded = try JSONDecoder().decode(ReaderDisplayPreferences.self, from: data)
+        #expect(decoded.visual == .moire)
+        #expect(decoded.visualOpacity == 0.7)
+    }
+
+    @Test("Visual opacity clamps to its range at both bounds")
+    func visualOpacityClamps() {
+        var prefs = ReaderDisplayPreferences.standard
+        prefs.visualOpacity = 5.0
+        #expect(prefs.clampedVisualOpacity == ReaderDisplayPreferences.visualOpacityRange.upperBound)
+        prefs.visualOpacity = -3.0
+        #expect(prefs.clampedVisualOpacity == ReaderDisplayPreferences.visualOpacityRange.lowerBound)
+    }</code></pre></figure>
+<ul><li>[ ] <strong>Step 2: Run the tests to verify they fail</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/ReaderColorModeTests 2&gt;&amp;1 | grep -E "error:|TEST"</code></pre></figure>
+<p>Expected: build failure, <code>value of type 'ReaderDisplayPreferences' has no member 'visual'</code>.</p>
+<ul><li>[ ] <strong>Step 3: Add the stored properties</strong></li></ul>
+<p>In <code>Ilumionate/TextTrance/ReaderDisplayPreferences.swift</code>, add two properties after <code>colorMode</code> (line 17):</p>
+<figure class="code"><span class="lang">swift</span><pre><code>    var visual: ReaderVisual
+    var visualOpacity: Double</code></pre></figure>
+<p>Extend the memberwise <code>init</code> signature — add these two parameters after <code>colorMode</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>         colorMode: ReaderColorMode = .followApp,
+         visual: ReaderVisual = .breath,
+         visualOpacity: Double = 0.35) {</code></pre></figure>
+<p>and assign them at the end of the init body:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>        self.visual = visual
+        self.visualOpacity = visualOpacity</code></pre></figure>
+<ul><li>[ ] <strong>Step 4: Extend <code>CodingKeys</code> and the custom decoder</strong></li></ul>
+<p>Add to <code>CodingKeys</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>        case visual, visualOpacity</code></pre></figure>
+<p>Add to <code>init(from:)</code>, after the <code>colorMode</code> line — <code>decodeIfPresent</code> is what keeps older stored preferences loading, exactly as <code>colorMode</code> already does:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>        visual = try c.decodeIfPresent(ReaderVisual.self, forKey: .visual) ?? .breath
+        visualOpacity = try c.decodeIfPresent(Double.self, forKey: .visualOpacity) ?? 0.35</code></pre></figure>
+<ul><li>[ ] <strong>Step 5: Add the range and clamp</strong></li></ul>
+<p>In the <code>extension ReaderDisplayPreferences</code> block, beside the other ranges:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>    /// Capped below 1.0 on purpose: at full strength even a centre-faded effect
+    /// starts competing with the word at the ellipse boundary.
+    static let visualOpacityRange: ClosedRange&lt;Double&gt; = 0.05...0.85
+
+    var clampedVisualOpacity: Double {
+        min(max(visualOpacity, Self.visualOpacityRange.lowerBound),
+            Self.visualOpacityRange.upperBound)
+    }</code></pre></figure>
+<ul><li>[ ] <strong>Step 6: Run the tests to verify they pass</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/ReaderColorModeTests 2&gt;&amp;1 | grep -E "Test case|TEST"</code></pre></figure>
+<p>Expected: all tests pass, including the 4 new ones.</p>
+<ul><li>[ ] <strong>Step 7: Commit</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>git add Ilumionate/TextTrance/ReaderDisplayPreferences.swift IlumionateTests/ReaderColorModeTests.swift
+git commit -m "feat(reader): persist visual choice and opacity"</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="task-4-extract-the-phase-colour-table"><summary><h2>Task 4: Extract the phase→colour table</h2></summary><div class="body">
+<p>The background tint and the word's glow must never disagree, so there can be only one table. It currently lives as a private computed property on <code>TextTrancePlayerView</code> (line 315).</p>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>Ilumionate/TextTrance/Visuals/TrancePhase+Atmosphere.swift</code></li><li>Modify: <code>Ilumionate/TextTrance/TextTrancePlayerView.swift</code></li><li>Test: <code>IlumionateTests/ReaderVisualTests.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Write the failing test</strong></li></ul>
+<p>Append inside <code>ReaderVisualTests</code>, before the closing brace:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>    // MARK: - Phase Atmosphere
+
+    @Test("Every phase resolves to an atmosphere colour")
+    func everyPhaseHasAtmosphere() {
+        for phase in TrancePhase.allCases {
+            #expect(phase.atmosphereColor != Color.clear)
+        }
+    }
+
+    @Test("Structural phases keep their established colours")
+    func knownPhaseColors() {
+        #expect(TrancePhase.induction.atmosphereColor == Color.phaseInduction)
+        #expect(TrancePhase.deepening.atmosphereColor == Color.phaseDeepener)
+        #expect(TrancePhase.emergence.atmosphereColor == Color.phaseAwakening)
+        #expect(TrancePhase.preTalk.atmosphereColor == Color.phaseIntro)
+    }</code></pre></figure>
+<p>Add <code>import SwiftUI</code> to the top of the file, beside the existing imports.</p>
+<ul><li>[ ] <strong>Step 2: Run the test to verify it fails</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/ReaderVisualTests 2&gt;&amp;1 | grep -E "error:|TEST"</code></pre></figure>
+<p>Expected: build failure, <code>value of type 'TrancePhase' has no member 'atmosphereColor'</code>.</p>
+<ul><li>[ ] <strong>Step 3: Create the extension</strong></li></ul>
+<p><code>Ilumionate/TextTrance/Visuals/TrancePhase+Atmosphere.swift</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>//  TrancePhase+Atmosphere.swift
+//  Ilumionate
+//
+//  The single phase→colour table for the reader. Both the background visual and
+//  the word's glow read this, so they can never drift apart.
+
+import SwiftUI
+
+extension TrancePhase {
+    var atmosphereColor: Color {
+        switch self {
+        case .preTalk, .transitional:    return .phaseIntro
+        case .induction:                 return .phaseInduction
+        case .deepening:                 return .phaseDeepener
+        case .fractionation, .confusion: return .phaseFractionation
+        case .suggestions, .therapy, .eroticSuggestions, .conditioning, .brainwashing:
+            return .phaseSuggestion
+        case .emergence:                 return .phaseAwakening
+        }
+    }
+}</code></pre></figure>
+<ul><li>[ ] <strong>Step 4: Point the player view at it</strong></li></ul>
+<p>In <code>Ilumionate/TextTrance/TextTrancePlayerView.swift</code>, delete the whole private <code>phaseColor</code> computed property (lines 314–325, including its doc comment) and replace it with a forwarding property so the four existing call sites keep working unchanged:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>    /// Atmosphere + word-glow color for the current reading phase.
+    private var phaseColor: Color { session.currentPhase.atmosphereColor }</code></pre></figure>
+<ul><li>[ ] <strong>Step 5: Run the test to verify it passes</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/ReaderVisualTests 2&gt;&amp;1 | grep -E "Test case|TEST"</code></pre></figure>
+<p>Expected: 6 tests pass.</p>
+<ul><li>[ ] <strong>Step 6: Commit</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>git add Ilumionate/TextTrance/Visuals/TrancePhase+Atmosphere.swift \
+        Ilumionate/TextTrance/TextTrancePlayerView.swift \
+        IlumionateTests/ReaderVisualTests.swift
+git commit -m "refactor(reader): extract the phase atmosphere colour table"</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="task-5-phase-modulation-and-safety-caps"><summary><h2>Task 5: Phase modulation and safety caps</h2></summary><div class="body">
+<p>This is where the coverage lives, because shader source cannot be unit-tested.</p>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>Ilumionate/TextTrance/Visuals/ReaderVisualModulation.swift</code></li><li>Test: <code>IlumionateTests/ReaderVisualModulatorTests.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Write the failing tests</strong></li></ul>
+<p><code>IlumionateTests/ReaderVisualModulatorTests.swift</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>//
+//  ReaderVisualModulatorTests.swift
+//  IlumionateTests
+//
+
+import Testing
+import SwiftUI
+@testable import Ilumionate
+
+struct ReaderVisualModulatorTests {
+
+    @Test("Speed never leaves the safe band, for any phase at any pace")
+    func speedAlwaysInBand() {
+        for phase in TrancePhase.allCases {
+            for multiplier in [-10.0, 0.0, 0.25, 1.0, 4.0, 1_000.0] {
+                let m = ReaderVisualModulator.modulation(
+                    for: phase, speedMultiplier: multiplier, reduceMotion: false
+                )
+                #expect(ReaderVisualModulator.speedBand.contains(m.speed))
+            }
+        }
+    }
+
+    @Test("Amplitude never leaves its band")
+    func amplitudeAlwaysInBand() {
+        for phase in TrancePhase.allCases {
+            let m = ReaderVisualModulator.modulation(
+                for: phase, speedMultiplier: 1.0, reduceMotion: false
+            )
+            #expect(ReaderVisualModulator.amplitudeBand.contains(m.amplitude))
+        }
+    }
+
+    @Test("Reduce Motion pins speed to zero for every phase")
+    func reduceMotionFreezes() {
+        for phase in TrancePhase.allCases {
+            let m = ReaderVisualModulator.modulation(
+                for: phase, speedMultiplier: 2.0, reduceMotion: true
+            )
+            #expect(m.speed == 0)
+        }
+    }
+
+    @Test("Reduce Motion still reports the phase tint")
+    func reduceMotionKeepsTint() {
+        let m = ReaderVisualModulator.modulation(
+            for: .deepening, speedMultiplier: 1.0, reduceMotion: true
+        )
+        #expect(m.tint == Color.phaseDeepener)
+    }
+
+    @Test("Amplitude deepens through the arc and eases off at emergence")
+    func amplitudeFollowsTheArc() {
+        func amp(_ phase: TrancePhase) -&gt; Double {
+            ReaderVisualModulator.modulation(
+                for: phase, speedMultiplier: 1.0, reduceMotion: false
+            ).amplitude
+        }
+        #expect(amp(.preTalk) &lt; amp(.induction))
+        #expect(amp(.induction) &lt; amp(.deepening))
+        #expect(amp(.deepening) &lt; amp(.fractionation))
+        #expect(amp(.emergence) &lt; amp(.deepening))
+    }
+
+    @Test("A faster reading pace yields a faster visual")
+    func paceRaisesSpeed() {
+        let slow = ReaderVisualModulator.modulation(
+            for: .deepening, speedMultiplier: 0.5, reduceMotion: false
+        )
+        let fast = ReaderVisualModulator.modulation(
+            for: .deepening, speedMultiplier: 2.0, reduceMotion: false
+        )
+        #expect(fast.speed &gt; slow.speed)
+    }
+
+    @Test("Tint comes from the shared phase table")
+    func tintMatchesPhase() {
+        let m = ReaderVisualModulator.modulation(
+            for: .emergence, speedMultiplier: 1.0, reduceMotion: false
+        )
+        #expect(m.tint == TrancePhase.emergence.atmosphereColor)
+    }
+}</code></pre></figure>
+<ul><li>[ ] <strong>Step 2: Run the tests to verify they fail</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/ReaderVisualModulatorTests 2&gt;&amp;1 | grep -E "error:|TEST"</code></pre></figure>
+<p>Expected: build failure, <code>cannot find 'ReaderVisualModulator' in scope</code>.</p>
+<ul><li>[ ] <strong>Step 3: Write the implementation</strong></li></ul>
+<p><code>Ilumionate/TextTrance/Visuals/ReaderVisualModulation.swift</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>//  ReaderVisualModulation.swift
+//  Ilumionate
+//
+//  Turns the session's reading phase and pace into the three values the shaders
+//  take. Every safety limit lives here rather than in Metal, so the caps are
+//  unit-testable and cannot be bypassed by editing a shader constant.
+
+import SwiftUI
+
+struct ReaderVisualModulation: Equatable, Sendable {
+    /// Phase tint, from the shared `TrancePhase.atmosphereColor` table.
+    let tint: Color
+    /// Normalised motion rate. Each shader interprets this for its own geometry;
+    /// see the per-effect rate comments in ReaderVisuals.metal.
+    let speed: Double
+    /// Pattern strength, 0…1.
+    let amplitude: Double
+
+    static let still = ReaderVisualModulation(tint: .phaseIntro, speed: 0, amplitude: 0.25)
+}
+
+enum ReaderVisualModulator {
+
+    /// Upper bound chosen so that every shader's fastest repeating feature stays
+    /// under 3 Hz at a fixed pixel — see the rate arithmetic beside each effect.
+    static let speedBand: ClosedRange&lt;Double&gt; = 0.05...0.45
+    static let amplitudeBand: ClosedRange&lt;Double&gt; = 0.25...1.0
+
+    static func modulation(
+        for phase: TrancePhase,
+        speedMultiplier: Double,
+        reduceMotion: Bool
+    ) -&gt; ReaderVisualModulation {
+        let tint = phase.atmosphereColor
+        let depth = depthWeight(for: phase)
+
+        guard reduceMotion == false else {
+            return ReaderVisualModulation(
+                tint: tint, speed: 0, amplitude: amplitude(for: depth)
+            )
+        }
+
+        // Reading pace nudges the visual, but depth dominates: a fast reader in
+        // pre-talk should still see something calm.
+        let pace = (min(max(speedMultiplier, 0.5), 2.0) - 0.5) / 1.5   // 0…1
+        let blend = depth * (0.7 + 0.3 * pace)
+
+        return ReaderVisualModulation(
+            tint: tint,
+            speed: clamp(
+                speedBand.lowerBound
+                    + (speedBand.upperBound - speedBand.lowerBound) * blend,
+                to: speedBand
+            ),
+            amplitude: amplitude(for: depth)
+        )
+    }
+
+    private static func amplitude(for depth: Double) -&gt; Double {
+        clamp(
+            amplitudeBand.lowerBound
+                + (amplitudeBand.upperBound - amplitudeBand.lowerBound) * depth,
+            to: amplitudeBand
+        )
+    }
+
+    /// How deep into trance a phase sits, 0…1. Drives both speed and amplitude
+    /// so the background intensifies with the script and eases off on the way out.
+    private static func depthWeight(for phase: TrancePhase) -&gt; Double {
+        switch phase {
+        case .preTalk:            return 0.10
+        case .emergence:          return 0.20
+        case .induction:          return 0.45
+        case .transitional:       return 0.50
+        case .suggestions:        return 0.62
+        case .therapy:            return 0.62
+        case .eroticSuggestions:  return 0.70
+        case .conditioning:       return 0.70
+        case .deepening:          return 0.78
+        case .brainwashing:       return 0.85
+        case .confusion:          return 0.92
+        case .fractionation:      return 0.95
+        }
+    }
+
+    private static func clamp(_ value: Double, to range: ClosedRange&lt;Double&gt;) -&gt; Double {
+        min(max(value, range.lowerBound), range.upperBound)
+    }
+}</code></pre></figure>
+<ul><li>[ ] <strong>Step 4: Run the tests to verify they pass</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/ReaderVisualModulatorTests 2&gt;&amp;1 | grep -E "Test case|TEST"</code></pre></figure>
+<p>Expected: 7 tests pass, <code>** TEST SUCCEEDED **</code>.</p>
+<ul><li>[ ] <strong>Step 5: Commit</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>git add Ilumionate/TextTrance/Visuals/ReaderVisualModulation.swift \
+        IlumionateTests/ReaderVisualModulatorTests.swift
+git commit -m "feat(reader): add phase modulation with capped motion"</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="task-6-the-four-shaders"><summary><h2>Task 6: The four shaders</h2></summary><div class="body">
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>Ilumionate/TextTrance/Visuals/ReaderVisuals.metal</code></li></ul>
+<p>There are no unit tests here — this is the untestable part, verified in Task 10.</p>
+<ul><li>[ ] <strong>Step 1: Write the shader file</strong></li></ul>
+<p><code>Ilumionate/TextTrance/Visuals/ReaderVisuals.metal</code>:</p>
+<figure class="code"><span class="lang">metal</span><pre><code>//  ReaderVisuals.metal
+//  Ilumionate
+//
+//  Reader background effects. Every function shares one uniform list —
+//  (size, time, tint, speed, amplitude) — so a mismatch between Swift and Metal
+//  is impossible by inspection. `speed` is the normalised value from
+//  ReaderVisualModulator, capped at 0.45.
+//
+//  SAFETY: each effect notes the per-pixel rate of its fastest repeating
+//  feature at speed = 0.45. All must stay under 3 Hz.
+
+#include &lt;metal_stdlib&gt;
+using namespace metal;
+
+static constant float kTau = 6.2831853;
+
+/// Erases the effect where the word sits. The word is pivot-anchored at the
+/// view's centre and is far wider than it is tall, so the protected region is a
+/// squashed ellipse. Every effect multiplies its alpha by this, which is why
+/// there is no scrim overlay anywhere in the reader.
+static half centreFade(float2 pos, float2 size) {
+    float2 d = (pos - size * 0.5) / (size * 0.5);
+    d.y /= 0.46;                     // wide-and-short protected region
+    return half(smoothstep(0.35, 1.0, length(d)));
+}
+
+/// Normalised radius, 0 at centre and 1 at the nearer edge.
+static float unitRadius(float2 pos, float2 size) {
+    return length(pos - size * 0.5) / (min(size.x, size.y) * 0.5);
+}
+
+/// Fades every effect out near the frame edges so nothing terminates abruptly.
+static half edgeFade(float r) {
+    return half(1.0 - smoothstep(0.85, 1.35, r));
+}
+
+static half4 composite(half4 tint, half alpha) {
+    // SwiftUI expects premultiplied colour out of a colorEffect shader.
+    return half4(tint.rgb * alpha, alpha);
+}
+
+// MARK: - Spiral
+// 5 arms × speed 0.45 = 2.25 Hz per pixel. Under 3 Hz.
+[[ stitchable ]] half4 readerSpiral(float2 pos, half4 color, float2 size,
+                                    float time, half4 tint,
+                                    float speed, float amplitude) {
+    float2 c = pos - size * 0.5;
+    float r = unitRadius(pos, size);
+    float a = atan2(c.y, c.x);
+    // The r term is what turns rays into a spiral.
+    float v = sin(a * 5.0 + r * 9.0 - time * speed * kTau);
+    half arms = half(smoothstep(0.0, 0.6, v));
+    half alpha = arms * edgeFade(r) * half(amplitude) * centreFade(pos, size);
+    return composite(tint, alpha);
+}
+
+// MARK: - Tunnel
+// 6 rings × speed 0.45 = 2.7 Hz per pixel. Under 3 Hz.
+[[ stitchable ]] half4 readerTunnel(float2 pos, half4 color, float2 size,
+                                    float time, half4 tint,
+                                    float speed, float amplitude) {
+    float r = unitRadius(pos, size);
+    // pow compresses rings toward the centre, which reads as depth.
+    float depth = pow(max(r, 0.02), 0.65);
+    float v = sin(kTau * (depth * 6.0 - time * speed * 6.0));
+    half rings = half(smoothstep(0.1, 0.75, v));
+    half alpha = rings * edgeFade(r) * half(amplitude) * centreFade(pos, size);
+    return composite(tint, alpha);
+}
+
+// MARK: - Moiré
+// Motion here is the OFFSET drifting, not rings sweeping past. Ring density is
+// ~14 across the half-width, so a sweeping term would breach 3 Hz; the drifting
+// offset changes any pixel's local phase far more slowly.
+[[ stitchable ]] half4 readerMoire(float2 pos, half4 color, float2 size,
+                                   float time, half4 tint,
+                                   float speed, float amplitude) {
+    float2 centre = size * 0.5;
+    float2 offset = float2(sin(time * speed * 0.9), cos(time * speed * 0.7))
+                    * size.x * 0.06;
+    float k = kTau / (size.x / 14.0);
+    float v = sin(length(pos - centre - offset) * k)
+            * sin(length(pos - centre + offset) * k);
+    half interference = half(smoothstep(0.15, 0.85, v));
+    half alpha = interference * edgeFade(unitRadius(pos, size))
+               * half(amplitude) * centreFade(pos, size);
+    return composite(tint, alpha);
+}
+
+// MARK: - Drift
+// Positional motion only — no repeating full-frame luminance cycle, so the 3 Hz
+// ceiling does not bind here.
+static float hash11(float p) {
+    p = fract(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return fract(p);
+}
+
+[[ stitchable ]] half4 readerDrift(float2 pos, half4 color, float2 size,
+                                   float time, half4 tint,
+                                   float speed, float amplitude) {
+    float2 c = (pos - size * 0.5) / (min(size.x, size.y) * 0.5);
+    half acc = 0.0h;
+    for (int i = 0; i &lt; 18; i++) {
+        float fi = float(i);
+        float seed = hash11(fi + 1.0);
+        float radius = 0.25 + 0.70 * hash11(fi + 21.0);
+        float rate = 0.4 + 0.9 * seed;
+        float angle = seed * kTau + time * speed * rate;
+        float2 p = float2(cos(angle) * radius, sin(angle) * radius * 0.82);
+        float d = length(c - p);
+        acc += half(exp(-d * d * 320.0));
+    }
+    half alpha = min(acc, 1.0h) * half(amplitude) * centreFade(pos, size);
+    return composite(tint, alpha);
+}</code></pre></figure>
+<ul><li>[ ] <strong>Step 2: Build for iOS</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build 2&gt;&amp;1 | grep -E "error:|BUILD"</code></pre></figure>
+<p>Expected: <code>** BUILD SUCCEEDED **</code>.</p>
+<ul><li>[ ] <strong>Step 3: Build for native macOS</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=macOS,arch=arm64' build 2&gt;&amp;1 | grep -E "error:|BUILD"</code></pre></figure>
+<p>Expected: <code>** BUILD SUCCEEDED **</code>.</p>
+<ul><li>[ ] <strong>Step 4: Commit</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>git add Ilumionate/TextTrance/Visuals/ReaderVisuals.metal
+git commit -m "feat(reader): add four hypnotic background shaders"</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="task-7-the-swiftui-layer"><summary><h2>Task 7: The SwiftUI layer</h2></summary><div class="body">
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>Ilumionate/TextTrance/Visuals/ReaderVisualLayer.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Write the view</strong></li></ul>
+<p><code>Ilumionate/TextTrance/Visuals/ReaderVisualLayer.swift</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>//  ReaderVisualLayer.swift
+//  Ilumionate
+//
+//  Feeds a ReaderVisual's shader with the current modulation. Renders nothing
+//  for `.none` and `.breath` — `.breath` is the RadialGradient that already
+//  lives in TextTrancePlayerView.
+
+import SwiftUI
+
+struct ReaderVisualLayer: View {
+    let visual: ReaderVisual
+    let modulation: ReaderVisualModulation
+    let opacity: Double
+
+    var body: some View {
+        if let shaderName = visual.shaderName {
+            GeometryReader { proxy in
+                // paused: stops the schedule entirely when Reduce Motion pinned
+                // speed to zero, so the shader is evaluated once and never again.
+                TimelineView(.animation(paused: modulation.speed == 0)) { timeline in
+                    Rectangle()
+                        .foregroundStyle(.black)
+                        .colorEffect(
+                            ShaderLibrary[dynamicMember: shaderName](
+                                .float2(proxy.size),
+                                .float(Self.shaderTime(timeline.date)),
+                                .color(modulation.tint),
+                                .float(Float(modulation.speed)),
+                                .float(Float(modulation.amplitude))
+                            )
+                        )
+                }
+            }
+            .opacity(opacity)
+            .allowsHitTesting(false)
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// Seconds, wrapped hourly. An unwrapped absolute timestamp loses float
+    /// precision and the motion visibly stutters after a while.
+    private static func shaderTime(_ date: Date) -&gt; Float {
+        Float(date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3_600))
+    }
+}</code></pre></figure>
+<ul><li>[ ] <strong>Step 2: Build for iOS</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build 2&gt;&amp;1 | grep -E "error:|BUILD"</code></pre></figure>
+<p>Expected: <code>** BUILD SUCCEEDED **</code>.</p>
+<p>If <code>ShaderLibrary[dynamicMember:]</code> does not compile, replace that call with a <code>switch</code> over <code>visual</code> that uses the static form (<code>ShaderLibrary.readerSpiral(...)</code> and so on) with the identical argument list.</p>
+<ul><li>[ ] <strong>Step 3: Commit</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>git add Ilumionate/TextTrance/Visuals/ReaderVisualLayer.swift
+git commit -m "feat(reader): add the shader-backed visual layer view"</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="task-8-wire-the-layer-into-the-player"><summary><h2>Task 8: Wire the layer into the player</h2></summary><div class="body">
+<p><strong>Files:</strong></p>
+<ul><li>Modify: <code>Ilumionate/TextTrance/TextTrancePlayerView.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Add the modulation accessor</strong></li></ul>
+<p>Add beside the existing <code>displayPrefs</code> computed property (after line 31):</p>
+<figure class="code"><span class="lang">swift</span><pre><code>    /// Current modulation for the background visual. Reduce Motion is read from
+    /// the environment, so toggling it mid-session pauses the layer immediately.
+    private var visualModulation: ReaderVisualModulation {
+        ReaderVisualModulator.modulation(
+            for: session.currentPhase,
+            speedMultiplier: session.speedMultiplier,
+            reduceMotion: reduceMotion
+        )
+    }</code></pre></figure>
+<ul><li>[ ] <strong>Step 2: Insert the layer into the ZStack</strong></li></ul>
+<p>In <code>body</code>, immediately after <code>displayPrefs.adjustedBackground.ignoresSafeArea()</code> (line 54) and <strong>before</strong> the phase-atmosphere <code>RadialGradient</code>:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>            ReaderVisualLayer(
+                visual: displayPrefs.visual,
+                modulation: visualModulation,
+                opacity: displayPrefs.clampedVisualOpacity
+            )</code></pre></figure>
+<ul><li>[ ] <strong>Step 3: Stop the breath glow from doubling up</strong></li></ul>
+<p>The <code>RadialGradient</code> is the <code>.breath</code> visual. Gate it so it only draws when <code>.breath</code> is selected. Change its <code>phaseColor.opacity(...)</code> argument (lines 61–66) from:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>                    phaseColor.opacity(
+                        displayPrefs.theme.showsPhaseAtmosphere
+                            ? (backgroundPulse ? 0.24 : 0.10)
+                            : 0
+                    ),</code></pre></figure>
+<p>to:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>                    phaseColor.opacity(
+                        displayPrefs.theme.showsPhaseAtmosphere
+                            &amp;&amp; displayPrefs.visual == .breath
+                            ? (backgroundPulse ? 0.24 : 0.10)
+                            : 0
+                    ),</code></pre></figure>
+<ul><li>[ ] <strong>Step 4: Build for iOS and macOS</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build 2&gt;&amp;1 | grep -E "error:|BUILD"
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=macOS,arch=arm64' build 2&gt;&amp;1 | grep -E "error:|BUILD"</code></pre></figure>
+<p>Expected: <code>** BUILD SUCCEEDED **</code> for both.</p>
+<ul><li>[ ] <strong>Step 5: Commit</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>git add Ilumionate/TextTrance/TextTrancePlayerView.swift
+git commit -m "feat(reader): render the visual layer behind the word"</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="task-9-settings"><summary><h2>Task 9: Settings</h2></summary><div class="body">
+<p><strong>Files:</strong></p>
+<ul><li>Modify: <code>Ilumionate/TextTrance/ReaderSettingsDrawer.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Add the opacity binding</strong></li></ul>
+<p>In <code>private struct ReaderDisplayFormSection</code>, beside the other bindings (after <code>brightnessBinding</code>, line 205):</p>
+<figure class="code"><span class="lang">swift</span><pre><code>    private var visualOpacityBinding: Binding&lt;Double&gt; {
+        Binding(
+            get: { preferences.clampedVisualOpacity },
+            set: { preferences.visualOpacity = $0 }
+        )
+    }</code></pre></figure>
+<ul><li>[ ] <strong>Step 2: Add the Visual section</strong></li></ul>
+<p>In the same struct's <code>body</code>, add a new <code>Section</code> after the existing <code>Section("Reader display") { … }</code> closes:</p>
+<figure class="code"><span class="lang">swift</span><pre><code>        Section("Visual") {
+            Picker("Effect", selection: $preferences.visual) {
+                ForEach(ReaderVisual.allCases) {
+                    Text($0.displayName).tag($0)
+                }
+            }
+
+            Text(preferences.visual.summary)
+                .font(TranceTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+
+            if preferences.visual != .none {
+                LabeledContent(
+                    "Strength",
+                    value: preferences.clampedVisualOpacity
+                        .formatted(.percent.precision(.fractionLength(0)))
+                )
+                Slider(
+                    value: visualOpacityBinding,
+                    in: ReaderDisplayPreferences.visualOpacityRange
+                )
+            }
+        }</code></pre></figure>
+<p>Note <code>.formatted(.percent…)</code> rather than <code>String(format:)</code> — this project's CLAUDE.md forbids C-style number formatting. (The neighbouring line spacing row at line 230 predates that rule; leave it alone.)</p>
+<ul><li>[ ] <strong>Step 3: Build for iOS</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build 2&gt;&amp;1 | grep -E "error:|BUILD"</code></pre></figure>
+<p>Expected: <code>** BUILD SUCCEEDED **</code>.</p>
+<ul><li>[ ] <strong>Step 4: Commit</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>git add Ilumionate/TextTrance/ReaderSettingsDrawer.swift
+git commit -m "feat(reader): add visual effect and strength controls"</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="task-10-on-device-verification"><summary><h2>Task 10: On-device verification</h2></summary><div class="body">
+<p>The shaders have no unit tests. This is their acceptance gate, and it is not optional.</p>
+<p><strong>Files:</strong> none — verification only.</p>
+<ul><li>[ ] <strong>Step 1: Run every new suite together</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test -only-testing:IlumionateTests/ReaderVisualTests \
+       -only-testing:IlumionateTests/ReaderVisualModulatorTests \
+       -only-testing:IlumionateTests/ReaderColorModeTests 2&gt;&amp;1 | grep -E "Test case|TEST"</code></pre></figure>
+<p>Expected: all pass, <code>** TEST SUCCEEDED **</code>.</p>
+<ul><li>[ ] <strong>Step 2: Install and launch</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>D=$(xcrun simctl list devices booted | grep -oE '[0-9A-F-]{36}' | head -1)
+APP=$(find ~/Library/Developer/Xcode/DerivedData -name Ilumionate.app -path "*Debug-iphonesimulator*" | head -1)
+xcrun simctl install "$D" "$APP" &amp;&amp; xcrun simctl launch "$D" com.byronquine.lumenSync</code></pre></figure>
+<ul><li>[ ] <strong>Step 3: Walk the matrix and screenshot each combination</strong></li></ul>
+<p>Open the Read tab, start any script, open Settings, and check every box:</p>
+<div class="tablewrap"><table><thead><tr><th>Check</th><th>Pass condition</th></tr></thead><tbody><tr><td>Each of <code>spiral</code>, <code>tunnel</code>, <code>moire</code>, <code>drift</code> at strength 0.85</td><td>The word is fully legible; no effect intrudes inside the centre ellipse</td></tr><tr><td>Same four at strength 0.05</td><td>Effect is faint but visible, not absent</td></tr><tr><td><code>none</code></td><td>Flat background, no glow, no pattern</td></tr><tr><td><code>breath</code></td><td>The original slow phase glow, and <strong>only</strong> that — no shader pattern</td></tr><tr><td>Themes Void, Dusk, Dawn, Paper, Sepia, Contrast with <code>spiral</code> at 0.5</td><td>Legible on all six; note that Paper and Sepia set <code>showsPhaseAtmosphere == false</code>, which gates only <code>.breath</code>, so shader effects still draw there — confirm that reads acceptably</td></tr><tr><td>Centre-fade boundary</td><td>No hard seam or visible ellipse edge</td></tr><tr><td>Settings → Simulator → Accessibility → Reduce Motion ON</td><td>Pattern freezes to a still frame; no residual animation</td></tr><tr><td>Scrub the progress line across phases</td><td>Tint shifts with phase; shape does not change</td></tr></tbody></table></div>
+<ul><li>[ ] <strong>Step 4: Confirm the frame budget</strong></li></ul>
+<p>With <code>drift</code> (the heaviest — 18 blobs per pixel) at strength 0.85, watch the word timer for a full minute. Word transitions must stay even. If they stutter, reduce the loop count in <code>readerDrift</code> from 18 to 12 and re-check.</p>
+<ul><li>[ ] <strong>Step 5: Verify on native macOS</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=macOS,arch=arm64' build 2&gt;&amp;1 | grep -E "error:|BUILD"</code></pre></figure>
+<p>Then run the Mac app and repeat the spiral-at-0.5 check in one dark and one light theme. <code>.colorEffect</code> is supported on macOS, but this project ships it as a first-class destination so it must be seen working.</p>
+<ul><li>[ ] <strong>Step 6: Commit the verification note</strong></li></ul>
+<figure class="code"><span class="lang">bash</span><pre><code>git commit --allow-empty -m "test(reader): verify hypnotic visuals on iOS and macOS
+
+Walked the effect × strength × theme matrix, confirmed legibility at 0.85,
+Reduce Motion freezes to a still frame, and word pacing holds with drift."</code></pre></figure>
+<p>---</p>
+</div></details>
+<details open id="self-review"><summary><h2>Self-Review</h2></summary><div class="body">
+<p><strong>Spec coverage:</strong></p>
+<div class="tablewrap"><table><thead><tr><th>Spec section</th><th>Task</th></tr></thead><tbody><tr><td>§1 Data model (<code>ReaderVisual</code>, opacity, back-compat)</td><td>2, 3</td></tr><tr><td>§2 Effect roster</td><td>2 (metadata), 6 (shaders)</td></tr><tr><td>§3 Phase modulation + safety caps</td><td>5</td></tr><tr><td>§4 Shader layer + <code>centreFade</code></td><td>6</td></tr><tr><td>§5 SwiftUI wrapper + insertion point</td><td>7, 8</td></tr><tr><td>§6 Settings UI</td><td>9</td></tr><tr><td>Error handling — missing shader degrades to flat</td><td>2 (unique-name test), 10 (visual check)</td></tr><tr><td>Error handling — legacy prefs</td><td>3</td></tr><tr><td>Error handling — opacity clamp</td><td>3</td></tr><tr><td>Testing plan</td><td>2, 3, 5, 10</td></tr><tr><td>Risks — Metal integration</td><td>1</td></tr><tr><td>Shared phase→colour table (spec §3 refactor note)</td><td>4</td></tr></tbody></table></div>
+<p>No spec requirement is unimplemented.</p>
+<p><strong>Type consistency:</strong> <code>ReaderVisual.shaderName</code> values match the four <code>[[stitchable]]</code> function names in Task 6 exactly (<code>readerSpiral</code>, <code>readerTunnel</code>, <code>readerMoire</code>, <code>readerDrift</code>). <code>ReaderVisualModulation</code> fields (<code>tint</code>, <code>speed</code>, <code>amplitude</code>) are consumed in the same order and types by Task 7's argument list and Task 6's uniform lists. <code>ReaderVisualModulator.speedBand</code> / <code>.amplitudeBand</code> are referenced by name in Task 5's tests. <code>clampedVisualOpacity</code> and <code>visualOpacityRange</code> are defined in Task 3 and used in Tasks 8 and 9.</p>
+<p><strong>Deviation from spec, recorded:</strong> the settings UI uses <code>Form</code> + <code>Picker</code> + <code>Slider</code>, not a chip row — see Before You Start.</p>
+</div></details></main></div></body></html>
