@@ -15,6 +15,8 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
     var hideControls: Bool
     var dyslexiaFriendly: Bool
     var colorMode: ReaderColorMode
+    var visual: ReaderVisual
+    var visualOpacity: Double
 
     init(theme: ReaderTheme = .void,
          font: ReaderFont = .monospaced,
@@ -24,7 +26,9 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
          backgroundBrightness: Double = 0.5,
          hideControls: Bool = false,
          dyslexiaFriendly: Bool = false,
-         colorMode: ReaderColorMode = .followApp) {
+         colorMode: ReaderColorMode = .followApp,
+         visual: ReaderVisual = .breath,
+         visualOpacity: Double = 0.35) {
         self.theme = theme
         self.font = font
         self.fontScale = fontScale
@@ -34,11 +38,14 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
         self.hideControls = hideControls
         self.dyslexiaFriendly = dyslexiaFriendly
         self.colorMode = colorMode
+        self.visual = visual
+        self.visualOpacity = visualOpacity
     }
 
     private enum CodingKeys: String, CodingKey {
         case theme, font, fontScale, lineSpacing, orpColor
         case backgroundBrightness, hideControls, dyslexiaFriendly, colorMode
+        case visual, visualOpacity
     }
 
     // Custom decoder so prefs persisted before colorMode existed still load.
@@ -53,6 +60,8 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
         hideControls = try c.decode(Bool.self, forKey: .hideControls)
         dyslexiaFriendly = try c.decode(Bool.self, forKey: .dyslexiaFriendly)
         colorMode = try c.decodeIfPresent(ReaderColorMode.self, forKey: .colorMode) ?? .followApp
+        visual = try c.decodeIfPresent(ReaderVisual.self, forKey: .visual) ?? .breath
+        visualOpacity = try c.decodeIfPresent(Double.self, forKey: .visualOpacity) ?? 0.35
     }
 
     static let standard = ReaderDisplayPreferences()
@@ -201,6 +210,9 @@ extension ReaderDisplayPreferences {
     static let fontScaleRange: ClosedRange<Double> = 0.75...1.45
     static let lineSpacingRange: ClosedRange<Double> = 0.8...1.8
     static let backgroundBrightnessRange: ClosedRange<Double> = 0.2...0.9
+    /// Capped below 1.0 on purpose: at full strength even a centre-faded effect
+    /// starts competing with the word at the ellipse boundary.
+    static let visualOpacityRange: ClosedRange<Double> = 0.05...0.85
 
     var clampedFontScale: Double {
         min(max(fontScale, Self.fontScaleRange.lowerBound), Self.fontScaleRange.upperBound)
@@ -215,6 +227,11 @@ extension ReaderDisplayPreferences {
             max(backgroundBrightness, Self.backgroundBrightnessRange.lowerBound),
             Self.backgroundBrightnessRange.upperBound
         )
+    }
+
+    var clampedVisualOpacity: Double {
+        min(max(visualOpacity, Self.visualOpacityRange.lowerBound),
+            Self.visualOpacityRange.upperBound)
     }
 
     var effectiveFont: ReaderFont {

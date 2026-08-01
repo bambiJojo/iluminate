@@ -65,4 +65,44 @@ struct ReaderColorModeTests {
         #expect(ReaderTheme.dawn.showsPhaseAtmosphere == true)
         #expect(ReaderTheme.void.isDark == true)
     }
+
+    // MARK: - Reader Visuals
+
+    @Test("Default visual is breath at 0.35 opacity")
+    func visualDefaults() {
+        #expect(ReaderDisplayPreferences.standard.visual == .breath)
+        #expect(ReaderDisplayPreferences.standard.visualOpacity == 0.35)
+    }
+
+    @Test("Legacy persisted JSON without visual fields decodes to the defaults")
+    func legacyVisualDecoding() throws {
+        let legacy = """
+        {"theme":"void","font":"monospaced","fontScale":1.0,"lineSpacing":1.0,
+         "orpColor":"teal","backgroundBrightness":0.5,"hideControls":false,
+         "dyslexiaFriendly":false,"colorMode":"followApp"}
+        """.data(using: .utf8)!
+        let prefs = try JSONDecoder().decode(ReaderDisplayPreferences.self, from: legacy)
+        #expect(prefs.visual == .breath)
+        #expect(prefs.visualOpacity == 0.35)
+    }
+
+    @Test("Visual fields round-trip through Codable")
+    func visualRoundTrip() throws {
+        var prefs = ReaderDisplayPreferences.standard
+        prefs.visual = .moire
+        prefs.visualOpacity = 0.7
+        let data = try JSONEncoder().encode(prefs)
+        let decoded = try JSONDecoder().decode(ReaderDisplayPreferences.self, from: data)
+        #expect(decoded.visual == .moire)
+        #expect(decoded.visualOpacity == 0.7)
+    }
+
+    @Test("Visual opacity clamps to its range at both bounds")
+    func visualOpacityClamps() {
+        var prefs = ReaderDisplayPreferences.standard
+        prefs.visualOpacity = 5.0
+        #expect(prefs.clampedVisualOpacity == ReaderDisplayPreferences.visualOpacityRange.upperBound)
+        prefs.visualOpacity = -3.0
+        #expect(prefs.clampedVisualOpacity == ReaderDisplayPreferences.visualOpacityRange.lowerBound)
+    }
 }
