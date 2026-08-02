@@ -117,31 +117,8 @@ extension View {
         #endif
     }
 
-    @ViewBuilder
-    func platformFullScreenCover<Content: View>(
-        isPresented: Binding<Bool>,
-        onDismiss: (() -> Void)? = nil,
-        @ViewBuilder content: @escaping () -> Content
-    ) -> some View {
-        #if os(macOS)
-        sheet(isPresented: isPresented, onDismiss: onDismiss, content: content)
-        #else
-        fullScreenCover(isPresented: isPresented, onDismiss: onDismiss, content: content)
-        #endif
-    }
-
-    @ViewBuilder
-    func platformFullScreenCover<Item: Identifiable, Content: View>(
-        item: Binding<Item?>,
-        onDismiss: (() -> Void)? = nil,
-        @ViewBuilder content: @escaping (Item) -> Content
-    ) -> some View {
-        #if os(macOS)
-        sheet(item: item, onDismiss: onDismiss, content: content)
-        #else
-        fullScreenCover(item: item, onDismiss: onDismiss, content: content)
-        #endif
-    }
+    // `platformFullScreenCover` lives in PlatformFullScreenCover.swift — the
+    // macOS path needs window-sizing plumbing that does not belong here.
 
     @ViewBuilder
     func platformPagedTabViewStyle() -> some View {
