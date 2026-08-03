@@ -204,6 +204,13 @@ private struct ReaderDisplayFormSection: View {
         )
     }
 
+    private var visualOpacityBinding: Binding<Double> {
+        Binding(
+            get: { preferences.clampedVisualOpacity },
+            set: { preferences.visualOpacity = $0 }
+        )
+    }
+
     var body: some View {
         Section("Reader display") {
             Picker("Reader mode", selection: $preferences.colorMode) {
@@ -241,6 +248,30 @@ private struct ReaderDisplayFormSection: View {
 
             Toggle("Hide controls by default", isOn: $preferences.hideControls)
             Toggle("Dyslexia-friendly rendering", isOn: $preferences.dyslexiaFriendly)
+        }
+
+        Section("Visual") {
+            Picker("Effect", selection: $preferences.visual) {
+                ForEach(ReaderVisual.allCases) {
+                    Text($0.displayName).tag($0)
+                }
+            }
+
+            Text(preferences.visual.summary)
+                .font(TranceTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+
+            if preferences.visual != .none {
+                LabeledContent(
+                    "Strength",
+                    value: preferences.clampedVisualOpacity
+                        .formatted(.percent.precision(.fractionLength(0)))
+                )
+                Slider(
+                    value: visualOpacityBinding,
+                    in: ReaderDisplayPreferences.visualOpacityRange
+                )
+            }
         }
     }
 }

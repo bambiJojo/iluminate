@@ -20,6 +20,27 @@ The spec has one inaccuracy, found while writing this plan. **Follow this plan, 
 
 - Spec §6 says the settings UI uses "a labelled chip row reusing the drawer's existing chip idiom". That is wrong. `ReaderSettingsDrawer` is a SwiftUI `Form` of `Section`s built from `Picker`, `Slider`, and `LabeledContent` (see `ReaderDisplayFormSection`). Task 9 uses a `Picker` + `Slider` to match. There is no chip idiom in that file.
 
+### Findings from the Task 1 spike — these change Tasks 6 and 7
+
+The spike ran and produced three results that supersede parts of this plan:
+
+1. **Metal needs a toolchain component.** Xcode 26 ships the Metal compiler separately.
+   `xcodebuild -downloadComponent MetalToolchain` (688 MB) is now installed on this
+   machine, but the project has gained a build dependency: it will not compile
+   elsewhere, or on CI, without it.
+2. **Synchronized file groups pick up `.metal` automatically** — confirmed, no
+   `.xcodeproj` edits needed. Shaders compile and ship on both platforms
+   (`spikeFill` verified inside the macOS `default.metallib`).
+3. **Shaders render on macOS, but `GeometryReader` sizing failed inside the reader's
+   cover.** A spike placed at the top of the macOS sidebar's detail pane rendered
+   correctly; the same view inside the reader's window-filling sheet rendered nothing.
+   The differentiator is the sheet context, not the platform.
+   **Therefore Task 7 must NOT size the shader from a `GeometryReader`.** Use the
+   `Shader.Argument.boundingRect` argument, which SwiftUI fills with the view's bounds
+   automatically and does not depend on the surrounding layout resolving a proxy size.
+   Task 6's shaders accordingly take `float4 bounds` rather than `float2 size`, with
+   `bounds.zw` as the size.
+
 ### Commands you will use
 
 Simulator destinations are **ambiguous by name** on this machine — there are 5 devices called `iPhone 17` and 5 called `iPhone 17 Pro`. If `xcodebuild` errors on ambiguity, get a concrete UDID:

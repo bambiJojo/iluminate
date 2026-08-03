@@ -30,6 +30,16 @@ struct TextTrancePlayerView: View {
         session.displayPreferences.resolved(appColorScheme: appColorScheme)
     }
 
+    /// Current modulation for the background visual. Reduce Motion is read from
+    /// the environment, so toggling it mid-session pauses the layer immediately.
+    private var visualModulation: ReaderVisualModulation {
+        ReaderVisualModulator.modulation(
+            for: session.currentPhase,
+            speedMultiplier: session.speedMultiplier,
+            reduceMotion: reduceMotion
+        )
+    }
+
     @State private var backgroundPulse = false
     @State private var wordOpacity: Double = 1
     @State private var isScrubbing = false
@@ -53,14 +63,24 @@ struct TextTrancePlayerView: View {
         ZStack {
             displayPrefs.adjustedBackground.ignoresSafeArea()
 
+            ReaderVisualLayer(
+                visual: displayPrefs.visual,
+                modulation: visualModulation,
+                opacity: displayPrefs.clampedVisualOpacity
+            )
+
             // Phase-aware atmosphere: the glow color follows the current reading
             // phase (induction → teal, deepening → violet, …), crossfading slowly
             // as phases blend. A slow breath is layered on top. (NOT the
             // entrainment light layer — FlashController only runs post-handoff.)
             RadialGradient(
                 colors: [
+                    // This gradient IS the `.breath` visual, so it only draws
+                    // when breath is selected — otherwise it would double up
+                    // underneath whichever shader the listener chose.
                     phaseColor.opacity(
                         displayPrefs.theme.showsPhaseAtmosphere
+                            && displayPrefs.visual == .breath
                             ? (backgroundPulse ? 0.24 : 0.10)
                             : 0
                     ),
