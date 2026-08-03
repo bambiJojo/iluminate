@@ -428,6 +428,13 @@ private struct ReaderDisplayCard: View {
         )
     }
 
+    private var visualOpacityBinding: Binding<Double> {
+        Binding(
+            get: { preferences.clampedVisualOpacity },
+            set: { preferences.visualOpacity = $0 }
+        )
+    }
+
     var body: some View {
         LiminalCard(label: "Reader display") {
             VStack(spacing: TranceSpacing.list) {
@@ -471,6 +478,30 @@ private struct ReaderDisplayCard: View {
                     .tint(.roseGold)
                 Toggle("Dyslexia-friendly rendering", isOn: $preferences.dyslexiaFriendly)
                     .tint(.roseGold)
+
+                // Mirrors the Visual section in ReaderSettingsDrawer so the
+                // background can be chosen before a session starts, not only
+                // mid-read. Both surfaces bind the same preference fields.
+                SetupPickerRow(title: "Visual") {
+                    Picker("Visual", selection: $preferences.visual) {
+                        ForEach(ReaderVisual.allCases) {
+                            Text($0.displayName).tag($0)
+                        }
+                    }
+                }
+
+                SetupControlLabel(text: preferences.visual.summary)
+
+                if preferences.visual != .none {
+                    SetupControlLabel(
+                        text: "Strength \(preferences.clampedVisualOpacity.formatted(.percent.precision(.fractionLength(0))))"
+                    )
+                    Slider(
+                        value: visualOpacityBinding,
+                        in: ReaderDisplayPreferences.visualOpacityRange
+                    )
+                    .tint(.roseDeep)
+                }
             }
         }
     }
