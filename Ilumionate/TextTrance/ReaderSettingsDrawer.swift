@@ -204,12 +204,6 @@ private struct ReaderDisplayFormSection: View {
         )
     }
 
-    private var visualOpacityBinding: Binding<Double> {
-        Binding(
-            get: { preferences.clampedVisualOpacity },
-            set: { preferences.visualOpacity = $0 }
-        )
-    }
 
     var body: some View {
         Section("Reader display") {
@@ -251,27 +245,7 @@ private struct ReaderDisplayFormSection: View {
         }
 
         Section("Visual") {
-            Picker("Effect", selection: $preferences.visual) {
-                ForEach(ReaderVisual.allCases) {
-                    Text($0.displayName).tag($0)
-                }
-            }
-
-            Text(preferences.visual.summary)
-                .font(TranceTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-
-            if preferences.visual != .none {
-                LabeledContent(
-                    "Strength",
-                    value: preferences.clampedVisualOpacity
-                        .formatted(.percent.precision(.fractionLength(0)))
-                )
-                Slider(
-                    value: visualOpacityBinding,
-                    in: ReaderDisplayPreferences.visualOpacityRange
-                )
-            }
+            ReaderVisualControls(preferences: $preferences, style: .formSection)
         }
     }
 }
