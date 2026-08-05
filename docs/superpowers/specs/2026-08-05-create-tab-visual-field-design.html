@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Create Tab: Visual Field — Design</title>
+<style>
+:root {
+  --bg:#0e0b12; --panel:#161119; --line:#2b2333; --text:#ece6f2;
+  --muted:#9a8fa6; --accent:#e9b7ba; --accent2:#be96ff; --code:#120e17;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg:#faf7fb; --panel:#fff; --line:#e6dfe9; --text:#1d1721;
+    --muted:#6b6274; --accent:#a35c63; --accent2:#6b3fa0; --code:#f3eff5; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+.wrap { display:grid; grid-template-columns:250px minmax(0,1fr); gap:44px;
+  max-width:1180px; margin:0 auto; padding:56px 28px 120px; }
+nav { position:sticky; top:36px; align-self:start; font-size:13px; }
+nav .navtitle { text-transform:uppercase; letter-spacing:.12em; font-size:10px;
+  color:var(--muted); margin-bottom:12px; }
+nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 0;
+  border-left:2px solid transparent; padding-left:12px; }
+nav a:hover { color:var(--accent); border-left-color:var(--accent); }
+main { min-width:0; }
+h1 { font-size:clamp(30px,4vw,44px); line-height:1.12; letter-spacing:-.025em;
+  margin:0 0 28px; }
+h2 { font-size:26px; letter-spacing:-.015em; margin:56px 0 16px;
+  padding-bottom:10px; border-bottom:1px solid var(--line); }
+h3 { font-size:18px; margin:34px 0 10px; color:var(--accent); }
+h4 { font-size:15px; margin:24px 0 8px; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.07em; }
+p { margin:0 0 15px; }
+ul,ol { margin:0 0 16px; padding-left:22px; }
+li { margin-bottom:7px; }
+hr { border:0; border-top:1px solid var(--line); margin:44px 0; }
+code { font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:var(--code); padding:2px 6px; border-radius:5px; }
+pre.code { background:var(--code); border:1px solid var(--line);
+  border-radius:12px; padding:16px 18px; overflow-x:auto; margin:0 0 18px; }
+pre.code code { background:none; padding:0; font-size:13px; }
+.tablewrap { overflow-x:auto; margin:0 0 20px;
+  border:1px solid var(--line); border-radius:12px; }
+table { border-collapse:collapse; width:100%; font-size:14.5px; }
+th { text-align:left; padding:11px 15px; background:var(--panel);
+  font-weight:650; border-bottom:1px solid var(--line);
+  font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--muted); white-space:nowrap; }
+td { padding:11px 15px; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+tr:last-child td { border-bottom:0; }
+strong { color:var(--accent2); font-weight:640; }
+@media (max-width:900px) {
+  .wrap { grid-template-columns:1fr; gap:0; padding:32px 20px 80px; }
+  nav { position:static; margin-bottom:36px; }
+}
+</style></head><body>
+<div class="wrap">
+<nav><div class="navtitle">Contents</div><a href="#problem">Problem</a><a href="#what-we-are-building">What we are building</a><a href="#architecture">Architecture</a><a href="#the-create-tab">The Create tab</a><a href="#session-runtime">Session runtime</a><a href="#persistence">Persistence</a><a href="#failure-behaviour">Failure behaviour</a><a href="#testing">Testing</a><a href="#definition-of-done">Definition of done</a></nav>
+<main><h1 id="create-tab-visual-field-design">Create Tab: Visual Field — Design</h1>
+<p><strong>Date:</strong> 2026-08-05 <strong>Status:</strong> Approved, ready for planning <strong>Branch:</strong> <code>feature/reader-hypnotic-visuals</code></p>
+<h2 id="problem">Problem</h2>
+<p>Two problems, one surface.</p>
+<p><strong>The Create tab has drifted.</strong> <code>MindMachineView.swift</code> is 698 lines holding a model, eight subviews, a hand-rolled slider and a drawn phone illustration. Every control that decides what kind of session you get — visual mode, intensity, colour temperature, waveform, binaural — is buried inside a single <code>AdvancedControlsSection</code> disclosure that is collapsed by default. Meanwhile the reader and the player were rebuilt around a different grammar: 72pt <code>PlayerControlTile</code> targets, drag for continuous values with a haptic tick, a slot list that never reflows. Create never got that treatment.</p>
+<p><strong>There is no wordless visual session.</strong> The reader&#x27;s shader backgrounds — spiral, tunnel, moiré, drift, glass, linescape — only exist underneath moving words, modulated by reading phase and pace. There is no way to run the field on its own and no way to control it directly.</p>
+<h2 id="what-we-are-building">What we are building</h2>
+<p>A restructured Create tab whose four session kinds sit in a segmented row above a live preview and a tile tray, plus a new wordless <strong>Visual Field</strong> session driven by the reader&#x27;s existing shaders under direct user control.</p>
+<h3 id="decisions-taken-during-design">Decisions taken during design</h3>
+<div class="tablewrap"><table><thead><tr><th>Question</th><th>Decision</th></tr></thead><tbody><tr><td>What is the user doing?</td><td>Staring at it as the whole experience; optionally with audio playing</td></tr><tr><td>How deep does customisation go?</td><td>Effect, colour, speed, strength — plus direction. No presets, no evolution arcs</td></tr><tr><td>Tab structure</td><td>One screen, mode first. Not a hub with a push</td></tr><tr><td>What rides along</td><td>Both binaural <em>and</em> an optional library track</td></tr><tr><td>How it ends</td><td>Open-ended by default, optional timer</td></tr><tr><td>Colour control</td><td>Named palette plus a custom chip, with a luminance floor</td></tr><tr><td>Code sharing</td><td>Promote the reader&#x27;s visual system to a shared module</td></tr></tbody></table></div>
+<p>Explicitly <strong>out of scope</strong>: saved/named presets, per-session evolution arcs (a visual that deepens over ten minutes), gradient/two-colour tints, layering two effects, and audio-reactive visuals. Each is a reasonable follow-on; none is needed to ship this.</p>
+<h2 id="architecture">Architecture</h2>
+<h3 id="1-promote-the-visual-system-to-a-shared-module">1. Promote the visual system to a shared module</h3>
+<p><code>TextTrance/Visuals/</code> moves to top-level <code>Visuals/</code>, with types renamed to admit both callers:</p>
+<div class="tablewrap"><table><thead><tr><th>Today</th><th>After</th></tr></thead><tbody><tr><td><code>ReaderVisual</code></td><td><code>TranceVisual</code></td></tr><tr><td><code>ReaderVisualLayer</code></td><td><code>VisualFieldLayer</code></td></tr><tr><td><code>ReaderVisualModulation</code></td><td><code>VisualModulation</code></td></tr><tr><td><code>ReaderVisualModulator</code></td><td><code>ReadingVisualModulator</code></td></tr><tr><td><code>ReaderVisuals.metal</code></td><td><code>TranceVisuals.metal</code></td></tr></tbody></table></div>
+<p><code>ReaderVisualStrength</code> and <code>ReaderVisualControls</code> stay under <code>TextTrance/</code> — they are reader-surface concerns, not renderer concerns.</p>
+<p><strong>Why not the smaller diff.</strong> Leaving the stack under <code>TextTrance/</code> and importing <code>Reader*</code> types from the Create tab was considered and rejected: <code>ReaderVisualControls</code> opens with a comment about being &quot;the ONE place the reader&#x27;s background-visual settings are expressed&quot;, written after the visual picker drifted onto one surface and not the other. A second consumer under <code>TextTrance/</code> recreates that condition. Forking a Create-specific shader stack was also rejected — it means two copies of the photosensitivity ceiling, and the copy is what rots.</p>
+<p><strong>The rename is safe but not free.</strong> <code>TranceVisual</code> must keep its exact <code>String</code> raw values (<code>&quot;none&quot;</code>, <code>&quot;breath&quot;</code>, <code>&quot;spiral&quot;</code>, <code>&quot;tunnel&quot;</code>, <code>&quot;moire&quot;</code>, <code>&quot;drift&quot;</code>, <code>&quot;glass&quot;</code>, <code>&quot;linescape&quot;</code>). <code>ReaderDisplayPreferences.visual</code> persists them, and <code>ReaderPresetStore</code> decodes every script&#x27;s preset as one <code>[String: ReaderPreset]</code> blob — a raw-value change silently wipes every saved reader preference for every script. <code>ReaderVisualTests.rawValues()</code> already pins the array and is the guard on this; it survives the rename apart from the type name. Metal function names (<code>readerSpiral</code>, <code>readerTunnel</code>, …) also stay unchanged, because <code>shaderNames()</code> pins them to literals and <code>ShaderLibrary</code> resolves at runtime — a typo is a blank background, not a build error.</p>
+<h3 id="2-two-producers-one-modulation-struct">2. Two producers, one modulation struct</h3>
+<p><code>VisualModulation</code> (tint, speed, amplitude) is unchanged, including both safety bands (<code>speedBand</code> 0.05…0.45, <code>amplitudeBand</code> 0.25…1.0). It gains a second producer:</p>
+<ul><li><code>ReadingVisualModulator.modulation(for:speedMultiplier:reduceMotion:)</code> — unchanged, phase-driven, for the reader.</li><li><code>VisualFieldSettings.modulation(reduceMotion:)</code> — new, direct-driven, for Create.</li></ul>
+<pre class="code" data-lang="swift"><code>struct VisualFieldSettings: Codable, Equatable, Sendable {
+    var visual: TranceVisual        // default .spiral
+    var tint: VisualTint            // palette case or .custom(hex)
+    var speed: Double               // normalised 0…1, mapped into speedBand
+    var amplitude: Double           // normalised 0…1, mapped into amplitudeBand
+    var direction: VisualDirection  // .inward | .outward
+    var opacity: Double             // strength, clamped to visualOpacityRange
+    var duration: TimeInterval?     // nil == open-ended
+}</code></pre>
+<p><code>visualOpacityRange</code> (0.05…0.85) currently lives on <code>ReaderDisplayPreferences</code> but is the same kind of thing as <code>speedBand</code> and <code>amplitudeBand</code> — an appearance/safety band on the renderer, not a reader preference. It moves into the shared module alongside them, and the four reader call sites (<code>ReaderDisplayPreferences.clampedVisualOpacity</code>, <code>ReaderVisualStrength</code> ×2, <code>ReaderVisualControls</code>) update to the new home. The value does not change, so no persisted preference shifts.</p>
+<p>Speed and amplitude are stored <strong>normalised 0…1</strong> and mapped into the bands when the modulation is produced. This makes the photosensitivity cap unbypassable from the settings layer: a user at &quot;100% speed&quot; gets <code>speedBand.upperBound</code> (0.45), the same ceiling the reader&#x27;s deepest phase reaches — not an unbounded value.</p>
+<h3 id="3-direction">3. Direction</h3>
+<p><code>VisualDirection</code> is a new field on <code>VisualModulation</code>, carried to Metal as the <strong>sign of the <code>rate</code> argument</strong>. The shared phase rule in <code>TranceVisuals.metal</code> already reads:</p>
+<pre class="code" data-lang=""><code>phase = convergentDepth(r, turns) * density - time * speed * rate</code></pre>
+<p>A negative <code>rate</code> reverses convergence with no new uniform and no per-effect work.</p>
+<p><code>TranceVisual.motionRate</code> stays <strong>unsigned</strong>, so <code>peakCrossingHz</code> and <code>everyEffectStaysUnderTheFlickerCeiling</code> keep measuring magnitude and need no edit. The sign is applied at the layer boundary when the shader argument is built. The reader always passes <code>.inward</code>, preserving its documented &quot;pull focus to the word&quot; rule; only the wordless field, which has no word to converge on, can pass <code>.outward</code>.</p>
+<h3 id="4-colour">4. Colour</h3>
+<p><code>VisualTint</code> is an enum with six named cases mapping to existing palette colours (<code>phaseInduction</code>, <code>phaseDeepener</code>, <code>roseGold</code>, <code>warmAccent</code>, <code>bwAlpha</code>, <code>bwTheta</code>), plus <code>.custom(String)</code> holding a hex.</p>
+<p>Resolution to a <code>Color</code> applies a <strong>luminance floor</strong>: <code>tint</code> multiplies the shader output, so a very dark pick does not produce a moody field, it produces a black rectangle. A pick below the floor is lifted, not rejected.</p>
+<h2 id="the-create-tab">The Create tab</h2>
+<p><code>MindMachineView.swift</code> is split into a <code>Create/</code> folder, following the player&#x27;s shape:</p>
+<pre class="code" data-lang=""><code>Create/
+  CreateView.swift          the screen: mode row, preview, tray, start bar
+  CreateSessionKind.swift   .flash | .colourPulse | .bilateral | .visualField
+  CreateControlSlot.swift   which tiles each kind shows  (mirrors PlayerControlSlot)
+  CreateFieldPreview.swift  the live preview panel
+  LightFieldSettings.swift  frequency / intensity / kelvin / pattern / binaural</code></pre>
+<p>Top to bottom: segmented <code>CreateSessionKind</code> row → live preview → tile tray → start bar. <code>MindMachineStartBar</code> and <code>AuroraBackground</code> stay.</p>
+<h3 id="the-tray">The tray</h3>
+<p><code>CreateControlSlot.slots(for:)</code> takes <strong>only</strong> a <code>CreateSessionKind</code> and nothing else, so no value change can add or remove a tile and the tray cannot reflow under a finger mid-drag. This mirrors <code>PlayerControlSlot.slots(for:)</code> and its stated reasoning. Tiles are the same 72pt <code>PlayerControlTile</code> with gauge fills.</p>
+<div class="tablewrap"><table><thead><tr><th>Kind</th><th>Tiles</th></tr></thead><tbody><tr><td>Visual field</td><td>Effect · Colour · Speed · Strength · Direction · Duration</td></tr><tr><td>Flash</td><td>Frequency · Intensity · Warmth · Waveform · Binaural · Duration</td></tr><tr><td>Colour pulse</td><td>Frequency · Intensity · Duration</td></tr><tr><td>Bilateral</td><td>Frequency · Intensity · Warmth · Waveform · Binaural · Duration</td></tr></tbody></table></div>
+<p>Six tiles lay out as two rows of three. Effect, Waveform, Direction and Duration are tap-to-advance. Speed, Strength, Frequency, Intensity and Warmth are drags.</p>
+<p>Colour taps to open a palette sheet carrying the six swatches and the custom chip — it does <strong>not</strong> cycle on tap with a long-press for the grid. <code>PlayerControlTile</code> states that a tile &quot;is either tappable or draggable, never both, which keeps gesture arbitration out of the picture entirely&quot;; adding a third gesture to one tile would reintroduce exactly that. A sheet also gives the custom picker somewhere to live.</p>
+<h3 id="deletions">Deletions</h3>
+<ul><li><code>AdvancedControlsSection</code> — burial was the problem; every control it hid now has a tile.</li><li><code>PhoneScreenOrb</code> — a drawn phone illustrating the effect is strictly worse than the effect.</li><li><code>CustomSlider</code> — nothing in the new tray uses it; tiles own their drag handling.</li><li><code>BrowseSessionsLink</code> <strong>moves to Library</strong> — it is a browsing affordance in a making surface.</li></ul>
+<h3 id="the-preview">The preview</h3>
+<p>Live and real. For <code>.visualField</code> it is <code>VisualFieldLayer</code> rendering the actual settings inside a rounded rect — the same shader the session will run, at the same modulation. For the light kinds it is a <code>LumeOrb</code>-style pulse at the configured frequency and warmth.</p>
+<p>Two constraints: it renders at the configured <em>strength</em>, so what you see is what you get; and it holds to the same flicker ceiling as the session, because a preview is a small light flashing at you for as long as you sit on the screen.</p>
+<h3 id="analytics">Analytics</h3>
+<p><code>CreateMode</code> and <code>MindMachineMode</code> each gain a <code>visualField</code> case. Existing <code>createModeSelected</code> and <code>mindMachineStartRequested</code> calls carry it unchanged otherwise.</p>
+<h2 id="session-runtime">Session runtime</h2>
+<h3 id="player-mode">Player mode</h3>
+<pre class="code" data-lang="swift"><code>case visualField(
+    settings: VisualFieldSettings,
+    audioFile: AudioFile?,
+    binaural: BinauralSettings?
+)</code></pre>
+<p><code>id</code> is <code>&quot;visualField-&quot; + UUID()</code>, matching <code>flashMode</code>. <code>title</code> is &quot;Visual Field&quot;.</p>
+<p><code>BinauralSettings</code> is new — a small <code>Equatable, Sendable</code> struct of <code>enabled</code>, <code>carrier</code>, <code>volume</code>. <code>flashMode</code> currently carries those three as loose parameters; it is <strong>not</strong> changed here. Folding it in is a tidy follow-on, but it touches every <code>flashMode</code> call site and none of that work serves this feature.</p>
+<p>Capability flags: <code>hasAudioScrubber</code> and <code>hasVolumeControl</code> are both <code>audioFile != nil</code>. <code>hasBrightnessControl</code> is <code>false</code> — strength is the visual&#x27;s own knob, not screen brightness.</p>
+<h3 id="in-session-tray">In-session tray</h3>
+<p><code>PlayerControlSlot</code> gains <code>.visualStrength</code> and <code>.visualSpeed</code>, both draggable, so the field can be tuned while running without ending the session — the affordance the reader&#x27;s tray already gives. <code>slots(for: .visualField)</code> returns <code>[.visualStrength, .visualSpeed]</code>, plus <code>.volume</code> when there is a track and <code>.more</code> when binaural is on. Still a fixed list per mode, so the no-reflow rule holds.</p>
+<h3 id="audio">Audio</h3>
+<p>Binaural reuses <code>BinauralBeatsEngine</code> exactly as <code>flashMode</code> does. A library track reuses the <code>audioLight</code> playback path minus the light-sync generation — the visual field is not driven by the audio, it plays underneath. Both are independently optional, and silence is a valid configured state, not an unconfigured one.</p>
+<h3 id="duration">Duration</h3>
+<p><code>settings.duration == nil</code> runs open-ended. When set, the field fades its strength to zero over the final 20 seconds and then dismisses, so a timed session ends by receding rather than cutting to black. Reuses <code>flashMode</code>&#x27;s existing <code>goalDuration</code> machinery rather than adding a second timer.</p>
+<h3 id="screen-sleep">Screen sleep</h3>
+<p><code>PlatformApplication</code>&#x27;s idle-timer wrapper is already gated on <code>AppSettingsManager.keepScreenAwakeDuringSessions</code>. <code>.visualField</code> opts in on the same terms as every other mode. On macOS the window-filling cover behaves as the reader&#x27;s does.</p>
+<h3 id="safety">Safety</h3>
+<p><strong>No flash warning gate for <code>.visualField</code>.</strong> <code>PlayerSafetyWarningView</code> exists for the entrainment path and <code>LightSafety</code> governs that path&#x27;s frequency cap; neither applies here, because the visual field never drives <code>FlashController</code> or <code>LightEngine</code>. Its worst case is moiré at 2.7 Hz peak crossing, below the 3 Hz threshold — which is exactly why the reader ships these effects without a warning today. Keeping the warning tied to the flash path preserves its meaning; showing it everywhere teaches people to dismiss it. The three light kinds gate exactly as they do now.</p>
+<h3 id="reduce-motion">Reduce Motion</h3>
+<p><code>VisualFieldLayer</code> already stops the <code>TimelineView</code> schedule when speed is zero, so a Reduce Motion user gets a static field rather than a frozen animation loop. Correct — but in the reader the visual is decoration and here it <em>is</em> the content, so the Create screen shows a line under the preview stating that motion is reduced by a system setting, rather than leaving someone dragging a Speed tile that does nothing.</p>
+<h3 id="platforms">Platforms</h3>
+<p>All shared code. <code>#if os(...)</code> appears only where it already does: the idle timer and the full-screen cover presentation.</p>
+<h2 id="persistence">Persistence</h2>
+<p><code>VisualFieldStore</code> — <code>@MainActor @Observable</code>, JSON in <code>UserDefaults</code> — holds the last-used <code>VisualFieldSettings</code> so reopening Create restores what you had. It decodes field-by-field with <code>decodeIfPresent</code> and per-field defaults, copying <code>ReaderDisplayPreferences.init(from:)</code> for the reason stated in that file: a single unreadable field must degrade to its default, never discard the whole blob.</p>
+<p>Light-kind settings persist the same way, which they do not today — <code>MindMachineModel</code> is <code>@State</code> and resets whenever you leave the tab.</p>
+<h2 id="failure-behaviour">Failure behaviour</h2>
+<div class="tablewrap"><table><thead><tr><th>Failure</th><th>Behaviour</th></tr></thead><tbody><tr><td>Audio fails (missing file, decode error, interruption)</td><td>Session continues; the field is the content and audio must never take it down. Non-blocking notice in the tray; volume tile goes <code>.disabled</code></td></tr><tr><td>Corrupt persisted settings</td><td>Per-field fallback to defaults</td></tr><tr><td>Unparseable custom hex</td><td>Resolves to the default palette tint, never clear or black</td></tr><tr><td>Missing shader</td><td>Blank background, not a crash — <code>ShaderLibrary</code> resolves at runtime; <code>shaderNames()</code> pins every name</td></tr></tbody></table></div>
+<h2 id="testing">Testing</h2>
+<p>New suites, all pure-value so they run on both destinations:</p>
+<ul><li><strong><code>VisualFieldSettingsTests</code></strong> — normalised speed/amplitude map into <code>speedBand</code> / <code>amplitudeBand</code> and stay inside them for hostile inputs (negative, &gt; 1, NaN). This is the test that makes the cap unbypassable from the settings layer.</li><li><strong><code>VisualDirectionTests</code></strong> — inward and outward produce opposite-signed rate with identical magnitude, so the flicker ceiling holds in both directions.</li><li><strong><code>VisualTintTests</code></strong> — the luminance floor lifts dark picks; palette cases resolve to expected colours; malformed hex falls back.</li><li><strong><code>VisualFieldFadeTests</code></strong> — the timed-ending fade as a pure function of elapsed/duration/configured-strength, kept out of the view in the same spirit as <code>ReaderVisualStrength</code> and <code>DragValueMapper</code>.</li><li><strong><code>CreateControlSlotTests</code></strong> — <code>slots(for:)</code> is a pure function of kind; each kind&#x27;s list is pinned. Mirrors <code>ReaderControlSlotTests</code>.</li><li><strong><code>VisualFieldStoreTests</code></strong> — decode fallback per field.</li></ul>
+<p>Extended: <code>PlayerControlSlot</code> gains <code>.visualField</code> coverage. The renamed <code>TranceVisualTests</code> keeps <code>rawValues()</code> pinning the persisted strings — the guard on the whole rename.</p>
+<p><strong>Unchanged, deliberately:</strong> <code>everyEffectStaysUnderTheFlickerCeiling</code>, <code>moireHasTheLeastHeadroom</code>, and both modulator band tests. If the rename touches those assertions, something has gone wrong.</p>
+<p>Per <code>CLAUDE.md</code>, the suite runs on both destinations:</p>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; test -only-testing:IlumionateTests</code></pre>
+<h2 id="definition-of-done">Definition of done</h2>
+<ol><li>The reader behaves identically to before the rename — same effects, same modulation, same saved preferences surviving an app relaunch.</li><li>Create shows four session kinds in a segmented row, each with a live preview and a fixed tile tray. No disclosure group.</li><li>A Visual Field session runs full-screen from Create with effect, colour, speed, strength and direction all under direct control, open-ended or timed.</li><li>Binaural and a library track can each independently ride along, and either failing leaves the field running.</li><li>Both destinations build; the full test suite passes on both.</li></ol></main>
+</div></body></html>
