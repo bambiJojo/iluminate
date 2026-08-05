@@ -94,6 +94,22 @@ static float halfMinDimension(float2 size) {
     return max(min(size.x, size.y) * 0.5, 1.0);
 }
 
+/// Normalised radius against the FARTHER edge — 1 at the middle of the long
+/// side rather than the short one.
+///
+/// `unitRadius` divides by the nearer edge, so on a tall phone `edgeFade` was
+/// fully dark 1.28 half-widths out: on a 402x874 frame that is 257pt from
+/// centre against a 437pt half-height, leaving the top and bottom fifths of the
+/// screen permanently black. Fading on this radius instead lets the field reach
+/// the short edges and only vignettes the corners.
+///
+/// Deliberately separate from `unitRadius`: feature scale still keys off the
+/// short side, so ring spacing — and with it the `featureCount * speed`
+/// flicker budget — is unchanged. This affects alpha only.
+static float coverageRadius(float2 pos, float2 size) {
+    return length(pos - size * 0.5) / max(max(size.x, size.y) * 0.5, 1.0);
+}
+
 /// Erases the effect where the word sits, leaving a still, dark well the
 /// converging field falls into. The word is pivot-anchored at the view's centre
 /// and far wider than tall, so the protected region is a squashed ellipse.
@@ -152,7 +168,7 @@ static half4 composite(half4 tint, half alpha) {
     half pattern = mix(ringBand(ring, dydp, 0.26),
                        ringBand(arm,  dydp, 0.26), morph);
 
-    half alpha = pattern * edgeFade(r) * half(amplitude) * focusWell(pos, size);
+    half alpha = pattern * edgeFade(coverageRadius(pos, size)) * half(amplitude) * focusWell(pos, size);
     return composite(tint, alpha);
 }
 
@@ -171,7 +187,7 @@ static half4 composite(half4 tint, half alpha) {
     float y = convergentDepth(r, turns) * density - time * speed * rate;
     float dydp = depthGradient(r, turns, density, halfMin);
 
-    half alpha = ringBand(y, dydp, 0.24) * edgeFade(r) * half(amplitude)
+    half alpha = ringBand(y, dydp, 0.24) * edgeFade(coverageRadius(pos, size)) * half(amplitude)
                * focusWell(pos, size);
     return composite(tint, alpha);
 }
@@ -202,7 +218,7 @@ static half4 composite(half4 tint, half alpha) {
     half bandB = ringBand(depth * densityB - travel,
                           depthGradient(r, turns, densityB, halfMin), 0.46);
 
-    half alpha = bandA * bandB * edgeFade(r) * half(amplitude)
+    half alpha = bandA * bandB * edgeFade(coverageRadius(pos, size)) * half(amplitude)
                * focusWell(pos, size);
     return composite(tint, alpha);
 }
@@ -327,7 +343,7 @@ static float hash11(float p) {
         ch[i] = max(ring, spoke * 0.8h);
     }
 
-    half mask = edgeFade(r) * half(amplitude) * focusWell(pos, size);
+    half mask = edgeFade(coverageRadius(pos, size)) * half(amplitude) * focusWell(pos, size);
     half alpha = ((ch.r + ch.g + ch.b) / 3.0h) * mask;
     // Per-channel values can exceed alpha slightly at the fringes. That
     // overshoot IS the chromatic edge; clamping it away flattens the effect.
@@ -367,7 +383,7 @@ static float hash11(float p) {
     float thickness = 0.05 + 0.20 * r;
     float dydp = depthGradient(r, turns, density, halfMin);
 
-    half alpha = ringBand(y, dydp, thickness) * edgeFade(r) * half(amplitude)
+    half alpha = ringBand(y, dydp, thickness) * edgeFade(coverageRadius(pos, size)) * half(amplitude)
                * focusWell(pos, size);
     return composite(tint, alpha);
 }
