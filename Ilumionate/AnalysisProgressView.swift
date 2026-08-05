@@ -263,7 +263,7 @@ struct AnalysisProgressView: View {
                     .font(TranceTypography.sectionTitle)
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(GlassButtonStyle())
+                .glassButtonStyleIfAvailable()
                 .padding(.horizontal)
             } else if viewModel.stage == .failed {
                 Button {
@@ -273,7 +273,7 @@ struct AnalysisProgressView: View {
                         .font(TranceTypography.sectionTitle)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(GlassButtonStyle())
+                .glassButtonStyleIfAvailable()
                 .padding(.horizontal)
             }
         }
