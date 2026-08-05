@@ -129,7 +129,28 @@ sign is applied at the layer boundary when the shader argument is built. The rea
 always passes `.inward`, preserving its documented "pull focus to the word" rule; only
 the wordless field, which has no word to converge on, can pass `.outward`.
 
-### 4. Colour
+### 4. The focus well
+
+Every effect ends with `alpha = ... * focusWell(pos, size)`. `focusWell` erases the
+effect where the word sits — "a still, dark well the converging field falls into", and
+the reason the reader needs no scrim overlay.
+
+Wordless, that well punches a dark hole to protect a word that is not there, and removes
+the compressed vanishing point that makes an inward spiral hypnotic. So the shared
+uniform list gains a `focus` float, applied as:
+
+```metal
+mix(1.0h, focusWell(pos, size), focus)
+```
+
+The reader passes `1.0` and is pixel-identical to today. The visual field passes `0.0`
+and gets an unbroken centre. This stays internal — it is not a seventh knob.
+
+Safe on the aliasing front: `ringBand` already dissolves to flat tone where features
+compress past the pixel grid, which is what keeps an un-welled centre from beating
+against it.
+
+### 5. Colour
 
 `VisualTint` is an enum with six named cases mapping to existing palette colours
 (`phaseInduction`, `phaseDeepener`, `roseGold`, `warmAccent`, `bwAlpha`, `bwTheta`), plus
