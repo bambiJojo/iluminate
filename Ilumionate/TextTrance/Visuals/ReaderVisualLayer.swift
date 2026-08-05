@@ -28,7 +28,10 @@ struct ReaderVisualLayer: View {
                             .float(Self.shaderTime(timeline.date)),
                             .color(modulation.tint),
                             .float(Float(modulation.speed)),
-                            .float(Float(modulation.amplitude))
+                            .float(Float(modulation.amplitude)),
+                            // Sourced from Swift, not hardcoded in Metal, so
+                            // the photosensitivity ceiling is testable.
+                            .float(Float(visual.motionRate))
                         )
                     )
             }

@@ -28,11 +28,22 @@ enum ReaderVisualModulator {
     ///
     /// The safety target is that no effect makes a repeating feature cross a
     /// fixed pixel at 3 Hz or more, since that is where flicker starts to carry
-    /// photosensitivity risk. This band is the *input* budget; it does not by
-    /// itself guarantee the target. Each shader multiplies `speed` by its own
-    /// feature count, so meeting the target is a per-effect obligation: pick
-    /// constants such that `featureCount * speedBand.upperBound < 3.0`, and
-    /// record that arithmetic beside the constant.
+    /// photosensitivity risk.
+    ///
+    /// Every shader now derives its motion from the shared phase rule
+    ///
+    ///     phase = convergentDepth(r, turns) * density - time * speed * rate
+    ///
+    /// whose time derivative is `speed * rate` — independent of radius. The
+    /// compressed centre therefore does not flicker faster than the sparse rim,
+    /// and meeting the target reduces to a single multiplication rather than
+    /// per-effect reasoning about feature counts.
+    ///
+    /// `rate` lives on `ReaderVisual.motionRate` and reaches Metal as a shader
+    /// argument, so `ReaderVisualTests.everyEffectStaysUnderTheFlickerCeiling`
+    /// checks the ceiling for every case. Editing a shader constant can no
+    /// longer bypass it. `density` scales only the spatial term and is free to
+    /// tune without re-deriving any of this.
     static let speedBand: ClosedRange<Double> = 0.05...0.45
     static let amplitudeBand: ClosedRange<Double> = 0.25...1.0
 

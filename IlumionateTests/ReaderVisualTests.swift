@@ -16,6 +16,13 @@ struct ReaderVisualTests {
         }
     }
 
+    @Test("Every case has a non-empty summary")
+    func summaries() {
+        for visual in ReaderVisual.allCases {
+            #expect(visual.summary.isEmpty == false)
+        }
+    }
+
     @Test("Only shader-backed cases carry a shader name")
     func shaderNames() {
         #expect(ReaderVisual.none.shaderName == nil)
@@ -24,6 +31,8 @@ struct ReaderVisualTests {
         #expect(ReaderVisual.tunnel.shaderName == "readerTunnel")
         #expect(ReaderVisual.moire.shaderName == "readerMoire")
         #expect(ReaderVisual.drift.shaderName == "readerDrift")
+        #expect(ReaderVisual.glass.shaderName == "readerGlass")
+        #expect(ReaderVisual.linescape.shaderName == "readerLinescape")
     }
 
     @Test("Shader names are unique")
@@ -35,7 +44,51 @@ struct ReaderVisualTests {
     @Test("Raw values are stable for persistence")
     func rawValues() {
         #expect(ReaderVisual.allCases.map(\.rawValue)
-                == ["none", "breath", "spiral", "tunnel", "moire", "drift"])
+                == ["none", "breath", "spiral", "tunnel",
+                    "moire", "drift", "glass", "linescape"])
+    }
+
+    // MARK: - Motion budget
+    //
+    // The photosensitivity ceiling. These tests are the reason `motionRate`
+    // lives in Swift rather than as a constant inside the shader: a new effect
+    // that exceeds the budget fails here instead of shipping.
+
+    @Test("Every effect stays under the 3 Hz flicker ceiling")
+    func everyEffectStaysUnderTheFlickerCeiling() {
+        for visual in ReaderVisual.allCases {
+            #expect(
+                visual.peakCrossingHz < 3.0,
+                "\(visual.rawValue) crosses at \(visual.peakCrossingHz) Hz"
+            )
+        }
+    }
+
+    @Test("Only the shaderless cases have no motion")
+    func motionRateIsZeroExactlyForShaderlessCases() {
+        for visual in ReaderVisual.allCases {
+            #expect((visual.motionRate == 0) == (visual.shaderName == nil))
+        }
+    }
+
+    @Test("Moiré and Linescape declare the harmonics their arithmetic adds")
+    func spectralMultipliers() {
+        // Moiré multiplies two bands, so their sum frequency appears. Linescape's
+        // wobble rides on the travelling phase. Dropping either multiplier would
+        // silently understate those effects' real crossing rate.
+        #expect(ReaderVisual.moire.spectralMultiplier == 2.0)
+        #expect(ReaderVisual.linescape.spectralMultiplier > 1.0)
+        for visual in [ReaderVisual.spiral, .tunnel, .drift, .glass] {
+            #expect(visual.spectralMultiplier == 1.0)
+        }
+    }
+
+    @Test("Moiré is the tightest against the ceiling, so it guards the margin")
+    func moireHasTheLeastHeadroom() {
+        let shaderBacked = ReaderVisual.allCases.filter { $0.shaderName != nil }
+        let worst = shaderBacked.max { $0.peakCrossingHz < $1.peakCrossingHz }
+        #expect(worst == .moire)
+        #expect(abs(ReaderVisual.moire.peakCrossingHz - 2.7) < 0.0001)
     }
 
     // MARK: - Phase Atmosphere
