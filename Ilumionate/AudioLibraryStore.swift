@@ -45,13 +45,15 @@ nonisolated enum AudioLibraryStore {
     }
 
     static func load(defaults: UserDefaults = .standard) -> [AudioFile] {
-        guard
-            let data = defaults.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey),
-            let files = try? JSONDecoder().decode([AudioFile].self, from: data)
-        else {
+        guard let data = defaults.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey) else {
             return []
         }
-
+        // Per-element. Decoding the array whole meant one unreadable audio file
+        // silently emptied the user's entire library.
+        let (files, dropped) = ResilientDecoding.array(AudioFile.self, from: data)
+        if dropped > 0 {
+            Log.audio.error("Dropped \(dropped) unreadable audio file(s) while loading the library")
+        }
         return files
     }
 

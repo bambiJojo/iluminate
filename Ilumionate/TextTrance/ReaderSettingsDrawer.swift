@@ -246,13 +246,6 @@ private struct ReaderSpeedDetailRows: View {
 private struct ReaderDisplayDetailRows: View {
     @Binding var preferences: ReaderDisplayPreferences
 
-    private var lineSpacingBinding: Binding<Double> {
-        Binding(
-            get: { preferences.clampedLineSpacing },
-            set: { preferences.lineSpacing = $0 }
-        )
-    }
-
     private var brightnessBinding: Binding<Double> {
         Binding(
             get: { preferences.clampedBackgroundBrightness },
@@ -264,9 +257,6 @@ private struct ReaderDisplayDetailRows: View {
         Picker("Theme", selection: $preferences.theme) {
             ForEach(ReaderTheme.allCases) { Text($0.displayName).tag($0) }
         }
-
-        LabeledContent("Line spacing", value: String(format: "%.1fx", preferences.clampedLineSpacing))
-        Slider(value: lineSpacingBinding, in: ReaderDisplayPreferences.lineSpacingRange)
 
         Picker("Highlight color", selection: $preferences.orpColor) {
             ForEach(ReaderORPColor.allCases) { Text($0.displayName).tag($0) }

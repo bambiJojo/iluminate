@@ -9,7 +9,6 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
     var theme: ReaderTheme
     var font: ReaderFont
     var fontScale: Double
-    var lineSpacing: Double
     var orpColor: ReaderORPColor
     var backgroundBrightness: Double
     var hideControls: Bool
@@ -21,7 +20,6 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
     init(theme: ReaderTheme = .void,
          font: ReaderFont = .monospaced,
          fontScale: Double = 1.0,
-         lineSpacing: Double = 1.0,
          orpColor: ReaderORPColor = .teal,
          backgroundBrightness: Double = 0.5,
          hideControls: Bool = false,
@@ -32,7 +30,6 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
         self.theme = theme
         self.font = font
         self.fontScale = fontScale
-        self.lineSpacing = lineSpacing
         self.orpColor = orpColor
         self.backgroundBrightness = backgroundBrightness
         self.hideControls = hideControls
@@ -43,25 +40,33 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case theme, font, fontScale, lineSpacing, orpColor
+        case theme, font, fontScale, orpColor
         case backgroundBrightness, hideControls, dyslexiaFriendly, colorMode
         case visual, visualOpacity
     }
 
-    // Custom decoder so prefs persisted before colorMode existed still load.
+    /// Every field decodes optionally and falls back to its default.
+    ///
+    /// This is load-bearing, not defensive habit. `ReaderPresetStore` decodes
+    /// all scripts' presets as one `[String: ReaderPreset]` blob with `try?`, so
+    /// a single field that fails to decode does not lose one preference — it
+    /// silently wipes every saved reader preference for every script. A missing
+    /// or unreadable value must degrade to the default, never throw.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        theme = try c.decode(ReaderTheme.self, forKey: .theme)
-        font = try c.decode(ReaderFont.self, forKey: .font)
-        fontScale = try c.decode(Double.self, forKey: .fontScale)
-        lineSpacing = try c.decode(Double.self, forKey: .lineSpacing)
-        orpColor = try c.decode(ReaderORPColor.self, forKey: .orpColor)
-        backgroundBrightness = try c.decode(Double.self, forKey: .backgroundBrightness)
-        hideControls = try c.decode(Bool.self, forKey: .hideControls)
-        dyslexiaFriendly = try c.decode(Bool.self, forKey: .dyslexiaFriendly)
-        colorMode = try c.decodeIfPresent(ReaderColorMode.self, forKey: .colorMode) ?? .followApp
-        visual = try c.decodeIfPresent(ReaderVisual.self, forKey: .visual) ?? .breath
-        visualOpacity = try c.decodeIfPresent(Double.self, forKey: .visualOpacity) ?? 0.35
+        let d = Self.standard
+        theme = try c.decodeIfPresent(ReaderTheme.self, forKey: .theme) ?? d.theme
+        font = try c.decodeIfPresent(ReaderFont.self, forKey: .font) ?? d.font
+        fontScale = try c.decodeIfPresent(Double.self, forKey: .fontScale) ?? d.fontScale
+        orpColor = try c.decodeIfPresent(ReaderORPColor.self, forKey: .orpColor) ?? d.orpColor
+        backgroundBrightness = try c.decodeIfPresent(Double.self, forKey: .backgroundBrightness)
+            ?? d.backgroundBrightness
+        hideControls = try c.decodeIfPresent(Bool.self, forKey: .hideControls) ?? d.hideControls
+        dyslexiaFriendly = try c.decodeIfPresent(Bool.self, forKey: .dyslexiaFriendly)
+            ?? d.dyslexiaFriendly
+        colorMode = try c.decodeIfPresent(ReaderColorMode.self, forKey: .colorMode) ?? d.colorMode
+        visual = try c.decodeIfPresent(ReaderVisual.self, forKey: .visual) ?? d.visual
+        visualOpacity = try c.decodeIfPresent(Double.self, forKey: .visualOpacity) ?? d.visualOpacity
     }
 
     static let standard = ReaderDisplayPreferences()
@@ -208,7 +213,6 @@ enum ReaderORPColor: String, Codable, CaseIterable, Identifiable, Sendable {
 
 extension ReaderDisplayPreferences {
     static let fontScaleRange: ClosedRange<Double> = 0.75...1.45
-    static let lineSpacingRange: ClosedRange<Double> = 0.8...1.8
     static let backgroundBrightnessRange: ClosedRange<Double> = 0.2...0.9
     /// Capped below 1.0 on purpose: at full strength even a centre-faded effect
     /// starts competing with the word at the ellipse boundary.
@@ -216,10 +220,6 @@ extension ReaderDisplayPreferences {
 
     var clampedFontScale: Double {
         min(max(fontScale, Self.fontScaleRange.lowerBound), Self.fontScaleRange.upperBound)
-    }
-
-    var clampedLineSpacing: Double {
-        min(max(lineSpacing, Self.lineSpacingRange.lowerBound), Self.lineSpacingRange.upperBound)
     }
 
     var clampedBackgroundBrightness: Double {
@@ -240,10 +240,6 @@ extension ReaderDisplayPreferences {
 
     var effectiveFontWeight: Font.Weight {
         dyslexiaFriendly ? .medium : .regular
-    }
-
-    var lineSpacingPoints: CGFloat {
-        CGFloat((clampedLineSpacing - 1.0) * 18.0)
     }
 
     var adjustedBackground: Color {

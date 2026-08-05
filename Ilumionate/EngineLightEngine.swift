@@ -135,10 +135,13 @@ final class LightEngine {
     /// Calculate optimal refresh rate based on current therapeutic frequencies
     /// Uses 8x oversampling minimum for smooth waveform rendering
     private func calculateOptimalRefreshRate() -> Int {
-        let leftFreq = currentFrequency + (bilateralMode ? currentBilateralOffset : 0.0)
-        let rightFreq = currentFrequency - (bilateralMode ? currentBilateralOffset : 0.0)
-
-        let maxTherapeuticFreq = max(leftFreq, rightFreq)
+        // `currentBilateralOffset` is a PHASE offset, not a frequency one —
+        // `evaluateOscillator` uses it as `waveform.evaluate(at: phase + offset)`,
+        // so both eyes run at the same rate and only their phase differs.
+        // Treating it as a frequency delta here modelled a per-eye rate that
+        // never exists, inflating the required refresh and quietly eroding the
+        // power saving this function is here to produce.
+        let maxTherapeuticFreq = currentFrequency
 
         // Minimum 8 samples per cycle for smooth waveforms
         let minRequiredRefresh = maxTherapeuticFreq * 8.0
@@ -173,7 +176,7 @@ final class LightEngine {
             )
 
             let efficiencyText = powerEfficiencyGain > 0 ? String(format: " (%.1f%% power savings)", powerEfficiencyGain) : ""
-            Log.engine.info("🔄 Adaptive refresh rate: \(optimalRate)Hz (therapeutic: \(String(format: "%.1f", max(self.currentFrequency + abs(self.currentBilateralOffset), self.currentFrequency - abs(self.currentBilateralOffset))))Hz)\(efficiencyText)")
+            Log.engine.info("🔄 Adaptive refresh rate: \(optimalRate)Hz (therapeutic: \(String(format: "%.1f", self.currentFrequency))Hz)\(efficiencyText)")
         }
     }
 

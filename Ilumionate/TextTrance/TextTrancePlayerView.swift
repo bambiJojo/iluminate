@@ -441,7 +441,6 @@ private struct AnchoredWord: View {
                 weight: preferences.effectiveFontWeight,
                 design: preferences.effectiveFont.design
             ))
-            .lineSpacing(preferences.lineSpacingPoints)
             .multilineTextAlignment(.center)
             .minimumScaleFactor(0.55)
             .offset(x: layout.anchorOffset * offsetScale)

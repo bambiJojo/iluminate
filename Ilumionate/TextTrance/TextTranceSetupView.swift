@@ -586,13 +586,6 @@ private struct ReaderDisplayCard: View {
         )
     }
 
-    private var lineSpacingBinding: Binding<Double> {
-        Binding(
-            get: { preferences.clampedLineSpacing },
-            set: { preferences.lineSpacing = $0 }
-        )
-    }
-
     private var brightnessBinding: Binding<Double> {
         Binding(
             get: { preferences.clampedBackgroundBrightness },
@@ -612,10 +605,6 @@ private struct ReaderDisplayCard: View {
                 }
 
                 // Font and size live in ReadingComfortCard at main tier.
-                SetupControlLabel(text: "Line \(String(format: "%.1fx", preferences.clampedLineSpacing))")
-                Slider(value: lineSpacingBinding, in: ReaderDisplayPreferences.lineSpacingRange)
-                    .tint(.roseDeep)
-
                 SetupPickerRow(title: "Highlight color") {
                     Picker("Highlight color", selection: $preferences.orpColor) {
                         ForEach(ReaderORPColor.allCases) {

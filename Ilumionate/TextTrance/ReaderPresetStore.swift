@@ -63,12 +63,16 @@ final class ReaderPresetStore {
     }
 
     private func load() {
-        guard let data = defaults.data(forKey: storageKey),
-              let decoded = try? JSONDecoder().decode([String: ReaderPreset].self, from: data) else {
+        guard let data = defaults.data(forKey: storageKey) else {
             presets = [:]
             return
         }
+        // Per-entry, so one unreadable script's preset costs that script only.
+        // Decoding the dictionary whole meant a single bad entry wiped every
+        // script's saved reader preferences at once.
+        let (decoded, dropped) = ResilientDecoding.dictionary(ReaderPreset.self, from: data)
         presets = decoded
+        if dropped > 0 { persist() }   // write back without the unreadable entries
     }
 
     private func persist() {
