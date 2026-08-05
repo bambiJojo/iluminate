@@ -39,12 +39,15 @@ struct ClusterPlayButton: View {
     let label: String
     let systemImage: String
     var size: CGFloat = 64
+    /// Overrides the glyph size when the button is scaled up. Nil keeps the
+    /// original `.title2`, so existing callers render exactly as before.
+    var symbolSize: CGFloat?
     let action: () -> Void
 
     var body: some View {
         Button(label, systemImage: systemImage, action: action)
             .labelStyle(.iconOnly)
-            .font(.title2)
+            .font(symbolSize.map { .system(size: $0, weight: .semibold) } ?? .title2)
             .foregroundStyle(Color.bgDeep)
             .contentTransition(.symbolEffect(.replace))
             .frame(width: size, height: size)
@@ -59,14 +62,21 @@ struct ClusterGhostButton: View {
     let label: String
     let systemImage: String
     var size: CGFloat = 44
+    /// Overrides the glyph size when the button is scaled up. Nil keeps the
+    /// original `.body`, so existing callers render exactly as before.
+    var symbolSize: CGFloat?
+    /// Fills the ring with the glass surface used by control tiles, so a
+    /// transport row can sit in the same visual family as a tile tray.
+    var filled = false
     let action: () -> Void
 
     var body: some View {
         Button(label, systemImage: systemImage, action: action)
             .labelStyle(.iconOnly)
-            .font(.body)
+            .font(symbolSize.map { .system(size: $0, weight: .medium) } ?? .body)
             .foregroundStyle(Color.textSecondary)
             .frame(width: size, height: size)
+            .background(Circle().fill(filled ? Color.glassFill : .clear))
             .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 1))
             .contentShape(.circle)
             .buttonStyle(PlayerButtonStyle())

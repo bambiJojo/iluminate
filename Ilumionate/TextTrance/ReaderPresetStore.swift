@@ -9,11 +9,24 @@ import Foundation
 struct ReaderPreset: Codable, Equatable, Sendable {
     var speedTraining: ReaderSpeedTrainingSettings
     var displayPreferences: ReaderDisplayPreferences
+    /// User override for the reader mode. `nil` means "use the value derived
+    /// from the script's source kind" — see `ReaderMode.derived(from:)`. Being
+    /// Optional is what keeps presets written before this field existed
+    /// decodable: synthesized Codable decodes optionals with `decodeIfPresent`.
+    var mode: ReaderMode?
 
     init(speedTraining: ReaderSpeedTrainingSettings = .standard,
-         displayPreferences: ReaderDisplayPreferences = .standard) {
+         displayPreferences: ReaderDisplayPreferences = .standard,
+         mode: ReaderMode? = nil) {
         self.speedTraining = speedTraining
         self.displayPreferences = displayPreferences
+        self.mode = mode
+    }
+
+    /// The mode to use for `script`: the user's override when they have set one,
+    /// otherwise the value derived from how the content arrived.
+    func resolvedMode(for script: TranceScript) -> ReaderMode {
+        mode ?? ReaderMode.derived(from: script.source)
     }
 
     static let standard = ReaderPreset()

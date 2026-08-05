@@ -30,6 +30,15 @@ struct TextTrancePlayerView: View {
         session.displayPreferences.resolved(appColorScheme: appColorScheme)
     }
 
+    /// Which groups the settings drawer offers. Fixed for the session — the
+    /// setup view owns switching mode. The Trance tile in the tray toggles the
+    /// hypnotic visuals, not this.
+    private var readerMode: ReaderMode {
+        ReaderPresetStore.shared
+            .preset(forScriptId: session.script.id)
+            .resolvedMode(for: session.script)
+    }
+
     /// Current modulation for the background visual. Reduce Motion is read from
     /// the environment, so toggling it mid-session pauses the layer immediately.
     private var visualModulation: ReaderVisualModulation {
@@ -92,7 +101,14 @@ struct TextTrancePlayerView: View {
                            value: backgroundPulse)
                 .animation(.easeInOut(duration: 2.5), value: session.currentPhase)
 
+            // Centre on the same rect the shader does. ReaderVisualLayer
+            // ignores the safe area, so its boundingRect — and therefore the
+            // focus well every effect converges on — is the full screen. Left
+            // inside the safe area the word centres ~13pt lower on a notched
+            // phone, because the top inset is far larger than the bottom, and
+            // it visibly misses the eye of the spiral.
             wordLayer
+                .ignoresSafeArea()
 
             if controlsVisibility.isVisible {
                 VStack {
@@ -101,7 +117,8 @@ struct TextTrancePlayerView: View {
                         session: session,
                         onSections: presentSections,
                         onSettings: { activeSheet = .settings },
-                        onEnd: { session.end(); dismiss() })
+                        onEnd: { session.end(); dismiss() },
+                        onInteraction: controlsVisibility.registerInteraction)
                 }
                 .opacity(isScrubbing ? 0 : 1)       // clear the stage for the scrub readout
                 .animation(.easeInOut(duration: 0.2), value: isScrubbing)
@@ -156,7 +173,17 @@ struct TextTrancePlayerView: View {
         .contentShape(.rect)
         .gesture(endHoldGesture)
         .simultaneousGesture(revealHideDrag)
-        .onTapGesture { controlsVisibility.registerInteraction() }
+        // Tap toggles rather than only revealing. Buttons and tiles consume
+        // their own taps, so this only fires on the bare reading surface —
+        // which means a tap outside the controls dismisses them immediately
+        // instead of re-arming the idle timer and making you wait it out.
+        .onTapGesture {
+            if controlsVisibility.isVisible {
+                controlsVisibility.hideNow()
+            } else {
+                controlsVisibility.registerInteraction()
+            }
+        }
         .onAppear {
             preparePresentation()
             startPlaybackIfNeeded()
@@ -194,7 +221,11 @@ struct TextTrancePlayerView: View {
         .sheet(item: $activeSheet, onDismiss: handleSheetDismiss) { sheet in
             switch sheet {
             case .settings:
-                ReaderSettingsDrawer(session: session, attentionStatus: attentionStatus)
+                ReaderSettingsDrawer(
+                    session: session,
+                    attentionStatus: attentionStatus,
+                    mode: readerMode
+                )
             case .sections:
                 ReaderSectionNavigatorSheet(session: session)
             }
@@ -207,11 +238,21 @@ struct TextTrancePlayerView: View {
             ReaderPresetStore.shared.save(
                 ReaderPreset(
                     speedTraining: session.speedTraining,
-                    displayPreferences: session.displayPreferences
+                    displayPreferences: session.displayPreferences,
+                    // Carry the mode through. Rebuilding the preset without it
+                    // would silently discard the user's override every time the
+                    // player closed.
+                    mode: modeOverride(for: readerMode)
                 ),
                 forScriptId: session.script.id
             )
         }
+    }
+
+    /// Only record an override when it departs from the derived value, so a
+    /// script whose source kind changes later still follows the default.
+    private func modeOverride(for mode: ReaderMode) -> ReaderMode? {
+        mode == ReaderMode.derived(from: session.script.source) ? nil : mode
     }
 
     @ViewBuilder

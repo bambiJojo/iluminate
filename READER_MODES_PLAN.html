@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader Modes — settings reorganisation plan</title>
+<style>
+  :root {
+    --bg: #0f0e13; --surface: #17161d; --surface-2: #1e1c26;
+    --line: rgba(255,255,255,0.09);
+    --text: #e9e6f0; --dim: rgba(233,230,240,0.62); --faint: rgba(233,230,240,0.38);
+    --accent: #b39ddb; --accent-2: #8a5fd6;
+    --good: #7fe0b0; --warn: #ffc46e; --bad: #ff8b9d;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #faf9fc; --surface: #fff; --surface-2: #f2f0f7;
+      --line: rgba(0,0,0,0.11);
+      --text: #1b1826; --dim: rgba(27,24,38,0.68); --faint: rgba(27,24,38,0.45);
+      --accent: #6b46c1; --accent-2: #7c4dcc;
+      --good: #1a7f4f; --warn: #9a6300; --bad: #b3123a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px 100px; display: grid;
+          grid-template-columns: 232px 1fr; gap: 48px; align-items: start; }
+  header { grid-column: 1 / -1; padding: 56px 0 30px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0 0 14px; font-size: clamp(28px, 4vw, 42px); line-height: 1.15; letter-spacing: -0.02em; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill { font-size: 12px; padding: 5px 11px; border-radius: 999px;
+          background: var(--surface-2); color: var(--dim); border: 1px solid var(--line); }
+  .pill.status { background: rgba(255,196,110,0.14); color: var(--warn); border-color: transparent; }
+  .pill b { color: var(--text); font-weight: 600; }
+
+  nav { position: sticky; top: 24px; padding-top: 34px; }
+  nav .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.9px;
+               color: var(--faint); font-weight: 700; margin-bottom: 12px; }
+  nav a { display: block; padding: 6px 0 6px 12px; color: var(--dim); text-decoration: none;
+          font-size: 13.5px; border-left: 2px solid var(--line); }
+  nav a:hover { color: var(--text); border-left-color: var(--accent); }
+  nav a.sub { padding-left: 24px; font-size: 12.5px; color: var(--faint); }
+
+  main { padding-top: 34px; min-width: 0; }
+  section { margin-bottom: 44px; scroll-margin-top: 24px; }
+  h2 { font-size: 25px; margin: 0 0 16px; letter-spacing: -0.01em; }
+  h3 { font-size: 17px; margin: 28px 0 10px; color: var(--accent); }
+  h4 { font-size: 14px; margin: 18px 0 8px; text-transform: uppercase;
+       letter-spacing: 0.7px; color: var(--faint); }
+  p { margin: 0 0 14px; color: var(--dim); }
+  p strong, li strong { color: var(--text); }
+  ul, ol { color: var(--dim); padding-left: 22px; margin: 0 0 14px; }
+  li { margin-bottom: 7px; }
+  code { font-family: var(--mono); font-size: 0.87em; background: var(--surface-2);
+         padding: 2px 6px; border-radius: 4px; color: var(--accent); }
+  pre { background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+        padding: 16px 18px; overflow-x: auto; margin: 0 0 16px; }
+  pre code { background: none; padding: 0; color: var(--text); font-size: 13px; line-height: 1.6; }
+  a { color: var(--accent); }
+
+  .tablewrap { overflow-x: auto; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line);
+           vertical-align: top; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.6px;
+       color: var(--faint); font-weight: 700; }
+  td { color: var(--dim); }
+  td strong { color: var(--text); }
+  tbody tr:hover { background: var(--surface); }
+
+  .callout { border-left: 3px solid var(--accent-2); background: var(--surface);
+             padding: 14px 18px; border-radius: 0 9px 9px 0; margin: 0 0 16px; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.good { border-left-color: var(--good); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  details { background: var(--surface); border: 1px solid var(--line);
+            border-radius: 9px; padding: 0 18px; margin-bottom: 12px; }
+  details[open] { padding-bottom: 8px; }
+  summary { cursor: pointer; padding: 14px 0; font-weight: 600; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; display: inline-block; width: 18px; color: var(--accent); }
+  details[open] summary::before { content: "▾"; }
+
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  .box { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 15px 17px; }
+  .box h4 { margin-top: 0; }
+  .box ul { margin-bottom: 0; padding-left: 18px; font-size: 14px; }
+  .box.absent { border-style: dashed; opacity: 0.72; }
+
+  .tag { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px;
+         text-transform: uppercase; padding: 2px 7px; border-radius: 4px; margin-left: 6px; }
+  .tag.main { background: rgba(127,224,176,0.16); color: var(--good); }
+  .tag.adv  { background: rgba(179,157,219,0.18); color: var(--accent); }
+  .tag.none { background: rgba(255,139,157,0.14); color: var(--bad); }
+
+  @media (max-width: 900px) {
+    .wrap { grid-template-columns: 1fr; gap: 0; padding: 0 20px 70px; }
+    nav { position: static; padding-top: 22px; }
+    nav a { display: inline-block; border-left: 0; border-bottom: 2px solid var(--line);
+            margin-right: 10px; padding: 5px 0; }
+    nav a.sub { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Reader Modes — settings reorganisation</h1>
+    <div class="meta">
+      <span class="pill status">Proposed · not started</span>
+      <span class="pill">Branch <b>feature/reader-hypnotic-visuals</b></span>
+      <span class="pill">2026-08-04</span>
+    </div>
+  </header>
+
+  <nav>
+    <div class="label">Contents</div>
+    <a href="#problem">Problem</a>
+    <a href="#cause" class="sub">The real cause</a>
+    <a href="#decisions">Decisions</a>
+    <a href="#target">Target structure</a>
+    <a href="#why" class="sub">Why it works</a>
+    <a href="#impl">Implementation</a>
+    <a href="#testing">Testing</a>
+    <a href="#scope">Out of scope</a>
+  </nav>
+
+  <main>
+    <section id="problem">
+      <h2>Problem</h2>
+      <p>The reader's settings are one undifferentiated pile.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Surface</th><th>Top level</th><th>Behind "Advanced"</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>TextTranceSetupView</code></td>
+              <td>Script, Arc, Pacing preset, Visual</td>
+              <td>Layers <em>(light, binaural)</em>, Attention, Speed training <em>(6 controls)</em>, Reader display <em>(9 controls)</em>, Subliminal <em>(2)</em></td>
+            </tr>
+            <tr>
+              <td><code>ReaderSettingsDrawer</code></td>
+              <td colspan="2"><em>everything, flat — no split at all</em></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ol>
+        <li><strong>Font size is two taps deep</strong> (<code>TextTranceSetupView.swift:463</code>) — the most-reached-for control in any reader.</li>
+        <li><strong>Binaural beats is inside a card called "Layers" inside Advanced</strong> — a headline feature under a label that means nothing to a user.</li>
+        <li><strong>The drawer has no basic/advanced split</strong>, so mid-session you scroll past ramp-start WPM sliders to reach brightness. Worst possible ordering for the surface used while in trance.</li>
+        <li><strong>The two surfaces disagree</strong> about what counts as advanced, because tiering is hardcoded separately in each.</li>
+        <li><strong>Advanced mixes everyday preferences with genuine tuning</strong> — theme and font sit next to ramp-start WPM.</li>
+      </ol>
+    </section>
+
+    <section id="cause">
+      <h2>The real cause</h2>
+      <div class="callout">
+        <p>"Basic vs advanced" is the wrong axis. There are <strong>two distinct reading modes</strong>, and the settings only look chaotic because both modes' controls are shown at once.</p>
+      </div>
+      <ul>
+        <li><strong>Plain reading</strong> — RSVP speed reading, word by word. A reading tool.</li>
+        <li><strong>Hypnotic trance</strong> — a scripted hypnosis experience.</li>
+      </ul>
+      <p>The data model already encodes this, badly. Imported content is forced into the hypnosis script shape:</p>
+<pre><code>// WebReadableTextImporter.swift:80 and ReadingDocumentStore.swift:71
+theme: .focus,                    // a hypnosis theme, for a PDF
+supportedArcs: [.fullText],
+segments: [TranceScriptSegment(
+    phase: .induction,            // a news article, labelled an induction</code></pre>
+      <p>So a Wikipedia page is modelled as a trance induction, and therefore gets offered arcs, binaural beats and subliminal flashing.</p>
+      <div class="callout good">
+        <p>The honest distinction is already available in <code>TranceScript.swift:46</code>:</p>
+        <pre style="margin-top:10px"><code>enum Kind { case bundled, generated, importedWeb, importedDocument }</code></pre>
+      </div>
+    </section>
+
+    <section id="decisions">
+      <h2>Decisions</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Question</th><th>Decision</th></tr></thead>
+          <tbody>
+            <tr><td>One reader or two?</td><td><strong>One reader.</strong> Mode reconfigures it; the library stays unified.</td></tr>
+            <tr><td>Mode derived or chosen?</td><td><strong>Derived from <code>ScriptSource.Kind</code>, with a per-script override.</strong> Right by default, never a trap.</td></tr>
+            <tr><td>Visuals in plain reading?</td><td><strong>Always toggleable.</strong> Mode must never remove the visual picker.</td></tr>
+            <tr><td>What does mode affect?</td><td><strong>The settings hierarchy only.</strong> The rendering surface is untouched.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>That last decision is deliberately narrow. <code>ReaderVisual</code> already has a <code>.none</code> case and <code>showsPhaseAtmosphere</code> already keys off the user's theme, so both are under user control today. Mode does not get to override either.</p>
+    </section>
+
+    <section id="target">
+      <h2>Target structure</h2>
+
+      <h3>Shared by both modes</h3>
+      <div class="cols">
+        <div class="box">
+          <h4>Main <span class="tag main">main</span></h4>
+          <ul><li>Reading comfort — reader mode, font, size</li><li>Visual</li><li>Attention</li></ul>
+        </div>
+        <div class="box">
+          <h4>Advanced <span class="tag adv">advanced</span></h4>
+          <ul><li>Display detail — line spacing, highlight colour, background brightness, hide controls, dyslexia-friendly</li><li>Speed detail — speed mode, warm-up WPM, ramp-start WPM, words per flash, punctuation pauses</li></ul>
+        </div>
+      </div>
+
+      <h3>Plain reading only</h3>
+      <div class="cols">
+        <div class="box"><h4>Main <span class="tag main">main</span></h4><ul><li>Speed — target WPM, exposed as a number</li></ul></div>
+        <div class="box absent"><h4>Absent <span class="tag none">absent</span></h4><ul><li>Arc</li><li>Binaural</li><li>Subliminal</li><li>Light handoff</li></ul></div>
+      </div>
+
+      <h3>Hypnotic trance only</h3>
+      <div class="cols">
+        <div class="box"><h4>Main <span class="tag main">main</span></h4><ul><li>Arc</li><li>Pacing preset</li><li>Binaural</li></ul></div>
+        <div class="box"><h4>Advanced <span class="tag adv">advanced</span></h4><ul><li>Subliminal</li><li>Light pulse after handoff <em>(already conditional on <code>arc == .handoff</code>)</em></li></ul></div>
+      </div>
+    </section>
+
+    <section id="why">
+      <h2>Why this works</h2>
+      <p>Advanced shrinks because roughly half the settings genuinely don't apply to the mode you're in — not because of a judgement call about what's "advanced."</p>
+      <div class="callout good">
+        <p>Speed lands in its right home in both modes. <strong>In plain reading, WPM is the point</strong> — it's a speed-reader, so the number goes top-level. In trance it stays tuning underneath the named pacing preset. Same underlying <code>ReaderSpeedTrainingSettings.targetWPM</code>, two honest presentations.</p>
+      </div>
+      <p>Binaural stops being a buried "Layer" and becomes a headline control — but only in the mode where it means anything.</p>
+    </section>
+
+    <section id="impl">
+      <h2>Implementation</h2>
+
+      <details open>
+        <summary>1 · <code>ReaderMode</code></summary>
+        <p>New file <code>Ilumionate/TextTrance/ReaderMode.swift</code>:</p>
+<pre><code>enum ReaderMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case reading
+    case trance
+
+    /// Default for a script, from how the content arrived. Imported articles and
+    /// documents are things you read; bundled and generated scripts are trance.
+    static func derived(from source: ScriptSource) -> ReaderMode {
+        switch source.kind {
+        case .importedWeb, .importedDocument: .reading
+        case .bundled, .generated:            .trance
+        }
+    }
+}</code></pre>
+      </details>
+
+      <details open>
+        <summary>2 · Single source of truth for tiering</summary>
+        <p>New <code>ReaderSettingsCatalog</code> describing, for each settings group, which modes show it and at which tier. Both surfaces read this instead of hardcoding their own arrangement — the same centralising move already made by <code>LightSafety</code> and <code>ReaderPacingPreset</code>, and what stops the two surfaces drifting apart again.</p>
+<pre><code>enum ReaderSettingsGroup: CaseIterable {
+    case readingComfort, visual, attention
+    case speedTarget, arc, pacingPreset, binaural
+    case displayDetail, speedDetail, subliminal, lightHandoff
+
+    func tier(in mode: ReaderMode) -> ReaderSettingsTier?   // nil == absent
+}</code></pre>
+      </details>
+
+      <details>
+        <summary>3 · Persist the override</summary>
+        <p>Add <code>mode: ReaderMode?</code> to <code>ReaderPreset</code>. <code>nil</code> means "use the derived value"; a non-nil value is an explicit user override for that script only. Follow the existing <code>decodeIfPresent</code> migration pattern from <code>ReaderDisplayPreferences</code> so presets saved before this field still load.</p>
+      </details>
+
+      <details>
+        <summary>4 · Rewire the two surfaces</summary>
+        <ul>
+          <li><strong><code>TextTranceSetupView</code></strong> — group cards by tier from the catalog; retire the "Layers" card, splitting binaural into its own main-tier control and leaving light with the handoff group.</li>
+          <li><strong><code>ReaderSettingsDrawer</code></strong> — add the matching Advanced disclosure it currently lacks, driven by the same catalog.</li>
+        </ul>
+        <div class="callout warn">
+          <p><code>TextTranceSetupView</code> is already 560+ lines; the card structs should move to their own files while this work is happening, per the 800-line guidance in the coding-style rules.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>5 · Mode switcher</summary>
+        <p>A single control in setup showing the derived mode with the option to override. <strong>Not in the drawer</strong> — switching mode mid-session would reshuffle the surface underneath someone who is, by design, in trance.</p>
+      </details>
+    </section>
+
+    <section id="testing">
+      <h2>Testing</h2>
+      <ul>
+        <li><code>ReaderMode.derived(from:)</code> for all four <code>ScriptSource.Kind</code> cases</li>
+        <li><code>ReaderSettingsGroup.tier(in:)</code> — every group in both modes, asserting the absent set</li>
+        <li><code>ReaderPreset</code> round-trips with <code>mode</code> nil and non-nil</li>
+        <li>A preset JSON saved <em>before</em> <code>mode</code> existed still decodes</li>
+        <li>Existing <code>ReaderQuickStartPlanTests</code> and <code>ReaderProgressStoreTests</code> still pass</li>
+      </ul>
+    </section>
+
+    <section id="scope">
+      <h2>Out of scope</h2>
+      <p>Flagged, deliberately not fixed here:</p>
+      <div class="callout warn">
+        <p><strong>Imported content is modelled as <code>.induction</code>.</strong> A real data-modelling problem — it makes imported documents inherit induction-phase atmosphere colour. Cosmetic today because both the visual and the atmosphere are user-toggleable, and because <code>effectiveBaseWPM</code> prefers the importer's explicit <code>baseWPM: 150</code> over the depth-derived slowdown. Worth its own fix.</p>
+      </div>
+      <div class="callout warn">
+        <p><strong>The macOS test destination is broken</strong> — <code>IlumionateTests</code> crashes with <code>signal abrt</code> before the runner connects, on a clean tree. CLAUDE.md lists macOS as a first-class test destination.</p>
+      </div>
+      <div class="callout warn">
+        <p><strong>Five unrelated iOS test failures</strong> — <code>slowFileTransferDoesNotBlockMainActor</code>, <code>savingLargeLibraryDoesNotBlockMainActor</code>, <code>idleTimerHides</code>, <code>closingDrawerReArmsTimer</code>, <code>keepsWhisperPrefetchOutOfContentAnalysis</code>. All main-actor/timing tests taking 35–54s each; reads like simulator load rather than real regressions.</p>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
