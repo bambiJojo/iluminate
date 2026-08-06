@@ -262,7 +262,8 @@ struct TextTrancePlayerView: View {
                 text: session.currentWord,
                 pivot: session.currentPivotIndex,
                 referenceCharacterCount: session.readerReferenceCharacterCount,
-                preferences: displayPrefs
+                preferences: displayPrefs,
+                phase: session.currentPhase
             )
             .opacity(session.isPaused ? 0.4 : wordOpacity)
             .shadow(color: reduceMotion ? .clear : phaseColor.opacity(0.30), radius: 14)
@@ -419,6 +420,9 @@ private struct AnchoredWord: View {
     let pivot: Int
     let referenceCharacterCount: Int
     let preferences: ReaderDisplayPreferences
+    /// Needed because `.matchBackground` resolves the pivot colour against the
+    /// reading phase, so the highlighted letter tracks the field behind it.
+    let phase: TrancePhase
 
     var body: some View {
         GeometryReader { proxy in
@@ -455,7 +459,8 @@ private struct AnchoredWord: View {
 
         let lowerBound = attributed.characters.index(attributed.startIndex, offsetBy: safePivot)
         let upperBound = attributed.characters.index(after: lowerBound)
-        attributed[lowerBound..<upperBound].foregroundColor = preferences.pivotColor
+        attributed[lowerBound..<upperBound].foregroundColor =
+            preferences.pivotColor(phase: phase)
         return attributed
     }
 }

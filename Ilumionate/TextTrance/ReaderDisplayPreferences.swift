@@ -20,7 +20,7 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
     init(theme: ReaderTheme = .void,
          font: ReaderFont = .monospaced,
          fontScale: Double = 1.0,
-         orpColor: ReaderORPColor = .teal,
+         orpColor: ReaderORPColor = .matchBackground,
          backgroundBrightness: Double = 0.5,
          hideControls: Bool = false,
          dyslexiaFriendly: Bool = false,
@@ -181,6 +181,14 @@ enum ReaderFont: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 enum ReaderORPColor: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// Follow the background — the phase tint the atmosphere glow and the
+    /// background shader already use, so the highlighted letter and the field
+    /// around it are always the same colour.
+    ///
+    /// This deliberately does NOT mean the theme's background fill. That would
+    /// paint the pivot letter in the exact colour of the surface behind it and
+    /// make it invisible. "Background" here is the tint, not the page.
+    case matchBackground
     case teal
     case blue
     case amber
@@ -191,6 +199,7 @@ enum ReaderORPColor: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var displayName: String {
         switch self {
+        case .matchBackground: return "Match Background"
         case .teal: return "Teal"
         case .blue: return "Blue"
         case .amber: return "Amber"
@@ -199,14 +208,27 @@ enum ReaderORPColor: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var color: Color {
+    /// "White" means "match body text" — pure white would vanish on Dawn.
+    ///
+    /// Hoisted to a stored constant rather than built inside `color(phase:)`.
+    /// That function runs on every word render, and a freshly constructed
+    /// dynamic `Color` is both an allocation per word and a value that does not
+    /// compare equal to an identically-configured one.
+    private static let bodyMatching = Color(
+        light: Color(hex: PinkAuroraHex.textInk), dark: .white
+    )
+
+    /// The highlight colour for a given reading phase.
+    ///
+    /// Only `.matchBackground` consults the phase; every fixed choice ignores it.
+    func color(phase: TrancePhase) -> Color {
         switch self {
+        case .matchBackground: return phase.atmosphereColor
         case .teal: return .roseGold
         case .blue: return .roseDeep
         case .amber: return .warmAccent
         case .pink: return .blush
-        // "White" means "match body text" — pure white would vanish on Dawn.
-        case .white: return Color(light: Color(hex: PinkAuroraHex.textInk), dark: .white)
+        case .white: return Self.bodyMatching
         }
     }
 }
@@ -252,7 +274,14 @@ extension ReaderDisplayPreferences {
 
     var textColor: Color { theme.text }
     var secondaryTextColor: Color { theme.secondaryText }
-    var pivotColor: Color { orpColor.color }
+    /// The highlight colour for the pivot letter.
+    ///
+    /// Takes the phase because `.matchBackground` resolves against it. Callers
+    /// that genuinely have no phase can pass `.induction`, but the reader always
+    /// has one.
+    func pivotColor(phase: TrancePhase) -> Color {
+        orpColor.color(phase: phase)
+    }
 
     /// The color scheme the reader should render in, honoring the override.
     func resolvedScheme(appColorScheme: ColorScheme) -> ColorScheme {
