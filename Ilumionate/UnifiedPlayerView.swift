@@ -222,6 +222,14 @@ struct UnifiedPlayerView: View {
                 isPaused: viewModel.playbackState == .paused
             )
 
+        case .visualField:
+            // Reads the view model's live copy, not the mode's snapshot, so the
+            // in-session Strength and Speed tiles take effect immediately.
+            VisualFieldStage(
+                settings: viewModel.visualFieldSettings,
+                fade: viewModel.visualFieldFade
+            )
+
         case .audioLight:
             EntrainmentBackground(
                 engine: viewModel.engine,

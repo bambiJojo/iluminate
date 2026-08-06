@@ -34,6 +34,13 @@ enum PlayerMode: Identifiable {
         goalDuration: TimeInterval? = nil
     )
     case colorPulse(frequency: Double, intensity: Double)
+    /// A wordless shader field. Never drives LightEngine or FlashController,
+    /// which is why it carries no photosensitivity warning.
+    case visualField(
+        settings: VisualFieldSettings,
+        audioFile: AudioFile?,
+        binaural: BinauralSettings?
+    )
     case audioLight(audioFile: AudioFile)
     case playlist(playlist: Playlist)
 
@@ -45,6 +52,8 @@ enum PlayerMode: Identifiable {
             return "flash-\(UUID())"
         case .colorPulse:
             return "colorPulse-\(UUID())"
+        case .visualField:
+            return "visualField-\(UUID())"
         case .audioLight(let file):
             return "audio-\(file.id)"
         case .playlist(let playlist):
@@ -62,6 +71,8 @@ enum PlayerMode: Identifiable {
             return "Mind Machine"
         case .colorPulse:
             return "Color Pulse"
+        case .visualField:
+            return "Visual Field"
         case .audioLight(let file):
             return file.displayName
         case .playlist(let playlist):
@@ -74,6 +85,7 @@ enum PlayerMode: Identifiable {
     var hasAudioScrubber: Bool {
         switch self {
         case .session, .audioLight, .playlist: return true
+        case .visualField(_, let audioFile, _): return audioFile != nil
         case .flashMode, .colorPulse: return false
         }
     }
@@ -82,6 +94,7 @@ enum PlayerMode: Identifiable {
         switch self {
         case .audioLight, .playlist: return true
         case .session(_, let audioFile): return audioFile != nil
+        case .visualField(_, let audioFile, _): return audioFile != nil
         case .flashMode, .colorPulse: return false
         }
     }
@@ -90,6 +103,9 @@ enum PlayerMode: Identifiable {
         switch self {
         case .session, .playlist: return true
         case .audioLight: return true // shown when light sync enabled
+        // Strength is the field's own knob, and the field does not drive the
+        // light engine that screen brightness would scale.
+        case .visualField: return false
         case .flashMode, .colorPulse: return false
         }
     }
@@ -98,7 +114,7 @@ enum PlayerMode: Identifiable {
         switch self {
         case .audioLight: return true
         case .playlist: return true
-        case .session, .flashMode, .colorPulse: return false
+        case .session, .flashMode, .colorPulse, .visualField: return false
         }
     }
 
@@ -166,7 +182,7 @@ enum PlayerMode: Identifiable {
     /// Whether this mode uses a dark visual (flash/color/light engine backgrounds)
     var usesDarkChrome: Bool {
         switch self {
-        case .flashMode, .colorPulse, .playlist: return true
+        case .flashMode, .colorPulse, .playlist, .visualField: return true
         case .audioLight: return false // switches when light sync enabled
         case .session: return false
         }
@@ -179,6 +195,8 @@ enum PlayerMode: Identifiable {
             return true
         case .flashMode(_, _, _, _, _, _, _, let goalDuration):
             return goalDuration != nil
+        case .visualField(let settings, _, _):
+            return settings.duration != nil
         case .colorPulse:
             return false
         }
@@ -187,10 +205,14 @@ enum PlayerMode: Identifiable {
     /// Optional finish line for quick Mind Machine presets. Custom sessions
     /// remain open-ended when no goal is supplied.
     var goalDuration: TimeInterval? {
-        guard case .flashMode(_, _, _, _, _, _, _, let goalDuration) = self else {
+        switch self {
+        case .flashMode(_, _, _, _, _, _, _, let goalDuration):
+            return goalDuration
+        case .visualField(let settings, _, _):
+            return settings.duration
+        default:
             return nil
         }
-        return goalDuration
     }
 
     var hasFrequencyDisplay: Bool {

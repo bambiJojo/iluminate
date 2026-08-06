@@ -16,6 +16,8 @@ enum PlayerControlSlot: Equatable, CaseIterable {
     case lightSync
     case volume
     case brightness
+    case visualStrength
+    case visualSpeed
     case more
 
     // MARK: - Composition
@@ -38,6 +40,12 @@ enum PlayerControlSlot: Equatable, CaseIterable {
         case .flashMode:
             return [.more]
 
+        case .visualField(_, let audioFile, let binaural):
+            var slots: [PlayerControlSlot] = [.visualStrength, .visualSpeed]
+            if audioFile != nil { slots.append(.volume) }
+            if binaural?.enabled == true { slots.append(.more) }
+            return slots
+
         case .colorPulse:
             return []
         }
@@ -48,6 +56,7 @@ enum PlayerControlSlot: Equatable, CaseIterable {
     /// Whether this tile is adjusted by dragging rather than tapping.
     var isDraggable: Bool {
         self == .volume || self == .brightness
+            || self == .visualStrength || self == .visualSpeed
     }
 
     /// Labels stay constant so the tray never reflows and muscle memory holds;
@@ -58,6 +67,8 @@ enum PlayerControlSlot: Equatable, CaseIterable {
         case .lightSync:   return "Light sync"
         case .volume:      return "Volume"
         case .brightness:  return "Brightness"
+        case .visualStrength: return "Strength"
+        case .visualSpeed:    return "Speed"
         case .more:        return "More"
         }
     }
@@ -67,6 +78,8 @@ enum PlayerControlSlot: Equatable, CaseIterable {
         case .mindMachine, .lightSync: return lightsAreOn ? "lightbulb.fill" : "lightbulb"
         case .volume:                  return "speaker.wave.2.fill"
         case .brightness:              return "sun.max.fill"
+        case .visualStrength:          return "circle.lefthalf.filled"
+        case .visualSpeed:             return "speedometer"
         case .more:                    return "ellipsis"
         }
     }
@@ -77,7 +90,7 @@ enum PlayerControlSlot: Equatable, CaseIterable {
             return lightsAreOn ? .active : .normal
         case .brightness:
             return lightsAreOn ? .normal : .disabled
-        case .volume, .more:
+        case .volume, .more, .visualStrength, .visualSpeed:
             return .normal
         }
     }

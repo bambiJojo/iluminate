@@ -127,6 +127,14 @@ final class UnifiedPlayerViewModel {
     var flashFrequency: Double = 10.0
     var flashColorTemperature: Int = 3000
 
+    // MARK: - Visual Field State
+
+    /// Live copy of the field's settings, so strength and speed can be tuned
+    /// mid-session without ending it — the same affordance the reader's tray has.
+    var visualFieldSettings: VisualFieldSettings = .standard
+    /// Rides the field's strength down over the last seconds of a timed session.
+    private(set) var visualFieldFade: Double = 1
+
     // MARK: - Binaural State
 
     private var binauralEngine: BinauralBeatsEngine?
@@ -227,6 +235,10 @@ final class UnifiedPlayerViewModel {
             flashFrequency = freq
             flashColorTemperature = colorTemp
             bilateralMode = mindMachineMode == .bilateral
+        }
+
+        if case .visualField(let settings, _, _) = mode {
+            visualFieldSettings = settings
         }
 
         showingSafetyWarning = mode.requiresSafetyWarning && !hasSeenFlashWarning
@@ -363,7 +375,7 @@ final class UnifiedPlayerViewModel {
             }
         case .audioLight(let audioFile):
             Task { await AudioLibraryStore.setFavorite(true, audioFileID: audioFile.id) }
-        case .flashMode, .colorPulse, .playlist:
+        case .flashMode, .colorPulse, .playlist, .visualField:
             return
         }
         isCurrentSessionSaved = true
@@ -377,7 +389,7 @@ final class UnifiedPlayerViewModel {
     var canSaveCompletedSession: Bool {
         switch mode {
         case .session, .audioLight: true
-        case .flashMode, .colorPulse, .playlist: false
+        case .flashMode, .colorPulse, .playlist, .visualField: false
         }
     }
 
@@ -398,7 +410,7 @@ final class UnifiedPlayerViewModel {
             audioLightSyncPlayer?.seek(to: time)
         case .playlist:
             playlistController?.seek(to: time)
-        case .flashMode, .colorPulse:
+        case .flashMode, .colorPulse, .visualField:
             break
         }
         currentTime = time
@@ -615,7 +627,7 @@ final class UnifiedPlayerViewModel {
     /// Whether the chrome should use light or dark text
     var useDarkChrome: Bool {
         switch mode {
-        case .flashMode, .colorPulse, .playlist, .session:
+        case .flashMode, .colorPulse, .playlist, .session, .visualField:
             return true
         case .audioLight:
             return lightSyncEnabled
@@ -642,6 +654,19 @@ final class UnifiedPlayerViewModel {
         case .colorPulse:
             // No controller needed — TimelineView handles rendering
             duration = 0 // infinite
+
+        case .visualField(let settings, _, let binaural):
+            // No controller at all: the field is a shader driven by
+            // TimelineView, and it never touches LightEngine or FlashController.
+            duration = settings.duration ?? 0
+            if let binaural {
+                setupBinaural(
+                    enabled: binaural.enabled,
+                    carrier: binaural.carrier,
+                    volume: binaural.volume,
+                    beatFrequency: binaural.beatFrequency
+                )
+            }
 
         case .audioLight(let audioFile):
             setupAudioMode(audioFile: audioFile)
@@ -700,12 +725,32 @@ final class UnifiedPlayerViewModel {
         flashController = controller
         duration = 0 // infinite
 
+        setupBinaural(
+            enabled: binauralEnabled,
+            carrier: binauralCarrier,
+            volume: binauralVolume,
+            // Flash entrains with light, so the beat agrees with the light.
+            beatFrequency: frequency
+        )
+    }
+
+    /// Builds the binaural engine for whichever mode wants one.
+    ///
+    /// Shared by flash and the visual field. They differ only in where the beat
+    /// frequency comes from: flash derives it from its light frequency, and the
+    /// wordless field carries its own, because it has no light to agree with.
+    private func setupBinaural(
+        enabled: Bool,
+        carrier: Double,
+        volume: Double,
+        beatFrequency: Double
+    ) {
         let binaural = BinauralBeatsEngine()
-        binaural.carrierFrequency = binauralCarrier
-        binaural.volume = binauralVolume
-        binaural.beatFrequency = frequency
+        binaural.carrierFrequency = carrier
+        binaural.volume = volume
+        binaural.beatFrequency = beatFrequency
         binauralEngine = binaural
-        binauralActive = binauralEnabled
+        binauralActive = enabled
     }
 
     private func setupAudioMode(audioFile: AudioFile) {
@@ -827,6 +872,11 @@ final class UnifiedPlayerViewModel {
             flashController?.start()
             if binauralActive { binauralEngine?.start() }
 
+        case .visualField:
+            // The shader renders itself; only the optional binaural needs
+            // starting. No light controller is involved at any point.
+            if binauralActive { binauralEngine?.start() }
+
         case .colorPulse:
             // TimelineView handles rendering automatically
             break
@@ -854,6 +904,9 @@ final class UnifiedPlayerViewModel {
             flashController?.pause()
             binauralEngine?.pause()
 
+        case .visualField:
+            binauralEngine?.pause()
+
         case .colorPulse:
             break // TimelineView keeps running but we show pause overlay
 
@@ -879,6 +932,9 @@ final class UnifiedPlayerViewModel {
 
         case .flashMode:
             flashController?.resume()
+            if binauralActive { binauralEngine?.resume() }
+
+        case .visualField:
             if binauralActive { binauralEngine?.resume() }
 
         case .colorPulse:
@@ -912,6 +968,9 @@ final class UnifiedPlayerViewModel {
 
         case .flashMode:
             flashController?.stop()
+            binauralEngine?.stop()
+
+        case .visualField:
             binauralEngine?.stop()
 
         case .colorPulse:
@@ -975,6 +1034,9 @@ final class UnifiedPlayerViewModel {
 
         case .flashMode:
             flashController?.stop()
+            binauralEngine?.stop()
+
+        case .visualField:
             binauralEngine?.stop()
 
         case .colorPulse:
@@ -1051,6 +1113,8 @@ final class UnifiedPlayerViewModel {
             return bilateralMode ? MindMachineMode.bilateral : MindMachineMode.flash
         case .colorPulse:
             return MindMachineMode.colorPulse
+        case .visualField:
+            return MindMachineMode.visualField
         case .session, .audioLight, .playlist:
             return nil
         }
@@ -1120,6 +1184,21 @@ final class UnifiedPlayerViewModel {
             // currentTime tracks how long the pulse has been running
             if playbackState == .playing {
                 currentTime += 0.1
+            }
+
+        case .visualField(let settings, _, _):
+            // Same as colorPulse: nothing else owns a clock here, so the field
+            // advances its own and the fade reads off it.
+            if playbackState == .playing {
+                currentTime += 0.1
+            }
+            visualFieldFade = VisualFieldFade.multiplier(
+                elapsed: currentTime, duration: settings.duration
+            )
+            if VisualFieldFade.isComplete(
+                elapsed: currentTime, duration: settings.duration
+            ) {
+                completePlayback()
             }
 
         case .audioLight:
@@ -1199,7 +1278,7 @@ final class UnifiedPlayerViewModel {
     private var resumableContentKind: ResumablePlaybackKind {
         switch mode {
         case .audioLight: .audio
-        case .session, .flashMode, .colorPulse, .playlist: .session
+        case .session, .flashMode, .colorPulse, .playlist, .visualField: .session
         }
     }
 
@@ -1217,7 +1296,7 @@ final class UnifiedPlayerViewModel {
             return session.id.uuidString
         case .audioLight(let audioFile):
             return audioFile.id.uuidString
-        case .flashMode, .colorPulse, .playlist:
+        case .flashMode, .colorPulse, .playlist, .visualField:
             return nil
         }
     }
@@ -1228,7 +1307,7 @@ final class UnifiedPlayerViewModel {
             audioFile?.favorite ?? savedSessionStore.contains(session.id.uuidString)
         case .audioLight(let audioFile):
             audioFile.favorite
-        case .flashMode, .colorPulse, .playlist:
+        case .flashMode, .colorPulse, .playlist, .visualField:
             false
         }
     }
@@ -1249,7 +1328,7 @@ final class UnifiedPlayerViewModel {
         case .session(let currentSession, nil):
             recommendedNextMode = recommendedBuiltInSession(excluding: currentSession.id)
                 .map { .session(session: $0, audioFile: nil) }
-        case .flashMode, .colorPulse, .playlist:
+        case .flashMode, .colorPulse, .playlist, .visualField:
             recommendedNextMode = recommendedBuiltInSession(excluding: nil)
                 .map { .session(session: $0, audioFile: nil) }
         }
@@ -1271,6 +1350,8 @@ final class UnifiedPlayerViewModel {
             break
         case .flashMode(_, _, _, _, _, _, _, let goalDuration):
             guard goalDuration != nil else { return }
+        case .visualField(let settings, _, _):
+            guard settings.duration != nil else { return }
         case .colorPulse, .playlist:
             return
         }
@@ -1292,7 +1373,7 @@ final class UnifiedPlayerViewModel {
             frequency = first.frequency
         case .flashMode(let value, _, _, _, _, _, _, _), .colorPulse(let value, _):
             frequency = value
-        case .audioLight, .playlist:
+        case .audioLight, .playlist, .visualField:
             return "Trance"
         }
 
@@ -1309,7 +1390,7 @@ final class UnifiedPlayerViewModel {
         switch mode {
         case .session(_, let audioFile): audioFile == nil ? .preset : .generated
         case .audioLight:                .generated
-        case .flashMode, .colorPulse:    .mindMachine
+        case .flashMode, .colorPulse, .visualField: .mindMachine
         case .playlist:                  .preset
         }
     }
