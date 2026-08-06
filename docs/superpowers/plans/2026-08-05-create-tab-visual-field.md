@@ -218,7 +218,7 @@ Expected: `** TEST SUCCEEDED **` on both. Every test that passed in Step 1 must 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "refactor: promote the reader's visual system to a shared Visuals module"
 ```
 
@@ -338,7 +338,7 @@ Expected: `** TEST SUCCEEDED **`, including the pre-existing `ReaderVisualStreng
 - [ ] **Step 7: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "refactor: move the visual opacity band onto VisualModulation"
 ```
 
@@ -529,7 +529,7 @@ Expected: `** TEST SUCCEEDED **`. `everyEffectStaysUnderTheFlickerCeiling` and `
 - [ ] **Step 7: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(visuals): add VisualDirection, carried as the sign of the shader rate"
 ```
 
@@ -648,7 +648,7 @@ Expected: `** TEST SUCCEEDED **`.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(visuals): make the focus well optional via a focus uniform"
 ```
 
@@ -917,7 +917,7 @@ Expected: `** TEST SUCCEEDED **` on both.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(visuals): add VisualTint with a luminance floor"
 ```
 
@@ -1180,7 +1180,7 @@ Expected: `** TEST SUCCEEDED **`.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(visuals): add VisualFieldSettings as the direct modulation producer"
 ```
 
@@ -1362,7 +1362,7 @@ enum CreateSessionKind: String, CaseIterable, Identifiable, Sendable {
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(create): add CreateSessionKind"
 ```
 
@@ -1560,7 +1560,7 @@ enum CreateControlSlot: String, Equatable, Hashable, CaseIterable, Sendable {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(create): add CreateControlSlot"
 ```
 
@@ -1724,7 +1724,7 @@ final class VisualFieldStore {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(create): persist the last-used visual field settings"
 ```
 
@@ -1876,7 +1876,7 @@ enum SessionDurationOption: String, CaseIterable, Identifiable, Sendable {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(create): add session duration options"
 ```
 
@@ -2246,7 +2246,7 @@ Two things the compiler is likely to object to, both with the same shape of fix:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(create): add the Create control tray and tint sheet"
 ```
 
@@ -2369,7 +2369,7 @@ Expected: `** BUILD SUCCEEDED **`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(create): add the live session preview"
 ```
 
@@ -2719,7 +2719,7 @@ In `Ilumionate/ContentView.swift:185-189`:
 - [ ] **Step 8: Commit (build is expected to fail until Task 14)**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(create): rebuild the Create tab around session kinds and a tile tray"
 ```
 
@@ -3013,7 +3013,7 @@ The compiler will now flag every remaining non-exhaustive switch outside `Player
 - [ ] **Step 8: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(player): add PlayerMode.visualField and its tray slots"
 ```
 
@@ -3175,7 +3175,7 @@ From Create, with Visuals selected, tap Begin Visuals. Verify: the field fills t
 - [ ] **Step 8: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(player): run the wordless visual field full screen"
 ```
 
@@ -3354,7 +3354,7 @@ Start a Visual Field session with a 10-minute duration. Confirm it is at full st
 - [ ] **Step 8: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(player): fade a timed visual field out rather than cutting to black"
 ```
 
@@ -3545,7 +3545,7 @@ Start a Visual Field session with binaural on and no track; then with a track. T
 - [ ] **Step 8: Commit**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "feat(player): let binaural and a library track ride along with the visual field"
 ```
 
@@ -3610,7 +3610,7 @@ On both iOS and macOS:
 - [ ] **Step 6: Commit any fixes and update the plan**
 
 ```bash
-git add -A
+git add Ilumionate IlumionateTests
 git commit -m "chore: final verification for the Create tab visual field"
 ```
 

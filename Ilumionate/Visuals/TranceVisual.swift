@@ -75,7 +75,7 @@ enum TranceVisual: String, Codable, CaseIterable, Identifiable, Sendable {
     /// `rate` argument. The shader must not scale it further.
     ///
     /// This lives here rather than in Metal so the photosensitivity ceiling is
-    /// enforced by `ReaderVisualTests`, not by a comment beside a constant that
+    /// enforced by `TranceVisualTests`, not by a comment beside a constant that
     /// nothing checks.
     var motionRate: Double {
         switch self {
@@ -112,6 +112,6 @@ enum TranceVisual: String, Codable, CaseIterable, Identifiable, Sendable {
     /// everywhere in the frame — the compressed centre does not flicker faster
     /// than the sparse rim.
     var peakCrossingHz: Double {
-        motionRate * spectralMultiplier * ReadingVisualModulator.speedBand.upperBound
+        motionRate * spectralMultiplier * VisualModulation.speedBand.upperBound
     }
 }

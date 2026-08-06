@@ -29,7 +29,7 @@ enum ReaderControlSlot: Equatable, CaseIterable {
     /// Whether this tile is adjusted by dragging rather than tapping.
     ///
     /// Trance drags to set visual strength, and its travel runs below
-    /// `visualOpacityRange.lowerBound` down to fully off — so the one gesture
+    /// `VisualModulation.opacityBand.lowerBound` down to fully off — so the one gesture
     /// covers strength *and* on/off, and you can drag straight back up again.
     var isDraggable: Bool { self == .speed || self == .tranceMode }
 

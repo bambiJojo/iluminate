@@ -12,29 +12,6 @@ import SwiftUI
 
 enum ReadingVisualModulator {
 
-    /// The motion budget every effect must fit inside.
-    ///
-    /// The safety target is that no effect makes a repeating feature cross a
-    /// fixed pixel at 3 Hz or more, since that is where flicker starts to carry
-    /// photosensitivity risk.
-    ///
-    /// Every shader now derives its motion from the shared phase rule
-    ///
-    ///     phase = convergentDepth(r, turns) * density - time * speed * rate
-    ///
-    /// whose time derivative is `speed * rate` — independent of radius. The
-    /// compressed centre therefore does not flicker faster than the sparse rim,
-    /// and meeting the target reduces to a single multiplication rather than
-    /// per-effect reasoning about feature counts.
-    ///
-    /// `rate` lives on `TranceVisual.motionRate` and reaches Metal as a shader
-    /// argument, so `ReaderVisualTests.everyEffectStaysUnderTheFlickerCeiling`
-    /// checks the ceiling for every case. Editing a shader constant can no
-    /// longer bypass it. `density` scales only the spatial term and is free to
-    /// tune without re-deriving any of this.
-    static let speedBand: ClosedRange<Double> = 0.05...0.45
-    static let amplitudeBand: ClosedRange<Double> = 0.25...1.0
-
     static func modulation(
         for phase: TrancePhase,
         speedMultiplier: Double,
@@ -54,22 +31,23 @@ enum ReadingVisualModulator {
         let pace = (min(max(speedMultiplier, 0.5), 2.0) - 0.5) / 1.5   // 0…1
         let blend = depth * (0.7 + 0.3 * pace)
 
+        let band = VisualModulation.speedBand
+
         return VisualModulation(
             tint: tint,
             speed: clamp(
-                speedBand.lowerBound
-                    + (speedBand.upperBound - speedBand.lowerBound) * blend,
-                to: speedBand
+                band.lowerBound + (band.upperBound - band.lowerBound) * blend,
+                to: band
             ),
             amplitude: amplitude(for: depth)
         )
     }
 
     private static func amplitude(for depth: Double) -> Double {
-        clamp(
-            amplitudeBand.lowerBound
-                + (amplitudeBand.upperBound - amplitudeBand.lowerBound) * depth,
-            to: amplitudeBand
+        let band = VisualModulation.amplitudeBand
+        return clamp(
+            band.lowerBound + (band.upperBound - band.lowerBound) * depth,
+            to: band
         )
     }
 

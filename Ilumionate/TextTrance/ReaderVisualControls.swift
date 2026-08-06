@@ -114,7 +114,7 @@ struct ReaderVisualControls: View {
     private var strengthSlider: some View {
         Slider(
             value: opacityBinding,
-            in: ReaderDisplayPreferences.visualOpacityRange
+            in: VisualModulation.opacityBand
         )
         .accessibilityLabel("Visual strength")
         .accessibilityValue(strengthValue)

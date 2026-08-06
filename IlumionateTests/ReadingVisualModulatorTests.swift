@@ -16,7 +16,7 @@ struct ReadingVisualModulatorTests {
                 let m = ReadingVisualModulator.modulation(
                     for: phase, speedMultiplier: multiplier, reduceMotion: false
                 )
-                #expect(ReadingVisualModulator.speedBand.contains(m.speed))
+                #expect(VisualModulation.speedBand.contains(m.speed))
             }
         }
     }
@@ -27,7 +27,7 @@ struct ReadingVisualModulatorTests {
             let m = ReadingVisualModulator.modulation(
                 for: phase, speedMultiplier: 1.0, reduceMotion: false
             )
-            #expect(ReadingVisualModulator.amplitudeBand.contains(m.amplitude))
+            #expect(VisualModulation.amplitudeBand.contains(m.amplitude))
         }
     }
 

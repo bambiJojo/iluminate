@@ -101,8 +101,8 @@ struct ReaderColorModeTests {
     func visualOpacityClamps() {
         var prefs = ReaderDisplayPreferences.standard
         prefs.visualOpacity = 5.0
-        #expect(prefs.clampedVisualOpacity == ReaderDisplayPreferences.visualOpacityRange.upperBound)
+        #expect(prefs.clampedVisualOpacity == VisualModulation.opacityBand.upperBound)
         prefs.visualOpacity = -3.0
-        #expect(prefs.clampedVisualOpacity == ReaderDisplayPreferences.visualOpacityRange.lowerBound)
+        #expect(prefs.clampedVisualOpacity == VisualModulation.opacityBand.lowerBound)
     }
 }

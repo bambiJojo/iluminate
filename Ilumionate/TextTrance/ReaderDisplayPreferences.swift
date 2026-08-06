@@ -214,9 +214,6 @@ enum ReaderORPColor: String, Codable, CaseIterable, Identifiable, Sendable {
 extension ReaderDisplayPreferences {
     static let fontScaleRange: ClosedRange<Double> = 0.75...1.45
     static let backgroundBrightnessRange: ClosedRange<Double> = 0.2...0.9
-    /// Capped below 1.0 on purpose: at full strength even a centre-faded effect
-    /// starts competing with the word at the ellipse boundary.
-    static let visualOpacityRange: ClosedRange<Double> = 0.05...0.85
 
     var clampedFontScale: Double {
         min(max(fontScale, Self.fontScaleRange.lowerBound), Self.fontScaleRange.upperBound)
@@ -230,8 +227,8 @@ extension ReaderDisplayPreferences {
     }
 
     var clampedVisualOpacity: Double {
-        min(max(visualOpacity, Self.visualOpacityRange.lowerBound),
-            Self.visualOpacityRange.upperBound)
+        min(max(visualOpacity, VisualModulation.opacityBand.lowerBound),
+            VisualModulation.opacityBand.upperBound)
     }
 
     var effectiveFont: ReaderFont {

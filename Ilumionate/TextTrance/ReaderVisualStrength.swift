@@ -12,12 +12,12 @@ enum ReaderVisualStrength {
     /// minimum strength, so the bottom of the drag is fully off rather than
     /// merely faint.
     static let dragRange: ClosedRange<Double> =
-        0...ReaderDisplayPreferences.visualOpacityRange.upperBound
+        0...VisualModulation.opacityBand.upperBound
 
     /// Below this the effect switches off entirely, stopping the shader instead
     /// of drawing it at an invisible opacity.
     static var offThreshold: Double {
-        ReaderDisplayPreferences.visualOpacityRange.lowerBound
+        VisualModulation.opacityBand.lowerBound
     }
 
     struct Resolution: Equatable {

@@ -16,7 +16,7 @@ struct ReaderVisualStrengthTests {
         // has to start below it for "off" to be reachable at all.
         #expect(ReaderVisualStrength.dragRange.lowerBound == 0)
         #expect(ReaderVisualStrength.dragRange.lowerBound
-                < ReaderDisplayPreferences.visualOpacityRange.lowerBound)
+                < VisualModulation.opacityBand.lowerBound)
     }
 
     @Test("Dragging to the bottom switches the effect off")
