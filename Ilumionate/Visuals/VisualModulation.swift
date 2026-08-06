@@ -22,6 +22,24 @@ struct VisualModulation: Equatable, Sendable {
     /// Pattern strength, always within `VisualModulation.amplitudeBand`
     /// (currently floored at 0.25, never 0 — a selected effect stays visible).
     let amplitude: Double
+    /// Which way the effect travels. The reader is always `.inward` — its
+    /// effects exist to pull focus to the word. Only the wordless Visual Field,
+    /// which has no word to converge on, sets `.outward`.
+    let direction: VisualDirection
+
+    /// `direction` defaults to `.inward` so the reader's producer constructs
+    /// this exactly as it did before the Visual Field existed.
+    init(
+        tint: Color,
+        speed: Double,
+        amplitude: Double,
+        direction: VisualDirection = .inward
+    ) {
+        self.tint = tint
+        self.speed = speed
+        self.amplitude = amplitude
+        self.direction = direction
+    }
 
     static let still = VisualModulation(tint: .phaseIntro, speed: 0, amplitude: 0.25)
 }

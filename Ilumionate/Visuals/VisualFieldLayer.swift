@@ -33,8 +33,11 @@ struct VisualFieldLayer: View {
                             .float(Float(modulation.speed)),
                             .float(Float(modulation.amplitude)),
                             // Sourced from Swift, not hardcoded in Metal, so
-                            // the photosensitivity ceiling is testable.
-                            .float(Float(visual.motionRate))
+                            // the photosensitivity ceiling is testable. The SIGN
+                            // carries direction; the magnitude is what the
+                            // ceiling test measures, so reversing travel cannot
+                            // smuggle an effect past the budget.
+                            .float(Float(visual.motionRate * modulation.direction.sign))
                         )
                     )
             }
