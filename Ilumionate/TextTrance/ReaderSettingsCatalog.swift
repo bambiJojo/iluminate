@@ -20,7 +20,7 @@ enum ReaderSettingsTier: String, CaseIterable, Sendable {
 enum ReaderSettingsGroup: String, CaseIterable, Identifiable, Sendable {
     // Shared
     case readingComfort     // reader mode, font, size
-    case visual             // ReaderVisual picker (never removed by mode)
+    case visual             // TranceVisual picker (never removed by mode)
     case attention          // attention gate
     case displayDetail      // line spacing, highlight, brightness, hide controls, dyslexia
     case speedDetail        // speed mode, warm-up/ramp WPM, chunk size, punctuation pauses

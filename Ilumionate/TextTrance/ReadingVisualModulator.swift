@@ -1,28 +1,16 @@
-//  ReaderVisualModulation.swift
+//  ReadingVisualModulator.swift
 //  Ilumionate
 //
-//  Turns the session's reading phase and pace into the three values the shaders
-//  take. Every safety limit lives here rather than in Metal, so the caps are
-//  unit-testable and cannot be bypassed by editing a shader constant.
+//  Turns the session's reading phase and pace into a VisualModulation. This is
+//  the reader's producer; the Create tab's Visual Field produces the same struct
+//  directly from VisualFieldSettings instead.
+//
+//  Every safety limit lives on VisualModulation itself rather than here, so no
+//  producer can exceed the bands.
 
 import SwiftUI
 
-struct ReaderVisualModulation: Equatable, Sendable {
-    /// Phase tint, from the shared `TrancePhase.atmosphereColor` table.
-    let tint: Color
-    /// Normalised motion rate, always within `ReaderVisualModulator.speedBand`.
-    /// Each shader interprets it for its own geometry — a revolution rate for a
-    /// spiral, a ring-crossing rate for a tunnel — so the same value produces
-    /// different physical rates per effect.
-    let speed: Double
-    /// Pattern strength, always within `ReaderVisualModulator.amplitudeBand`
-    /// (currently floored at 0.25, never 0 — a selected effect stays visible).
-    let amplitude: Double
-
-    static let still = ReaderVisualModulation(tint: .phaseIntro, speed: 0, amplitude: 0.25)
-}
-
-enum ReaderVisualModulator {
+enum ReadingVisualModulator {
 
     /// The motion budget every effect must fit inside.
     ///
@@ -39,7 +27,7 @@ enum ReaderVisualModulator {
     /// and meeting the target reduces to a single multiplication rather than
     /// per-effect reasoning about feature counts.
     ///
-    /// `rate` lives on `ReaderVisual.motionRate` and reaches Metal as a shader
+    /// `rate` lives on `TranceVisual.motionRate` and reaches Metal as a shader
     /// argument, so `ReaderVisualTests.everyEffectStaysUnderTheFlickerCeiling`
     /// checks the ceiling for every case. Editing a shader constant can no
     /// longer bypass it. `density` scales only the spatial term and is free to
@@ -51,12 +39,12 @@ enum ReaderVisualModulator {
         for phase: TrancePhase,
         speedMultiplier: Double,
         reduceMotion: Bool
-    ) -> ReaderVisualModulation {
+    ) -> VisualModulation {
         let tint = phase.atmosphereColor
         let depth = depthWeight(for: phase)
 
         guard reduceMotion == false else {
-            return ReaderVisualModulation(
+            return VisualModulation(
                 tint: tint, speed: 0, amplitude: amplitude(for: depth)
             )
         }
@@ -66,7 +54,7 @@ enum ReaderVisualModulator {
         let pace = (min(max(speedMultiplier, 0.5), 2.0) - 0.5) / 1.5   // 0…1
         let blend = depth * (0.7 + 0.3 * pace)
 
-        return ReaderVisualModulation(
+        return VisualModulation(
             tint: tint,
             speed: clamp(
                 speedBand.lowerBound

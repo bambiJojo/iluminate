@@ -89,7 +89,7 @@ struct ReaderVisualStrengthTests {
 
     @Test("Resolving never yields none while asking for a real strength")
     func neverStrandsOn() {
-        for visual in ReaderVisual.effects {
+        for visual in TranceVisual.effects {
             let resolved = ReaderVisualStrength.resolve(
                 draggedValue: 0.6,
                 current: .none,

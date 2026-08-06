@@ -1,5 +1,5 @@
 //
-//  ReaderVisualModulatorTests.swift
+//  ReadingVisualModulatorTests.swift
 //  IlumionateTests
 //
 
@@ -7,16 +7,16 @@ import Testing
 import SwiftUI
 @testable import Ilumionate
 
-struct ReaderVisualModulatorTests {
+struct ReadingVisualModulatorTests {
 
     @Test("Speed never leaves the safe band, for any phase at any pace")
     func speedAlwaysInBand() {
         for phase in TrancePhase.allCases {
             for multiplier in [-10.0, 0.0, 0.25, 1.0, 4.0, 1_000.0] {
-                let m = ReaderVisualModulator.modulation(
+                let m = ReadingVisualModulator.modulation(
                     for: phase, speedMultiplier: multiplier, reduceMotion: false
                 )
-                #expect(ReaderVisualModulator.speedBand.contains(m.speed))
+                #expect(ReadingVisualModulator.speedBand.contains(m.speed))
             }
         }
     }
@@ -24,17 +24,17 @@ struct ReaderVisualModulatorTests {
     @Test("Amplitude never leaves its band")
     func amplitudeAlwaysInBand() {
         for phase in TrancePhase.allCases {
-            let m = ReaderVisualModulator.modulation(
+            let m = ReadingVisualModulator.modulation(
                 for: phase, speedMultiplier: 1.0, reduceMotion: false
             )
-            #expect(ReaderVisualModulator.amplitudeBand.contains(m.amplitude))
+            #expect(ReadingVisualModulator.amplitudeBand.contains(m.amplitude))
         }
     }
 
     @Test("Reduce Motion pins speed to zero for every phase")
     func reduceMotionFreezes() {
         for phase in TrancePhase.allCases {
-            let m = ReaderVisualModulator.modulation(
+            let m = ReadingVisualModulator.modulation(
                 for: phase, speedMultiplier: 2.0, reduceMotion: true
             )
             #expect(m.speed == 0)
@@ -43,7 +43,7 @@ struct ReaderVisualModulatorTests {
 
     @Test("Reduce Motion still reports the phase tint")
     func reduceMotionKeepsTint() {
-        let m = ReaderVisualModulator.modulation(
+        let m = ReadingVisualModulator.modulation(
             for: .deepening, speedMultiplier: 1.0, reduceMotion: true
         )
         #expect(m.tint == Color.phaseDeepener)
@@ -52,7 +52,7 @@ struct ReaderVisualModulatorTests {
     @Test("Amplitude deepens through the arc and eases off at emergence")
     func amplitudeFollowsTheArc() {
         func amp(_ phase: TrancePhase) -> Double {
-            ReaderVisualModulator.modulation(
+            ReadingVisualModulator.modulation(
                 for: phase, speedMultiplier: 1.0, reduceMotion: false
             ).amplitude
         }
@@ -65,7 +65,7 @@ struct ReaderVisualModulatorTests {
     @Test("Amplitude ordering pins the whole depth table, not just a few phases")
     func amplitudeOrderingCoversEveryPhase() {
         func amp(_ phase: TrancePhase) -> Double {
-            ReaderVisualModulator.modulation(
+            ReadingVisualModulator.modulation(
                 for: phase, speedMultiplier: 1.0, reduceMotion: false
             ).amplitude
         }
@@ -86,10 +86,10 @@ struct ReaderVisualModulatorTests {
 
     @Test("A faster reading pace yields a faster visual")
     func paceRaisesSpeed() {
-        let slow = ReaderVisualModulator.modulation(
+        let slow = ReadingVisualModulator.modulation(
             for: .deepening, speedMultiplier: 0.5, reduceMotion: false
         )
-        let fast = ReaderVisualModulator.modulation(
+        let fast = ReadingVisualModulator.modulation(
             for: .deepening, speedMultiplier: 2.0, reduceMotion: false
         )
         #expect(fast.speed > slow.speed)
@@ -97,7 +97,7 @@ struct ReaderVisualModulatorTests {
 
     @Test("Tint comes from the shared phase table")
     func tintMatchesPhase() {
-        let m = ReaderVisualModulator.modulation(
+        let m = ReadingVisualModulator.modulation(
             for: .emergence, speedMultiplier: 1.0, reduceMotion: false
         )
         #expect(m.tint == TrancePhase.emergence.atmosphereColor)

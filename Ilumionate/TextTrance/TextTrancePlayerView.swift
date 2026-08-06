@@ -41,8 +41,8 @@ struct TextTrancePlayerView: View {
 
     /// Current modulation for the background visual. Reduce Motion is read from
     /// the environment, so toggling it mid-session pauses the layer immediately.
-    private var visualModulation: ReaderVisualModulation {
-        ReaderVisualModulator.modulation(
+    private var visualModulation: VisualModulation {
+        ReadingVisualModulator.modulation(
             for: session.currentPhase,
             speedMultiplier: session.speedMultiplier,
             reduceMotion: reduceMotion
@@ -72,7 +72,7 @@ struct TextTrancePlayerView: View {
         ZStack {
             displayPrefs.adjustedBackground.ignoresSafeArea()
 
-            ReaderVisualLayer(
+            VisualFieldLayer(
                 visual: displayPrefs.visual,
                 modulation: visualModulation,
                 opacity: displayPrefs.clampedVisualOpacity
@@ -101,7 +101,7 @@ struct TextTrancePlayerView: View {
                            value: backgroundPulse)
                 .animation(.easeInOut(duration: 2.5), value: session.currentPhase)
 
-            // Centre on the same rect the shader does. ReaderVisualLayer
+            // Centre on the same rect the shader does. VisualFieldLayer
             // ignores the safe area, so its boundingRect — and therefore the
             // focus well every effect converges on — is the full screen. Left
             // inside the safe area the word centres ~13pt lower on a notched

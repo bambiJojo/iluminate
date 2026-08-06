@@ -93,15 +93,15 @@ extension ReaderColorMode {
     }
 }
 
-extension ReaderVisual {
+extension TranceVisual {
     /// The selectable effects — everything except "off", which the Trance tile
     /// owns.
-    static var effects: [ReaderVisual] { allCases.filter { $0 != .none } }
+    static var effects: [TranceVisual] { allCases.filter { $0 != .none } }
 
     /// Tapping the Visual tile steps to the next effect. `.none` is deliberately
     /// not in this cycle: turning the visuals off is the Trance tile's job, so
     /// cycling can never strand you on a blank background.
-    var nextEffect: ReaderVisual {
+    var nextEffect: TranceVisual {
         let effects = Self.effects
         guard let index = effects.firstIndex(of: self) else { return effects.first ?? .breath }
         return effects[(index + 1) % effects.count]

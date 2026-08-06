@@ -14,7 +14,7 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
     var hideControls: Bool
     var dyslexiaFriendly: Bool
     var colorMode: ReaderColorMode
-    var visual: ReaderVisual
+    var visual: TranceVisual
     var visualOpacity: Double
 
     init(theme: ReaderTheme = .void,
@@ -25,7 +25,7 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
          hideControls: Bool = false,
          dyslexiaFriendly: Bool = false,
          colorMode: ReaderColorMode = .followApp,
-         visual: ReaderVisual = .breath,
+         visual: TranceVisual = .breath,
          visualOpacity: Double = 0.35) {
         self.theme = theme
         self.font = font
@@ -65,7 +65,7 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
         dyslexiaFriendly = try c.decodeIfPresent(Bool.self, forKey: .dyslexiaFriendly)
             ?? d.dyslexiaFriendly
         colorMode = try c.decodeIfPresent(ReaderColorMode.self, forKey: .colorMode) ?? d.colorMode
-        visual = try c.decodeIfPresent(ReaderVisual.self, forKey: .visual) ?? d.visual
+        visual = try c.decodeIfPresent(TranceVisual.self, forKey: .visual) ?? d.visual
         visualOpacity = try c.decodeIfPresent(Double.self, forKey: .visualOpacity) ?? d.visualOpacity
     }
 

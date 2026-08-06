@@ -1,17 +1,20 @@
-//  ReaderVisual.swift
+//  TranceVisual.swift
 //  Ilumionate
 //
-//  The reader's animated background choices. `.none` and `.breath` are handled
-//  without a shader — `.breath` is the phase-tinted radial glow the reader has
-//  always had, kept as a named option so it can stay the default.
+//  The animated background effects, shared by the reader and the Create tab's
+//  wordless Visual Field. `.none` and `.breath` are handled without a shader —
+//  `.breath` is the phase-tinted radial glow the reader has always had, kept as
+//  a named option so it can stay the reader's default.
 //
-//  Every shader-backed effect converges INWARD, toward the word at the centre
-//  of the frame. See
-//  docs/superpowers/specs/2026-08-04-reader-focus-visuals-design.md.
+//  Shader-backed effects converge INWARD by default, toward the word at the
+//  centre of the frame. The Visual Field can reverse that with VisualDirection,
+//  because it has no word to converge on. See
+//  docs/superpowers/specs/2026-08-04-reader-focus-visuals-design.md and
+//  docs/superpowers/specs/2026-08-05-create-tab-visual-field-design.md.
 
 import Foundation
 
-enum ReaderVisual: String, Codable, CaseIterable, Identifiable, Sendable {
+enum TranceVisual: String, Codable, CaseIterable, Identifiable, Sendable {
     case none
     case breath
     case spiral
@@ -109,6 +112,6 @@ enum ReaderVisual: String, Codable, CaseIterable, Identifiable, Sendable {
     /// everywhere in the frame — the compressed centre does not flicker faster
     /// than the sparse rim.
     var peakCrossingHz: Double {
-        motionRate * spectralMultiplier * ReaderVisualModulator.speedBand.upperBound
+        motionRate * spectralMultiplier * ReadingVisualModulator.speedBand.upperBound
     }
 }

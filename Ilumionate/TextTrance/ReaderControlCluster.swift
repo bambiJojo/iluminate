@@ -36,9 +36,9 @@ struct ReaderControlCluster: View {
     @State private var strengthDragStart: Double?
     /// Restored when the visuals are switched back on, so turning them off and
     /// on returns the effect you were using rather than a default.
-    @State private var lastEffect: ReaderVisual = .breath
+    @State private var lastEffect: TranceVisual = .breath
 
-    private var visualBinding: Binding<ReaderVisual> {
+    private var visualBinding: Binding<TranceVisual> {
         Binding(
             get: { session.displayPreferences.visual },
             set: { newValue in
@@ -77,7 +77,7 @@ struct ReaderControlCluster: View {
 
     /// The effect to come back to. Never `.none`, so switching the visuals on
     /// always actually shows something.
-    private var restorableEffect: ReaderVisual {
+    private var restorableEffect: TranceVisual {
         lastEffect == .none ? .breath : lastEffect
     }
 
@@ -171,7 +171,7 @@ struct ReaderControlCluster: View {
         // Effects only — turning the visuals off belongs to the Trance tile, so
         // there is exactly one control for on/off.
         Picker("Effect", selection: visualBinding) {
-            ForEach(ReaderVisual.effects) { visual in
+            ForEach(TranceVisual.effects) { visual in
                 Text(visual.displayName).tag(visual)
             }
         }

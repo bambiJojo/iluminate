@@ -21,7 +21,7 @@ enum ReaderVisualStrength {
     }
 
     struct Resolution: Equatable {
-        let visual: ReaderVisual
+        let visual: TranceVisual
         let opacity: Double
     }
 
@@ -31,9 +31,9 @@ enum ReaderVisualStrength {
     ///   the off zone; it must not be `.none` or switching on would show nothing.
     static func resolve(
         draggedValue: Double,
-        current: ReaderVisual,
+        current: TranceVisual,
         currentOpacity: Double,
-        restoring restorable: ReaderVisual
+        restoring restorable: TranceVisual
     ) -> Resolution {
         guard draggedValue >= offThreshold else {
             // Hold the last opacity so coming back on does not also reset it.
@@ -45,7 +45,7 @@ enum ReaderVisualStrength {
 
     /// Gauge fill, 0...1. Zero whenever the effect is off, so an empty gauge is
     /// itself the "off" signal.
-    static func gauge(visual: ReaderVisual, opacity: Double) -> Double {
+    static func gauge(visual: TranceVisual, opacity: Double) -> Double {
         guard visual != .none else { return 0 }
         let span = dragRange.upperBound - dragRange.lowerBound
         guard span > 0 else { return 0 }

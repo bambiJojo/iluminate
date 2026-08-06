@@ -105,7 +105,7 @@ struct ReaderVisualControls: View {
 
     private var visualPicker: some View {
         Picker("Effect", selection: $preferences.visual) {
-            ForEach(ReaderVisual.allCases) {
+            ForEach(TranceVisual.allCases) {
                 Text($0.displayName).tag($0)
             }
         }

@@ -100,9 +100,9 @@ struct ReaderControlSlotTests {
 
     @Test("Cycling reaches every effect and wraps")
     func visualCycles() throws {
-        let effects = ReaderVisual.effects
+        let effects = TranceVisual.effects
         var visual = try #require(effects.first)
-        var seen: Set<ReaderVisual> = [visual]
+        var seen: Set<TranceVisual> = [visual]
         for _ in effects {
             visual = visual.nextEffect
             seen.insert(visual)
@@ -117,16 +117,16 @@ struct ReaderControlSlotTests {
     /// strand the reader on a blank background.
     @Test("Cycling never lands on none")
     func visualCycleSkipsOff() {
-        #expect(!ReaderVisual.effects.contains(.none))
-        for visual in ReaderVisual.effects {
+        #expect(!TranceVisual.effects.contains(.none))
+        for visual in TranceVisual.effects {
             #expect(visual.nextEffect != .none)
         }
         // Even from the off state, stepping produces a real effect.
-        #expect(ReaderVisual.none.nextEffect != .none)
+        #expect(TranceVisual.none.nextEffect != .none)
     }
 
     @Test("There is exactly one effect fewer than there are cases")
     func effectsExcludeOnlyNone() {
-        #expect(ReaderVisual.effects.count == ReaderVisual.allCases.count - 1)
+        #expect(TranceVisual.effects.count == TranceVisual.allCases.count - 1)
     }
 }

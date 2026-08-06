@@ -1,15 +1,18 @@
-//  ReaderVisualLayer.swift
+//  VisualFieldLayer.swift
 //  Ilumionate
 //
-//  Feeds a ReaderVisual's shader with the current modulation. Renders nothing
+//  Feeds a TranceVisual's shader with the current modulation. Renders nothing
 //  for `.none` and `.breath` — `.breath` is the RadialGradient that already
 //  lives in TextTrancePlayerView.
+//
+//  Shared by both surfaces: the reader draws this behind its words, and the
+//  Create tab's Visual Field draws it as the whole screen.
 
 import SwiftUI
 
-struct ReaderVisualLayer: View {
-    let visual: ReaderVisual
-    let modulation: ReaderVisualModulation
+struct VisualFieldLayer: View {
+    let visual: TranceVisual
+    let modulation: VisualModulation
     let opacity: Double
 
     var body: some View {
