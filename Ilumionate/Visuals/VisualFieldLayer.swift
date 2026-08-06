@@ -14,6 +14,11 @@ struct VisualFieldLayer: View {
     let visual: TranceVisual
     let modulation: VisualModulation
     let opacity: Double
+    /// How much of the centre focus well to apply. 1 protects a word at the
+    /// centre — the reader's case, and the default so its call sites are
+    /// unchanged. 0 leaves the centre unbroken, which is what the wordless
+    /// Visual Field wants: the compressed vanishing point IS the effect there.
+    var focus: Double = 1
 
     var body: some View {
         if let shaderName = visual.shaderName {
@@ -37,7 +42,8 @@ struct VisualFieldLayer: View {
                             // carries direction; the magnitude is what the
                             // ceiling test measures, so reversing travel cannot
                             // smuggle an effect past the budget.
-                            .float(Float(visual.motionRate * modulation.direction.sign))
+                            .float(Float(visual.motionRate * modulation.direction.sign)),
+                            .float(Float(min(max(focus, 0), 1)))
                         )
                     )
             }

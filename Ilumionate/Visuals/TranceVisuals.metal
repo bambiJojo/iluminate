@@ -1,9 +1,15 @@
-//  ReaderVisuals.metal
+//  TranceVisuals.metal
 //  Ilumionate
 //
-//  Reader background effects. Every function shares one uniform list —
-//  (bounds, time, tint, speed, amplitude, rate) — so a mismatch between Swift
-//  and Metal is impossible by inspection.
+//  Background effects for both surfaces that draw a field: the reader, behind
+//  its words, and the Create tab's wordless Visual Field, as the whole screen.
+//
+//  Every function shares one uniform list —
+//  (bounds, time, tint, speed, amplitude, rate, focus) — so a mismatch between
+//  Swift and Metal is impossible by inspection. Keep this list in step with
+//  VisualFieldLayer's argument order; nothing else checks it, because
+//  ShaderLibrary resolves at runtime and a mismatch is a blank frame rather
+//  than a build error.
 //
 //  `bounds` comes from SwiftUI's `Shader.Argument.boundingRect`, NOT from a
 //  GeometryReader. The Task 1 spike showed a GeometryReader-supplied size
@@ -11,18 +17,23 @@
 //  with no usable extent. boundingRect is filled by SwiftUI itself and does
 //  not depend on the surrounding layout resolving a proxy.
 //
-//  `speed` is the normalised value from ReaderVisualModulator, capped at 0.45.
-//  `rate` is the effect's own feature-crossing rate, supplied by Swift from
-//  ReaderVisual.motionRate rather than hardcoded here, so the photosensitivity
-//  budget is enforced by a test instead of by comments.
+//  `speed` is the normalised value from VisualModulation.speedBand, capped at
+//  0.45. `rate` is the effect's own feature-crossing rate, supplied by Swift
+//  from TranceVisual.motionRate rather than hardcoded here, so the
+//  photosensitivity budget is enforced by a test instead of by comments. Its
+//  SIGN carries VisualDirection; its magnitude is what the budget measures.
+//  `focus` is how much of the centre focus well to apply — 1 for the reader,
+//  which has a word to protect, 0 for the wordless field, which does not.
 //
-//  DESIGN: every effect converges INWARD, toward the word at the centre. The
-//  reader's focus should be pulled to the word, never pushed to the frame edge.
-//  See docs/superpowers/specs/2026-08-04-reader-focus-visuals-design.md.
+//  DESIGN: effects converge INWARD by default, toward the word at the centre.
+//  The reader's focus should be pulled to the word, never pushed to the frame
+//  edge, so the reader never passes a negative rate. See
+//  docs/superpowers/specs/2026-08-04-reader-focus-visuals-design.md and
+//  docs/superpowers/specs/2026-08-05-create-tab-visual-field-design.md.
 //
 //  SAFETY: no effect may make a repeating feature cross a fixed pixel at 3 Hz
 //  or more. Because every effect uses the phase rule below, that rate is
-//  `speed * rate` everywhere in the frame — see ReaderVisualModulation.swift.
+//  `speed * rate` everywhere in the frame — see VisualModulation.swift.
 
 #include <metal_stdlib>
 using namespace metal;
@@ -124,6 +135,21 @@ static half focusWell(float2 pos, float2 size) {
     return half(smoothstep(0.26, 0.62, length(d)));
 }
 
+/// How much of the focus well to apply. `focus` is 1 for the reader, which needs
+/// the well to protect its word, and 0 for the wordless Visual Field, which has
+/// no word to protect and wants the compressed centre the well would erase.
+///
+/// A blend rather than a branch: `focus` is uniform across the frame, so there
+/// is no divergence cost, and intermediate values stay available without adding
+/// a second code path to reason about.
+///
+/// Safe to switch off. `ringBand` already dissolves to flat tone where features
+/// compress past the pixel grid, so an un-welled centre does not alias against
+/// it — see the Nyquist note on ringBand above.
+static half focusMask(float2 pos, float2 size, float focus) {
+    return mix(1.0h, focusWell(pos, size), half(clamp(focus, 0.0, 1.0)));
+}
+
 /// Dims the periphery. Together with focusWell this puts peak brightness in an
 /// annulus at r ~ 0.7 — a ring of light around the word, with darkness at both
 /// the centre and the corners.
@@ -140,7 +166,8 @@ static half4 composite(half4 tint, half alpha) {
 // Arms crawl inward. rate 4.0 x speed 0.45 = 1.80 Hz. Under 3 Hz.
 [[ stitchable ]] half4 readerSpiral(float2 pos, half4 color, float4 bounds,
                                     float time, half4 tint,
-                                    float speed, float amplitude, float rate) {
+                                    float speed, float amplitude, float rate,
+                                    float focus) {
     float2 size = bounds.zw;
     float2 c = pos - size * 0.5;
     float r = unitRadius(pos, size);
@@ -168,7 +195,7 @@ static half4 composite(half4 tint, half alpha) {
     half pattern = mix(ringBand(ring, dydp, 0.26),
                        ringBand(arm,  dydp, 0.26), morph);
 
-    half alpha = pattern * edgeFade(coverageRadius(pos, size)) * half(amplitude) * focusWell(pos, size);
+    half alpha = pattern * edgeFade(coverageRadius(pos, size)) * half(amplitude) * focusMask(pos, size, focus);
     return composite(tint, alpha);
 }
 
@@ -177,7 +204,8 @@ static half4 composite(half4 tint, half alpha) {
 // rate 4.0 x speed 0.45 = 1.80 Hz. Under 3 Hz.
 [[ stitchable ]] half4 readerTunnel(float2 pos, half4 color, float4 bounds,
                                     float time, half4 tint,
-                                    float speed, float amplitude, float rate) {
+                                    float speed, float amplitude, float rate,
+                                    float focus) {
     float2 size = bounds.zw;
     float r = unitRadius(pos, size);
     float halfMin = halfMinDimension(size);
@@ -188,7 +216,7 @@ static half4 composite(half4 tint, half alpha) {
     float dydp = depthGradient(r, turns, density, halfMin);
 
     half alpha = ringBand(y, dydp, 0.24) * edgeFade(coverageRadius(pos, size)) * half(amplitude)
-               * focusWell(pos, size);
+               * focusMask(pos, size, focus);
     return composite(tint, alpha);
 }
 
@@ -203,7 +231,8 @@ static half4 composite(half4 tint, half alpha) {
 // headroom of any effect here — do not raise this rate.
 [[ stitchable ]] half4 readerMoire(float2 pos, half4 color, float4 bounds,
                                    float time, half4 tint,
-                                   float speed, float amplitude, float rate) {
+                                   float speed, float amplitude, float rate,
+                                   float focus) {
     float2 size = bounds.zw;
     float r = unitRadius(pos, size);
     float halfMin = halfMinDimension(size);
@@ -219,7 +248,7 @@ static half4 composite(half4 tint, half alpha) {
                           depthGradient(r, turns, densityB, halfMin), 0.46);
 
     half alpha = bandA * bandB * edgeFade(coverageRadius(pos, size)) * half(amplitude)
-               * focusWell(pos, size);
+               * focusMask(pos, size, focus);
     return composite(tint, alpha);
 }
 
@@ -236,7 +265,8 @@ static float hash11(float p) {
 
 [[ stitchable ]] half4 readerDrift(float2 pos, half4 color, float4 bounds,
                                    float time, half4 tint,
-                                   float speed, float amplitude, float rate) {
+                                   float speed, float amplitude, float rate,
+                                   float focus) {
     float2 size = bounds.zw;
     float2 c = (pos - size * 0.5) / halfMinDimension(size);
 
@@ -282,7 +312,7 @@ static float hash11(float p) {
         acc += half(exp(-dist * dist * spread) * life * (0.55 + 0.45 * bSeed));
     }
 
-    half alpha = min(acc, 1.0h) * half(amplitude) * focusWell(pos, size);
+    half alpha = min(acc, 1.0h) * half(amplitude) * focusMask(pos, size, focus);
     return composite(tint, alpha);
 }
 
@@ -313,7 +343,8 @@ static float hash11(float p) {
 
 [[ stitchable ]] half4 readerGlass(float2 pos, half4 color, float4 bounds,
                                    float time, half4 tint,
-                                   float speed, float amplitude, float rate) {
+                                   float speed, float amplitude, float rate,
+                                   float focus) {
     float2 size = bounds.zw;
     float halfMin = halfMinDimension(size);
     float2 p = (pos - size * 0.5) / halfMin;
@@ -343,7 +374,7 @@ static float hash11(float p) {
         ch[i] = max(ring, spoke * 0.8h);
     }
 
-    half mask = edgeFade(coverageRadius(pos, size)) * half(amplitude) * focusWell(pos, size);
+    half mask = edgeFade(coverageRadius(pos, size)) * half(amplitude) * focusMask(pos, size, focus);
     half alpha = ((ch.r + ch.g + ch.b) / 3.0h) * mask;
     // Per-channel values can exceed alpha slightly at the fringes. That
     // overshoot IS the chromatic edge; clamping it away flattens the effect.
@@ -359,7 +390,8 @@ static float hash11(float p) {
 // = 147), so it is the one most dependent on ringBand's antialiasing.
 [[ stitchable ]] half4 readerLinescape(float2 pos, half4 color, float4 bounds,
                                        float time, half4 tint,
-                                       float speed, float amplitude, float rate) {
+                                       float speed, float amplitude, float rate,
+                                       float focus) {
     float2 size = bounds.zw;
     float2 c = pos - size * 0.5;
     float r = unitRadius(pos, size);
@@ -384,6 +416,6 @@ static float hash11(float p) {
     float dydp = depthGradient(r, turns, density, halfMin);
 
     half alpha = ringBand(y, dydp, thickness) * edgeFade(coverageRadius(pos, size)) * half(amplitude)
-               * focusWell(pos, size);
+               * focusMask(pos, size, focus);
     return composite(tint, alpha);
 }
