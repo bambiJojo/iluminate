@@ -53,6 +53,7 @@ struct CreateControlTray: View {
             label: slot.label,
             state: .normal,
             value: gauge(for: slot),
+            displayValue: displayValue(for: slot),
             accessibilityValueText: valueText(for: slot),
             onTap: onTap,
             onDragChanged: onDragChanged,
@@ -111,6 +112,30 @@ struct CreateControlTray: View {
 
     private func percent(_ value: Double) -> String {
         "\(Int((value * 100).rounded())) percent"
+    }
+
+    /// The short form shown on the tile itself. Kept terse — a tile is 72pt of
+    /// width shared with an icon and a label, so "Inward" fits and
+    /// "Drawing toward the centre" does not.
+    private func displayValue(for slot: CreateControlSlot) -> String {
+        switch slot {
+        case .effect:      return visual.visual.displayName
+        case .tint:        return visual.tint.displayName
+        case .direction:   return visual.direction.displayName
+        case .duration:    return SessionDurationOption(seconds: visual.duration).label
+        case .visualSpeed: return shortPercent(visual.speed)
+        case .strength:    return shortPercent(visual.clampedOpacity)
+        case .frequency:
+            return "\(light.frequency.formatted(.number.precision(.fractionLength(1)))) Hz"
+        case .intensity:   return shortPercent(light.intensity)
+        case .warmth:      return "\(light.colorTemperature)K"
+        case .waveform:    return light.selectedPattern.rawValue
+        case .binaural:    return light.binauralEnabled ? "On" : "Off"
+        }
+    }
+
+    private func shortPercent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
     }
 
     // MARK: - Tapping
