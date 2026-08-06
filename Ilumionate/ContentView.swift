@@ -184,7 +184,7 @@ struct ContentView: View {
                 .transition(.opacity)
             } else if selectedTab == .create {
                 NavigationStack {
-                    MindMachineView(engine: engine, sessions: sessions)
+                    CreateView(engine: engine)
                 }
                 .transition(.opacity)
             }

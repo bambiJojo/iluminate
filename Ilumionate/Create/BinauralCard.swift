@@ -1,8 +1,15 @@
 //
-//  MindMachineView+Binaural.swift
+//  BinauralCard.swift
 //  Ilumionate
 //
-//  Binaural beats card for the Mind Machine screen.
+//  Binaural carrier and volume, for the surfaces that expose more than an
+//  on/off tile.
+//
+//  The old "Color Pulse is visual-only" branch is gone: which kinds offer
+//  binaural is now expressed structurally by CreateControlSlot.slots(for:),
+//  which simply does not give colourPulse a binaural tile. A card explaining
+//  why a control it is showing does not apply was always the weaker way to say
+//  it.
 //
 
 import SwiftUI
@@ -14,19 +21,7 @@ struct BinauralCard: View {
 
     var body: some View {
         LiminalCard(label: "Binaural Beats") {
-            if model.selectedVisualMode == .colorPulse {
-                VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                    Label("Color Pulse is visual-only", systemImage: "info.circle")
-                        .font(TranceTypography.body)
-                        .foregroundStyle(Color.textPrimary)
-
-                    Text("Switch to Flash or Bilateral mode to launch matched binaural audio.")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                VStack(spacing: TranceSpacing.list) {
+            VStack(spacing: TranceSpacing.list) {
                     // Toggle row
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -85,7 +80,6 @@ struct BinauralCard: View {
                         // Brainwave info
                         binauralBrainwaveInfo
                     }
-                }
             }
         }
     }
