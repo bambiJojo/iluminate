@@ -1060,6 +1060,7 @@ final class UnifiedPlayerViewModel {
         switch mindMachineMode {
         case .bilateral: .bilateral
         case .colorPulse: .colorPulse
+        case .visualField: .visualField
         case .flash, .none: .flash
         }
     }

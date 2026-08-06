@@ -229,7 +229,7 @@ nonisolated struct AudioAnalysisTelemetryContext: Equatable, Sendable {
 }
 
 enum MindMachineMode: String, Sendable {
-    case flash, colorPulse, bilateral
+    case flash, colorPulse, bilateral, visualField
 }
 
 enum MindMachineEntryPoint: String, Sendable {
@@ -237,7 +237,7 @@ enum MindMachineEntryPoint: String, Sendable {
 }
 
 nonisolated enum CreateMode: String, Sendable {
-    case flash, colorPulse, bilateral, audioSession
+    case flash, colorPulse, bilateral, audioSession, visualField
 }
 
 nonisolated enum CreateFailureBucket: String, Sendable {
