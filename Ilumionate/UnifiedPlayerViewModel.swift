@@ -271,6 +271,15 @@ final class UnifiedPlayerViewModel {
             viewModel: self,
             resetProgress: isFreshPresentation
         )
+
+        // The visual field starts itself: its shader background renders
+        // whenever it is on screen, so an idle player in front of a moving
+        // field reads as a broken paused state. Other modes keep the explicit
+        // play tap. Fresh presentations only — returning from the mini-player
+        // must not restart a session.
+        if isFreshPresentation, mode.beginsAutomatically, !showingSafetyWarning {
+            startCountdownAndPlay()
+        }
     }
 
     /// Records the user's own screen brightness exactly once per presentation,
@@ -830,7 +839,7 @@ final class UnifiedPlayerViewModel {
         }
 
         let count = countdownDuration
-        countdownMessage = "Close your eyes and relax in\u{2026}"
+        countdownMessage = mode.countdownIntroMessage
         countdownValue = count
         playbackState = .countdown
         haptics.light()
@@ -846,15 +855,25 @@ final class UnifiedPlayerViewModel {
             }
             try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.35)) {
-                countdownValue = nil
-                countdownMessage = "Close your eyes"
-            }
-            haptics.medium()
-            try? await Task.sleep(for: .seconds(1.5))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.3)) {
-                countdownMessage = nil
+            if let holdMessage = mode.countdownHoldMessage {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    countdownValue = nil
+                    countdownMessage = holdMessage
+                }
+                haptics.medium()
+                try? await Task.sleep(for: .seconds(1.5))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.3)) {
+                    countdownMessage = nil
+                }
+            } else {
+                // No held line — the visual field is watched, so the session
+                // begins the moment the count ends.
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    countdownValue = nil
+                    countdownMessage = nil
+                }
+                haptics.medium()
             }
             beginPlayback()
             // Auto-hide controls

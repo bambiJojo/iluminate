@@ -105,6 +105,27 @@ struct VisualFieldPlayerModeTests {
         #expect(PlayerControlSlot.slots(for: mode) == PlayerControlSlot.slots(for: mode))
     }
 
+    // MARK: - Countdown and auto-start
+
+    @Test("Only the visual field starts itself — its background renders whenever it is on screen")
+    func onlyTheFieldBeginsAutomatically() {
+        #expect(mode().beginsAutomatically)
+        #expect(PlayerMode.colorPulse(frequency: 10, intensity: 0.5).beginsAutomatically == false)
+        #expect(PlayerMode.flashMode(
+            frequency: 10, intensity: 0.5, colorTemperature: 3000, pattern: .sine,
+            binauralEnabled: false, binauralCarrier: 200, binauralVolume: 0.5
+        ).beginsAutomatically == false)
+    }
+
+    @Test("The field's countdown never tells a watcher to close their eyes")
+    func countdownCopyFitsAWatchedSession() {
+        #expect(mode().countdownHoldMessage == nil)
+        #expect(mode().countdownIntroMessage.localizedStandardContains("close your eyes") == false)
+        // The listened modes keep their established copy.
+        #expect(PlayerMode.colorPulse(frequency: 10, intensity: 0.5)
+            .countdownHoldMessage == "Close your eyes")
+    }
+
     // MARK: - BinauralSettings
 
     @Test("Binaural settings round-trip through Codable")

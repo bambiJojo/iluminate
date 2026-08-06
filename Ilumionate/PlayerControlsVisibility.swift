@@ -24,6 +24,17 @@ final class PlayerControlsVisibility {
         }
     }
 
+    /// Set while playback is not running. Someone who has paused is deciding
+    /// something, not sinking into a session, and hiding the controls leaves
+    /// them facing a still screen with nothing to touch. Re-arms on resume, for
+    /// the same reason `isDrawerOpen` does.
+    var isPaused: Bool = false {
+        didSet {
+            guard oldValue, !isPaused else { return }
+            scheduleAutoHide()
+        }
+    }
+
     private let voiceOverActive: @MainActor () -> Bool
     private let autoHideDelay: Double
     private var hideTask: Task<Void, Never>?
@@ -37,7 +48,7 @@ final class PlayerControlsVisibility {
     }
 
     /// Whether auto-hide is currently allowed.
-    var canAutoHide: Bool { !isDrawerOpen && !voiceOverActive() }
+    var canAutoHide: Bool { !isDrawerOpen && !isPaused && !voiceOverActive() }
 
     /// User touched the screen: show controls and restart the idle timer.
     func registerInteraction() {

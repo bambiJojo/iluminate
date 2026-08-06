@@ -154,6 +154,12 @@ struct UnifiedPlayerView: View {
         .onChange(of: showingOverflow) { _, open in
             controlsVisibility.isDrawerOpen = open || viewModel.showingTrackList
         }
+        .onChange(of: viewModel.playbackState, initial: true) { _, state in
+            // Anything other than playing keeps the controls up: a paused or
+            // not-yet-started session should never leave the user looking at a
+            // still screen with nothing to touch.
+            controlsVisibility.isPaused = state != .playing
+        }
         .platformStatusBarHidden(!viewModel.showingControls)
         .gesture(
             DragGesture(minimumDistance: 20)
@@ -227,7 +233,8 @@ struct UnifiedPlayerView: View {
             // in-session Strength and Speed tiles take effect immediately.
             VisualFieldStage(
                 settings: viewModel.visualFieldSettings,
-                fade: viewModel.visualFieldFade
+                fade: viewModel.visualFieldFade,
+                isPaused: viewModel.playbackState != .playing
             )
 
         case .audioLight:

@@ -11,6 +11,11 @@ struct VisualFieldStage: View {
     /// Scales the configured strength. The timed ending rides this down to zero
     /// so a session recedes rather than cutting to black.
     var fade: Double = 1
+    /// Freezes the field without hiding it. The shader is a TimelineView and
+    /// would otherwise animate whenever it is on screen — including while the
+    /// player is idle, counting down, or paused, which reads as a session
+    /// running behind a player that says it has not started.
+    var isPaused: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -20,12 +25,17 @@ struct VisualFieldStage: View {
 
             VisualFieldLayer(
                 visual: settings.visual,
-                modulation: settings.modulation(reduceMotion: reduceMotion),
+                modulation: modulation,
                 opacity: settings.clampedOpacity * min(max(fade, 0), 1),
                 focus: 0
             )
         }
         .accessibilityHidden(true)
+    }
+
+    private var modulation: VisualModulation {
+        let live = settings.modulation(reduceMotion: reduceMotion)
+        return isPaused ? live.stilled : live
     }
 }
 

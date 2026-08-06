@@ -172,6 +172,38 @@ enum PlayerMode: Identifiable {
         return false
     }
 
+    /// Whether the player counts down and begins as soon as it appears,
+    /// rather than opening idle and waiting for the transport's play button.
+    ///
+    /// True only for the visual field. Its background is a shader that renders
+    /// whenever it is on screen, so an idle player over a moving field reads as
+    /// a broken paused state — the session must start when the screen does.
+    var beginsAutomatically: Bool {
+        switch self {
+        case .visualField: return true
+        default: return false
+        }
+    }
+
+    /// The line above the countdown numerals.
+    var countdownIntroMessage: String {
+        switch self {
+        case .visualField: return "Soften your gaze in\u{2026}"
+        default: return "Close your eyes and relax in\u{2026}"
+        }
+    }
+
+    /// The line held on screen after the count, or nil to begin immediately.
+    ///
+    /// Nil for the visual field: it is watched, not listened to with eyes
+    /// shut, so "Close your eyes" would be an instruction to miss the session.
+    var countdownHoldMessage: String? {
+        switch self {
+        case .visualField: return nil
+        default: return "Close your eyes"
+        }
+    }
+
     var requiresSafetyWarning: Bool {
         switch self {
         case .flashMode, .colorPulse: return true

@@ -31,6 +31,37 @@ struct VisualModulationBandsTests {
         #expect(VisualModulation.amplitudeBand.lowerBound > 0)
     }
 
+    // MARK: - Stilling
+
+    @Test("Stilling stops the motion and nothing else")
+    func stilledKeepsAppearance() {
+        let running = VisualFieldSettings.standard.modulation(reduceMotion: false)
+        let held = running.stilled
+
+        #expect(held.speed == 0)
+        #expect(held.tint == running.tint)
+        #expect(held.amplitude == running.amplitude)
+        #expect(held.direction == running.direction)
+    }
+
+    @Test("Stilling an already-still field changes nothing")
+    func stillingIsIdempotent() {
+        let held = VisualFieldSettings.standard.modulation(reduceMotion: false).stilled
+        #expect(held.stilled == held)
+    }
+
+    @Test("A stilled field keeps its strength, so pausing does not blank the screen")
+    func stilledStaysVisible() {
+        // Zero speed, not zero amplitude: a paused session shows the field
+        // frozen, not gone.
+        for direction in VisualDirection.allCases {
+            var settings = VisualFieldSettings.standard
+            settings.direction = direction
+            let held = settings.modulation(reduceMotion: false).stilled
+            #expect(held.amplitude >= VisualModulation.amplitudeBand.lowerBound)
+        }
+    }
+
     // MARK: - The reader still reads them
 
     @Test("The reader's clamp uses the shared opacity band")

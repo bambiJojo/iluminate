@@ -39,6 +39,27 @@ struct PlayerControlsVisibilityTests {
         #expect(v.isVisible == true)
     }
 
+    @Test("Auto-hide is suppressed while playback is not running")
+    func pauseSuppressesHide() {
+        // A paused session that hides its controls leaves the user facing a
+        // still screen with nothing to touch.
+        let v = PlayerControlsVisibility()
+        v.isPaused = true
+        v.hideNow()
+        #expect(v.isVisible == true)
+        #expect(v.canAutoHide == false)
+    }
+
+    @Test("Resuming allows auto-hide again")
+    func resumeRestoresAutoHide() {
+        let v = PlayerControlsVisibility()
+        v.isPaused = true
+        v.isPaused = false
+        #expect(v.canAutoHide)
+        v.hideNow()
+        #expect(v.isVisible == false)
+    }
+
     // MARK: - Idle timer
 
     /// Short delay so these run fast; 0.2s is a generous settle window.

@@ -53,6 +53,22 @@ struct VisualModulation: Equatable, Sendable {
 
 extension VisualModulation {
 
+    /// The same field, held still.
+    ///
+    /// Zero speed stops `VisualFieldLayer`'s TimelineView schedule outright, so
+    /// this is a still frame rather than a hidden animation still costing GPU.
+    /// Appearance is untouched — a stilled field looks like the running one
+    /// paused, not like a different field.
+    ///
+    /// Used whenever a wordless session is not playing. Its shader renders
+    /// whenever it is on screen, so without this a countdown or a pause shows a
+    /// moving field behind a player that says it has not started.
+    var stilled: VisualModulation {
+        VisualModulation(
+            tint: tint, speed: 0, amplitude: amplitude, direction: direction
+        )
+    }
+
     /// The motion budget every effect must fit inside.
     ///
     /// The safety target is that no effect makes a repeating feature cross a
