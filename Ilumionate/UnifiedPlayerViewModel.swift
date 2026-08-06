@@ -134,6 +134,11 @@ final class UnifiedPlayerViewModel {
     var visualFieldSettings: VisualFieldSettings = .standard
     /// Rides the field's strength down over the last seconds of a timed session.
     private(set) var visualFieldFade: Double = 1
+    /// Set when a Visual Field session's accompanying track could not play.
+    ///
+    /// The session keeps running regardless — see VisualFieldAudioFailure. This
+    /// only disables the volume tile and lets the view say so.
+    private(set) var audioUnavailable = false
 
     // MARK: - Binaural State
 
@@ -655,8 +660,8 @@ final class UnifiedPlayerViewModel {
             // No controller needed — TimelineView handles rendering
             duration = 0 // infinite
 
-        case .visualField(let settings, _, let binaural):
-            // No controller at all: the field is a shader driven by
+        case .visualField(let settings, let audioFile, let binaural):
+            // No light controller at all: the field is a shader driven by
             // TimelineView, and it never touches LightEngine or FlashController.
             duration = settings.duration ?? 0
             if let binaural {
@@ -666,6 +671,9 @@ final class UnifiedPlayerViewModel {
                     volume: binaural.volume,
                     beatFrequency: binaural.beatFrequency
                 )
+            }
+            if let audioFile {
+                setupVisualFieldAudio(audioFile: audioFile)
             }
 
         case .audioLight(let audioFile):
@@ -751,6 +759,30 @@ final class UnifiedPlayerViewModel {
         binaural.beatFrequency = beatFrequency
         binauralEngine = binaural
         binauralActive = enabled
+    }
+
+    /// Loads a track to play underneath a wordless field.
+    ///
+    /// Reuses `.audioLight`'s player minus the light-sync generation: the field
+    /// is not driven by the audio, it just plays underneath.
+    ///
+    /// The catch is the point of this method. Everywhere else in the player a
+    /// failed load means a failed session; here the field is the content and
+    /// audio is decoration, so a missing or unreadable file degrades to silence
+    /// and the session carries on. See VisualFieldAudioFailure.
+    private func setupVisualFieldAudio(audioFile: AudioFile) {
+        let player = AudioLightSyncPlayer(lightEngine: engine)
+        audioLightSyncPlayer = player
+
+        Task {
+            do {
+                try await player.loadAudio(audioFile: audioFile)
+            } catch {
+                Log.general.info("Visual field audio unavailable: \(error)")
+                audioLightSyncPlayer = nil
+                audioUnavailable = true
+            }
+        }
     }
 
     private func setupAudioMode(audioFile: AudioFile) {
@@ -873,9 +905,10 @@ final class UnifiedPlayerViewModel {
             if binauralActive { binauralEngine?.start() }
 
         case .visualField:
-            // The shader renders itself; only the optional binaural needs
-            // starting. No light controller is involved at any point.
+            // The shader renders itself; only the optional audio needs starting.
+            // No light controller is involved at any point.
             if binauralActive { binauralEngine?.start() }
+            audioLightSyncPlayer?.play()
 
         case .colorPulse:
             // TimelineView handles rendering automatically
@@ -906,6 +939,7 @@ final class UnifiedPlayerViewModel {
 
         case .visualField:
             binauralEngine?.pause()
+            audioLightSyncPlayer?.pause()
 
         case .colorPulse:
             break // TimelineView keeps running but we show pause overlay
@@ -936,6 +970,7 @@ final class UnifiedPlayerViewModel {
 
         case .visualField:
             if binauralActive { binauralEngine?.resume() }
+            audioLightSyncPlayer?.play()
 
         case .colorPulse:
             break
@@ -972,6 +1007,7 @@ final class UnifiedPlayerViewModel {
 
         case .visualField:
             binauralEngine?.stop()
+            audioLightSyncPlayer?.stop()
 
         case .colorPulse:
             break
@@ -1038,6 +1074,7 @@ final class UnifiedPlayerViewModel {
 
         case .visualField:
             binauralEngine?.stop()
+            audioLightSyncPlayer?.pause()
 
         case .colorPulse:
             break
@@ -1192,6 +1229,7 @@ final class UnifiedPlayerViewModel {
             if playbackState == .playing {
                 currentTime += 0.1
             }
+            if let player = audioLightSyncPlayer { volume = player.volume }
             visualFieldFade = VisualFieldFade.multiplier(
                 elapsed: currentTime, duration: settings.duration
             )

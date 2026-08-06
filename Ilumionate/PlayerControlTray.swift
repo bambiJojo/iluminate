@@ -50,7 +50,14 @@ struct PlayerControlTray: View {
 
     @ViewBuilder
     private func tile(for slot: PlayerControlSlot) -> some View {
-        let state = slot.state(lightsAreOn: lightsAreOn)
+        // Handled here rather than in PlayerControlSlot.state(lightsAreOn:),
+        // which deliberately takes no view-model state. The tile's PRESENCE
+        // still comes only from the mode, so the tray does not reflow — only
+        // its state changes.
+        let state: PlayerControlTile.State =
+            (slot == .volume && viewModel.audioUnavailable)
+                ? .disabled
+                : slot.state(lightsAreOn: lightsAreOn)
 
         PlayerControlTile(
             systemImage: slot.systemImage(lightsAreOn: lightsAreOn),

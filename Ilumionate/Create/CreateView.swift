@@ -16,7 +16,9 @@ struct CreateView: View {
     @State private var light = MindMachineModel()
     @State private var store = VisualFieldStore.shared
     @State private var showingTintSheet = false
+    @State private var showingAudioSheet = false
     @State private var showingPlayer = false
+    @State private var accompanyingTrack: AudioFile?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -49,6 +51,10 @@ struct CreateView: View {
                         light: light,
                         showingTintSheet: $showingTintSheet
                     )
+
+                    if kind == .visualField {
+                        audioRow
+                    }
                 }
                 .padding(.top, TranceSpacing.statusBar)
                 .padding(.bottom, TranceSpacing.tabBarClearance)
@@ -66,6 +72,15 @@ struct CreateView: View {
         .platformLargeNavigationTitle()
         .sheet(isPresented: $showingTintSheet) {
             CreateTintSheet(tint: visualBinding.tint)
+        }
+        .sheet(isPresented: $showingAudioSheet) {
+            CreateAudioSheet(
+                track: $accompanyingTrack,
+                binaural: Binding(
+                    get: { store.binaural },
+                    set: { store.binaural = $0 }
+                )
+            )
         }
         .platformFullScreenCover(isPresented: $showingPlayer) {
             UnifiedPlayerView(
@@ -93,6 +108,54 @@ struct CreateView: View {
         .padding(.horizontal, TranceSpacing.screen)
     }
 
+    /// What rides along with the field. Only the wordless kind shows this: the
+    /// light kinds carry their binaural on a tray tile, and none of them takes
+    /// an accompanying track.
+    private var audioRow: some View {
+        Button {
+            showingAudioSheet = true
+        } label: {
+            HStack(spacing: TranceSpacing.inner) {
+                Image(systemName: audioSymbol)
+                    .foregroundStyle(Color.roseGold)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Audio")
+                        .font(TranceTypography.body)
+                        .foregroundStyle(Color.textPrimary)
+                    Text(audioSummary)
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .padding(TranceSpacing.inner)
+            .liminalGlass(.roundedRect(cornerRadius: TranceRadius.glassCard))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, TranceSpacing.screen)
+        .accessibilityLabel("Audio")
+        .accessibilityValue(audioSummary)
+    }
+
+    private var audioSymbol: String {
+        if accompanyingTrack != nil { return "music.note" }
+        return store.binaural.enabled ? "headphones" : "speaker.slash"
+    }
+
+    private var audioSummary: String {
+        var parts: [String] = []
+        if let accompanyingTrack { parts.append(accompanyingTrack.displayName) }
+        if store.binaural.enabled {
+            let beat = store.binaural.beatFrequency
+                .formatted(.number.precision(.fractionLength(1)))
+            parts.append("Binaural \(beat) Hz")
+        }
+        return parts.isEmpty ? "Silence" : parts.joined(separator: " · ")
+    }
+
     /// Reduce Motion freezes the field. In the reader the visual is decoration,
     /// so a still frame needs no explanation; here it IS the content, and a
     /// Speed tile that does nothing needs one.
@@ -111,8 +174,8 @@ struct CreateView: View {
         case .visualField:
             return .visualField(
                 settings: store.settings,
-                audioFile: nil,
-                binaural: light.binauralEnabled ? light.binauralSettings : nil
+                audioFile: accompanyingTrack,
+                binaural: store.binaural.enabled ? store.binaural : nil
             )
         case .colourPulse:
             return .colorPulse(frequency: light.frequency, intensity: light.intensity)
