@@ -58,7 +58,7 @@ Four beats, 2.6s total.
 |---|---|---|
 | Arrival | 0 – 0.5s | Screen opens at exactly the `UILaunchScreen` colour. Vignette closes in from the edges — the periphery, where the cluttered phone was, darkens first. Orb is a dim point at 0.6 scale |
 | Bloom | 0.5 – 1.6s | Orb scales 0.6 → 1.0 on a slow ease-out. Conic ring spins up from rest. Aurora blobs fade in behind. One inhale |
-| Settle | 1.6 – 2.2s | Orb completes exactly one breath and rests at neutral. Nothing scales. Held stillness |
+| Settle | 1.6 – 2.2s | Choreographed scale holds flat at 1.0. Only `LumeOrb`'s own internal breath keeps moving. Held stillness |
 | Opening | 2.2 – 2.6s | Vignette releases outward, the inverse of Arrival. Orb scales 1.0 → 1.15 while fading to zero. Home's chrome fades up through it |
 
 Three properties of this arc are load-bearing:
@@ -66,9 +66,15 @@ Three properties of this arc are load-bearing:
 **Bloom is the only growth beat.** A spinner never grows. A single unrepeated
 0.6 → 1.0 expansion is the clearest available signal that this has a beginning.
 
-**Settle is flat on purpose.** Nothing scales for 0.6 seconds. The eye reads a plateau as
-an ending rather than a wait, and this is the stretch that does the actual relaxing. It
-is precisely the beat every loading indicator lacks.
+**Settle is flat on purpose.** The choreographed scale does not move for 0.6 seconds. The
+eye reads a plateau as an ending rather than a wait, and this is the stretch that does the
+actual relaxing. It is precisely the beat every loading indicator lacks.
+
+The orb is not frozen during Settle — `LumeOrb` runs its own breath off the absolute clock
+and we neither can nor should phase-lock it, since it is shared with every other surface
+that draws an orb. So Settle is *stillness with a pulse*: the threshold stops driving the
+orb and lets its resting breath show through. That is the correct read anyway. A
+completely motionless screen looks hung.
 
 **Opening inverts Arrival.** The orb scaling *up* as it fades reads as the field opening,
 not the orb leaving. The vignette releasing outward is literally beat 1 run backwards.
@@ -142,8 +148,8 @@ struct ThresholdChoreography: Sendable {
 
     let motion: Motion
 
-    var totalDuration: Duration { get }
-    func frame(atElapsed: Duration) -> Frame
+    var totalDuration: TimeInterval { get }
+    func frame(atElapsed: TimeInterval) -> Frame
     func exitFrame(from: Frame, progress: Double) -> Frame
 }
 ```
@@ -205,6 +211,11 @@ The threshold does not show when:
 
 - **VoiceOver is running.** A decorative animation with nothing to announce that blocks
   the shell for 2.6 seconds is hostile to a screen reader user. Straight to Home.
+- **First launch.** `ContentView.checkForFirstLaunch()` raises `OnboardingView` 800ms
+  after appear when `hasCompletedOnboarding` is false — landing squarely inside the Bloom
+  beat, with a `fullScreenCover` animating up through a threshold that is still playing.
+  Onboarding is the entry experience on first launch; the threshold stands down. The
+  controller reads the same `hasCompletedOnboarding` key.
 - **Not iOS.** There is no cluttered iPhone environment to leave on macOS, and a
   threshold overlay inside a resizable window reads as a modal glitch. Gated at the
   `ContentView` overlay seam with `#if os(iOS)`; the `Threshold/` files themselves stay
@@ -255,6 +266,7 @@ Swift Testing. New file `IlumionateTests/ThresholdChoreographyTests.swift`:
 | Skip lands correctly | `exitFrame(from: midBloomFrame, progress: 1.0)` equals the frame at `totalDuration` |
 | Skip interpolates | `exitFrame` at progress 0 equals the captured frame |
 | Past the end is clamped | `frame(atElapsed: totalDuration * 2)` equals the frame at `totalDuration` |
+| Negative elapsed is clamped | `frame(atElapsed: -1)` equals the frame at 0 |
 
 No UI tests. There is nothing a UI test would catch here that a value test would not, and
 a UI test of a 2.6-second animation is a flake generator.
@@ -269,6 +281,7 @@ moves to `.exiting`; `skip()` from `.exiting` or `.finished` is a no-op.
 - The aurora field does not jump, shift or recolour at the moment the threshold exits.
 - A tap at any point during the arc eases out within 0.35s.
 - Resume from background does not replay the threshold.
+- First launch goes straight to Home and then Onboarding, with no threshold underneath it.
 - Reduce Motion produces the short fade variant with no scaling or spinning.
 - VoiceOver launches straight into Home.
 - macOS and Mac Catalyst build and launch unchanged.

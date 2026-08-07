@@ -1,0 +1,944 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Launch Threshold Implementation Plan</title>
+<style>
+:root {
+  --bg:#0e0b12; --panel:#161119; --line:#2b2333; --text:#ece6f2;
+  --muted:#9a8fa6; --accent:#e9b7ba; --accent2:#be96ff; --code:#120e17;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg:#faf7fb; --panel:#fff; --line:#e6dfe9; --text:#1d1721;
+    --muted:#6b6274; --accent:#a35c63; --accent2:#6b3fa0; --code:#f3eff5; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+.wrap { display:grid; grid-template-columns:250px minmax(0,1fr); gap:44px;
+  max-width:1180px; margin:0 auto; padding:56px 28px 120px; }
+nav { position:sticky; top:36px; align-self:start; font-size:13px; }
+nav .navtitle { text-transform:uppercase; letter-spacing:.12em; font-size:10px;
+  color:var(--muted); margin-bottom:12px; }
+nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 0;
+  border-left:2px solid transparent; padding-left:12px; }
+nav a:hover { color:var(--accent); border-left-color:var(--accent); }
+main { min-width:0; }
+h1 { font-size:clamp(30px,4vw,44px); line-height:1.12; letter-spacing:-.025em;
+  margin:0 0 28px; }
+h2 { font-size:26px; letter-spacing:-.015em; margin:56px 0 16px;
+  padding-bottom:10px; border-bottom:1px solid var(--line); }
+h3 { font-size:18px; margin:34px 0 10px; color:var(--accent); }
+h4 { font-size:15px; margin:24px 0 8px; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.07em; }
+p { margin:0 0 15px; }
+ul,ol { margin:0 0 16px; padding-left:22px; }
+li { margin-bottom:7px; }
+hr { border:0; border-top:1px solid var(--line); margin:44px 0; }
+blockquote { margin:0 0 20px; padding:14px 20px; background:var(--panel);
+  border-left:3px solid var(--accent2); border-radius:0 10px 10px 0;
+  font-size:17px; color:var(--text); }
+blockquote p:last-child { margin-bottom:0; }
+code { font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:var(--code); padding:2px 6px; border-radius:5px; }
+pre.code { background:var(--code); border:1px solid var(--line);
+  border-radius:12px; padding:16px 18px; overflow-x:auto; margin:0 0 18px; }
+pre.code code { background:none; padding:0; font-size:13px; }
+.tablewrap { overflow-x:auto; margin:0 0 20px;
+  border:1px solid var(--line); border-radius:12px; }
+table { border-collapse:collapse; width:100%; font-size:14.5px; }
+th { text-align:left; padding:11px 15px; background:var(--panel);
+  font-weight:650; border-bottom:1px solid var(--line);
+  font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--muted); white-space:nowrap; }
+td { padding:11px 15px; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+tr:last-child td { border-bottom:0; }
+strong { color:var(--accent2); font-weight:640; }
+@media (max-width:900px) {
+  .wrap { grid-template-columns:1fr; gap:0; padding:32px 20px 80px; }
+  nav { position:static; margin-bottom:36px; }
+}
+</style></head><body>
+<div class="wrap">
+<nav><div class="navtitle">Contents</div><a href="#before-you-start">Before you start</a><a href="#file-structure">File structure</a><a href="#task-1-the-choreography-value-type">Task 1: The choreography value type</a><a href="#task-2-the-controller-and-its-phase-machine">Task 2: The controller and its phase machine</a><a href="#task-3-the-vignette">Task 3: The vignette</a><a href="#task-4-the-threshold-view">Task 4: The threshold view</a><a href="#task-5-colour-matched-launch-frame">Task 5: Colour-matched launch frame</a><a href="#task-6-wire-the-overlay-into-the-shell">Task 6: Wire the overlay into the shell</a><a href="#task-7-verify-both-platforms-and-every-suppression-path">Task 7: Verify both platforms and every suppression path</a><a href="#definition-of-done">Definition of done</a></nav>
+<main><h1 id="launch-threshold-implementation-plan">Launch Threshold Implementation Plan</h1>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>Goal:</strong> Play a wordless 2.6-second visual arc over the tab shell on cold launch, so the app opens with a paced handoff out of the cluttered phone environment instead of dropping the user straight into a populated UI.</p>
+<p><strong>Architecture:</strong> A pure <code>ThresholdChoreography</code> value type maps elapsed seconds to a frame of visual values (orb scale, orb opacity, vignette closure, aurora opacity). A <code>@MainActor @Observable ThresholdController</code> owns the clock and a three-case phase machine. <code>ThresholdView</code> renders the frame each tick via <code>TimelineView(.animation)</code> and overlays an already-mounted <code>ContentView</code>, so session loading hides inside the transition and the shared <code>AuroraBackground</code> — which animates off the absolute clock — carries across the exit with no visible seam.</p>
+<p><strong>Tech Stack:</strong> Swift 6.2, SwiftUI, Swift Testing (<code>import Testing</code>), Xcode synchronized file groups.</p>
+<p><strong>Spec:</strong> <code>docs/superpowers/specs/2026-08-07-launch-threshold-design.md</code></p>
+<hr>
+<h2 id="before-you-start">Before you start</h2>
+<p>Read these three things. They are the load-bearing facts this plan depends on.</p>
+<p><strong>1. New files need no Xcode project edits.</strong> <code>Ilumionate.xcodeproj/project.pbxproj:188</code> and <code>:198</code> declare <code>Ilumionate/</code> and <code>IlumionateTests/</code> as <code>PBXFileSystemSynchronizedRootGroup</code>. Any <code>.swift</code> file you create under those directories joins the target automatically. Do not hand-edit the pbxproj. (It already shows as modified in git from unrelated prior work — leave that alone.)</p>
+<p><strong>2. The aurora continuity is real, not aspirational.</strong> <code>Ilumionate/DesignSystem/AuroraBackground.swift:66</code> computes blob phase from <code>context.date.timeIntervalSinceReferenceDate</code> — absolute wall-clock time, not a per-instance start date. <code>LumeOrb</code> spins on the same clock. This is why two separately-mounted instances render pixel-identical, and why the exit needs no <code>matchedGeometryEffect</code>. If you find yourself adding one, stop and re-read the spec.</p>
+<p><strong>3. The threshold must never wait on anything.</strong> Fixed duration, always. If you are tempted to gate it on loading state, that is the exact failure mode this feature exists to avoid.</p>
+<h3 id="build-and-test-commands">Build and test commands</h3>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; test -only-testing:IlumionateTests/ThresholdChoreographyTests</code></pre>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; build</code></pre>
+<hr>
+<h2 id="file-structure">File structure</h2>
+<div class="tablewrap"><table><thead><tr><th>File</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>Ilumionate/Threshold/ThresholdChoreography.swift</code></td><td>Pure elapsed-time → <code>Frame</code> mapping. All timing constants. No SwiftUI, no state, no clock</td></tr><tr><td><code>Ilumionate/Threshold/ThresholdController.swift</code></td><td>Phase machine, start date, skip, suppression rules</td></tr><tr><td><code>Ilumionate/Threshold/ThresholdVignette.swift</code></td><td>The edge-closing radial mask</td></tr><tr><td><code>Ilumionate/Threshold/ThresholdView.swift</code></td><td>Composes aurora + orb + vignette from a <code>Frame</code>. Skip button</td></tr><tr><td><code>Ilumionate/Assets.xcassets/LaunchBackground.colorset/Contents.json</code></td><td>Adaptive colour matching <code>bgDeep</code>, used by <code>UILaunchScreen</code></td></tr><tr><td><code>Ilumionate/Info.plist</code></td><td><code>UIColorName</code> inside the existing empty <code>UILaunchScreen</code> dict</td></tr><tr><td><code>Ilumionate/ContentView.swift</code></td><td>Hosts the overlay; loses the dead <code>isLoading</code> state</td></tr><tr><td><code>IlumionateTests/ThresholdChoreographyTests.swift</code></td><td>Value assertions on the arc</td></tr><tr><td><code>IlumionateTests/ThresholdControllerTests.swift</code></td><td>Phase machine assertions</td></tr></tbody></table></div>
+<hr>
+<h2 id="task-1-the-choreography-value-type">Task 1: The choreography value type</h2>
+<p>This is the whole feature&#x27;s logic. It is a pure function, so it is tested exhaustively and everything downstream is dumb.</p>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>IlumionateTests/ThresholdChoreographyTests.swift</code></li><li>Create: <code>Ilumionate/Threshold/ThresholdChoreography.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Write the failing tests</strong></li></ul>
+<p>Create <code>IlumionateTests/ThresholdChoreographyTests.swift</code>:</p>
+<pre class="code" data-lang="swift"><code>//
+//  ThresholdChoreographyTests.swift
+//  IlumionateTests
+//
+
+import Testing
+@testable import Ilumionate
+
+struct ThresholdChoreographyTests {
+
+    private let full = ThresholdChoreography(motion: .full)
+    private let reduced = ThresholdChoreography(motion: .reduced)
+
+    // MARK: - Arrival
+
+    @Test(&quot;The arc opens with the orb invisible and the vignette wide open&quot;)
+    func arrivalStart() {
+        let frame = full.frame(atElapsed: 0)
+        #expect(frame.orbOpacity == 0)
+        #expect(frame.vignetteClosure == 0)
+        #expect(frame.auroraOpacity == 0)
+    }
+
+    @Test(&quot;Arrival closes the vignette from the edges&quot;)
+    func arrivalClosesVignette() {
+        // The periphery — where the cluttered phone was — darkens first.
+        let samples = stride(from: 0.0, through: 0.5, by: 0.05)
+            .map { full.frame(atElapsed: $0).vignetteClosure }
+        for (earlier, later) in zip(samples, samples.dropFirst()) {
+            #expect(later &gt;= earlier)
+        }
+        #expect(full.frame(atElapsed: 0.5).vignetteClosure == 1)
+    }
+
+    // MARK: - Bloom
+
+    @Test(&quot;Bloom is the only beat where the orb grows&quot;)
+    func bloomGrows() {
+        // A spinner never grows. One unrepeated expansion is the clearest
+        // available signal that this arc has a beginning.
+        let samples = stride(from: 0.5, through: 1.6, by: 0.05)
+            .map { full.frame(atElapsed: $0).orbScale }
+        for (earlier, later) in zip(samples, samples.dropFirst()) {
+            #expect(later &gt; earlier)
+        }
+        #expect(abs(full.frame(atElapsed: 0.5).orbScale - 0.6) &lt; 0.0001)
+        #expect(abs(full.frame(atElapsed: 1.6).orbScale - 1.0) &lt; 0.0001)
+    }
+
+    // MARK: - Settle
+
+    @Test(&quot;Settle holds the choreographed scale perfectly flat&quot;)
+    func settleIsFlat() {
+        // The plateau is the point. The eye reads a flat stretch as an ending
+        // rather than a wait — this is the beat a loading indicator lacks.
+        for elapsed in stride(from: 1.6, through: 2.2, by: 0.05) {
+            #expect(abs(full.frame(atElapsed: elapsed).orbScale - 1.0) &lt; 0.0001)
+        }
+    }
+
+    // MARK: - Opening
+
+    @Test(&quot;Opening clears the orb and releases the vignette&quot;)
+    func openingClears() {
+        let frame = full.frame(atElapsed: full.totalDuration)
+        #expect(frame.orbOpacity == 0)
+        #expect(frame.vignetteClosure == 0)
+    }
+
+    @Test(&quot;Opening lifts the orb outward as it fades&quot;)
+    func openingLifts() {
+        // Scaling up while fading reads as the field opening, not the orb leaving.
+        #expect(full.frame(atElapsed: 2.4).orbScale &gt; 1.0)
+        #expect(full.frame(atElapsed: full.totalDuration).orbScale &gt; 1.0)
+    }
+
+    @Test(&quot;The aurora never fades out, including on the final frame&quot;)
+    func auroraHolds() {
+        // The threshold&#x27;s aurora is the same field Home is already drawing
+        // underneath. Fading it during Opening would darken the screen and
+        // force Home&#x27;s copy to fade back in — the exact seam this avoids.
+        for elapsed in stride(from: 1.6, through: full.totalDuration, by: 0.05) {
+            #expect(full.frame(atElapsed: elapsed).auroraOpacity == 1)
+        }
+        #expect(full.frame(atElapsed: full.totalDuration).auroraOpacity == 1)
+    }
+
+    // MARK: - Clamping
+
+    @Test(&quot;Elapsed past the end clamps to the final frame&quot;)
+    func clampsPastEnd() {
+        #expect(full.frame(atElapsed: full.totalDuration * 2)
+                == full.frame(atElapsed: full.totalDuration))
+    }
+
+    @Test(&quot;Negative elapsed clamps to the first frame&quot;)
+    func clampsBeforeStart() {
+        #expect(full.frame(atElapsed: -1) == full.frame(atElapsed: 0))
+    }
+
+    // MARK: - Reduce Motion
+
+    @Test(&quot;Reduced motion pins the orb scale at rest&quot;)
+    func reducedMotionDoesNotScale() {
+        for elapsed in stride(from: 0.0, through: reduced.totalDuration, by: 0.05) {
+            #expect(reduced.frame(atElapsed: elapsed).orbScale == 1.0)
+        }
+    }
+
+    @Test(&quot;Reduced motion never travels the vignette&quot;)
+    func reducedMotionHasNoVignette() {
+        for elapsed in stride(from: 0.0, through: reduced.totalDuration, by: 0.05) {
+            #expect(reduced.frame(atElapsed: elapsed).vignetteClosure == 0)
+        }
+    }
+
+    @Test(&quot;Reduced motion still fades the orb in and back out&quot;)
+    func reducedMotionFades() {
+        #expect(reduced.frame(atElapsed: 0).orbOpacity == 0)
+        #expect(reduced.frame(atElapsed: 0.5).orbOpacity == 1)
+        #expect(reduced.frame(atElapsed: reduced.totalDuration).orbOpacity == 0)
+    }
+
+    @Test(&quot;Reduced motion is markedly shorter than the full arc&quot;)
+    func reducedMotionIsShort() {
+        #expect(reduced.totalDuration &lt; 1.0)
+        #expect(reduced.totalDuration &lt; full.totalDuration)
+    }
+
+    @Test(&quot;Reduced motion also holds the aurora up&quot;)
+    func reducedMotionHoldsAurora() {
+        #expect(reduced.frame(atElapsed: reduced.totalDuration).auroraOpacity == 1)
+    }
+
+    // MARK: - Skip
+
+    @Test(&quot;A skip that runs to completion lands on the resting frame&quot;)
+    func skipLandsAtRest() {
+        let midBloom = full.frame(atElapsed: 1.0)
+        #expect(full.exitFrame(from: midBloom, progress: 1)
+                == full.frame(atElapsed: full.totalDuration))
+    }
+
+    @Test(&quot;A skip begins from exactly where the arc was&quot;)
+    func skipStartsWhereItWas() {
+        // Easing out from the current frame is what stops a skip snapping.
+        let midBloom = full.frame(atElapsed: 1.0)
+        #expect(full.exitFrame(from: midBloom, progress: 0) == midBloom)
+    }
+
+    @Test(&quot;Skip progress is clamped at both ends&quot;)
+    func skipClamps() {
+        let midBloom = full.frame(atElapsed: 1.0)
+        #expect(full.exitFrame(from: midBloom, progress: -0.5) == midBloom)
+        #expect(full.exitFrame(from: midBloom, progress: 2)
+                == full.exitFrame(from: midBloom, progress: 1))
+    }
+}</code></pre>
+<ul><li>[ ] <strong>Step 2: Run the tests to verify they fail</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; test -only-testing:IlumionateTests/ThresholdChoreographyTests</code></pre>
+<p>Expected: compile failure, <code>cannot find &#x27;ThresholdChoreography&#x27; in scope</code>.</p>
+<ul><li>[ ] <strong>Step 3: Write the implementation</strong></li></ul>
+<p>Create <code>Ilumionate/Threshold/ThresholdChoreography.swift</code>:</p>
+<pre class="code" data-lang="swift"><code>//
+//  ThresholdChoreography.swift
+//  Ilumionate
+//
+//  The launch threshold&#x27;s arc, as a pure function of elapsed time.
+//
+//  A spinner loops; a threshold progresses. Every constant here serves that
+//  one distinction — a single unrepeated growth beat, a flat plateau the eye
+//  reads as an ending, and an exit that inverts the entrance.
+//
+//  No SwiftUI, no timers, no clock. Given a number of seconds, it returns the
+//  frame that belongs at that moment. That is the whole type.
+//
+
+import Foundation
+
+struct ThresholdChoreography: Sendable {
+
+    enum Motion: Sendable, Equatable {
+        case full
+        /// Same four-beat structure, expressed only in opacity.
+        case reduced
+    }
+
+    /// Everything the view needs to draw one moment of the arc.
+    struct Frame: Equatable, Sendable {
+        /// Choreographed scale applied *on top of* LumeOrb&#x27;s own breath.
+        var orbScale: Double
+        var orbOpacity: Double
+        /// 0 = wide open, 1 = fully closed in around the centre.
+        var vignetteClosure: Double
+        var auroraOpacity: Double
+    }
+
+    // MARK: - Beat boundaries (seconds from launch)
+
+    private enum Beat {
+        static let arrivalEnd: TimeInterval = 0.5
+        static let bloomEnd: TimeInterval = 1.6
+        static let settleEnd: TimeInterval = 2.2
+        static let openingEnd: TimeInterval = 2.6
+    }
+
+    private enum ReducedBeat {
+        static let fadeInEnd: TimeInterval = 0.4
+        static let holdEnd: TimeInterval = 0.6
+        static let fadeOutEnd: TimeInterval = 0.9
+    }
+
+    /// The orb starts as a dim point rather than nothing, so Bloom reads as
+    /// something opening rather than something appearing.
+    private static let seedScale = 0.6
+    private static let seedOpacity = 0.25
+    /// Overshooting rest on the way out is what makes the exit read as the
+    /// field opening instead of the orb being taken away.
+    private static let liftScale = 1.15
+
+    let motion: Motion
+
+    var totalDuration: TimeInterval {
+        switch motion {
+        case .full: Beat.openingEnd
+        case .reduced: ReducedBeat.fadeOutEnd
+        }
+    }
+
+    // MARK: - The arc
+
+    func frame(atElapsed elapsed: TimeInterval) -&gt; Frame {
+        let t = min(max(elapsed, 0), totalDuration)
+        return switch motion {
+        case .full: fullFrame(at: t)
+        case .reduced: reducedFrame(at: t)
+        }
+    }
+
+    private func fullFrame(at t: TimeInterval) -&gt; Frame {
+        if t &lt;= Beat.arrivalEnd {
+            let p = progress(t, from: 0, to: Beat.arrivalEnd)
+            return Frame(
+                orbScale: Self.seedScale,
+                orbOpacity: Self.seedOpacity * p,
+                vignetteClosure: easeInOut(p),
+                auroraOpacity: 0
+            )
+        }
+
+        if t &lt;= Beat.bloomEnd {
+            let p = progress(t, from: Beat.arrivalEnd, to: Beat.bloomEnd)
+            let eased = easeOut(p)
+            return Frame(
+                orbScale: lerp(Self.seedScale, 1.0, eased),
+                orbOpacity: lerp(Self.seedOpacity, 1.0, eased),
+                vignetteClosure: 1,
+                auroraOpacity: p
+            )
+        }
+
+        if t &lt;= Beat.settleEnd {
+            // Nothing moves here but the orb&#x27;s own breath. That is the point.
+            return Frame(orbScale: 1, orbOpacity: 1, vignetteClosure: 1, auroraOpacity: 1)
+        }
+
+        let p = progress(t, from: Beat.settleEnd, to: Beat.openingEnd)
+        return Frame(
+            orbScale: lerp(1.0, Self.liftScale, easeIn(p)),
+            orbOpacity: 1 - p,
+            vignetteClosure: 1 - easeInOut(p),
+            // Held at full. The field underneath must never dip.
+            auroraOpacity: 1
+        )
+    }
+
+    private func reducedFrame(at t: TimeInterval) -&gt; Frame {
+        if t &lt;= ReducedBeat.fadeInEnd {
+            let p = progress(t, from: 0, to: ReducedBeat.fadeInEnd)
+            return Frame(orbScale: 1, orbOpacity: p, vignetteClosure: 0, auroraOpacity: p)
+        }
+
+        if t &lt;= ReducedBeat.holdEnd {
+            return Frame(orbScale: 1, orbOpacity: 1, vignetteClosure: 0, auroraOpacity: 1)
+        }
+
+        let p = progress(t, from: ReducedBeat.holdEnd, to: ReducedBeat.fadeOutEnd)
+        return Frame(orbScale: 1, orbOpacity: 1 - p, vignetteClosure: 0, auroraOpacity: 1)
+    }
+
+    // MARK: - Skip
+
+    /// Interpolates from a captured frame to the resting frame, so a skip eases
+    /// out from wherever the arc happened to be rather than snapping.
+    func exitFrame(from captured: Frame, progress: Double) -&gt; Frame {
+        let p = min(max(progress, 0), 1)
+        let rest = frame(atElapsed: totalDuration)
+        return Frame(
+            orbScale: lerp(captured.orbScale, rest.orbScale, p),
+            orbOpacity: lerp(captured.orbOpacity, rest.orbOpacity, p),
+            vignetteClosure: lerp(captured.vignetteClosure, rest.vignetteClosure, p),
+            auroraOpacity: lerp(captured.auroraOpacity, rest.auroraOpacity, p)
+        )
+    }
+
+    /// How long a skip takes to ease out.
+    static let skipDuration: TimeInterval = 0.35
+
+    // MARK: - Curves
+
+    private func progress(_ t: TimeInterval, from: TimeInterval, to: TimeInterval) -&gt; Double {
+        guard to &gt; from else { return 1 }
+        return min(max((t - from) / (to - from), 0), 1)
+    }
+
+    private func lerp(_ a: Double, _ b: Double, _ t: Double) -&gt; Double {
+        a + (b - a) * t
+    }
+
+    private func easeOut(_ t: Double) -&gt; Double {
+        1 - pow(1 - t, 3)
+    }
+
+    private func easeIn(_ t: Double) -&gt; Double {
+        t * t * t
+    }
+
+    private func easeInOut(_ t: Double) -&gt; Double {
+        t &lt; 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+    }
+}</code></pre>
+<ul><li>[ ] <strong>Step 4: Run the tests to verify they pass</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; test -only-testing:IlumionateTests/ThresholdChoreographyTests</code></pre>
+<p>Expected: all 17 tests pass.</p>
+<ul><li>[ ] <strong>Step 5: Commit</strong></li></ul>
+<pre class="code" data-lang="bash"><code>git add Ilumionate/Threshold/ThresholdChoreography.swift IlumionateTests/ThresholdChoreographyTests.swift
+git commit -m &quot;feat(threshold): map the launch arc as a pure function of elapsed time&quot;</code></pre>
+<hr>
+<h2 id="task-2-the-controller-and-its-phase-machine">Task 2: The controller and its phase machine</h2>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>IlumionateTests/ThresholdControllerTests.swift</code></li><li>Create: <code>Ilumionate/Threshold/ThresholdController.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Write the failing tests</strong></li></ul>
+<p>Create <code>IlumionateTests/ThresholdControllerTests.swift</code>:</p>
+<pre class="code" data-lang="swift"><code>//
+//  ThresholdControllerTests.swift
+//  IlumionateTests
+//
+
+import Testing
+@testable import Ilumionate
+
+@MainActor
+struct ThresholdControllerTests {
+
+    @Test(&quot;A controller that is allowed to run starts out presenting&quot;)
+    func runsWhenAllowed() {
+        let controller = ThresholdController(isSuppressed: false, motion: .full)
+        #expect(controller.isPresenting)
+    }
+
+    @Test(&quot;A suppressed controller never presents&quot;)
+    func suppressedNeverPresents() {
+        // VoiceOver and first launch both land here.
+        let controller = ThresholdController(isSuppressed: true, motion: .full)
+        #expect(controller.isPresenting == false)
+    }
+
+    @Test(&quot;Skipping a running threshold moves it into the exit&quot;)
+    func skipStartsExit() {
+        let controller = ThresholdController(isSuppressed: false, motion: .full)
+        controller.skip(now: .now)
+        #expect(controller.isExiting)
+        #expect(controller.isPresenting)
+    }
+
+    @Test(&quot;Skipping twice is a no-op&quot;)
+    func skipTwiceIsIgnored() {
+        // Otherwise a double tap restarts the exit interpolation and stutters.
+        let controller = ThresholdController(isSuppressed: false, motion: .full)
+        let start = Date.now
+        controller.skip(now: start)
+        let firstExit = controller.frame(at: start.addingTimeInterval(0.1))
+        controller.skip(now: start.addingTimeInterval(0.1))
+        #expect(controller.frame(at: start.addingTimeInterval(0.1)) == firstExit)
+    }
+
+    @Test(&quot;Finishing stops presentation&quot;)
+    func finishStopsPresenting() {
+        let controller = ThresholdController(isSuppressed: false, motion: .full)
+        controller.finish()
+        #expect(controller.isPresenting == false)
+    }
+
+    @Test(&quot;Skipping after finishing is a no-op&quot;)
+    func skipAfterFinishIsIgnored() {
+        let controller = ThresholdController(isSuppressed: false, motion: .full)
+        controller.finish()
+        controller.skip(now: .now)
+        #expect(controller.isPresenting == false)
+    }
+
+    @Test(&quot;While running, the frame tracks elapsed time from the start date&quot;)
+    func runningFrameTracksElapsed() {
+        let controller = ThresholdController(isSuppressed: false, motion: .full)
+        let start = Date.now
+        controller.begin(at: start)
+        let choreography = ThresholdChoreography(motion: .full)
+        #expect(controller.frame(at: start.addingTimeInterval(1.0))
+                == choreography.frame(atElapsed: 1.0))
+    }
+
+    @Test(&quot;The exit interpolates from the frame captured at the moment of the tap&quot;)
+    func exitInterpolatesFromCapturedFrame() {
+        let controller = ThresholdController(isSuppressed: false, motion: .full)
+        let start = Date.now
+        controller.begin(at: start)
+        let tapTime = start.addingTimeInterval(1.0)
+        let choreography = ThresholdChoreography(motion: .full)
+        let captured = choreography.frame(atElapsed: 1.0)
+
+        controller.skip(now: tapTime)
+
+        #expect(controller.frame(at: tapTime) == captured)
+        #expect(controller.frame(at: tapTime.addingTimeInterval(ThresholdChoreography.skipDuration))
+                == choreography.frame(atElapsed: choreography.totalDuration))
+    }
+
+    @Test(&quot;Reduced motion controllers use the short arc&quot;)
+    func reducedMotionUsesShortArc() {
+        let controller = ThresholdController(isSuppressed: false, motion: .reduced)
+        #expect(controller.totalDuration &lt; 1.0)
+    }
+}</code></pre>
+<ul><li>[ ] <strong>Step 2: Run the tests to verify they fail</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; test -only-testing:IlumionateTests/ThresholdControllerTests</code></pre>
+<p>Expected: compile failure, <code>cannot find &#x27;ThresholdController&#x27; in scope</code>.</p>
+<ul><li>[ ] <strong>Step 3: Write the implementation</strong></li></ul>
+<p>Create <code>Ilumionate/Threshold/ThresholdController.swift</code>:</p>
+<pre class="code" data-lang="swift"><code>//
+//  ThresholdController.swift
+//  Ilumionate
+//
+//  Owns the launch threshold&#x27;s clock, its phase, and the decision about
+//  whether it should run at all.
+//
+//  The controller takes an injected `now` on every call rather than reading the
+//  clock itself, so the whole phase machine is testable without waiting.
+//
+
+import Foundation
+import SwiftUI
+
+#if canImport(UIKit)
+import UIKit
+#endif
+
+@MainActor
+@Observable
+final class ThresholdController {
+
+    enum Phase: Equatable {
+        case running(start: Date)
+        case exiting(from: ThresholdChoreography.Frame, start: Date)
+        case finished
+    }
+
+    private let choreography: ThresholdChoreography
+    private(set) var phase: Phase
+
+    /// - Parameters:
+    ///   - isSuppressed: when true the threshold never appears. See
+    ///     `shouldSuppress` for the two cases that set it.
+    ///   - motion: `.reduced` mirrors the Reduce Motion accessibility setting.
+    ///
+    /// `nonisolated` so `ContentView` can build one in a `@State` property
+    /// initialiser, which is not a main-actor context.
+    nonisolated init(isSuppressed: Bool, motion: ThresholdChoreography.Motion, now: Date = .now) {
+        self.choreography = ThresholdChoreography(motion: motion)
+        self.phase = isSuppressed ? .finished : .running(start: now)
+    }
+
+    var isPresenting: Bool {
+        phase != .finished
+    }
+
+    var isExiting: Bool {
+        if case .exiting = phase { return true }
+        return false
+    }
+
+    var totalDuration: TimeInterval {
+        choreography.totalDuration
+    }
+
+    /// Restarts the clock. The view calls this on appear so the arc is timed
+    /// from the first frame actually drawn, not from init.
+    func begin(at now: Date) {
+        guard case .running = phase else { return }
+        phase = .running(start: now)
+    }
+
+    /// Captures the current frame and eases out from it. A no-op unless the
+    /// arc is still running, so a double tap cannot restart the interpolation.
+    func skip(now: Date) {
+        guard case .running = phase else { return }
+        phase = .exiting(from: frame(at: now), start: now)
+    }
+
+    func finish() {
+        phase = .finished
+    }
+
+    func frame(at now: Date) -&gt; ThresholdChoreography.Frame {
+        switch phase {
+        case .running(let start):
+            choreography.frame(atElapsed: now.timeIntervalSince(start))
+        case .exiting(let captured, let start):
+            choreography.exitFrame(
+                from: captured,
+                progress: now.timeIntervalSince(start) / ThresholdChoreography.skipDuration
+            )
+        case .finished:
+            choreography.frame(atElapsed: choreography.totalDuration)
+        }
+    }
+
+    /// True once the current phase has run its course at `now`.
+    func hasElapsed(at now: Date) -&gt; Bool {
+        switch phase {
+        case .running(let start):
+            now.timeIntervalSince(start) &gt;= choreography.totalDuration
+        case .exiting(_, let start):
+            now.timeIntervalSince(start) &gt;= ThresholdChoreography.skipDuration
+        case .finished:
+            true
+        }
+    }
+
+    // MARK: - Suppression
+
+    /// The threshold stands down in two situations, both of them cases where
+    /// playing it would actively hurt.
+    ///
+    /// `nonisolated` for the same reason as `init` — it is read from a `@State`
+    /// property initialiser.
+    nonisolated static var shouldSuppress: Bool {
+        // First launch: `ContentView.checkForFirstLaunch()` raises Onboarding
+        // 800ms after appear — squarely inside the Bloom beat. Onboarding is
+        // the entry experience that time; the threshold is not needed.
+        if !UserDefaults.standard.bool(forKey: &quot;hasCompletedOnboarding&quot;) {
+            return true
+        }
+
+        #if canImport(UIKit)
+        // VoiceOver: a decorative animation with nothing to announce that
+        // blocks the shell for 2.6 seconds is hostile to a screen reader user.
+        if UIAccessibility.isVoiceOverRunning {
+            return true
+        }
+        #endif
+
+        return false
+    }
+}</code></pre>
+<ul><li>[ ] <strong>Step 4: Run the tests to verify they pass</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; test -only-testing:IlumionateTests/ThresholdControllerTests</code></pre>
+<p>Expected: all 9 tests pass.</p>
+<ul><li>[ ] <strong>Step 5: Commit</strong></li></ul>
+<pre class="code" data-lang="bash"><code>git add Ilumionate/Threshold/ThresholdController.swift IlumionateTests/ThresholdControllerTests.swift
+git commit -m &quot;feat(threshold): add the phase machine and suppression rules&quot;</code></pre>
+<hr>
+<h2 id="task-3-the-vignette">Task 3: The vignette</h2>
+<p>A radial mask that darkens the periphery. <code>closure</code> 0 draws nothing at all; 1 draws a fully closed vignette.</p>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>Ilumionate/Threshold/ThresholdVignette.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Write the view</strong></li></ul>
+<p>Create <code>Ilumionate/Threshold/ThresholdVignette.swift</code>:</p>
+<pre class="code" data-lang="swift"><code>//
+//  ThresholdVignette.swift
+//  Ilumionate
+//
+//  Darkness that closes in from the edges during Arrival and releases during
+//  Opening. The periphery is where the cluttered phone was, so the periphery
+//  is what goes first.
+//
+
+import SwiftUI
+
+struct ThresholdVignette: View {
+    /// 0 = wide open (invisible), 1 = fully closed in around the centre.
+    var closure: Double
+
+    var body: some View {
+        // At full closure the clear centre is a little under half the screen&#x27;s
+        // shorter edge, so the orb always sits inside untouched space.
+        let innerFraction = 0.85 - 0.45 * closure
+
+        GeometryReader { proxy in
+            let extent = max(proxy.size.width, proxy.size.height)
+            RadialGradient(
+                colors: [.clear, Color.bgDeep],
+                center: .center,
+                startRadius: extent * innerFraction * 0.5,
+                endRadius: extent * 0.78
+            )
+            .opacity(closure)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+#Preview(&quot;Closed&quot;) {
+    ZStack { Color.bgPrimary.ignoresSafeArea(); LumeOrb(size: .hero); ThresholdVignette(closure: 1) }
+}
+#Preview(&quot;Open&quot;) {
+    ZStack { Color.bgPrimary.ignoresSafeArea(); LumeOrb(size: .hero); ThresholdVignette(closure: 0) }
+}</code></pre>
+<ul><li>[ ] <strong>Step 2: Verify it compiles</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; build</code></pre>
+<p>Expected: BUILD SUCCEEDED.</p>
+<ul><li>[ ] <strong>Step 3: Commit</strong></li></ul>
+<pre class="code" data-lang="bash"><code>git add Ilumionate/Threshold/ThresholdVignette.swift
+git commit -m &quot;feat(threshold): add the closing vignette&quot;</code></pre>
+<hr>
+<h2 id="task-4-the-threshold-view">Task 4: The threshold view</h2>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>Ilumionate/Threshold/ThresholdView.swift</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Write the view</strong></li></ul>
+<p>Create <code>Ilumionate/Threshold/ThresholdView.swift</code>:</p>
+<pre class="code" data-lang="swift"><code>//
+//  ThresholdView.swift
+//  Ilumionate
+//
+//  The launch threshold. Void, a breathing orb, and a vignette that closes and
+//  releases — then the app is simply there.
+//
+//  The aurora drawn here is deliberately the same field Home draws, at the same
+//  mood and the same phase: `AuroraBackground` animates off the absolute clock,
+//  so two instances mounted seconds apart are pixel-identical. That is what
+//  makes the exit seamless without any geometry matching.
+//
+
+import SwiftUI
+
+struct ThresholdView: View {
+    /// Plain `let` is correct here — `@Observable` tracks reads without
+    /// `@Bindable`, and nothing in this view needs a two-way binding.
+    let controller: ThresholdController
+
+    /// Same call Home makes, so the two fields agree on colour as well as phase.
+    private var mood: BrainwaveCategory {
+        PortalRecommender.category(forHour: Calendar.current.component(.hour, from: .now))
+    }
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let frame = controller.frame(at: context.date)
+
+            ZStack {
+                Color.bgDeep
+                    .ignoresSafeArea()
+
+                AuroraBackground(mood: mood)
+                    .opacity(frame.auroraOpacity)
+
+                LumeOrb(size: .hero)
+                    .scaleEffect(frame.orbScale)
+                    .opacity(frame.orbOpacity)
+
+                ThresholdVignette(closure: frame.vignetteClosure)
+
+                Button {
+                    controller.skip(now: .now)
+                } label: {
+                    Color.clear.contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .ignoresSafeArea()
+                .accessibilityLabel(&quot;Skip the opening&quot;)
+            }
+            .onChange(of: controller.hasElapsed(at: context.date)) { _, elapsed in
+                if elapsed { controller.finish() }
+            }
+        }
+        .task {
+            controller.begin(at: .now)
+        }
+    }
+}
+
+#Preview(&quot;Full motion&quot;) {
+    ThresholdView(controller: ThresholdController(isSuppressed: false, motion: .full))
+}
+#Preview(&quot;Reduced motion&quot;) {
+    ThresholdView(controller: ThresholdController(isSuppressed: false, motion: .reduced))
+}</code></pre>
+<ul><li>[ ] <strong>Step 2: Verify it compiles</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; build</code></pre>
+<p>Expected: BUILD SUCCEEDED.</p>
+<ul><li>[ ] <strong>Step 3: Commit</strong></li></ul>
+<pre class="code" data-lang="bash"><code>git add Ilumionate/Threshold/ThresholdView.swift
+git commit -m &quot;feat(threshold): compose the arc over a shared aurora field&quot;</code></pre>
+<hr>
+<h2 id="task-5-colour-matched-launch-frame">Task 5: Colour-matched launch frame</h2>
+<p>Without this the OS draws a white (or black) frame before any of your code runs, and the threshold begins with a flash — the opposite of the intent.</p>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>Ilumionate/Assets.xcassets/LaunchBackground.colorset/Contents.json</code></li><li>Modify: <code>Ilumionate/Info.plist:68-69</code></li></ul>
+<ul><li>[ ] <strong>Step 1: Create the colour set</strong></li></ul>
+<p>The values match <code>Color.bgDeep</code> — <code>TranceDesignSystem.swift:44</code> resolves it to <code>dawnDeep</code> (<code>#FFE9F4</code>) in light and <code>voidDeep</code> (<code>#03040C</code>) in dark.</p>
+<pre class="code" data-lang="bash"><code>mkdir -p Ilumionate/Assets.xcassets/LaunchBackground.colorset</code></pre>
+<p>Create <code>Ilumionate/Assets.xcassets/LaunchBackground.colorset/Contents.json</code>:</p>
+<pre class="code" data-lang="json"><code>{
+  &quot;colors&quot; : [
+    {
+      &quot;color&quot; : {
+        &quot;color-space&quot; : &quot;srgb&quot;,
+        &quot;components&quot; : {
+          &quot;alpha&quot; : &quot;1.000&quot;,
+          &quot;blue&quot; : &quot;0xF4&quot;,
+          &quot;green&quot; : &quot;0xE9&quot;,
+          &quot;red&quot; : &quot;0xFF&quot;
+        }
+      },
+      &quot;idiom&quot; : &quot;universal&quot;
+    },
+    {
+      &quot;appearances&quot; : [
+        {
+          &quot;appearance&quot; : &quot;luminosity&quot;,
+          &quot;value&quot; : &quot;dark&quot;
+        }
+      ],
+      &quot;color&quot; : {
+        &quot;color-space&quot; : &quot;srgb&quot;,
+        &quot;components&quot; : {
+          &quot;alpha&quot; : &quot;1.000&quot;,
+          &quot;blue&quot; : &quot;0x0C&quot;,
+          &quot;green&quot; : &quot;0x04&quot;,
+          &quot;red&quot; : &quot;0x03&quot;
+        }
+      },
+      &quot;idiom&quot; : &quot;universal&quot;
+    }
+  ],
+  &quot;info&quot; : {
+    &quot;author&quot; : &quot;xcode&quot;,
+    &quot;version&quot; : 1
+  }
+}</code></pre>
+<ul><li>[ ] <strong>Step 2: Point the launch screen at it</strong></li></ul>
+<p>In <code>Ilumionate/Info.plist</code>, replace:</p>
+<pre class="code" data-lang="xml"><code>	&lt;key&gt;UILaunchScreen&lt;/key&gt;
+	&lt;dict/&gt;</code></pre>
+<p>with:</p>
+<pre class="code" data-lang="xml"><code>	&lt;key&gt;UILaunchScreen&lt;/key&gt;
+	&lt;dict&gt;
+		&lt;key&gt;UIColorName&lt;/key&gt;
+		&lt;string&gt;LaunchBackground&lt;/string&gt;
+	&lt;/dict&gt;</code></pre>
+<ul><li>[ ] <strong>Step 3: Verify the launch frame matches</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; build</code></pre>
+<p>Expected: BUILD SUCCEEDED.</p>
+<p>Then launch the app in the simulator in dark appearance and watch the first moment. Expected: no white flash — the OS frame is already the void colour, and the first frame of Arrival continues it. Repeat in light appearance; the frame should be the pale dawn wash, not white.</p>
+<blockquote><p>If the colour still flashes white, the asset name in <code>Info.plist</code> does not match the <code>.colorset</code> directory name. It is matched by name at runtime, so a typo fails silently.</p></blockquote>
+<ul><li>[ ] <strong>Step 4: Commit</strong></li></ul>
+<pre class="code" data-lang="bash"><code>git add Ilumionate/Assets.xcassets/LaunchBackground.colorset/Contents.json Ilumionate/Info.plist
+git commit -m &quot;feat(threshold): match the OS launch frame to the void&quot;</code></pre>
+<hr>
+<h2 id="task-6-wire-the-overlay-into-the-shell">Task 6: Wire the overlay into the shell</h2>
+<p><strong>Files:</strong></p>
+<ul><li>Modify: <code>Ilumionate/ContentView.swift:32</code> (delete <code>isLoading</code>), <code>:44-45</code> (the overlay), <code>:242</code> and <code>:254</code> (the dead assignments)</li></ul>
+<ul><li>[ ] <strong>Step 1: Add the controller state</strong></li></ul>
+<p>In <code>Ilumionate/ContentView.swift</code>, replace this line (currently line 32):</p>
+<pre class="code" data-lang="swift"><code>    @State private var isLoading = true</code></pre>
+<p>with:</p>
+<pre class="code" data-lang="swift"><code>    @State private var threshold = ThresholdController(
+        isSuppressed: ThresholdController.shouldSuppress,
+        motion: .full
+    )</code></pre>
+<blockquote><p><code>isLoading</code> is dead — assigned at two places and read by nothing. It goes now rather than becoming a tempting thing to gate the threshold on, which is how a ritual turns back into a loading screen.</p></blockquote>
+<ul><li>[ ] <strong>Step 2: Remove the two dead assignments</strong></li></ul>
+<p>Delete the line <code>isLoading = true</code> (around line 242) and the line <code>isLoading = false</code> (around line 254). Find them with:</p>
+<pre class="code" data-lang="bash"><code>grep -n &quot;isLoading&quot; Ilumionate/ContentView.swift</code></pre>
+<p>Expected after deleting: no output.</p>
+<ul><li>[ ] <strong>Step 3: Overlay the threshold</strong></li></ul>
+<p>Replace the opening of <code>body</code>:</p>
+<pre class="code" data-lang="swift"><code>    var body: some View {
+        mainLayout
+        .task {</code></pre>
+<p>with:</p>
+<pre class="code" data-lang="swift"><code>    var body: some View {
+        ZStack {
+            mainLayout
+
+            #if os(iOS)
+            if threshold.isPresenting {
+                ThresholdView(controller: threshold)
+                    .transition(.identity)
+            }
+            #endif
+        }
+        .task {</code></pre>
+<blockquote><p><code>.transition(.identity)</code> matters: the view animates its own exit through the choreography, and letting SwiftUI add an implicit fade on top would double the dissolve.</p></blockquote>
+<blockquote><p>The <code>#if os(iOS)</code> is the only platform fork. There is no cluttered iPhone environment to leave on macOS, and an overlay inside a resizable window reads as a modal glitch. The <code>Threshold/</code> files themselves stay platform-free.</p></blockquote>
+<ul><li>[ ] <strong>Step 4: Add the motion switch to the controller</strong></li></ul>
+<p>In <code>Ilumionate/Threshold/ThresholdController.swift</code>, replace:</p>
+<pre class="code" data-lang="swift"><code>    private let choreography: ThresholdChoreography</code></pre>
+<p>with:</p>
+<pre class="code" data-lang="swift"><code>    private(set) var choreography: ThresholdChoreography</code></pre>
+<p>and add this method directly after <code>begin(at:)</code>:</p>
+<pre class="code" data-lang="swift"><code>    /// Swaps to the short opacity-only arc, and restarts the clock so the
+    /// shorter arc gets its full length. Called once on appear, because the
+    /// accessibility environment is not readable from a property initialiser.
+    func adoptReducedMotion(at now: Date) {
+        guard case .running = phase, choreography.motion == .full else { return }
+        choreography = ThresholdChoreography(motion: .reduced)
+        phase = .running(start: now)
+    }</code></pre>
+<ul><li>[ ] <strong>Step 5: Honour Reduce Motion from the shell</strong></li></ul>
+<p>The controller is built in a property initialiser, which cannot read <code>@Environment</code>, so the switch happens on appear instead. Add the environment value alongside the existing <code>scenePhase</code> property near line 17:</p>
+<pre class="code" data-lang="swift"><code>    @Environment(\.accessibilityReduceMotion) private var reduceMotion</code></pre>
+<p>Then inside the existing <code>.task { ... }</code> block, as its first line — before <code>await analysisManager.restoreManualRecoveries()</code>:</p>
+<pre class="code" data-lang="swift"><code>            if reduceMotion { threshold.adoptReducedMotion(at: .now) }</code></pre>
+<ul><li>[ ] <strong>Step 6: Run the full test suite</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; test -only-testing:IlumionateTests</code></pre>
+<p>Expected: all tests pass, including the two new suites and every pre-existing test.</p>
+<ul><li>[ ] <strong>Step 7: Commit</strong></li></ul>
+<pre class="code" data-lang="bash"><code>git add Ilumionate/ContentView.swift Ilumionate/Threshold/ThresholdController.swift Ilumionate/Threshold/ThresholdChoreography.swift
+git commit -m &quot;feat(threshold): open the app through the threshold on cold launch&quot;</code></pre>
+<hr>
+<h2 id="task-7-verify-both-platforms-and-every-suppression-path">Task 7: Verify both platforms and every suppression path</h2>
+<p>Nothing here is automated. These are the behaviours the value tests cannot reach.</p>
+<p><strong>Files:</strong> none modified.</p>
+<ul><li>[ ] <strong>Step 1: Confirm macOS is untouched</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; build</code></pre>
+<p>Expected: BUILD SUCCEEDED. Launch it. Expected: the sidebar shell appears immediately with no threshold.</p>
+<ul><li>[ ] <strong>Step 2: Confirm Mac Catalyst still compiles</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,variant=Mac Catalyst,arch=arm64&#x27; build</code></pre>
+<p>Expected: BUILD SUCCEEDED.</p>
+<ul><li>[ ] <strong>Step 3: Run the macOS test suite</strong></li></ul>
+<pre class="code" data-lang="bash"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests</code></pre>
+<p>Expected: all tests pass. The choreography is platform-free, so it must pass here too.</p>
+<ul><li>[ ] <strong>Step 4: Walk the iOS behaviours</strong></li></ul>
+<p>On an iPhone 17 Pro simulator, with onboarding already completed, check each of these:</p>
+<div class="tablewrap"><table><thead><tr><th>Check</th><th>Expected</th></tr></thead><tbody><tr><td>Cold launch, dark appearance</td><td>No white flash. Vignette closes, orb blooms, holds, opens into Home</td></tr><tr><td>Cold launch, light appearance</td><td>Same arc over the dawn wash. The OS frame is pale, not white</td></tr><tr><td>The exit moment</td><td>The aurora does <strong>not</strong> jump, shift, dim or recolour as the threshold clears. This is the single most important thing to watch</td></tr><tr><td>Tap during Bloom</td><td>Eases out within ~0.35s from where the orb was. No snap</td></tr><tr><td>Tap during Arrival</td><td>Same, no crash, no stutter</td></tr><tr><td>Double tap</td><td>Behaves exactly like a single tap</td></tr><tr><td>Background then foreground</td><td>No replay. The threshold is cold-launch only</td></tr><tr><td>Settings → Reduce Motion on, then cold launch</td><td>Short fade, no scaling, no spinning, no vignette travel</td></tr><tr><td>Settings → VoiceOver on, then cold launch</td><td>Straight to Home, no threshold</td></tr><tr><td>Delete app, reinstall, launch</td><td>No threshold. Onboarding appears as it always did</td></tr></tbody></table></div>
+<ul><li>[ ] <strong>Step 5: Commit if anything needed fixing</strong></li></ul>
+<pre class="code" data-lang="bash"><code>git add -A
+git commit -m &quot;fix(threshold): address issues found in platform verification&quot;</code></pre>
+<hr>
+<h2 id="definition-of-done">Definition of done</h2>
+<ul><li>[ ] Cold launch on iOS shows the four-beat arc with no white flash and no seam at the OS handoff, in both appearances</li><li>[ ] The aurora field does not jump, shift or recolour when the threshold exits</li><li>[ ] A tap at any point eases out within 0.35s</li><li>[ ] Resume from background does not replay the threshold</li><li>[ ] First launch goes to Onboarding with no threshold underneath</li><li>[ ] Reduce Motion produces the short fade variant</li><li>[ ] VoiceOver launches straight into Home</li><li>[ ] macOS and Mac Catalyst build and launch unchanged</li><li>[ ] <code>ThresholdChoreographyTests</code> and <code>ThresholdControllerTests</code> pass on both the macOS and iOS Simulator destinations</li><li>[ ] No regression in the existing suite</li></ul></main>
+</div>
+</body></html>
