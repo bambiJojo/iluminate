@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Launch Threshold — Design</title>
+<style>
+:root {
+  --bg:#0e0b12; --panel:#161119; --line:#2b2333; --text:#ece6f2;
+  --muted:#9a8fa6; --accent:#e9b7ba; --accent2:#be96ff; --code:#120e17;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg:#faf7fb; --panel:#fff; --line:#e6dfe9; --text:#1d1721;
+    --muted:#6b6274; --accent:#a35c63; --accent2:#6b3fa0; --code:#f3eff5; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+.wrap { display:grid; grid-template-columns:250px minmax(0,1fr); gap:44px;
+  max-width:1180px; margin:0 auto; padding:56px 28px 120px; }
+nav { position:sticky; top:36px; align-self:start; font-size:13px; }
+nav .navtitle { text-transform:uppercase; letter-spacing:.12em; font-size:10px;
+  color:var(--muted); margin-bottom:12px; }
+nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 0;
+  border-left:2px solid transparent; padding-left:12px; }
+nav a:hover { color:var(--accent); border-left-color:var(--accent); }
+main { min-width:0; }
+h1 { font-size:clamp(30px,4vw,44px); line-height:1.12; letter-spacing:-.025em;
+  margin:0 0 28px; }
+h2 { font-size:26px; letter-spacing:-.015em; margin:56px 0 16px;
+  padding-bottom:10px; border-bottom:1px solid var(--line); }
+h3 { font-size:18px; margin:34px 0 10px; color:var(--accent); }
+h4 { font-size:15px; margin:24px 0 8px; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.07em; }
+p { margin:0 0 15px; }
+ul,ol { margin:0 0 16px; padding-left:22px; }
+li { margin-bottom:7px; }
+hr { border:0; border-top:1px solid var(--line); margin:44px 0; }
+blockquote { margin:0 0 20px; padding:14px 20px; background:var(--panel);
+  border-left:3px solid var(--accent2); border-radius:0 10px 10px 0;
+  font-size:17px; color:var(--text); }
+blockquote p:last-child { margin-bottom:0; }
+code { font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:var(--code); padding:2px 6px; border-radius:5px; }
+pre.code { background:var(--code); border:1px solid var(--line);
+  border-radius:12px; padding:16px 18px; overflow-x:auto; margin:0 0 18px; }
+pre.code code { background:none; padding:0; font-size:13px; }
+.tablewrap { overflow-x:auto; margin:0 0 20px;
+  border:1px solid var(--line); border-radius:12px; }
+table { border-collapse:collapse; width:100%; font-size:14.5px; }
+th { text-align:left; padding:11px 15px; background:var(--panel);
+  font-weight:650; border-bottom:1px solid var(--line);
+  font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--muted); white-space:nowrap; }
+td { padding:11px 15px; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+tr:last-child td { border-bottom:0; }
+strong { color:var(--accent2); font-weight:640; }
+@media (max-width:900px) {
+  .wrap { grid-template-columns:1fr; gap:0; padding:32px 20px 80px; }
+  nav { position:static; margin-bottom:36px; }
+}
+</style></head><body>
+<div class="wrap">
+<nav><div class="navtitle">Contents</div><a href="#problem">Problem</a><a href="#what-we-are-building">What we are building</a><a href="#the-core-risk-and-the-answer-to-it">The core risk, and the answer to it</a><a href="#choreography">Choreography</a><a href="#why-an-overlay-not-a-scene-swap">Why an overlay, not a scene swap</a><a href="#architecture">Architecture</a><a href="#suppression">Suppression</a><a href="#deliberately-not-coupled-to-loading">Deliberately not coupled to loading</a><a href="#failure-behaviour">Failure behaviour</a><a href="#testing">Testing</a><a href="#definition-of-done">Definition of done</a><a href="#out-of-scope">Out of scope</a></nav>
+<main><h1 id="launch-threshold-design">Launch Threshold — Design</h1>
+<p><strong>Date:</strong> 2026-08-07 <strong>Status:</strong> Approved, ready for planning <strong>Branch:</strong> <code>feature/reader-hypnotic-visuals</code></p>
+<h2 id="problem">Problem</h2>
+<p>The app has no entry. <code>Info.plist:68</code> declares <code>UILaunchScreen</code> as an empty dict, so iOS draws a bare white (or black) frame, and then <code>ContentView</code> pops straight into the four-tab shell with a tab bar, cards, a streak pill and whatever Home has to say. The user goes from a notification-strewn home screen to a populated UI in one frame.</p>
+<p>That transition is at odds with what the app is for. LumeSync asks the user to settle, narrow their attention and stay with a slow visual field for twenty minutes. It opens by handing them another dense screen to parse. Nothing in the launch marks the boundary between the phone they were just using and the state the app wants them in.</p>
+<h2 id="what-we-are-building">What we are building</h2>
+<p>A <strong>threshold</strong>: a full-screen, wordless, 2.6-second visual arc that plays over the tab shell on cold launch, then opens into Home. Void, a breathing <code>LumeOrb</code>, and a vignette that closes and releases. No text, no branding, no data. It auto-dismisses; a tap anywhere skips it.</p>
+<p>The transition itself is the feature. The threshold is not a splash screen advertising the app and not a loading screen reporting progress — it is a paced handoff from a cluttered environment to a quiet one.</p>
+<h3 id="decisions-taken-during-design">Decisions taken during design</h3>
+<div class="tablewrap"><table><thead><tr><th>Question</th><th>Decision</th></tr></thead><tbody><tr><td>Static asset or in-app view?</td><td>In-app animated threshold, backed by a colour-matched <code>UILaunchScreen</code> so there is no seam</td></tr><tr><td>How does it end?</td><td>Auto-dismiss on a fixed arc; tap anywhere to skip</td></tr><tr><td>What is on screen?</td><td>Pure atmosphere — void, orb, vignette. No words, no wordmark, no stats</td></tr><tr><td>How does it compose with the shell?</td><td>Overlay above a already-mounted <code>ContentView</code>, not a scene swap</td></tr><tr><td>When does it show?</td><td>Cold launch only. Not on resume from background</td></tr><tr><td>Platforms</td><td>iOS only</td></tr><tr><td>VoiceOver</td><td>Skipped entirely</td></tr><tr><td>Coupled to loading?</td><td>No, deliberately. Fixed duration regardless of load state</td></tr></tbody></table></div>
+<h2 id="the-core-risk-and-the-answer-to-it">The core risk, and the answer to it</h2>
+<p>Pure atmosphere with no words risks reading as a loading spinner — the exact opposite of the intent. The distinction is structural, not decorative:</p>
+<blockquote><p>A spinner <strong>loops</strong>. A threshold <strong>progresses</strong>.</p></blockquote>
+<p>So the motion must have a legible beginning, middle and end, and it must never wait on anything. Every timing decision below serves that one constraint.</p>
+<h2 id="choreography">Choreography</h2>
+<p>Four beats, 2.6s total.</p>
+<div class="tablewrap"><table><thead><tr><th>Beat</th><th>Window</th><th>What happens</th></tr></thead><tbody><tr><td>Arrival</td><td>0 – 0.5s</td><td>Screen opens at exactly the <code>UILaunchScreen</code> colour. Vignette closes in from the edges — the periphery, where the cluttered phone was, darkens first. Orb is a dim point at 0.6 scale</td></tr><tr><td>Bloom</td><td>0.5 – 1.6s</td><td>Orb scales 0.6 → 1.0 on a slow ease-out. Conic ring spins up from rest. Aurora blobs fade in behind. One inhale</td></tr><tr><td>Settle</td><td>1.6 – 2.2s</td><td>Orb completes exactly one breath and rests at neutral. Nothing scales. Held stillness</td></tr><tr><td>Opening</td><td>2.2 – 2.6s</td><td>Vignette releases outward, the inverse of Arrival. Orb scales 1.0 → 1.15 while fading to zero. Home&#x27;s chrome fades up through it</td></tr></tbody></table></div>
+<p>Three properties of this arc are load-bearing:</p>
+<p><strong>Bloom is the only growth beat.</strong> A spinner never grows. A single unrepeated 0.6 → 1.0 expansion is the clearest available signal that this has a beginning.</p>
+<p><strong>Settle is flat on purpose.</strong> Nothing scales for 0.6 seconds. The eye reads a plateau as an ending rather than a wait, and this is the stretch that does the actual relaxing. It is precisely the beat every loading indicator lacks.</p>
+<p><strong>Opening inverts Arrival.</strong> The orb scaling <em>up</em> as it fades reads as the field opening, not the orb leaving. The vignette releasing outward is literally beat 1 run backwards.</p>
+<h3 id="the-aurora-never-fades-out">The aurora never fades out</h3>
+<p><code>auroraOpacity</code> runs 0 through Arrival, ramps 0 → 1 across Bloom, and then stays at 1 for Settle <em>and</em> Opening. It must not fall at the end. The threshold&#x27;s aurora is the same field Home is already drawing underneath at identical phase and colour; fading it out during Opening would darken the field for 0.4s and then require Home&#x27;s copy to fade back in, which is the visible seam this whole approach exists to avoid. Only the orb and the vignette dissolve. The field is continuous by construction.</p>
+<h3 id="skip">Skip</h3>
+<p>A tap at any moment captures the current frame and interpolates from it to the resting frame over 0.35s. A skip therefore eases out from wherever the orb happens to be rather than snapping. Skip is available from the first frame.</p>
+<h3 id="reduce-motion">Reduce Motion</h3>
+<p>A real variant, not a disable. Same four-beat structure, no motion: a 0.4s opacity fade in, a held beat, a 0.3s fade out. Orb scale is pinned at 1.0 throughout, no spin, no vignette travel. About 0.9s total.</p>
+<h2 id="why-an-overlay-not-a-scene-swap">Why an overlay, not a scene swap</h2>
+<p><code>ContentView</code> stays mounted underneath and the threshold renders above it in a <code>ZStack</code>. Three consequences, all of them wins:</p>
+<p><strong>Real work hides inside the ritual.</strong> <code>ContentView</code>&#x27;s <code>.task</code> — <code>loadSessions()</code>, <code>loadAudioFiles()</code>, <code>restoreManualRecoveries()</code>, first-launch and consent checks — runs behind the threshold. Launch latency becomes part of the transition rather than adding to it. A scene-level swap would mount <code>ContentView</code> <em>after</em> the arc, starting that work late and making launch genuinely slower.</p>
+<p><strong>The aurora field is continuous.</strong> <code>AuroraBackground.animatedBlobs</code> (<code>AuroraBackground.swift:66</code>) derives blob phase from <code>context.date.timeIntervalSinceReferenceDate</code> — absolute wall-clock time, not a per-instance start. Two instances mounted seconds apart render pixel-identical. <code>LumeOrb</code> spins on the same absolute clock. So when the threshold draws <code>AuroraBackground(mood:)</code> with the mood from the same <code>PortalRecommender.category(forHour:)</code> call Home makes at <code>HomeView.swift:111</code>, the two fields match in phase <em>and</em> colour. The exit is not a crossfade between two screens; only the threshold&#x27;s own layers dissolve while the field underneath continues untouched.</p>
+<p><strong>No geometry coupling.</strong> A <code>matchedGeometryEffect</code> morph of the orb into a Home position would be more cinematic but would couple <code>ThresholdView</code> to <code>HomeView</code>&#x27;s internals, and matched geometry across a tab shell during first load is fragile. The shared absolute clock buys the continuity without the coupling.</p>
+<h2 id="architecture">Architecture</h2>
+<p>New directory <code>Ilumionate/Threshold/</code>.</p>
+<h3 id="thresholdchoreographyswift"><code>ThresholdChoreography.swift</code></h3>
+<p>A <code>Sendable</code> value type, and the heart of the feature. A pure function of elapsed time to a frame of visual values:</p>
+<pre class="code" data-lang="swift"><code>struct ThresholdChoreography: Sendable {
+    enum Motion: Sendable { case full, reduced }
+
+    struct Frame: Equatable, Sendable {
+        var orbScale: Double
+        var orbOpacity: Double
+        var vignetteClosure: Double   // 0 = wide open, 1 = fully closed
+        var auroraOpacity: Double
+    }
+
+    let motion: Motion
+
+    var totalDuration: Duration { get }
+    func frame(atElapsed: Duration) -&gt; Frame
+    func exitFrame(from: Frame, progress: Double) -&gt; Frame
+}</code></pre>
+<p>No SwiftUI, no timers, no state, no clock of its own. Every timing constant in the choreography table above lives here as a named <code>static let</code>. Because it is pure, the whole arc is testable by calling <code>frame(atElapsed:)</code> with arbitrary values, and the controller can compute the current frame itself without the view feeding state back.</p>
+<h3 id="thresholdcontrollerswift"><code>ThresholdController.swift</code></h3>
+<p><code>@MainActor @Observable final class</code>. Owns the start date and a phase:</p>
+<pre class="code" data-lang="swift"><code>enum Phase: Equatable {
+    case running(start: Date)
+    case exiting(from: ThresholdChoreography.Frame, start: Date)
+    case finished
+}</code></pre>
+<p>Decides whether to present at all (see Suppression below), drives the transition to <code>.finished</code> via a <code>.task</code> that sleeps for <code>totalDuration</code>, and handles <code>skip()</code> by computing the current frame from the choreography and moving to <code>.exiting</code>.</p>
+<p>The per-frame visuals come from <code>TimelineView(.animation)</code> in the view; the phase transition comes from the sleeping task. Both are anchored to the same start date and read the same duration constant, so drift across a 2.6s arc is under one frame.</p>
+<h3 id="thresholdviewswift"><code>ThresholdView.swift</code></h3>
+<p>Presentation only. <code>TimelineView(.animation)</code> computes the frame each tick — the same pattern <code>LumeOrb</code> already uses. Renders <code>AuroraBackground(mood:)</code>, the orb, and the vignette. The skip target is a full-bleed <code>Button</code> with a <code>Color.clear</code> label and <code>.contentShape(.rect)</code>, per the house rule against <code>onTapGesture</code> for plain taps.</p>
+<h3 id="thresholdvignetteswift"><code>ThresholdVignette.swift</code></h3>
+<p>The edge-closing radial mask. Separated because it is the one piece with fiddly geometry and benefits from its own preview.</p>
+<h3 id="modified-files">Modified files</h3>
+<p><strong><code>ContentView.swift</code></strong> gains <code>@State private var threshold = ThresholdController()</code> and a <code>ZStack</code> overlay above <code>mainLayout</code>. <code>ContentView</code> mounts once per process launch, so <code>@State</code> gives cold-launch-only semantics for free — no separate &quot;already shown&quot; flag and no <code>UserDefaults</code>. Resume from background does not remount and therefore does not re-trigger.</p>
+<p><strong><code>Info.plist</code></strong> gets <code>UIColorName</code> inside the existing empty <code>UILaunchScreen</code> dict.</p>
+<p><strong><code>Assets.xcassets</code></strong> gets a <code>LaunchBackground</code> colour set with light and dark variants matching <code>Color.bgDeep</code>, so the OS-drawn launch frame is indistinguishable from frame one of Arrival in both appearances.</p>
+<h2 id="suppression">Suppression</h2>
+<p>The threshold does not show when:</p>
+<ul><li><strong>VoiceOver is running.</strong> A decorative animation with nothing to announce that blocks the shell for 2.6 seconds is hostile to a screen reader user. Straight to Home.</li><li><strong>Not iOS.</strong> There is no cluttered iPhone environment to leave on macOS, and a threshold overlay inside a resizable window reads as a modal glitch. Gated at the <code>ContentView</code> overlay seam with <code>#if os(iOS)</code>; the <code>Threshold/</code> files themselves stay platform-free and compile everywhere.</li></ul>
+<p><code>UIAccessibility.isVoiceOverRunning</code> is UIKit, so it sits behind <code>#if canImport(UIKit)</code> inside the controller as a narrow adapter, consistent with the project&#x27;s platform-boundary rule.</p>
+<h2 id="deliberately-not-coupled-to-loading">Deliberately not coupled to loading</h2>
+<p><code>isLoading</code> in <code>ContentView.swift:32</code> is currently dead state — assigned at lines 242 and 254, read by nothing. It is tempting to gate the threshold on it. We are not doing that.</p>
+<p>If the threshold waited for loading, it would become an indefinite loading screen, which is the precise failure mode this feature exists to avoid. The arc runs for a fixed duration and exits on schedule. If sessions are still loading when it ends, Home shows its own loading state — that is Home&#x27;s job.</p>
+<p><code>isLoading</code> is deleted as part of this work, since it is dead code in a file we are already modifying.</p>
+<h2 id="failure-behaviour">Failure behaviour</h2>
+<p>There is nothing here that can fail — no I/O, no decoding, no network. The two degenerate cases:</p>
+<ul><li><strong>Load outruns the arc.</strong> Threshold exits anyway; Home renders whatever it has.</li><li><strong>Skip during the exit interpolation.</strong> Ignored. <code>skip()</code> is a no-op unless the phase is <code>.running</code>.</li></ul>
+<h2 id="testing">Testing</h2>
+<p><code>ThresholdChoreography</code> is a pure function, so tests are direct value assertions with Swift Testing. New file <code>IlumionateTests/ThresholdChoreographyTests.swift</code>:</p>
+<div class="tablewrap"><table><thead><tr><th>Test</th><th>Assertion</th></tr></thead><tbody><tr><td>Arrival start</td><td><code>frame(atElapsed: .zero)</code> has <code>orbOpacity</code> near 0, <code>vignetteClosure</code> 0</td></tr><tr><td>Arrival closes the vignette</td><td><code>vignetteClosure</code> is monotonically increasing across 0 → 0.5s</td></tr><tr><td>Bloom grows</td><td><code>orbScale</code> is strictly increasing across 0.5 → 1.6s, reaching 1.0</td></tr><tr><td>Settle is flat</td><td><code>orbScale</code> is constant at 1.0 across 1.6 → 2.2s — the plateau is asserted, not incidental</td></tr><tr><td>Opening clears</td><td>at <code>totalDuration</code>, <code>orbOpacity == 0</code> and <code>vignetteClosure == 0</code></td></tr><tr><td>Opening lifts</td><td><code>orbScale</code> exceeds 1.0 during 2.2 → 2.6s</td></tr><tr><td>Aurora holds</td><td><code>auroraOpacity == 1</code> at every sampled value from 1.6s through <code>totalDuration</code>, including the final frame</td></tr><tr><td>Reduced motion pins scale</td><td>with <code>.reduced</code>, <code>orbScale == 1.0</code> at every sampled elapsed value</td></tr><tr><td>Reduced motion is shorter</td><td><code>.reduced</code> <code>totalDuration</code> is under 1.0s</td></tr><tr><td>Skip lands correctly</td><td><code>exitFrame(from: midBloomFrame, progress: 1.0)</code> equals the frame at <code>totalDuration</code></td></tr><tr><td>Skip interpolates</td><td><code>exitFrame</code> at progress 0 equals the captured frame</td></tr><tr><td>Past the end is clamped</td><td><code>frame(atElapsed: totalDuration * 2)</code> equals the frame at <code>totalDuration</code></td></tr></tbody></table></div>
+<p>No UI tests. There is nothing a UI test would catch here that a value test would not, and a UI test of a 2.6-second animation is a flake generator.</p>
+<p><code>ThresholdController</code> gets light coverage for the phase machine: <code>skip()</code> from <code>.running</code> moves to <code>.exiting</code>; <code>skip()</code> from <code>.exiting</code> or <code>.finished</code> is a no-op.</p>
+<h2 id="definition-of-done">Definition of done</h2>
+<ul><li>Cold launch on iOS shows the four-beat arc with no white flash and no visible seam at the OS handoff, in both light and dark appearance.</li><li>The aurora field does not jump, shift or recolour at the moment the threshold exits.</li><li>A tap at any point during the arc eases out within 0.35s.</li><li>Resume from background does not replay the threshold.</li><li>Reduce Motion produces the short fade variant with no scaling or spinning.</li><li>VoiceOver launches straight into Home.</li><li>macOS and Mac Catalyst build and launch unchanged.</li><li><code>ThresholdChoreographyTests</code> passes on both the macOS and iOS Simulator destinations.</li><li>No regression in the existing suite.</li></ul>
+<h2 id="out-of-scope">Out of scope</h2>
+<ul><li>Extending the threshold to cover entry into a session or the player. The same grammar would likely apply, but it is a separate decision about a different seam.</li><li>Any change to <code>OnboardingView</code>, which remains the first-launch experience and is unrelated.</li><li>The <code>iphone-performance-gaming-tier</code> entry in <code>UIRequiredDeviceCapabilities</code> (<code>Info.plist:71</code>), which restricts App Store availability to a narrow set of devices. Noticed while reading the plist during this design; worth resolving before submission, but not part of this work.</li></ul></main>
+</div>
+</body></html>
