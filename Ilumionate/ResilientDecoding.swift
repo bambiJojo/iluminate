@@ -14,7 +14,7 @@
 
 import Foundation
 
-enum ResilientDecoding {
+nonisolated enum ResilientDecoding {
 
     /// Decode an array, dropping only the elements that fail.
     ///
@@ -65,7 +65,7 @@ enum ResilientDecoding {
 }
 
 /// One element captured as re-encodable JSON, so it can be decoded on its own.
-private struct RawJSON: Decodable {
+private nonisolated struct RawJSON: Decodable {
     let data: Data?
 
     init(from decoder: Decoder) throws {
@@ -90,7 +90,7 @@ private struct RawJSON: Decodable {
 }
 
 /// Minimal type-erased JSON value, used only to re-serialise one element.
-private struct AnyCodable: Decodable {
+private nonisolated struct AnyCodable: Decodable {
     let value: Any
 
     init(from decoder: Decoder) throws {

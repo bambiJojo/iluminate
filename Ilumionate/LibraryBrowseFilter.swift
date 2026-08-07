@@ -40,7 +40,10 @@ nonisolated enum LibraryQuickFilter: Hashable, Identifiable, Sendable {
         }
     }
 
-    var systemImage: String {
+    /// `@MainActor` only because ContentTypeStyle's icons live beside its
+    /// colours, which are SwiftUI values and main-actor by module default. The
+    /// filtering logic below stays nonisolated and testable.
+    @MainActor var systemImage: String {
         switch self {
         case .all:                   "square.grid.2x2"
         case .favorites:             "heart.fill"
@@ -123,6 +126,7 @@ nonisolated enum LibraryBrowseFilter {
     }
 
     /// Whether a playlist matches a free-text query — its name or any track title.
+    @MainActor
     static func matches(_ playlist: Playlist, query: String) -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { return true }
@@ -143,6 +147,11 @@ nonisolated enum LibraryBrowseFilter {
     }
 
     /// Playlists matching a query, in stored order.
+    ///
+    /// `@MainActor` follows from `matches(_:query:)`, which reads PlaylistItem's
+    /// display names. Only the playlist paths carry this; the audio-file paths
+    /// above stay nonisolated.
+    @MainActor
     static func apply(to playlists: [Playlist], query: String = "") -> [Playlist] {
         playlists.filter { matches($0, query: query) }
     }
@@ -171,6 +180,7 @@ nonisolated enum PlaylistSortOption: String, CaseIterable, Sendable {
         }
     }
 
+    @MainActor
     func sorted(_ playlists: [Playlist]) -> [Playlist] {
         playlists.sorted { lhs, rhs in
             switch self {
