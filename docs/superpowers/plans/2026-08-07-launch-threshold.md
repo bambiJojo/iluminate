@@ -14,7 +14,7 @@
 
 ## Before you start
 
-Read these three things. They are the load-bearing facts this plan depends on.
+Read these four things. They are the load-bearing facts this plan depends on.
 
 **1. New files need no Xcode project edits.** `Ilumionate.xcodeproj/project.pbxproj:188` and `:198` declare `Ilumionate/` and `IlumionateTests/` as `PBXFileSystemSynchronizedRootGroup`. Any `.swift` file you create under those directories joins the target automatically. Do not hand-edit the pbxproj. (It already shows as modified in git from unrelated prior work — leave that alone.)
 
@@ -22,14 +22,18 @@ Read these three things. They are the load-bearing facts this plan depends on.
 
 **3. The threshold must never wait on anything.** Fixed duration, always. If you are tempted to gate it on loading state, that is the exact failure mode this feature exists to avoid.
 
+**4. The module already defaults to main-actor isolation.** `project.pbxproj` sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` alongside `SWIFT_STRICT_CONCURRENCY = complete` on every configuration. So a `@State` property initialiser inside a `View` is already a main-actor context, and no `nonisolated` annotation is needed anywhere in this feature. Do not add one — on an `@Observable` tracked stored property it is a hard compile error (`main actor-isolated property 'phase' can not be mutated from a nonisolated context`). Keep the explicit `@MainActor` on the class regardless: 37 of the 38 `@Observable` files here carry it, and matching the house convention beats saving a line.
+
 ### Build and test commands
 
+**Always pass `-derivedDataPath`.** The user keeps Xcode open and runs their own builds; sharing the default DerivedData causes `unable to attach DB: database is locked`. Every command below already includes the flag.
+
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests/ThresholdChoreographyTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData test -only-testing:IlumionateTests/ThresholdChoreographyTests
 ```
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData build
 ```
 
 ---
@@ -226,7 +230,7 @@ struct ThresholdChoreographyTests {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests/ThresholdChoreographyTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData test -only-testing:IlumionateTests/ThresholdChoreographyTests
 ```
 
 Expected: compile failure, `cannot find 'ThresholdChoreography' in scope`.
@@ -409,7 +413,7 @@ struct ThresholdChoreography: Sendable {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests/ThresholdChoreographyTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData test -only-testing:IlumionateTests/ThresholdChoreographyTests
 ```
 
 Expected: all 17 tests pass.
@@ -439,6 +443,7 @@ Create `IlumionateTests/ThresholdControllerTests.swift`:
 //  IlumionateTests
 //
 
+import Foundation
 import Testing
 @testable import Ilumionate
 
@@ -529,7 +534,7 @@ struct ThresholdControllerTests {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests/ThresholdControllerTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData test -only-testing:IlumionateTests/ThresholdControllerTests
 ```
 
 Expected: compile failure, `cannot find 'ThresholdController' in scope`.
@@ -574,10 +579,7 @@ final class ThresholdController {
     ///   - isSuppressed: when true the threshold never appears. See
     ///     `shouldSuppress` for the two cases that set it.
     ///   - motion: `.reduced` mirrors the Reduce Motion accessibility setting.
-    ///
-    /// `nonisolated` so `ContentView` can build one in a `@State` property
-    /// initialiser, which is not a main-actor context.
-    nonisolated init(isSuppressed: Bool, motion: ThresholdChoreography.Motion, now: Date = .now) {
+    init(isSuppressed: Bool, motion: ThresholdChoreography.Motion, now: Date = .now) {
         self.choreography = ThresholdChoreography(motion: motion)
         self.phase = isSuppressed ? .finished : .running(start: now)
     }
@@ -643,10 +645,7 @@ final class ThresholdController {
 
     /// The threshold stands down in two situations, both of them cases where
     /// playing it would actively hurt.
-    ///
-    /// `nonisolated` for the same reason as `init` — it is read from a `@State`
-    /// property initialiser.
-    nonisolated static var shouldSuppress: Bool {
+    static var shouldSuppress: Bool {
         // First launch: `ContentView.checkForFirstLaunch()` raises Onboarding
         // 800ms after appear — squarely inside the Bloom beat. Onboarding is
         // the entry experience that time; the threshold is not needed.
@@ -670,7 +669,7 @@ final class ThresholdController {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests/ThresholdControllerTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData test -only-testing:IlumionateTests/ThresholdControllerTests
 ```
 
 Expected: all 9 tests pass.
@@ -743,7 +742,7 @@ struct ThresholdVignette: View {
 - [ ] **Step 2: Verify it compiles**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData build
 ```
 
 Expected: BUILD SUCCEEDED.
@@ -839,7 +838,7 @@ struct ThresholdView: View {
 - [ ] **Step 2: Verify it compiles**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData build
 ```
 
 Expected: BUILD SUCCEEDED.
@@ -934,7 +933,7 @@ with:
 - [ ] **Step 3: Verify the launch frame matches**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData build
 ```
 
 Expected: BUILD SUCCEEDED.
@@ -1061,7 +1060,7 @@ Then inside the existing `.task { ... }` block, as its first line — before `aw
 - [ ] **Step 6: Run the full test suite**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData test -only-testing:IlumionateTests
 ```
 
 Expected: all tests pass, including the two new suites and every pre-existing test.
@@ -1084,7 +1083,7 @@ Nothing here is automated. These are the behaviours the value tests cannot reach
 - [ ] **Step 1: Confirm macOS is untouched**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData build
 ```
 
 Expected: BUILD SUCCEEDED. Launch it. Expected: the sidebar shell appears immediately with no threshold.
@@ -1092,7 +1091,7 @@ Expected: BUILD SUCCEEDED. Launch it. Expected: the sidebar shell appears immedi
 - [ ] **Step 2: Confirm Mac Catalyst still compiles**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,variant=Mac Catalyst,arch=arm64' build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,variant=Mac Catalyst,arch=arm64' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData build
 ```
 
 Expected: BUILD SUCCEEDED.
@@ -1100,7 +1099,7 @@ Expected: BUILD SUCCEEDED.
 - [ ] **Step 3: Run the macOS test suite**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' -derivedDataPath /private/tmp/claude-501/-Users-byronquine-Projects-Ilumionate/3129a8f3-f525-4d0a-878c-a8e688c164ba/scratchpad/DerivedData test -only-testing:IlumionateTests
 ```
 
 Expected: all tests pass. The choreography is platform-free, so it must pass here too.
