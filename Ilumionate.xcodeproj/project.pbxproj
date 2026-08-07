@@ -917,7 +917,6 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Ilumionate/Info.plist;
 				"INFOPLIST_FILE[sdk=macosx*]" = "Ilumionate/Info-macOS.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = Ilumionate;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -966,7 +965,6 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Ilumionate/Info.plist;
 				"INFOPLIST_FILE[sdk=macosx*]" = "Ilumionate/Info-macOS.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = Ilumionate;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
