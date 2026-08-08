@@ -18,6 +18,18 @@ struct ThresholdView: View {
     /// `@Bindable`, and nothing in this view needs a two-way binding.
     let controller: ThresholdController
 
+    /// The instruction held beneath the orb — "Close your eyes and relax".
+    ///
+    /// The arc is wordless; the screen is not. Whether the user's eyes are
+    /// closed changes what a photoentrainment session does, so this is
+    /// functional copy rather than decoration.
+    var message: String?
+
+    /// Called when the user taps to skip. The arc eases out over
+    /// `ThresholdChoreography.skipDuration` regardless; this tells the owner
+    /// to bring the session forward to meet it.
+    var onSkip: (() -> Void)?
+
     /// Same call Home makes, so the two fields agree on colour as well as phase.
     private var mood: BrainwaveCategory {
         PortalRecommender.category(forHour: Calendar.current.component(.hour, from: .now))
@@ -40,14 +52,29 @@ struct ThresholdView: View {
 
                 ThresholdVignette(closure: frame.vignetteClosure)
 
+                if let message {
+                    Text(message)
+                        .font(TranceTypography.body)
+                        .foregroundStyle(Color.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, TranceSpacing.content)
+                        // Tracks the aurora, not the orb: it arrives with the
+                        // field during Bloom and stays up through Opening and
+                        // any held line afterwards, rather than dissolving
+                        // with the orb while it is still being read.
+                        .opacity(frame.auroraOpacity)
+                        .offset(y: LumeOrb.Size.hero.diameter * 0.85)
+                }
+
                 Button {
                     controller.skip(now: .now)
+                    onSkip?()
                 } label: {
                     Color.clear.contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .ignoresSafeArea()
-                .accessibilityLabel("Skip the opening")
+                .accessibilityLabel("Begin the session now")
             }
             .onChange(of: controller.hasElapsed(at: context.date)) { _, hasElapsed in
                 if hasElapsed { controller.finish() }

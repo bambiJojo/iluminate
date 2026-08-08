@@ -92,6 +92,13 @@ final class UnifiedPlayerViewModel {
     private(set) var playbackState: PlaybackState = .idle
     private(set) var countdownValue: Int? = nil
     private(set) var countdownMessage: String? = nil
+    /// True when this session opened with the VoiceOver numeral fallback
+    /// rather than the threshold. Held explicitly rather than inferred from
+    /// `countdownValue`, which also goes nil mid-flow when the held line
+    /// replaces the count.
+    private(set) var usesNumericCountdown = false
+    /// Drives the threshold arc. Nil on the numeric path.
+    private(set) var thresholdController: ThresholdController?
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
     var showingControls = true
@@ -839,21 +846,37 @@ final class UnifiedPlayerViewModel {
         }
 
         let count = countdownDuration
+        // VoiceOver keeps the numerals: they announce progress, and the
+        // wordless arc announces nothing. Everyone else gets the threshold.
+        let numeric = ThresholdController.prefersNumericCountdown
+        usesNumericCountdown = numeric
         countdownMessage = mode.countdownIntroMessage
-        countdownValue = count
+        countdownValue = numeric ? count : nil
+        thresholdController = numeric ? nil : ThresholdController(
+            isSuppressed: false,
+            motion: PlatformAccessibility.isReduceMotionEnabled ? .reduced : .full,
+            duration: Double(count)
+        )
         playbackState = .countdown
         haptics.light()
 
         countdownTask = Task {
-            for tick in stride(from: count - 1, through: 1, by: -1) {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { return }
-                withAnimation(.easeInOut(duration: 0.35)) {
-                    countdownValue = tick
+            if numeric {
+                for tick in stride(from: count - 1, through: 1, by: -1) {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        countdownValue = tick
+                    }
+                    haptics.light()
                 }
-                haptics.light()
+                try? await Task.sleep(for: .seconds(1))
+            } else {
+                // The arc carries the whole budget in one stretch — no
+                // per-second ticks, because a pulse every second is the
+                // arousal the threshold exists to avoid.
+                try? await Task.sleep(for: .seconds(Double(count)))
             }
-            try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
             if let holdMessage = mode.countdownHoldMessage {
                 withAnimation(.easeInOut(duration: 0.35)) {
@@ -866,6 +889,7 @@ final class UnifiedPlayerViewModel {
                 withAnimation(.easeOut(duration: 0.3)) {
                     countdownMessage = nil
                 }
+                thresholdController = nil
             } else {
                 // No held line — the visual field is watched, so the session
                 // begins the moment the count ends.
@@ -873,6 +897,7 @@ final class UnifiedPlayerViewModel {
                     countdownValue = nil
                     countdownMessage = nil
                 }
+                thresholdController = nil
                 haptics.medium()
             }
             beginPlayback()
@@ -884,6 +909,31 @@ final class UnifiedPlayerViewModel {
                     showingControls = false
                 }
             }
+        }
+    }
+
+    /// Brings the session forward when the user taps during the threshold.
+    ///
+    /// The numeric countdown could not be skipped. The arc can, because
+    /// someone who has already settled should not have to sit out ten
+    /// seconds they chose for a day they were less settled. Skipping starts
+    /// the session early; it does not shorten it.
+    func skipCountdown() {
+        guard playbackState == .countdown, !usesNumericCountdown else { return }
+
+        countdownTask?.cancel()
+        countdownTask = Task {
+            // Let the arc's exit interpolation finish so the field opens
+            // rather than cutting.
+            try? await Task.sleep(for: .seconds(ThresholdChoreography.skipDuration))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.35)) {
+                countdownValue = nil
+                countdownMessage = nil
+            }
+            thresholdController = nil
+            haptics.medium()
+            beginPlayback()
         }
     }
 

@@ -78,12 +78,23 @@ struct UnifiedPlayerView: View {
                 .transition(.opacity)
             }
 
-            // Layer 5: Countdown overlay
+            // Layer 5: Session opening — the threshold arc, or the numeric
+            // countdown when VoiceOver needs something to announce.
             if viewModel.countdownValue != nil || viewModel.countdownMessage != nil {
-                PlayerCountdownOverlay(
-                    count: viewModel.countdownValue,
-                    message: viewModel.countdownMessage
-                )
+                Group {
+                    if let threshold = viewModel.thresholdController, !viewModel.usesNumericCountdown {
+                        ThresholdView(
+                            controller: threshold,
+                            message: viewModel.countdownMessage,
+                            onSkip: viewModel.skipCountdown
+                        )
+                    } else {
+                        PlayerCountdownOverlay(
+                            count: viewModel.countdownValue,
+                            message: viewModel.countdownMessage
+                        )
+                    }
+                }
                 .transition(.opacity)
                 .zIndex(10)
             }

@@ -185,11 +185,15 @@ enum PlayerMode: Identifiable {
         }
     }
 
-    /// The line above the countdown numerals.
+    /// The instruction shown while the session opens.
+    ///
+    /// Reads as a standalone sentence because the threshold has no numerals
+    /// for it to lead into. It still sits above the count on the VoiceOver
+    /// fallback, where "Close your eyes and relax" followed by "3" is fine.
     var countdownIntroMessage: String {
         switch self {
-        case .visualField: return "Soften your gaze in\u{2026}"
-        default: return "Close your eyes and relax in\u{2026}"
+        case .visualField: return "Soften your gaze"
+        default: return "Close your eyes and relax"
         }
     }
 
