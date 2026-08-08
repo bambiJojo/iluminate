@@ -64,6 +64,15 @@ struct ThresholdView: View {
                         // with the orb while it is still being read.
                         .opacity(frame.auroraOpacity)
                         .offset(y: LumeOrb.Size.hero.diameter * 0.85)
+                        .id(message)
+                        // Sequenced, not crossfaded. Both lines share a
+                        // position and a font now that no numeral separates
+                        // them, so overlapping them mid-swap renders as one
+                        // illegible smear rather than a transition.
+                        .transition(.asymmetric(
+                            insertion: .opacity.animation(.easeIn(duration: 0.28).delay(0.3)),
+                            removal: .opacity.animation(.easeOut(duration: 0.28))
+                        ))
                 }
 
                 Button {
