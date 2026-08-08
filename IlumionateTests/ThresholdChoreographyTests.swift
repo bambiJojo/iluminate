@@ -3,6 +3,7 @@
 //  IlumionateTests
 //
 
+import Foundation
 import Testing
 @testable import Ilumionate
 
@@ -121,10 +122,13 @@ struct ThresholdChoreographyTests {
         #expect(reduced.frame(atElapsed: reduced.totalDuration).orbOpacity == 0)
     }
 
-    @Test("Reduced motion is markedly shorter than the full arc")
-    func reducedMotionIsShort() {
-        #expect(reduced.totalDuration < 1.0)
-        #expect(reduced.totalDuration < full.totalDuration)
+    @Test("Reduced motion matches whatever total duration was requested, not a fixed short arc")
+    func reducedMotionMatchesRequestedDuration() {
+        // The old launch-only arc was fixed short. At session entry the hold
+        // must absorb the user's configured duration exactly as Settle does
+        // for the full arc, so both motions honour the same timing contract.
+        #expect(reduced.totalDuration == full.totalDuration)
+        #expect(ThresholdChoreography(motion: .reduced, duration: 7).totalDuration == 7)
     }
 
     @Test("Reduced motion also holds the aurora up")
@@ -154,5 +158,110 @@ struct ThresholdChoreographyTests {
         #expect(full.exitFrame(from: midBloom, progress: -0.5) == midBloom)
         #expect(full.exitFrame(from: midBloom, progress: 2)
                 == full.exitFrame(from: midBloom, progress: 1))
+    }
+
+    // MARK: - Duration scaling
+
+    @Test("The default duration reproduces the previously-pinned 2.6s arc")
+    func defaultDurationMatchesExplicit2_6() {
+        let explicit = ThresholdChoreography(motion: .full, duration: 2.6)
+        #expect(full.totalDuration == 2.6)
+        for elapsed in stride(from: 0.0, through: full.totalDuration, by: 0.1) {
+            #expect(full.frame(atElapsed: elapsed) == explicit.frame(atElapsed: elapsed))
+        }
+    }
+
+    @Test("Settle absorbs all extra duration at 10s while Arrival, Bloom and Opening keep their absolute lengths")
+    func settleAbsorbsExtraDurationAtTenSeconds() {
+        let long = ThresholdChoreography(motion: .full, duration: 10)
+        #expect(long.totalDuration == 10)
+
+        // Arrival and Bloom land at the same absolute instants as the default arc.
+        #expect(long.frame(atElapsed: 0.5).vignetteClosure == full.frame(atElapsed: 0.5).vignetteClosure)
+        #expect(abs(long.frame(atElapsed: 1.6).orbScale - 1.0) < 0.0001)
+
+        // Settle now runs from 1.6s to 9.6s: nearly 8s of held plateau.
+        for elapsed in stride(from: 1.6, through: 9.6, by: 0.5) {
+            #expect(abs(long.frame(atElapsed: elapsed).orbScale - 1.0) < 0.0001)
+        }
+
+        // Opening still takes exactly the final 0.4s.
+        #expect(abs(long.frame(atElapsed: 9.6).orbScale - 1.0) < 0.0001)
+        #expect(long.frame(atElapsed: 9.6).vignetteClosure == 1)
+        #expect(long.frame(atElapsed: 10).orbOpacity == 0)
+        #expect(long.frame(atElapsed: 10).vignetteClosure == 0)
+    }
+
+    @Test("Bloom ends 1.6s in regardless of the requested duration", arguments: [2.6, 3.0, 7.0, 10.0])
+    func bloomEndsAtFixedAbsoluteTime(duration: TimeInterval) {
+        let choreography = ThresholdChoreography(motion: .full, duration: duration)
+        #expect(abs(choreography.frame(atElapsed: 1.6).orbScale - 1.0) < 0.0001)
+        #expect(choreography.frame(atElapsed: 1.59).orbScale < 1.0)
+    }
+
+    @Test("Opening always occupies exactly the final 0.4s", arguments: [2.6, 3.0, 7.0, 10.0])
+    func openingOccupiesFinalFourTenths(duration: TimeInterval) {
+        let choreography = ThresholdChoreography(motion: .full, duration: duration)
+        let openingStart = duration - 0.4
+
+        // Still flat immediately before Opening begins.
+        #expect(abs(choreography.frame(atElapsed: openingStart).orbScale - 1.0) < 0.0001)
+        #expect(choreography.frame(atElapsed: openingStart).vignetteClosure == 1)
+
+        // Fully open by the end.
+        #expect(choreography.frame(atElapsed: duration).orbOpacity == 0)
+        #expect(choreography.frame(atElapsed: duration).vignetteClosure == 0)
+    }
+
+    @Test("Orb scale peaks at exactly 1.0 as Bloom hands off to Settle", arguments: [2.6, 3.0, 7.0, 10.0])
+    func scalePeaksEnteringSettle(duration: TimeInterval) {
+        let choreography = ThresholdChoreography(motion: .full, duration: duration)
+        let samples = stride(from: 0.0, through: 1.6, by: 0.1)
+            .map { choreography.frame(atElapsed: $0).orbScale }
+        #expect(samples.allSatisfy { $0 <= 1.0 + 0.0001 })
+        #expect(abs((samples.last ?? 0) - 1.0) < 0.0001)
+    }
+
+    @Test("The aurora holds at 1 through Settle and Opening at every duration", arguments: [2.6, 3.0, 7.0, 10.0])
+    func auroraHoldsAtEveryDuration(duration: TimeInterval) {
+        let choreography = ThresholdChoreography(motion: .full, duration: duration)
+        for elapsed in stride(from: 1.6, through: duration, by: max(0.1, duration / 20)) {
+            #expect(choreography.frame(atElapsed: elapsed).auroraOpacity == 1)
+        }
+        #expect(choreography.frame(atElapsed: duration).auroraOpacity == 1)
+    }
+
+    @Test("Reduced motion absorbs extra duration in the hold, matching the requested total")
+    func reducedMotionAbsorbsDurationInHold() {
+        let long = ThresholdChoreography(motion: .reduced, duration: 10)
+        #expect(long.totalDuration == 10)
+        for elapsed in stride(from: 0.0, through: 10, by: 0.5) {
+            #expect(long.frame(atElapsed: elapsed).orbScale == 1.0)
+        }
+        // Held flat through the middle of the budget.
+        #expect(long.frame(atElapsed: 5.0).orbOpacity == 1)
+    }
+
+    // MARK: - Degenerate short duration
+
+    @Test("A duration under the floor clamps up to the natural 2.6s arc instead of inverting")
+    func degenerateShortDurationClampsForFullMotion() {
+        let tooShort = ThresholdChoreography(motion: .full, duration: 1.0)
+        #expect(tooShort.totalDuration == 2.6)
+        for elapsed in stride(from: 0.0, through: 2.6, by: 0.1) {
+            #expect(tooShort.frame(atElapsed: elapsed) == full.frame(atElapsed: elapsed))
+        }
+    }
+
+    @Test("A degenerately short duration also clamps for reduced motion")
+    func degenerateShortDurationClampsForReducedMotion() {
+        let tooShort = ThresholdChoreography(motion: .reduced, duration: 0.2)
+        #expect(tooShort.totalDuration == 0.9)
+    }
+
+    @Test("Zero and negative durations do not invert the arc")
+    func nonPositiveDurationsClampSafely() {
+        #expect(ThresholdChoreography(motion: .full, duration: 0).totalDuration == 2.6)
+        #expect(ThresholdChoreography(motion: .full, duration: -5).totalDuration == 2.6)
     }
 }

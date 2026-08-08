@@ -32,19 +32,31 @@ struct ThresholdChoreography: Sendable {
         var auroraOpacity: Double
     }
 
-    // MARK: - Beat boundaries (seconds from launch)
+    // MARK: - Beat boundaries (seconds from the start of the arc)
 
+    /// Arrival, Bloom and Opening keep these *absolute* lengths at every
+    /// requested duration. Settle is the one beat that stretches — it is
+    /// derived in `init` as whatever is left between Bloom ending and
+    /// Opening's fixed final span.
     private enum Beat {
         static let arrivalEnd: TimeInterval = 0.5
         static let bloomEnd: TimeInterval = 1.6
-        static let settleEnd: TimeInterval = 2.2
-        static let openingEnd: TimeInterval = 2.6
+        static let openingSpan: TimeInterval = 0.4
+        /// Below this, Bloom (ending at 1.6s) and Opening's fixed 0.4s alone
+        /// would leave Settle with negative width. Requests under the floor
+        /// clamp up to it, so the arc degrades to its natural proportions —
+        /// the same shape as the default 2.6s arc — rather than inverting.
+        static let minimumDuration: TimeInterval = 2.6
     }
 
+    /// Same shape as `Beat`, for the opacity-only Reduce Motion variant: a
+    /// fixed fade in and fade out with the hold absorbing the remainder.
     private enum ReducedBeat {
-        static let fadeInEnd: TimeInterval = 0.4
-        static let holdEnd: TimeInterval = 0.6
-        static let fadeOutEnd: TimeInterval = 0.9
+        static let fadeInSpan: TimeInterval = 0.4
+        static let fadeOutSpan: TimeInterval = 0.3
+        /// Mirrors `Beat.minimumDuration`: below this the fade in and fade
+        /// out alone would leave the hold with negative width.
+        static let minimumDuration: TimeInterval = 0.9
     }
 
     /// The orb starts as a dim point rather than nothing, so Bloom reads as
@@ -57,10 +69,32 @@ struct ThresholdChoreography: Sendable {
 
     let motion: Motion
 
-    var totalDuration: TimeInterval {
+    /// The arc's effective length. Equal to the requested `duration`, unless
+    /// that duration fell under the degenerate floor, in which case it is
+    /// the floor itself.
+    let totalDuration: TimeInterval
+
+    /// Where the flat central beat ends and the final transition begins:
+    /// Settle → Opening for `.full`, hold → fade-out for `.reduced`. This is
+    /// the only boundary a duration change actually moves.
+    private let plateauEnd: TimeInterval
+
+    /// - Parameters:
+    ///   - duration: the total time the arc should fill. Defaults to 2.6s,
+    ///     the arc's natural length. Settle (or the reduced-motion hold)
+    ///     absorbs any amount above the degenerate floor; see `Beat` and
+    ///     `ReducedBeat` for that floor.
+    init(motion: Motion, duration: TimeInterval = 2.6) {
+        self.motion = motion
         switch motion {
-        case .full: Beat.openingEnd
-        case .reduced: ReducedBeat.fadeOutEnd
+        case .full:
+            let clamped = max(duration, Beat.minimumDuration)
+            self.totalDuration = clamped
+            self.plateauEnd = clamped - Beat.openingSpan
+        case .reduced:
+            let clamped = max(duration, ReducedBeat.minimumDuration)
+            self.totalDuration = clamped
+            self.plateauEnd = clamped - ReducedBeat.fadeOutSpan
         }
     }
 
@@ -96,12 +130,12 @@ struct ThresholdChoreography: Sendable {
             )
         }
 
-        if t <= Beat.settleEnd {
+        if t <= plateauEnd {
             // Nothing moves here but the orb's own breath. That is the point.
             return Frame(orbScale: 1, orbOpacity: 1, vignetteClosure: 1, auroraOpacity: 1)
         }
 
-        let p = progress(t, from: Beat.settleEnd, to: Beat.openingEnd)
+        let p = progress(t, from: plateauEnd, to: totalDuration)
         return Frame(
             orbScale: lerp(1.0, Self.liftScale, easeIn(p)),
             orbOpacity: 1 - p,
@@ -112,16 +146,16 @@ struct ThresholdChoreography: Sendable {
     }
 
     private func reducedFrame(at t: TimeInterval) -> Frame {
-        if t <= ReducedBeat.fadeInEnd {
-            let p = progress(t, from: 0, to: ReducedBeat.fadeInEnd)
+        if t <= ReducedBeat.fadeInSpan {
+            let p = progress(t, from: 0, to: ReducedBeat.fadeInSpan)
             return Frame(orbScale: 1, orbOpacity: p, vignetteClosure: 0, auroraOpacity: p)
         }
 
-        if t <= ReducedBeat.holdEnd {
+        if t <= plateauEnd {
             return Frame(orbScale: 1, orbOpacity: 1, vignetteClosure: 0, auroraOpacity: 1)
         }
 
-        let p = progress(t, from: ReducedBeat.holdEnd, to: ReducedBeat.fadeOutEnd)
+        let p = progress(t, from: plateauEnd, to: totalDuration)
         return Frame(orbScale: 1, orbOpacity: 1 - p, vignetteClosure: 0, auroraOpacity: 1)
     }
 

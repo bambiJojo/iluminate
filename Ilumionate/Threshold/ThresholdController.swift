@@ -12,10 +12,6 @@
 import Foundation
 import SwiftUI
 
-#if canImport(UIKit)
-import UIKit
-#endif
-
 @MainActor
 @Observable
 final class ThresholdController {
@@ -31,10 +27,19 @@ final class ThresholdController {
 
     /// - Parameters:
     ///   - isSuppressed: when true the threshold never appears. See
-    ///     `shouldSuppress` for the two cases that set it.
+    ///     `prefersNumericCountdown` for the case that sets it.
     ///   - motion: `.reduced` mirrors the Reduce Motion accessibility setting.
-    init(isSuppressed: Bool, motion: ThresholdChoreography.Motion, now: Date = .now) {
-        self.choreography = ThresholdChoreography(motion: motion)
+    ///   - duration: the countdown budget the arc should fill. Whoever builds
+    ///     the controller knows both the user's countdown setting and the
+    ///     accessibility environment, so both are settled here rather than
+    ///     swapped in later.
+    init(
+        isSuppressed: Bool,
+        motion: ThresholdChoreography.Motion,
+        duration: TimeInterval = 2.6,
+        now: Date = .now
+    ) {
+        self.choreography = ThresholdChoreography(motion: motion, duration: duration)
         self.phase = isSuppressed ? .finished : .running(start: now)
     }
 
@@ -97,24 +102,17 @@ final class ThresholdController {
 
     // MARK: - Suppression
 
-    /// The threshold stands down in two situations, both of them cases where
-    /// playing it would actively hurt.
-    static var shouldSuppress: Bool {
-        // First launch: `ContentView.checkForFirstLaunch()` raises Onboarding
-        // 800ms after appear — squarely inside the Bloom beat. Onboarding is
-        // the entry experience that time; the threshold is not needed.
-        if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
-            return true
-        }
-
-        #if canImport(UIKit)
-        // VoiceOver: a decorative animation with nothing to announce that
-        // blocks the shell for 2.6 seconds is hostile to a screen reader user.
-        if UIAccessibility.isVoiceOverRunning {
-            return true
-        }
-        #endif
-
-        return false
+    /// True when the numeric countdown should run instead of the wordless
+    /// arc, at session entry on either platform.
+    ///
+    /// This is the same mechanism the old launch-time `shouldSuppress` used,
+    /// but its meaning inverts: at launch, VoiceOver meant skipping the
+    /// intro outright, because a decorative animation with nothing to
+    /// announce was just delay. At session entry the countdown carries
+    /// information — "3, 2, 1" — that a screen reader user needs, and the
+    /// wordless arc announces nothing. So under VoiceOver we keep the
+    /// numeric fallback rather than drop the intro entirely.
+    static var prefersNumericCountdown: Bool {
+        PlatformAccessibility.isVoiceOverRunning
     }
 }

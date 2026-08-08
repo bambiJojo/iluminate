@@ -18,7 +18,7 @@ struct ThresholdControllerTests {
 
     @Test("A suppressed controller never presents")
     func suppressedNeverPresents() {
-        // VoiceOver and first launch both land here.
+        // VoiceOver lands here: the numeric countdown takes over instead.
         let controller = ThresholdController(isSuppressed: true, motion: .full)
         #expect(controller.isPresenting == false)
     }
@@ -83,9 +83,24 @@ struct ThresholdControllerTests {
                 == choreography.frame(atElapsed: choreography.totalDuration))
     }
 
-    @Test("Reduced motion controllers use the short arc")
-    func reducedMotionUsesShortArc() {
+    @Test("Reduced motion controllers still honour the default arc duration")
+    func reducedMotionUsesSameDurationAsFull() {
+        // Reduced motion is no longer a fixed short arc: its hold absorbs
+        // whatever duration was requested, just like Settle does for the
+        // full arc, so both motions share the same timing contract.
         let controller = ThresholdController(isSuppressed: false, motion: .reduced)
-        #expect(controller.totalDuration < 1.0)
+        #expect(controller.totalDuration == ThresholdChoreography(motion: .full).totalDuration)
+    }
+
+    // MARK: - Suppression
+
+    @Test("The numeric-countdown preference mirrors the platform's VoiceOver state")
+    func prefersNumericCountdownMirrorsVoiceOver() {
+        // At session entry the countdown's numerals carry information a
+        // screen reader user needs, so VoiceOver running is now the sole
+        // trigger for falling back to it — unlike the old launch-time
+        // suppression rules (first launch, unconditional VoiceOver skip),
+        // this one has a single, testable source of truth.
+        #expect(ThresholdController.prefersNumericCountdown == PlatformAccessibility.isVoiceOverRunning)
     }
 }
