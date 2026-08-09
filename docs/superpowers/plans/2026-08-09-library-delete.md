@@ -1480,6 +1480,64 @@ git commit -m "docs: mark library delete plan complete"
 
 ---
 
+## Execution notes (2026-08-09)
+
+Four things diverged from the plan as written. Recorded here so the next reader
+is not misled by the tasks above.
+
+**The plan targeted the wrong screen — half of it, anyway.** Opening the simulator to verify
+Task 5 landed on `LibraryBrowseView` ("Audio Files"), not `AudioLibraryView` ("Audio").
+`AudioLibraryView` is only ever presented as a *sheet* — from Home, or the Library tab's
+Sessions Manager row. The screen reached by ordinary Library-tab browsing is
+`LibraryBrowseView`, and `LibraryFileResultRow` had **no delete at all**. Tasks 10 and 11
+were added to cover it; the user confirmed both surfaces were wanted.
+
+**Task 6 needed the first fallback.** `.simultaneousGesture` let the wrapping
+`NavigationLink` swallow the drag and push the detail screen. `.highPriorityGesture`
+fixed it, and plain taps still navigate because the drag needs 12pt of travel first.
+The second and third fallbacks were not needed.
+
+**The undo duration became a named constant.** `PendingAudioDeletion.undoWindow`, so the
+window could be widened temporarily to observe the banner (the tool round-trip to take a
+screenshot is longer than 6 seconds). Shipped at `.seconds(6)`.
+
+**Xcode target membership was a non-issue.** The project uses
+`PBXFileSystemSynchronizedRootGroup`, so new files are picked up without touching
+`project.pbxproj`.
+
+### Tasks 10 & 11: delete on the browse surfaces
+
+`LibraryView` owns `audioFiles`, so delete is threaded down as an `onDelete` callback
+through `LibraryCreatorsView` into `LibraryBrowseView`, and passed to
+`LibraryFileResultRow` for the context menu. The undo banner is hosted **outside**
+`LibraryView`'s `NavigationStack` so it stays visible over pushed screens — verified on
+device against Audio Files.
+
+### Verification actually performed
+
+Unit tests: 11 in `PendingAudioDeletionTests`, all passing.
+
+Full `IlumionateTests` suite: **passes serially on both macOS and iOS Simulator**; Mac
+Catalyst builds. Under the default *parallel* runner the macOS suite reports a batch of
+failures — this is **pre-existing and unrelated**: it reproduces with
+`-skip-testing:IlumionateTests/PendingAudioDeletionTests`, and every failure is a
+timing-sensitive test starved by loaded workers (`slowFileTransferDoesNotBlockMainActor`
+at 45s, `idleTimerHides` at 51s, `keepsWhisperPrefetchOutOfContentAnalysis` hitting a 60s
+timeout).
+
+Confirmed by hand on iPhone 17 Pro: swipe reveals the trash without bleed-through on both
+`AudioLibraryView` and `LibraryBrowseView`; vertical scrolling never opens a row; tap still
+navigates; a second swipe closes the first row; the banner renders over the empty state and
+over pushed screens; Undo restores position, not just presence; a restored file keeps its
+generated light session; Select All is scoped to the active filter (6 of 8); and a planted
+orphan in the staging directory is swept on next launch.
+
+Not observed live: batch Undo restoring several rows at once. The 6-second window closes
+faster than a screenshot round-trip. It is covered by
+`restoreReturnsEntriesInAscendingOriginalIndexOrder` (stages three, restores three in order)
+plus the device-verified Undo button, and `undoDelete()` simply loops over everything
+`restore()` returns.
+
 ## Definition of done
 
 - Deleting one file takes a single left swipe plus a tap on the trash.
