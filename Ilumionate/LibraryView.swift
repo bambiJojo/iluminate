@@ -53,8 +53,52 @@ struct LibraryView: View {
     @State private var playingSession: LightSession?
     @State private var fileForPlaylist: AudioFile?
     @State private var editingPlaylist: Playlist?
+    @State private var pendingDeletion = PendingAudioDeletion.shared
+    /// Which search-result row currently has its swipe action revealed.
+    @State private var openSwipeRowID: AudioFile.ID?
 
     var body: some View {
+        // The banner sits outside the NavigationStack so it stays visible over
+        // pushed screens — Audio Files, Favorites, a creator's sessions — all
+        // of which can now delete.
+        ZStack {
+            libraryStack
+
+            if !pendingDeletion.staged.isEmpty {
+                VStack {
+                    Spacer()
+                    UndoDeleteBanner(
+                        message: undoBannerMessage,
+                        onUndo: { undoDelete() },
+                        onDismiss: { pendingDeletion.commit() }
+                    )
+                    .padding(.bottom, TranceSpacing.tabBarClearance)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: pendingDeletion.staged.count)
+        .task(id: pendingDeletion.staged.map(\.id)) {
+            guard !pendingDeletion.staged.isEmpty else { return }
+            try? await Task.sleep(for: PendingAudioDeletion.undoWindow)
+            guard !Task.isCancelled else { return }
+            pendingDeletion.commit()
+        }
+        .onDisappear {
+            // Leaving the Library tab finalizes the delete.
+            pendingDeletion.commit()
+        }
+    }
+
+    private var undoBannerMessage: String {
+        let staged = pendingDeletion.staged
+        guard staged.count == 1, let only = staged.first else {
+            return "\(staged.count) files deleted"
+        }
+        return "Deleted “\(only.file.displayName)”"
+    }
+
+    private var libraryStack: some View {
         NavigationStack(path: $navPath) {
             ZStack(alignment: .bottom) {
                 AuroraBackground()
@@ -96,23 +140,30 @@ struct LibraryView: View {
                         title: "Favorites",
                         audioFiles: audioFiles,
                         engine: engine,
-                        initialFilter: .favorites
+                        initialFilter: .favorites,
+                        onDelete: { deleteFile($0) }
                     )
                 case .builtInSessions:
                     SessionLibraryView(engine: engine)
                 case .artists:
-                    LibraryCreatorsView(audioFiles: audioFiles, engine: engine)
+                    LibraryCreatorsView(
+                        audioFiles: audioFiles,
+                        engine: engine,
+                        onDelete: { deleteFile($0) }
+                    )
                 case .artist(let name):
                     LibraryBrowseView(
                         title: name,
                         audioFiles: audioFiles.filter { $0.creatorDisplayName == name },
-                        engine: engine
+                        engine: engine,
+                        onDelete: { deleteFile($0) }
                     )
                 case .allFiles:
                     LibraryBrowseView(
                         title: "Audio Files",
                         audioFiles: audioFiles,
-                        engine: engine
+                        engine: engine,
+                        onDelete: { deleteFile($0) }
                     )
                 }
             }
@@ -304,8 +355,12 @@ struct LibraryView: View {
                             file: file,
                             onPlay: { playWithLights(file) },
                             onOpenInfo: { openFileInfo(file) },
-                            onAddToPlaylist: { fileForPlaylist = file }
+                            onAddToPlaylist: { fileForPlaylist = file },
+                            onDelete: { deleteFile(file) }
                         )
+                        .swipeToDelete(id: file.id, openRowID: $openSwipeRowID) {
+                            deleteFile(file)
+                        }
                         if file.id != searchResults.last?.id {
                             LibraryRowSeparator()
                         }
@@ -391,6 +446,36 @@ struct LibraryView: View {
 
     private func loadAudioFiles() async {
         audioFiles = await AudioLibraryStore.loadRepairingStoredFiles()
+    }
+
+    // MARK: - Delete
+
+    /// Removes the row and stages the file for undo. Nothing is destroyed until
+    /// `PendingAudioDeletion.commit()` runs.
+    private func deleteFile(_ file: AudioFile) {
+        guard let index = audioFiles.firstIndex(where: { $0.id == file.id }) else { return }
+
+        let staged = pendingDeletion.stage([
+            StagedAudioFile(file: file, originalURL: file.url, originalIndex: index)
+        ])
+
+        // The move failed, so the file is still in Documents. Keep the row —
+        // dropping it would let the next library scan re-register it.
+        guard !staged.isEmpty else { return }
+
+        audioFiles.remove(at: index)
+        Task { await AudioLibraryStore.save(audioFiles) }
+        TranceHaptics.shared.medium()
+    }
+
+    private func undoDelete() {
+        let recovered = pendingDeletion.restore()
+        for entry in recovered {
+            audioFiles.insert(entry.file, at: min(entry.originalIndex, audioFiles.count))
+        }
+        Task { await AudioLibraryStore.save(audioFiles) }
+        TranceHaptics.shared.light()
+        Log.audio.info("↩️ Restored \(recovered.count) deleted file(s)")
     }
 
     private func loadPlaylists() {

@@ -19,6 +19,10 @@ struct LibraryBrowseView: View {
     /// Pre-applied narrowing for scoped entry points (e.g. Favorites).
     var initialFilter: LibraryQuickFilter = .all
 
+    /// Handed down by whoever owns `audioFiles` — this screen only displays a
+    /// scoped copy, so it cannot remove a file itself.
+    var onDelete: ((AudioFile) -> Void)?
+
     @State private var searchText = ""
     @State private var quickFilter: LibraryQuickFilter = .all
     @State private var sortOption: LibrarySortOption = .newest
@@ -26,6 +30,8 @@ struct LibraryBrowseView: View {
     @State private var playerFile: AudioFile?
     @State private var fileForPlaylist: AudioFile?
     @State private var navigatingFile: AudioFile?
+    /// Which row currently has its swipe action revealed. Only one at a time.
+    @State private var openSwipeRowID: AudioFile.ID?
 
     private var chips: [LibraryFilterChip] {
         LibraryBrowseFilter.chips(for: audioFiles)
@@ -111,8 +117,16 @@ struct LibraryBrowseView: View {
                         onPlay: { play(file) },
                         onOpenInfo: { navigatingFile = file },
                         onAddToPlaylist: { fileForPlaylist = file },
-                        onAnalyze: { analyze(file) }
+                        onAnalyze: { analyze(file) },
+                        onDelete: onDelete.map { delete in { delete(file) } }
                     )
+                    .swipeToDelete(
+                        id: file.id,
+                        openRowID: $openSwipeRowID,
+                        isEnabled: onDelete != nil
+                    ) {
+                        onDelete?(file)
+                    }
 
                     if file.id != results.last?.id {
                         LibraryRowSeparator()
