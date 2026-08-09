@@ -37,6 +37,7 @@ struct LibraryView: View {
     @State private var cachedAnalyzedFiles: [AudioFile] = []
     @State private var cachedAllFiles: [AudioFile] = []
     @State private var cachedRecommendedFiles: [AudioFile] = []
+    @State private var cachedGeneratedSessions: [GeneratedSessionItem] = []
     @State private var cachedFilterChips: [LibraryFilterChip] = []
     @State private var searchText = ""
     @State private var quickFilter: LibraryQuickFilter = .all
@@ -294,6 +295,12 @@ struct LibraryView: View {
             LibraryAudioShelf(files: allFilesShelf, onPlay: playWithLights, onOpenInfo: openFileInfo)
         }
 
+        if !generatedSessions.isEmpty {
+            LibraryShelfSectionHeader(title: "Your Sessions")
+                .padding(.horizontal, TranceSpacing.screen)
+            LibraryGeneratedSessionShelf(items: generatedSessions, onPlay: playWithLights)
+        }
+
         if !shelfSessions.isEmpty {
             LibraryShelfSectionHeader(title: "Built-in Sessions") {
                 navPath.append(LibraryDestination.builtInSessions)
@@ -404,6 +411,7 @@ struct LibraryView: View {
     private var analyzedFiles: [AudioFile] { cachedAnalyzedFiles }
     private var allFilesShelf: [AudioFile] { cachedAllFiles }
     private var recommendedFiles: [AudioFile] { cachedRecommendedFiles }
+    private var generatedSessions: [GeneratedSessionItem] { cachedGeneratedSessions }
     private var shelfPlaylists: [Playlist] { LibraryShelfContent.shelfPlaylists(from: playlists) }
     private var shelfSessions: [LightSession] {
         Array(builtInSessions.prefix(LibraryShelfContent.shelfCap))
@@ -429,6 +437,9 @@ struct LibraryView: View {
         cachedAnalyzedFiles = LibraryShelfContent.analyzed(from: audioFiles)
         cachedAllFiles = LibraryShelfContent.allFiles(from: audioFiles)
         cachedRecommendedFiles = LibraryShelfContent.recommendedNext(from: audioFiles)
+        cachedGeneratedSessions = LibraryShelfContent.generatedSessions(from: audioFiles) { file in
+            GeneratedSessionStore.shared.load(for: file)
+        }
         cachedFilterChips = LibraryBrowseFilter.chips(for: audioFiles)
         if cachedFilterChips.contains(where: { $0.filter == quickFilter }) == false {
             quickFilter = .all

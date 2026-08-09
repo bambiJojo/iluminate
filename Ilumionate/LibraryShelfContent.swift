@@ -69,6 +69,22 @@ nonisolated enum LibraryShelfContent {
         Array(files.sorted { $0.createdDate > $1.createdDate }.prefix(shelfCap))
     }
 
+    /// Files paired with their user-generated light score, most recent first.
+    /// `sessionLookup` is injected (rather than reaching for
+    /// `GeneratedSessionStore.shared` here) so this stays pure and testable;
+    /// callers pass the store's `load(for:)` in production.
+    static func generatedSessions(
+        from files: [AudioFile],
+        sessionLookup: (AudioFile) -> LightSession?
+    ) -> [GeneratedSessionItem] {
+        files
+            .sorted { $0.createdDate > $1.createdDate }
+            .compactMap { file in
+                guard let session = sessionLookup(file) else { return nil }
+                return GeneratedSessionItem(audioFile: file, session: session)
+            }
+    }
+
     /// Chooses a small next-listen set using only local behavior. Matching the
     /// most recent creator/content type wins, followed by favorites and items
     /// the listener has not played yet.

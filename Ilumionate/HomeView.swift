@@ -66,7 +66,7 @@ struct HomeView: View {
     @State private var showingProfile = false
     @State var showingSessionLibrary = false
     @State var playerFile: AudioFile?
-    @State var myGeneratedSessions: [MyGeneratedSessionItem] = []
+    @State var myGeneratedSessions: [GeneratedSessionItem] = []
     @State private var cardsVisible = false
     @State private var selectedChipCategory: BrainwaveCategory?
 

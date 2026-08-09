@@ -9,15 +9,6 @@
 
 import SwiftUI
 
-/// Pairs a user-generated light score with the audio file it was built from,
-/// so tapping a card can launch synchronized audio + light playback.
-struct MyGeneratedSessionItem: Identifiable {
-    let audioFile: AudioFile
-    let session: LightSession
-
-    var id: UUID { audioFile.id }
-}
-
 extension HomeView {
 
     // MARK: - My Sessions Section
@@ -56,12 +47,9 @@ extension HomeView {
     // MARK: - Loading
 
     /// Most-recent-first list of audio files that have a saved generated session.
-    func loadMyGeneratedSessions() -> [MyGeneratedSessionItem] {
-        audioFiles
-            .sorted { $0.createdDate > $1.createdDate }
-            .compactMap { file in
-                guard let session = GeneratedSessionStore.shared.load(for: file) else { return nil }
-                return MyGeneratedSessionItem(audioFile: file, session: session)
-            }
+    func loadMyGeneratedSessions() -> [GeneratedSessionItem] {
+        LibraryShelfContent.generatedSessions(from: audioFiles) { file in
+            GeneratedSessionStore.shared.load(for: file)
+        }
     }
 }

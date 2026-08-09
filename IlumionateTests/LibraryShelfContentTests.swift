@@ -184,6 +184,64 @@ struct LibraryShelfContentTests {
         #expect(recommendations.contains(where: { $0.id == recent.id }) == false)
     }
 
+    // MARK: - Generated Sessions
+
+    private func makeSession(name: String) -> LightSession {
+        LightSession(
+            session_name: name,
+            duration_sec: 120,
+            light_score: [
+                LightMoment(time: 0, frequency: 8, intensity: 0.35, waveform: .sine)
+            ]
+        )
+    }
+
+    @Test
+    func generatedSessions_excludesFilesWithoutASession() {
+        let files = [makeFile(filename: "no-session.m4a")]
+
+        let items = LibraryShelfContent.generatedSessions(from: files) { _ in nil }
+
+        #expect(items.isEmpty)
+    }
+
+    @Test
+    func generatedSessions_includesFilesPairedWithTheRightSession() {
+        let file = makeFile(filename: "generated.m4a")
+        let other = makeFile(filename: "no-session.m4a")
+        let session = makeSession(name: "Generated Score")
+
+        let items = LibraryShelfContent.generatedSessions(from: [file, other]) {
+            $0.id == file.id ? session : nil
+        }
+
+        #expect(items.count == 1)
+        #expect(items.first?.audioFile.id == file.id)
+        #expect(items.first?.session.displayName == "Generated Score")
+    }
+
+    @Test
+    func generatedSessions_ordersMostRecentFirst() {
+        let now = Date()
+        let older = makeFile(filename: "older.m4a", createdDate: now.addingTimeInterval(-100))
+        let newer = makeFile(filename: "newer.m4a", createdDate: now)
+        let sessions: [UUID: LightSession] = [
+            older.id: makeSession(name: "Older Score"),
+            newer.id: makeSession(name: "Newer Score")
+        ]
+
+        let items = LibraryShelfContent.generatedSessions(from: [older, newer]) { sessions[$0.id] }
+
+        #expect(items.map(\.audioFile.filename) == ["newer.m4a", "older.m4a"])
+    }
+
+    @Test
+    func generatedSessions_emptyInputReturnsEmpty() {
+        let items = LibraryShelfContent.generatedSessions(from: []) { _ in nil }
+
+        #expect(items.isEmpty)
+    }
+
     // MARK: - Sorted Files
 
     @Test
