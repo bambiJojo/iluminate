@@ -91,8 +91,11 @@ nonisolated enum OnboardingCompletionAction: String, Sendable {
     case startWelcomeSession, exploreApp
 }
 
+/// The four doors on the launcher home screen. Raw values are wire format for
+/// TelemetryDeck — renaming a case would silently split a metric in two, so
+/// `audioLibrary` keeps its original spelling even though the door is "Listen".
 nonisolated enum HomeCoreAction: String, Sendable {
-    case audioLibrary, reader
+    case audioLibrary, reader, visuals, pulse
 }
 
 nonisolated enum ActivationPath: String, Sendable {
