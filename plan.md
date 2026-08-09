@@ -74,10 +74,15 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 ## SCREENS
 
 ### Home Dashboard
-- ✅ Greeting section (dynamic time-based messages)
-- ✅ Category icon grid (Sleep, Focus, Energy, Relax, Trance)
-- ✅ Continue Session card, Quick Start section, Library scroll
-- ✅ Staggered entrance animations
+- ✅ Launcher layout: greeting, four equal door quadrants (Listen/Read/Visuals/Pulse), resume pill
+- ✅ Settings reachable from a pinned toolbar gear (iOS); macOS uses the sidebar `SettingsLink`
+- ✅ Doors deep-link to Create with the segment preselected, preserving the flash safety warning
+- ✅ Resume reads `PlaybackProgressStore` — verified end-to-end in the simulator
+- ✅ Staggered entrance animations, reduce-motion aware
+- ✅ Quadrants reflow to one column at accessibility text sizes
+- ❌ Reader is not resumable — TextTrance never writes `PlaybackProgressStore` snapshots
+- ❌ Tab bar still maps to Home/Library/Read/Create rather than the four product surfaces
+      (home compensates via deep links; see the design doc's decision 6)
 
 ### Audio Player (SessionPlayerView)
 - ✅ MandalaVisualizer centerpiece, phase indicator, audio scrubber
@@ -100,6 +105,8 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 
 ### Session Library (LibraryView)
 - ✅ Session cards with metadata, filtering/search, gradient thumbnails
+- ✅ "Your Sessions" shelf for user-generated scores (added when home's launcher
+      rewrite dropped its own copy)
 - 🔄 Session selection flow into player — needs completion
 
 ### Session Generation (SessionGenerationView)
@@ -110,7 +117,9 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ✅ Settings split into 3 files (SwiftLint compliant)
 - ✅ Session Notifications toggle, Export Session Data
 - ✅ Intensity, duration, bilateral, frequency scale, listening history toggles
-- ✅ Profile with weekly activity chart, session history
+- ❌ Profile with weekly activity chart, session history — `ProfileView` exists but is
+      unreachable (nothing constructs it but its own `#Preview`); either give it an
+      entry point or delete it
 - 🔄 Accessibility options — Steady Light toggle ✅ (Session Defaults); Dynamic Type toggles still open
 - ❌ Achievements / milestones section
 
