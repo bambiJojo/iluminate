@@ -12,7 +12,13 @@ import SwiftUI
 struct CreateView: View {
     let engine: LightEngine
 
-    @State private var kind: CreateSessionKind = .visualField
+    /// Bumped by the caller to re-apply `requestedKind`. A plain value would be
+    /// swallowed when someone taps the same home door twice, because the state
+    /// is already equal — the same reason `readerQuickStartTrigger` exists.
+    let kindRequestToken: Int
+    let requestedKind: CreateSessionKind?
+
+    @State private var kind: CreateSessionKind
     @State private var light = MindMachineModel()
     @State private var store = VisualFieldStore.shared
     @State private var showingTintSheet = false
@@ -21,6 +27,17 @@ struct CreateView: View {
     @State private var accompanyingTrack: AudioFile?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(
+        engine: LightEngine,
+        kindRequestToken: Int = 0,
+        requestedKind: CreateSessionKind? = nil
+    ) {
+        self.engine = engine
+        self.kindRequestToken = kindRequestToken
+        self.requestedKind = requestedKind
+        self._kind = State(initialValue: requestedKind ?? .visualField)
+    }
 
     private var visualBinding: Binding<VisualFieldSettings> {
         Binding(get: { store.settings }, set: { store.settings = $0 })
@@ -93,6 +110,10 @@ struct CreateView: View {
         .onChange(of: kind) { _, newKind in
             UsageAnalytics.shared.createModeSelected(newKind.analyticsMode)
             TranceHaptics.shared.selection()
+        }
+        .onChange(of: kindRequestToken) { _, _ in
+            guard let requestedKind else { return }
+            kind = requestedKind
         }
     }
 
