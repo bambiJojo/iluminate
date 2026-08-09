@@ -8,6 +8,8 @@
 
 **Tech Stack:** SwiftUI, Swift 6.2 strict concurrency, `@Observable`, Swift Testing (`import Testing`), xcodebuild on macOS + iOS Simulator.
 
+**Xcode project note:** this project uses Xcode 16 file-system synchronized groups (`objectVersion = 77`, `PBXFileSystemSynchronizedRootGroup`). Files added under `Ilumionate/` and `IlumionateTests/` join their target automatically — **never hand-edit `project.pbxproj`**, and never add it to a commit for a plain file add or delete.
+
 **Spec:** `docs/superpowers/specs/2026-08-09-home-screen-launcher-design.md`
 
 ---
@@ -296,14 +298,10 @@ xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platfo
 
 Expected: all five tests pass.
 
-- [ ] **Step 5: Add the file to the Xcode target**
-
-`HomeDoor.swift` and `HomeDoorTests.swift` must have target membership (`Ilumionate` and `IlumionateTests` respectively). If the build reports `cannot find 'HomeDoor' in scope` after Step 4, membership is missing — add it in Xcode's File Inspector.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add Ilumionate/HomeDoor.swift IlumionateTests/HomeDoorTests.swift Ilumionate.xcodeproj
+git add Ilumionate/HomeDoor.swift IlumionateTests/HomeDoorTests.swift
 git commit -m "feat(home): add the HomeDoor model and its routes"
 ```
 
@@ -439,7 +437,7 @@ Expected: all five tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Ilumionate/HomeResumeState.swift IlumionateTests/HomeResumeStateTests.swift Ilumionate.xcodeproj
+git add Ilumionate/HomeResumeState.swift IlumionateTests/HomeResumeStateTests.swift
 git commit -m "feat(home): derive resume state from PlaybackProgressStore"
 ```
 
@@ -615,7 +613,7 @@ Expected: `** BUILD SUCCEEDED **`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add Ilumionate/HomeDoorsView.swift Ilumionate.xcodeproj
+git add Ilumionate/HomeDoorsView.swift
 git commit -m "feat(home): add the four-door quadrant grid"
 ```
 
@@ -698,7 +696,7 @@ Expected: `** BUILD SUCCEEDED **`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add Ilumionate/HomeResumePill.swift Ilumionate.xcodeproj
+git add Ilumionate/HomeResumePill.swift
 git commit -m "feat(home): add the resume pill"
 ```
 
@@ -1117,11 +1115,7 @@ git rm Ilumionate/HomeView+FeaturedSessions.swift \
        Ilumionate/HomeView+MySessions.swift
 ```
 
-- [ ] **Step 3: Remove them from the Xcode target**
-
-Open `Ilumionate.xcodeproj` and remove the four dangling file references, or the build will fail with `Build input file cannot be found`.
-
-- [ ] **Step 4: Build**
+- [ ] **Step 3: Build**
 
 ```bash
 xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' build 2>&1 | tail -5
@@ -1129,7 +1123,7 @@ xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platfo
 
 Expected: `** BUILD SUCCEEDED **`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add -A
@@ -1158,8 +1152,6 @@ Expected: the only hit is `Ilumionate/ContinueAudioCard.swift` defining itself. 
 ```bash
 git rm Ilumionate/ContinueAudioCard.swift
 ```
-
-Remove its reference from the Xcode target as well.
 
 `WordmarkView` and `CategorySessionSheet` were both defined and used only inside the old `HomeView.swift`, so the rewrite already removed them — this search should return nothing for either. If it unexpectedly returns a hit elsewhere, stop and restore that type to its own file rather than deleting a live caller's dependency.
 
