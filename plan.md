@@ -74,13 +74,14 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 ## SCREENS
 
 ### Home Dashboard
-- ✅ Launcher layout: greeting, four equal door quadrants (Listen/Read/Visuals/Pulse), resume pill
+- ✅ Launcher layout: greeting, four equal door quadrants (Listen/Read/Visuals/Pulse), Current, Continue
 - ✅ Settings reachable from a pinned toolbar gear (iOS); macOS uses the sidebar `SettingsLink`
 - ✅ Doors deep-link to Create with the segment preselected, preserving the flash safety warning
-- ✅ Resume reads `PlaybackProgressStore` — verified end-to-end in the simulator
+- ✅ Listen opens the Library tab; Continue moved here from Library (listening + reading)
+- ✅ Current shows active playback; `MiniPlayerBar` suppressed on home so it isn't doubled
+- ✅ Continue reads `PlaybackProgressStore` — verified end-to-end in the simulator
 - ✅ Staggered entrance animations, reduce-motion aware
 - ✅ Quadrants reflow to one column at accessibility text sizes
-- ❌ Reader is not resumable — TextTrance never writes `PlaybackProgressStore` snapshots
 - ❌ Tab bar still maps to Home/Library/Read/Create rather than the four product surfaces
       (home compensates via deep links; see the design doc's decision 6)
 
@@ -107,6 +108,7 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ✅ Session cards with metadata, filtering/search, gradient thumbnails
 - ✅ "Your Sessions" shelf for user-generated scores (added when home's launcher
       rewrite dropped its own copy)
+- ✅ Continue section removed — it now lives on Home
 - 🔄 Session selection flow into player — needs completion
 
 ### Session Generation (SessionGenerationView)

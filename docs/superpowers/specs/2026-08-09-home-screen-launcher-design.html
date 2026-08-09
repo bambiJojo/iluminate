@@ -116,14 +116,15 @@ strong { color:var(--accent2); font-weight:640; }
 <ol>
 <li><strong>Toolbar</strong> — gear, trailing, pinned. Opens <code>ProfileSettingsView</code>.</li>
 <li><strong>Greeting</strong> — time-aware line plus name, from <code>portalSection</code>. Streak folds in as one muted line rather than <code>HomeStreakPill</code>'s own card.</li>
-<li><strong>Door quadrants</strong> — 2×2, equal weight, fixed order, filling the bulk of the screen.</li>
-<li><strong>Resume pill</strong> — full width, below the quadrants. Present only when there is something to resume.</li>
+<li><strong>Door quadrants</strong> — 2×2, equal weight, fixed order. Square, so they read as quadrants of one field rather than four cards of arbitrary height.</li>
+<li><strong>Current</strong> — what is playing right now, from <code>NowPlayingState</code>. Shown only while active. <code>MiniPlayerBar</code> is suppressed on the home tab so the same information does not appear twice; every other tab keeps the floating bar unchanged.</li>
+<li><strong>Continue</strong> — <code>LibraryContinuationSection</code>, moved here from Library. Up to three listening continuations plus the reading one. Shown only when non-empty.</li>
 </ol>
 <p><code>HomeView.swift</code> drops from 838 lines to roughly 200, with the quadrants extracted to their own file.</p>
 
 <h2 id="doors">The four doors</h2>
 <div class="tablewrap"><table><thead><tr><th>Door</th><th>Subtitle</th><th>Routes to</th></tr></thead><tbody>
-<tr><td>Listen</td><td>your audio, light-synced</td><td><code>showingAudioLibrary = true</code></td></tr>
+<tr><td>Listen</td><td>your audio, light-synced</td><td><code>selectedTab = .library</code></td></tr>
 <tr><td>Read</td><td>scripts, paced</td><td><code>onOpenReader()</code> → <code>selectedTab = .read</code></td></tr>
 <tr><td>Visuals</td><td>a wordless field</td><td><code>selectedTab = .create</code>, kind <code>.visualField</code></td></tr>
 <tr><td>Pulse</td><td>flash entrainment</td><td><code>selectedTab = .create</code>, kind <code>.flash</code></td></tr>
@@ -164,11 +165,13 @@ strong { color:var(--accent2); font-weight:640; }
     let updatedAt: Date
 }</code></pre>
 <p>It keeps up to 20 snapshots ordered most-recent-first, is already consumed by <code>LibraryView:44</code>, and already has coverage in <code>PlaybackProgressStoreTests.swift</code>.</p>
-<p><strong>The resume pill reads <code>PlaybackProgressStore.shared.snapshots.first</code>.</strong> No new type, no new <code>UserDefaults</code> key, no migration. <code>kind</code> distinguishes session from audio, which is all the routing needs; <code>title</code>, <code>progress</code> and <code>duration</code> render the pill.</p>
+<p><strong>Continue reads <code>PlaybackProgressStore.shared.snapshots</code></strong>, filtered to content that still exists. No new type, no new <code>UserDefaults</code> key, no migration.</p>
+<p>A single-item <code>HomeResumePill</code> / <code>HomeResumeState</code> pair was built first and then deleted: <code>LibraryContinuationSection</code> already did the same job better (three items plus reading), so home reuses it rather than keeping a parallel implementation.</p>
 <p>Home stops reading <code>lastSessionId</code> / <code>lastSessionProgress</code> entirely. <code>UnifiedPlayerViewModel</code> keeps writing them — they still back <code>storedResumeID</code> / <code>storedResumeProgress</code> as a legacy fallback (<code>UnifiedPlayerViewModel.swift:1379</code>) — so nothing is removed from the player and there is no migration risk.</p>
 
-<h4 id="reader-resume">Reader is not resumable, and that is not a regression</h4>
-<p><code>ResumablePlaybackKind</code> has only <code>.session</code> and <code>.audio</code>, and TextTrance never writes to the store. <code>resumableContentID</code> returns <code>nil</code> for flash, colour pulse, visual field and playlist (<code>UnifiedPlayerViewModel.swift:1402</code>), so those were never resumable either. The pill therefore covers sessions and audio — exactly what <code>continueSessionCard</code> and <code>ContinueAudioCard</code> cover today. Making the reader resumable means teaching TextTrance to write snapshots and adding a <code>.reader</code> case; that is its own piece of work, tracked separately.</p>
+<h4 id="reader-resume">The reader is resumable — through a different store</h4>
+<p>An earlier draft of this spec claimed the reader was not resumable. That was wrong. <code>ResumablePlaybackKind</code> has only <code>.session</code> and <code>.audio</code>, and TextTrance never writes to <code>PlaybackProgressStore</code> — but reading progress lives in <code>ReaderProgressStore</code>, and <code>LibraryContinuationSection</code> already renders it alongside the listening rows. Moving that section to home therefore brings reader-resume with it.</p>
+<p>Flash, colour pulse, visual field and playlist genuinely are not resumable: <code>resumableContentID</code> returns <code>nil</code> for all four (<code>UnifiedPlayerViewModel.swift:1402</code>). That is unchanged and out of scope.</p>
 
 <h3 id="create-kind"><code>CreateView</code> initial kind</h3>
 <p><code>CreateView.kind</code> is private <code>@State</code> defaulting to <code>.visualField</code> (<code>Create/CreateView.swift:15</code>). It needs to accept a requested kind from outside, following the <code>readerQuickStartTrigger</code> pattern already in <code>ContentView</code> so a repeat tap re-applies rather than being swallowed as a no-op.</p>

@@ -87,9 +87,13 @@ Top to bottom:
 1. **Toolbar** — gear, trailing, pinned. Opens `ProfileSettingsView`.
 2. **Greeting** — time-aware line plus name, from `portalSection`. Streak folds in as
    one muted line rather than `HomeStreakPill`'s own card.
-3. **Door quadrants** — 2×2, equal weight, fixed order, filling the bulk of the screen.
-4. **Resume pill** — full width, below the quadrants. Present only when there is
-   something to resume.
+3. **Door quadrants** — 2×2, equal weight, fixed order. Square, so they read as
+   quadrants of one field rather than four cards of arbitrary height.
+4. **Current** — what is playing right now, from `NowPlayingState`. Shown only while
+   active. `MiniPlayerBar` is suppressed on the home tab so the same information does
+   not appear twice; every other tab keeps the floating bar unchanged.
+5. **Continue** — `LibraryContinuationSection`, moved here from Library. Up to three
+   listening continuations plus the reading one. Shown only when non-empty.
 
 `HomeView.swift` drops from 838 lines to roughly 200, with the quadrants extracted
 to their own file.
@@ -98,7 +102,7 @@ to their own file.
 
 | Door | Subtitle | Routes to |
 |---|---|---|
-| Listen | your audio, light-synced | `showingAudioLibrary = true` |
+| Listen | your audio, light-synced | `selectedTab = .library` |
 | Read | scripts, paced | `onOpenReader()` → `selectedTab = .read` |
 | Visuals | a wordless field | `selectedTab = .create`, kind `.visualField` |
 | Pulse | flash entrainment | `selectedTab = .create`, kind `.flash` |
@@ -164,9 +168,12 @@ struct PlaybackProgressSnapshot: Codable, Identifiable, Equatable, Sendable {
 It keeps up to 20 snapshots ordered most-recent-first, is already consumed by
 `LibraryView:44`, and already has coverage in `PlaybackProgressStoreTests.swift`.
 
-**The resume pill reads `PlaybackProgressStore.shared.snapshots.first`.** No new type,
-no new `UserDefaults` key, no migration. `kind` distinguishes session from audio,
-which is all the routing needs; `title`, `progress` and `duration` render the pill.
+**Continue reads `PlaybackProgressStore.shared.snapshots`**, filtered to content that
+still exists. No new type, no new `UserDefaults` key, no migration.
+
+A single-item `HomeResumePill` / `HomeResumeState` pair was built first and then
+deleted: `LibraryContinuationSection` already did the same job better (three items
+plus reading), so home reuses it rather than keeping a parallel implementation.
 
 Home stops reading `lastSessionId` / `lastSessionProgress` entirely.
 `UnifiedPlayerViewModel` keeps writing them — they still back
@@ -174,15 +181,17 @@ Home stops reading `lastSessionId` / `lastSessionProgress` entirely.
 (`UnifiedPlayerViewModel.swift:1379`) — so nothing is removed from the player and
 there is no migration risk.
 
-#### Reader is not resumable, and that is not a regression
+#### The reader is resumable — through a different store
 
+An earlier draft of this spec claimed the reader was not resumable. That was wrong.
 `ResumablePlaybackKind` has only `.session` and `.audio`, and TextTrance never writes
-to the store. `resumableContentID` returns `nil` for flash, colour pulse, visual field
-and playlist (`UnifiedPlayerViewModel.swift:1402`), so those were never resumable
-either. The pill therefore covers sessions and audio — exactly what
-`continueSessionCard` and `ContinueAudioCard` cover today. Making the reader resumable
-means teaching TextTrance to write snapshots and adding a `.reader` case; that is its
-own piece of work, tracked separately.
+to `PlaybackProgressStore` — but reading progress lives in `ReaderProgressStore`, and
+`LibraryContinuationSection` already renders it alongside the listening rows. Moving
+that section to home therefore brings reader-resume with it.
+
+Flash, colour pulse, visual field and playlist genuinely are not resumable:
+`resumableContentID` returns `nil` for all four (`UnifiedPlayerViewModel.swift:1402`).
+That is unchanged and out of scope.
 
 ### `CreateView` initial kind
 
