@@ -93,6 +93,14 @@ struct AudioLibraryView: View {
         analysisManager.analysisQueue.count + analysisManager.failedAnalyses.count
     }
 
+    private var undoBannerMessage: String {
+        let staged = pendingDeletion.staged
+        guard staged.count == 1, let only = staged.first else {
+            return "\(staged.count) files deleted"
+        }
+        return "Deleted “\(only.file.displayName)”"
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -158,6 +166,21 @@ struct AudioLibraryView: View {
                     }
                 }
 
+                // Above both emptyState and audioLibraryContent on purpose:
+                // deleting the last file flips the screen to the empty state,
+                // and Undo has to stay reachable from there.
+                if !pendingDeletion.staged.isEmpty {
+                    VStack {
+                        Spacer()
+                        UndoDeleteBanner(
+                            message: undoBannerMessage,
+                            onUndo: { undoDelete() },
+                            onDismiss: { pendingDeletion.commit() }
+                        )
+                        .padding(.bottom, TranceSpacing.tabBarClearance)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .navigationTitle("Audio")
             .navigationDestination(for: AudioFile.self) { file in
@@ -280,6 +303,22 @@ struct AudioLibraryView: View {
             .task {
                 await loadAudioFiles()
                 UsageAnalytics.shared.screen(.audioLibrary)
+            }
+            .animation(.snappy(duration: 0.25), value: pendingDeletion.staged.count)
+            .task(id: pendingDeletion.staged.map(\.id)) {
+                guard !pendingDeletion.staged.isEmpty else { return }
+                // Re-runs whenever the batch changes, cancelling the previous
+                // wait — so a second delete restarts the window rather than
+                // inheriting the remains of the first.
+                try? await Task.sleep(for: PendingAudioDeletion.undoWindow)
+                guard !Task.isCancelled else { return }
+                pendingDeletion.commit()
+            }
+            .onDisappear {
+                // Leaving the library finalizes the delete. Attached to the
+                // NavigationStack, so pushing a detail screen keeps Undo alive
+                // and only leaving the tab commits.
+                pendingDeletion.commit()
             }
             .confirmationDialog("Add to Sessions", isPresented: $showingAddSheet, titleVisibility: .visible) {
                 Button("Import from Files") {

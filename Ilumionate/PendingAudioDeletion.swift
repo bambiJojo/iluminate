@@ -29,6 +29,10 @@ struct StagedAudioFile: Sendable, Identifiable {
 final class PendingAudioDeletion {
     static let shared = PendingAudioDeletion()
 
+    /// How long a delete stays recoverable. Long enough to notice the banner
+    /// and react, short enough that the row does not linger as clutter.
+    static let undoWindow: Duration = .seconds(6)
+
     /// The batch currently held for undo. Empty means nothing is pending.
     private(set) var staged: [StagedAudioFile] = []
 
