@@ -442,8 +442,17 @@ struct LibraryView: View {
         PlaylistStore.save(playlists)
     }
 
+    /// Paints the last known library first so a return visit is not blank, then
+    /// refreshes behind it. `LibraryView` is rebuilt on every tab entry, so
+    /// without the seed the shelves would flash empty each time.
     private func loadAudioFiles() async {
-        audioFiles = await AudioLibraryStore.loadRepairingStoredFiles()
+        let cache = AudioLibraryCache.shared
+        if cache.hasLoaded, audioFiles.isEmpty {
+            audioFiles = cache.files
+            recomputeDerivedCollections()
+        }
+        await cache.refresh()
+        audioFiles = cache.files
     }
 
     // MARK: - Delete

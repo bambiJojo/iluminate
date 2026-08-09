@@ -252,8 +252,11 @@ struct ContentView: View {
         isLoading = false
     }
 
+    /// Publishes through the shared cache so Library can paint its shelves
+    /// immediately on first entry instead of waiting for its own load.
     private func loadAudioFiles() async {
-        audioFiles = await AudioLibraryStore.loadRepairingStoredFiles()
+        await AudioLibraryCache.shared.refresh()
+        audioFiles = AudioLibraryCache.shared.files
     }
 
     private func checkForFirstLaunch() {
