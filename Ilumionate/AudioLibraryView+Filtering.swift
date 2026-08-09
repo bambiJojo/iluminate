@@ -21,6 +21,13 @@ extension AudioLibraryView {
                                 audioFileRow(for: file)
                             }
                             .buttonStyle(.plain)
+                            .swipeToDelete(
+                                id: file.id,
+                                openRowID: $openSwipeRowID,
+                                isEnabled: !isSelectionMode
+                            ) {
+                                deleteFile(file)
+                            }
 
                             if file.id != filteredAudioFiles.last?.id {
                                 Rectangle()
