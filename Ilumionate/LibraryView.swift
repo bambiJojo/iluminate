@@ -424,7 +424,7 @@ struct LibraryView: View {
         cachedRecommendedFiles = LibraryShelfContent.recommendedNext(from: audioFiles)
         cachedGeneratedSessions = LibraryShelfContent.generatedSessions(
             from: audioFiles,
-            hasSession: { GeneratedSessionStore.shared.exists(for: $0) },
+            hasSession: { GeneratedSessionStore.shared.hasGeneratedScoreOnDisk(for: $0) },
             sessionLookup: { GeneratedSessionStore.shared.load(for: $0) }
         )
         cachedFilterChips = LibraryBrowseFilter.chips(for: audioFiles)
