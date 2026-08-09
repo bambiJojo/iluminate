@@ -24,7 +24,12 @@ struct HomeDoorsView: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: TranceSpacing.list) {
             ForEach(HomeDoor.allCases) { door in
-                HomeDoorTile(door: door) { onSelect(door) }
+                HomeDoorTile(
+                    door: door,
+                    isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+                ) {
+                    onSelect(door)
+                }
             }
         }
     }
@@ -32,6 +37,10 @@ struct HomeDoorsView: View {
 
 private struct HomeDoorTile: View {
     let door: HomeDoor
+    /// At accessibility sizes the grid drops to one column, where a square
+    /// would be a full-width block and the subtitle would need to wrap out of
+    /// it. Height goes back to hugging the text there.
+    let isAccessibilitySize: Bool
     let action: () -> Void
 
     var body: some View {
@@ -41,7 +50,7 @@ private struct HomeDoorTile: View {
                     .font(.title2)
                     .foregroundStyle(door.tint)
 
-                Spacer(minLength: TranceSpacing.content)
+                Spacer(minLength: TranceSpacing.inner)
 
                 Text(door.title)
                     .font(TranceTypography.sectionTitle)
@@ -52,8 +61,9 @@ private struct HomeDoorTile: View {
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(TranceSpacing.card)
+            .modifier(SquareWhenCompact(enabled: !isAccessibilitySize))
             .background(door.tint.opacity(0.10), in: .rect(cornerRadius: TranceRadius.glassCard))
             .liminalGlass(.roundedRect(cornerRadius: TranceRadius.glassCard))
         }
@@ -61,6 +71,22 @@ private struct HomeDoorTile: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(door.title)
         .accessibilityHint(door.subtitle)
+    }
+}
+
+/// Keeps the four doors square so they read as quadrants of one field rather
+/// than as four cards of arbitrary height. Without this the tile's `Spacer`
+/// expands to whatever the scroll view offers and each door becomes a tall,
+/// mostly empty box.
+private struct SquareWhenCompact: ViewModifier {
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.aspectRatio(1, contentMode: .fit)
+        } else {
+            content
+        }
     }
 }
 
