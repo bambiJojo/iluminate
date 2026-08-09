@@ -25,7 +25,6 @@ struct ContentView: View {
     @State private var audioFiles: [AudioFile] = []
     @State private var selectedSession: LightSession?
     @State private var showingAudioLibrary = false
-    @State private var showingSessionPlayer = false
     @State private var showingOnboarding = false
     @State private var showingAnalyticsConsentPrompt = false
     @State private var showingResumedPlayer = false
@@ -33,6 +32,8 @@ struct ContentView: View {
     @State private var showingAnalysisQueue = false
     @State private var readerSharedImportTrigger = 0
     @State private var readerQuickStartTrigger = 0
+    @State private var createKindRequestToken = 0
+    @State private var createRequestedKind: CreateSessionKind?
     @State private var nowPlaying = NowPlayingState.shared
     @State private var analysisManager = AnalysisStateManager.shared
 
@@ -157,13 +158,13 @@ struct ContentView: View {
                 NavigationStack {
                     HomeView(
                         showingAudioLibrary: $showingAudioLibrary,
-                        showingSessionPlayer: $showingSessionPlayer,
                         selectedSession: $selectedSession,
                         sessions: sessions,
                         audioFiles: audioFiles,
                         engine: engine,
                         onRefresh: loadSessions,
-                        onOpenReader: { selectedTab = .read }
+                        onOpenReader: { selectedTab = .read },
+                        onOpenCreate: openCreate
                     )
                 }
                 .transition(.opacity)
@@ -184,7 +185,11 @@ struct ContentView: View {
                 .transition(.opacity)
             } else if selectedTab == .create {
                 NavigationStack {
-                    CreateView(engine: engine)
+                    CreateView(
+                        engine: engine,
+                        kindRequestToken: createKindRequestToken,
+                        requestedKind: createRequestedKind
+                    )
                 }
                 .transition(.opacity)
             }
@@ -290,6 +295,15 @@ struct ContentView: View {
         case .read:    .read
         case .create:  .create
         }
+    }
+
+    /// Sends the user to Create with a segment preselected. The token is bumped
+    /// so tapping the same home door twice re-applies the kind instead of being
+    /// swallowed as a no-op.
+    private func openCreate(_ kind: CreateSessionKind) {
+        createRequestedKind = kind
+        createKindRequestToken += 1
+        selectedTab = .create
     }
 
     private func handleDeepLink(_ url: URL) {
