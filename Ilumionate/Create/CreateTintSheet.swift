@@ -65,29 +65,9 @@ struct CreateTintSheet: View {
     }
 
     private func swatchButton(_ swatch: VisualTint) -> some View {
-        Button {
+        TintSwatch(tint: swatch, isSelected: tint == swatch) {
             tint = swatch
             TranceHaptics.shared.selection()
-        } label: {
-            VStack(spacing: TranceSpacing.micro) {
-                Circle()
-                    .fill(swatch.color)
-                    .frame(height: 52)
-                    .overlay {
-                        Circle().stroke(
-                            tint == swatch ? Color.textPrimary : Color.glassBorder,
-                            lineWidth: tint == swatch ? 2 : 1
-                        )
-                    }
-                Text(swatch.displayName)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(
-                        tint == swatch ? Color.textPrimary : Color.textSecondary
-                    )
-            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(swatch.displayName)
-        .accessibilityAddTraits(tint == swatch ? [.isButton, .isSelected] : .isButton)
     }
 }

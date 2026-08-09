@@ -944,7 +944,8 @@ final class UnifiedPlayerViewModel {
             UsageAnalytics.shared.sessionStarted(
                 source: sessionSource,
                 category: sessionCategory,
-                startType: playbackStartType
+                startType: playbackStartType,
+                mode: mode.analyticsName
             )
             if let mindMachineMode {
                 UsageAnalytics.shared.mindMachineStarted(
@@ -1174,7 +1175,8 @@ final class UnifiedPlayerViewModel {
             source: sessionSource,
             category: sessionCategory,
             endReason: resolvedReason,
-            fraction: fraction
+            fraction: fraction,
+            mode: mode.analyticsName
         )
         reportCreateOutcomeIfNeeded()
     }

@@ -175,6 +175,13 @@ class AnalysisStateManager {
 
         guard !isQueuedOrActive(audioFile) else {
             Log.analysis.info("📋 File already in queue: \(audioFile.filename)")
+            // A queue can outlive its processor: once the automatic task ends or
+            // is cancelled, entries are left with nothing draining them. Returning
+            // here made every later retry a silent no-op — the file sat queued
+            // forever, emitting no completion, no error, and no telemetry.
+            // `startAutomaticProcessing` awaits any live task and no-ops on an
+            // empty queue, so re-arming is always safe.
+            await startAutomaticProcessing(priority: priority)
             return
         }
 
@@ -294,7 +301,10 @@ class AnalysisStateManager {
         }
     }
 
-    private func isQueuedOrActive(_ audioFile: AudioFile) -> Bool {
+    /// Whether this file is waiting in the queue or currently being analyzed.
+    /// Surfaced so pickers can show work already in flight instead of offering
+    /// to start it again.
+    func isQueuedOrActive(_ audioFile: AudioFile) -> Bool {
         analysisQueue.contains { $0.id == audioFile.id }
             || currentAnalysis?.audioFile.id == audioFile.id
     }

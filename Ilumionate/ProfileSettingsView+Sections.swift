@@ -151,6 +151,42 @@ extension ProfileSettingsView {
     var sessionDefaultsSection: some View {
         GlassCard(label: "Session Defaults") {
             VStack(spacing: TranceSpacing.list) {
+                settingsToggle(
+                    title: "Steady Light",
+                    description: "Hold a steady glow instead of flashing. "
+                        + "Also on whenever system Reduce Motion is.",
+                    binding: $steadyLightEnabled,
+                    icon: "sun.max",
+                    color: .bwAlpha
+                )
+                Button {
+                    TranceHaptics.shared.light()
+                    showingFlashTintSheet = true
+                } label: {
+                    HStack(spacing: TranceSpacing.list) {
+                        Image(systemName: "paintpalette")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color.roseGold)
+                            .frame(width: 24)
+                        Text("Flash Colour")
+                            .font(TranceTypography.body)
+                            .foregroundStyle(Color.textPrimary)
+                        Spacer()
+                        Circle()
+                            .fill(flashTint.color(colorTemperature: 3000))
+                            .frame(width: 18, height: 18)
+                            .overlay {
+                                Circle().stroke(Color.glassBorder, lineWidth: 1)
+                            }
+                        Text(flashTint.displayName)
+                            .font(TranceTypography.body)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                    // Without this the Spacer is not hit-testable, so only the
+                    // label and swatch respond and most of the row reads dead.
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
                 settingsSlider(
                     title: "Frequency Scale",
                     value: $userFrequencyMultiplier,

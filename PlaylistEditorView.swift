@@ -626,6 +626,39 @@ struct SessionPickerView: View {
     @State private var searchText = ""
     @State private var selectedFilter: ContentFilterOption = .all
     @State private var selectedIds = Set<UUID>()
+    @State private var analysisManager = AnalysisStateManager.shared
+    /// Recomputed as analyses land. `nil` until the first refresh, so the
+    /// caller's snapshot renders the first frame without a flash of "empty".
+    @State private var refreshedReadyIds: Set<UUID>?
+
+    private var readyIds: Set<UUID> { refreshedReadyIds ?? readySessionIds }
+
+    private func rowState(for file: AudioFile) -> PlaylistPickerRowState {
+        PlaylistPickerRowState.resolve(
+            hasGeneratedSession: readyIds.contains(file.id),
+            isAlreadyAdded: existingItemIds.contains(file.id),
+            isAnalyzing: analysisManager.isQueuedOrActive(file)
+        )
+    }
+
+    private func handleTap(on file: AudioFile, state: PlaylistPickerRowState) {
+        if state.canStartAnalysis {
+            Task { await analysisManager.queueForAnalysis(file) }
+            return
+        }
+        guard state.isSelectable else { return }
+        if selectedIds.contains(file.id) {
+            selectedIds.remove(file.id)
+        } else {
+            selectedIds.insert(file.id)
+        }
+    }
+
+    private func refreshReadyIds() {
+        refreshedReadyIds = Set(
+            audioFiles.filter { GeneratedSessionStore.shared.exists(for: $0) }.map(\.id)
+        )
+    }
 
     enum ContentFilterOption: String, CaseIterable {
         case all = "All"
@@ -743,20 +776,14 @@ struct SessionPickerView: View {
                         ScrollView {
                             LazyVStack(spacing: 0) {
                                 ForEach(filteredFiles) { file in
+                                    let state = rowState(for: file)
                                     PickerSessionRow(
                                         file: file,
-                                        isReady: readySessionIds.contains(file.id),
-                                        isAlreadyAdded: existingItemIds.contains(file.id),
+                                        state: state,
                                         isSelected: selectedIds.contains(file.id)
                                     ) {
                                         TranceHaptics.shared.light()
-                                        guard readySessionIds.contains(file.id) else { return }
-                                        if existingItemIds.contains(file.id) { return }
-                                        if selectedIds.contains(file.id) {
-                                            selectedIds.remove(file.id)
-                                        } else {
-                                            selectedIds.insert(file.id)
-                                        }
+                                        handleTap(on: file, state: state)
                                     }
 
                                     if file.id != filteredFiles.last?.id {
@@ -784,7 +811,7 @@ struct SessionPickerView: View {
                 if newlySelectedCount > 0 {
                     Button {
                         let toAdd = filteredFiles.filter { selectedIds.contains($0.id)
-                            && readySessionIds.contains($0.id)
+                            && readyIds.contains($0.id)
                             && !existingItemIds.contains($0.id) }
                         onAddFiles(toAdd)
                         dismiss()
@@ -816,6 +843,12 @@ struct SessionPickerView: View {
                         .foregroundColor(.roseGold)
                 }
             }
+            .task { refreshReadyIds() }
+            // An analysis started from this sheet lands here: the file gains a
+            // generated session and its row becomes selectable in place.
+            .onChange(of: analysisManager.completedAnalyses.count) {
+                refreshReadyIds()
+            }
         }
     }
 }
@@ -824,9 +857,7 @@ struct SessionPickerView: View {
 
 private struct PickerSessionRow: View {
     let file: AudioFile
-    /// Whether the file has a generated light session and can be added.
-    let isReady: Bool
-    let isAlreadyAdded: Bool
+    let state: PlaylistPickerRowState
     let isSelected: Bool
     let onTap: () -> Void
 
@@ -864,25 +895,32 @@ private struct PickerSessionRow: View {
                     .animation(.spring(response: 0.25), value: isSelected)
             }
             .padding(.vertical, TranceSpacing.card)
-            .opacity(isReady && !isAlreadyAdded ? 1.0 : 0.45)
+            .opacity(state == .ready ? 1.0 : 0.45)
         }
         .buttonStyle(PlainButtonStyle())
-        .disabled(!isReady || isAlreadyAdded)
+        // Un-analyzed rows stay tappable — tapping them starts the analysis
+        // that makes them addable.
+        .disabled(!state.isSelectable && !state.canStartAnalysis)
     }
 
     @ViewBuilder
     private var trailingIndicator: some View {
-        if !isReady {
-            // Un-analyzed: surfaced but not addable.
-            Text("Needs analysis")
-                .font(TranceTypography.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.textLight)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.glassBorder.opacity(0.18))
-                .clipShape(Capsule())
-        } else if isAlreadyAdded {
+        if let badgeTitle = state.badgeTitle {
+            HStack(spacing: 5) {
+                if state == .analyzing {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+                Text(badgeTitle)
+                    .font(TranceTypography.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(state == .needsAnalysis ? .roseGold : .textLight)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color.glassBorder.opacity(0.18))
+            .clipShape(Capsule())
+        } else if state == .alreadyAdded {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 22))
                 .foregroundColor(.textLight)

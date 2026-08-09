@@ -18,6 +18,8 @@ enum AppSettingsManager {
         static let autoLockEnabled = "autoLockEnabled"
         static let userFrequencyMultiplier = "userFrequencyMultiplier"
         static let countdownDuration = "countdownDuration"
+        static let steadyLightEnabled = "steadyLightEnabled"
+        static let flashTint = "flashTint"
         static let mindMachineEnabled = "mindMachineEnabled"
         static let listeningHistoryEnabled = "listeningHistoryEnabled"
         static let nsfwSourcesEnabled = "nsfwSourcesEnabled"
@@ -165,6 +167,8 @@ enum AppSettingsManager {
         defaults.set(true, forKey: Key.autoLockEnabled)
         defaults.set(1.0, forKey: Key.userFrequencyMultiplier)
         defaults.set(3, forKey: Key.countdownDuration)
+        defaults.set(false, forKey: Key.steadyLightEnabled)
+        defaults.removeObject(forKey: Key.flashTint)
         defaults.set(true, forKey: Key.mindMachineEnabled)
         defaults.set(false, forKey: Key.listeningHistoryEnabled)
         defaults.set(false, forKey: Key.nsfwSourcesEnabled)

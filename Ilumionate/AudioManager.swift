@@ -165,35 +165,42 @@ class AudioManager: NSObject {
             throw URLError(.badServerResponse)
         }
         
+        let contentType = httpResponse.allHeaderFields["Content-Type"] as? String
+
+        // Verify this is actually audio before it can reach the library. A URL
+        // ending in ".mp3" and an audio Content-Type are both only claims; a
+        // server that returns a sign-in page or a 404 body makes them both liars.
+        // Reading the leading bytes is enough to tell.
+        let leadingBytes = (try? FileHandle(forReadingFrom: tempURL).read(upToCount: 64)) ?? Data()
+        if let rejection = AudioDownloadValidation.rejectionReason(
+            contentType: contentType,
+            data: leadingBytes
+        ) {
+            try? FileManager.default.removeItem(at: tempURL)
+            Log.audio.info("❌ Rejected non-audio download from \(sourceURL.absoluteString): \(rejection)")
+            UsageAnalytics.shared.errorOccurred(.audioURLServerRejected)
+            throw rejection
+        }
+
         // Extract original filename or create a fallback using Content-Type hint
         let originalName = sourceURL.lastPathComponent.components(separatedBy: "?").first ?? ""
         let targetName: String
         let originalExt = URL(fileURLWithPath: originalName).pathExtension.lowercased()
         if !originalName.isEmpty, originalName != "/",
-           ["mp3", "m4a", "wav", "aac", "flac"].contains(originalExt) {
+           AudioDownloadValidation.audioExtensions.contains(originalExt) {
             // URL has a recognizable audio extension – use it directly
             targetName = originalName
         } else {
-            // Sniff Content-Type header to pick the right extension
-            let contentType = httpResponse.allHeaderFields["Content-Type"] as? String ?? ""
-            let ext: String
-            if contentType.contains("mpeg") || contentType.contains("mp3") {
-                ext = "mp3"
-            } else if contentType.contains("m4a") || contentType.contains("mp4") {
-                ext = "m4a"
-            } else if contentType.contains("wav") {
-                ext = "wav"
-            } else if contentType.contains("aac") {
-                ext = "aac"
-            } else if contentType.contains("flac") {
-                ext = "flac"
-            } else {
-                ext = "mp3" // safe fallback
-            }
+            // Trust the header, then the bytes. Never guess: an extension that
+            // does not match the payload is what put HTML in the library.
+            let ext = contentType
+                .flatMap(AudioDownloadValidation.audioExtension(forContentType:))
+                ?? AudioDownloadValidation.inferredExtension(from: leadingBytes)
+                ?? "mp3"
             let baseName = originalName.isEmpty || originalName == "/" ? "DownloadedAudio" : (originalName as NSString).deletingPathExtension
             targetName = "\(baseName).\(ext)"
         }
-        
+
         do {
             let audioFile = try await AudioImportWorker.prepareAudioFile(
                 from: tempURL,

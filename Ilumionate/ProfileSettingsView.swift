@@ -33,6 +33,9 @@ struct ProfileSettingsView: View {
     // Session Defaults
     @AppStorage("userFrequencyMultiplier") var userFrequencyMultiplier = 1.0
     @AppStorage("countdownDuration") var countdownDuration = 3
+    @AppStorage("steadyLightEnabled") var steadyLightEnabled = false
+    @State var flashTint: FlashTint = .default
+    @State var showingFlashTintSheet = false
 
     // Privacy
     @AppStorage("listeningHistoryEnabled") var listeningHistoryEnabled = true
@@ -100,6 +103,13 @@ struct ProfileSettingsView: View {
             }
             .sheet(isPresented: $isEditingProfile) { profileEditor }
             .sheet(isPresented: $showAbout) { aboutSheet }
+            .sheet(isPresented: $showingFlashTintSheet) {
+                FlashTintSheet(selection: $flashTint)
+            }
+            .task { flashTint = FlashTintPreference.current() }
+            .onChange(of: flashTint) { _, newValue in
+                FlashTintPreference.set(newValue)
+            }
             .alert("Clear All Data?", isPresented: $showClearDataAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Clear", role: .destructive) { clearAllData() }

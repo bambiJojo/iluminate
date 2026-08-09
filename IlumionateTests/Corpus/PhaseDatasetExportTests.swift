@@ -58,15 +58,27 @@ struct PhaseDatasetExportTests {
         #expect(count == 20)
     }
 
+    /// Truth-bearing cases from the on-disk corpus, across every subdirectory.
+    private func labeledCorpusCases() throws -> [CorpusCase] {
+        try (CorpusLoader.load(subdirectory: "fixtures")
+           + CorpusLoader.load(subdirectory: "synthetic")
+           + CorpusLoader.load(subdirectory: "real"))
+            .filter { !$0.truth.isEmpty }
+    }
+
     @Test("Generates phase-features.csv from the on-disk labeled corpus")
     func generatesFromCorpus() throws {
-        let cases = try (CorpusLoader.load(subdirectory: "fixtures")
-                       + CorpusLoader.load(subdirectory: "synthetic")
-                       + CorpusLoader.load(subdirectory: "real"))
-            .filter { !$0.truth.isEmpty }
+        let cases = try labeledCorpusCases()
         try #require(!cases.isEmpty, "no truth-bearing corpus cases")
 
-        let out = CorpusLoader.corpusRoot.appending(path: "dataset").appending(path: "phase-features.csv")
+        // Export somewhere unique per run. Suites run in parallel, so writing the
+        // real artifact path here let two workers interleave writes into the file
+        // this test reads back, which broke the column-count check intermittently.
+        // Regenerating the artifact is `exportsDatasetArtifact` below.
+        let directory = URL.temporaryDirectory.appending(path: "phase-dataset-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let out = directory.appending(path: "phase-features.csv")
+
         let rows = try PhaseDatasetExporter().export(cases: cases, to: out)
         #expect(rows > 0)
 
@@ -76,5 +88,25 @@ struct PhaseDatasetExportTests {
         for line in lines.dropFirst() {
             #expect(line.split(separator: ",", omittingEmptySubsequences: false).count == expectedColumns)
         }
+    }
+
+    /// Opt-in regeneration of the training dataset at `Corpus/dataset/phase-features.csv`
+    /// (gitignored; regenerate, don't commit). Disabled by default so a normal suite
+    /// run never writes into the shared corpus directory. Run it explicitly with:
+    ///
+    ///     PHASE_DATASET_EXPORT=1 xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+    ///       -destination 'platform=macOS,arch=arm64' test \
+    ///       -only-testing:IlumionateTests/PhaseDatasetExportTests/exportsDatasetArtifact
+    @Test(
+        "Writes the training dataset artifact into the corpus directory",
+        .enabled(if: ProcessInfo.processInfo.environment["PHASE_DATASET_EXPORT"] != nil)
+    )
+    func exportsDatasetArtifact() throws {
+        let cases = try labeledCorpusCases()
+        try #require(!cases.isEmpty, "no truth-bearing corpus cases")
+
+        let out = CorpusLoader.corpusRoot.appending(path: "dataset").appending(path: "phase-features.csv")
+        let rows = try PhaseDatasetExporter().export(cases: cases, to: out)
+        #expect(rows > 0)
     }
 }

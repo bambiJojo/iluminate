@@ -154,11 +154,7 @@ struct SessionDetailView: View {
                     HStack(spacing: TranceSpacing.inner) {
                         Image(systemName: "checkmark.seal.fill")
                             .foregroundStyle(Color.roseGold)
-                        Text(
-                            hasReviewedGoldScore
-                                ? "Gold Standard"
-                                : (catalogEntry == nil ? "AI Analyzed" : "Catalog Template")
-                        )
+                        Text(analysisProvenanceLabel)
                             .font(TranceTypography.caption)
                             .foregroundStyle(Color.roseGold)
 
@@ -431,6 +427,15 @@ struct SessionDetailView: View {
 
     // MARK: - Analyze Now (unanalyzed files)
 
+    /// Credits whichever path actually produced the analysis. Claiming "AI
+    /// Analyzed" after the model declined and keyword classification stood in
+    /// contradicts the AI Insights card directly below it.
+    private var analysisProvenanceLabel: String {
+        if hasReviewedGoldScore { return "Gold Standard" }
+        if catalogEntry != nil { return "Catalog Template" }
+        return analysis?.usedKeywordFallback == true ? "Keyword Analysis" : "AI Analyzed"
+    }
+
     private var analyzeNowSection: some View {
         LiminalCard {
             VStack(spacing: TranceSpacing.card) {
@@ -443,14 +448,41 @@ struct SessionDetailView: View {
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
 
-                GlowButton(title: "Analyze Now", systemImage: "sparkles") {
-                    Task {
-                        AnalysisStateManager.shared.evictCachedResult(for: audioFile)
-                        await AnalysisStateManager.shared.queueForAnalysis(audioFile)
+                // Reading the manager here means the button swaps to live progress
+                // the moment work is queued, rather than looking as though the tap
+                // did nothing.
+                if AnalysisStateManager.shared.isQueuedOrActive(audioFile) {
+                    analyzingIndicator
+                } else {
+                    GlowButton(title: "Analyze Now", systemImage: "sparkles") {
+                        Task {
+                            AnalysisStateManager.shared.evictCachedResult(for: audioFile)
+                            await AnalysisStateManager.shared.queueForAnalysis(audioFile)
+                        }
                     }
                 }
             }
         }
+    }
+
+    private var analyzingIndicator: some View {
+        let active = AnalysisStateManager.shared.currentAnalysis
+        let isThisFile = active?.audioFile.id == audioFile.id
+        return HStack(spacing: TranceSpacing.list) {
+            ProgressView()
+                .controlSize(.small)
+            Text(stageText(active: active, isThisFile: isThisFile))
+                .font(TranceTypography.body)
+                .foregroundStyle(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, TranceSpacing.card)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func stageText(active: ActiveAnalysis?, isThisFile: Bool) -> String {
+        guard isThisFile, let active else { return "Waiting in queue…" }
+        return AnalysisStageFeedback.stageSummary(active.stage)
     }
 
     // MARK: - Re-analyze

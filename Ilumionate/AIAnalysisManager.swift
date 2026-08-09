@@ -145,7 +145,18 @@ actor AIAnalysisManager {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                Log.analysis.info("⚠️ AI attempt 1 failed (\(type(of: error))) — retrying with minimal prompt")
+                // Log the error itself, not just its type: every Foundation
+                // Models failure surfaces as `GenerationError`, so the type alone
+                // cannot distinguish a context overflow from a guardrail refusal
+                // from missing assets — which are three unrelated fixes.
+                let diagnosis = AIGenerationDiagnosis.classify(error)
+                Log.analysis.info("⚠️ AI attempt 1 failed (\(diagnosis.rawValue)). Reason: \(String(describing: error))")
+
+                // A refusal, a missing model, or a safety host that cannot be
+                // queried will fail identically on a shorter prompt. Rethrowing
+                // skips a second full round-trip that changes nothing.
+                guard diagnosis.isRetryable else { throw error }
+                Log.analysis.info("↻ Retrying with minimal prompt")
             }
             // Retry with compact prompt; errors here propagate out of the Task.
             let fallback = LanguageModelSession(instructions: AVESystemPrompt.minimalInstructions)
@@ -165,7 +176,9 @@ actor AIAnalysisManager {
             currentTask = nil
             throw CancellationError()
         } catch {
-            Log.analysis.info("❌ All AI attempts exhausted (\(type(of: error))) — using keyword fallback")
+            let diagnosis = AIGenerationDiagnosis.classify(error)
+            Log.analysis.info("❌ AI generation gave up (\(diagnosis.rawValue)) — using keyword fallback. Reason: \(String(describing: error))")
+            await UsageAnalytics.shared.aiGenerationFallback(reason: diagnosis)
             currentTask = nil
             return nil
         }
@@ -675,7 +688,7 @@ private extension AIAnalysisManager {
             suggestedIntensity: intensity,
             suggestedColorTemperature: colorTemp,
             keyMoments: keyMoments,
-            aiSummary: "Analysis via keyword classification (AI generation failed).",
+            aiSummary: AIGenerationDiagnosis.keywordFallbackSummary,
             recommendedPreset: presetName,
             contentType: contentType,
             hypnosisMetadata: hypnosisMetadata,

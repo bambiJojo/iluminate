@@ -111,7 +111,7 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ✅ Session Notifications toggle, Export Session Data
 - ✅ Intensity, duration, bilateral, frequency scale, listening history toggles
 - ✅ Profile with weekly activity chart, session history
-- 🔄 Accessibility options (reduce motion, Dynamic Type toggles) — partial
+- 🔄 Accessibility options — Steady Light toggle ✅ (Session Defaults); Dynamic Type toggles still open
 - ❌ Achievements / milestones section
 
 ### Onboarding
@@ -153,10 +153,66 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ❌ Loading states with pulse animations
 - ❌ Success/error feedback states
 - ❌ Dynamic Type support
-- ❌ Reduce motion alternatives
+- ✅ Reduce motion alternatives for the light path — in-app Steady Light toggle, unioned with system Reduce Motion across engine, flash controller, and flash view (from TestFlight feedback, Apr 10)
 - ❌ Custom app icon (rose-gold mandala design)
 - ❌ Contextual help system
 - ❌ Sound effects for key interactions
+
+---
+
+## FROM TELEMETRY (see TELEMETRY_FINDINGS.md)
+
+- ✅ URL import accepted non-audio payloads — a link returning HTML was saved as
+  `.mp3`, logged as "✅ Successfully downloaded audio", and admitted to the library
+  where it failed transcription silently. Root cause of the 26% analysis success
+  rate. `AudioDownloadValidation` now gates both import paths on Content-Type and
+  container signature; `AudioManager.swift` and `InAppBrowserView.swift` (which
+  had the same `?: "mp3"` fallback) both fixed
+- ✅ **The silent stall** — `queueForAnalysis(_:priority:)` returned early for an
+  already-queued file *before* starting the processor, so a queue that outlived
+  its processor was stuck forever and "Analyze Now" was a permanent no-op. This is
+  what produced 0.7.3's 13 starts / 1 completion / 0 errors. Fixed by re-arming
+  `startAutomaticProcessing` on that path; verified end to end (93 segments,
+  hypnosis, 98% alignment, session generated)
+- ✅ "Analyze Now" now shows queue/stage progress instead of appearing to do
+  nothing (`SessionDetailView.analyzeNowSection`)
+- ❌ Analysis stalls still emit no terminal telemetry — worth adding
+  `Audio.Analysis.Failed` on the give-up path so this class of bug is visible
+- ✅ Session telemetry now records which player rendered (`mode` on
+  `session.started`/`.ended` via `PlayerMode.analyticsName`) — the one real gap;
+  `endReason`/`startType`/end-event coverage turned out to be correct since 0.7.2
+  and only looked broken because 0.6.1 traffic dominates the 30-day window
+- ✅ Diagnosed why AI analysis never runs — Foundation Models fails *closed* when
+  it cannot query its own safety classifier, reporting
+  `guardrailViolation("May contain sensitive or unsafe content")` whose underlying
+  error is `Failed model manager query … InferenceError::hostFailed`. The content
+  is never evaluated. `AIGenerationDiagnosis` now classifies this, the futile
+  retry is skipped, `ai.generationFallback` telemetry is emitted, and the badge
+  reads "Keyword Analysis" instead of falsely claiming "AI Analyzed"
+  - ⚠️ Observed in the **simulator** only — not proof the AI path fails on device.
+    The new telemetry is what will answer that
+- ❌ Whisper transcription degenerates on soft speech (observed output loops:
+  "mother mother mother"); `openai_whisper-base` may be too small for this content
+- ❌ First analysis downloads the WhisperKit model (~100s) with no progress shown
+- ❌ First analysis silently downloads a ~100s CoreML model with no progress shown
+
+## FROM TESTFLIGHT FEEDBACK
+
+Both reports came from real testers; screenshots and analysis in session notes.
+
+- ✅ In-app Steady Light toggle (Apr 10 report) — see Polish & Accessibility above
+- ✅ Playlist picker dead end (Mar 11 report) — un-analyzed files were listed but
+  disabled, reading as "my imports didn't save". Rows now start analysis on tap,
+  show "Analyzing…", and become selectable in place. `PlaylistPickerRowState`
+- ✅ Selectable flash colour (Apr 10 report) — `FlashTint` overrides the rendered
+  colour at render time only. Sessions keep their Kelvin `color_temperature`, so
+  the JSON schema, `SessionGenerator`, and the AI models are untouched. Picker in
+  Session Defaults; "Match Session" is the default. `FlashTint`, `FlashTintSheet`
+  - Note: `Color.fromKelvin` is a blackbody curve (2000K–6500K) with no teal,
+    violet, or rose on it, which is why exposing Kelvin alone could not have
+    answered this request
+  - Decision: no colour-specific seizure rules; the frequency cap in
+    `LightSafety` and the photosensitivity warning remain the only guards
 
 ---
 

@@ -472,11 +472,11 @@ final class LightEngine {
         applySessionState()
         advanceFrequency(deltaTime: deltaTime)
 
-        // Reduce Motion: hold a steady "on" brightness (the maximum/mid level)
-        // instead of advancing the oscillator, so the light never strobes for
-        // motion-sensitive users. Checked every frame, so a mid-session toggle
-        // of the system setting is respected.
-        if PlatformAccessibility.isReduceMotionEnabled {
+        // Steady light: hold a steady "on" brightness (the maximum/mid level)
+        // instead of advancing the oscillator, so the light never strobes.
+        // Driven by the in-app toggle or system Reduce Motion. Checked every
+        // frame, so a mid-session toggle of either source is respected.
+        if SteadyLightPreference.prefersSteadyLight() {
             let steady = max(0.0, min(1.0, maximumBrightness))
             brightness = steady
             brightnessLeft = steady
