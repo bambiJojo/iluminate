@@ -11,8 +11,15 @@ nonisolated enum AudioLibraryStore {
     private nonisolated static let supportedExtensions: Set<String> = ["mp3", "m4a", "wav", "aac", "flac"]
     private static let persistence = AudioLibraryPersistence()
 
-    @MainActor
-    static func loadRepairingStoredFiles(
+    /// Deliberately **not** `@MainActor`.
+    ///
+    /// This walks `Documents`, SHA-256 hashes every audio file that is missing a
+    /// fingerprint, and decodes the 830 KB known-audio catalog. Pinned to the main
+    /// actor — as it was — that was seconds of blocked UI every time the Library
+    /// tab was tapped. `AudioFile` and `LibraryRepair` are `Sendable`, and every
+    /// caller already awaits, so the results cross back to the main actor on
+    /// assignment.
+    nonisolated static func loadRepairingStoredFiles(
         defaults: UserDefaults = .standard,
         documentsURL: URL = .documentsDirectory
     ) async -> [AudioFile] {
