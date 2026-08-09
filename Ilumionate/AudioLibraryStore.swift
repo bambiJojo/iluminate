@@ -11,14 +11,23 @@ nonisolated enum AudioLibraryStore {
     private nonisolated static let supportedExtensions: Set<String> = ["mp3", "m4a", "wav", "aac", "flac"]
     private static let persistence = AudioLibraryPersistence()
 
-    /// Deliberately **not** `@MainActor`.
+    /// Runs off the main actor. `@concurrent` is load-bearing — do not drop it.
     ///
-    /// This walks `Documents`, SHA-256 hashes every audio file that is missing a
-    /// fingerprint, and decodes the 830 KB known-audio catalog. Pinned to the main
-    /// actor — as it was — that was seconds of blocked UI every time the Library
-    /// tab was tapped. `AudioFile` and `LibraryRepair` are `Sendable`, and every
-    /// caller already awaits, so the results cross back to the main actor on
-    /// assignment.
+    /// This decodes the whole stored library (every `AudioFile`, and with it every
+    /// `AnalysisResult` and `TranscriptAnalysis`), walks `Documents`, SHA-256
+    /// hashes any file missing a fingerprint, and decodes the 830 KB known-audio
+    /// catalog. An Instruments trace on device measured it at ~2.1s per call with
+    /// a 75-file library, blocking the main thread every time Library appeared.
+    ///
+    /// Marking it merely `nonisolated` is not enough: this target builds with
+    /// `SWIFT_APPROACHABLE_CONCURRENCY = YES`, so a plain `nonisolated async`
+    /// function *inherits the caller's isolation*. Called from a `@MainActor`
+    /// `.task`, it therefore ran on the main actor regardless. `@concurrent`
+    /// forces the global executor.
+    ///
+    /// `AudioFile` and `LibraryRepair` are `Sendable` and every caller already
+    /// awaits, so results cross back on assignment.
+    @concurrent
     nonisolated static func loadRepairingStoredFiles(
         defaults: UserDefaults = .standard,
         documentsURL: URL = .documentsDirectory
