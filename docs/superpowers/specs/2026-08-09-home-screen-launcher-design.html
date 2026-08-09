@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home Screen Launcher — Design</title>
+<style>
+:root {
+  --bg:#0e0b12; --panel:#161119; --line:#2b2333; --text:#ece6f2;
+  --muted:#9a8fa6; --accent:#e9b7ba; --accent2:#be96ff; --code:#120e17;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg:#faf7fb; --panel:#fff; --line:#e6dfe9; --text:#1d1721;
+    --muted:#6b6274; --accent:#a35c63; --accent2:#6b3fa0; --code:#f3eff5; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+.wrap { display:grid; grid-template-columns:250px minmax(0,1fr); gap:44px;
+  max-width:1180px; margin:0 auto; padding:56px 28px 120px; }
+nav { position:sticky; top:36px; align-self:start; font-size:13px; }
+nav .navtitle { text-transform:uppercase; letter-spacing:.12em; font-size:10px;
+  color:var(--muted); margin-bottom:12px; }
+nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 0;
+  border-left:2px solid transparent; padding-left:12px; }
+nav a:hover { color:var(--accent); border-left-color:var(--accent); }
+main { min-width:0; }
+h1 { font-size:clamp(30px,4vw,44px); line-height:1.12; letter-spacing:-.025em;
+  margin:0 0 28px; }
+h2 { font-size:26px; letter-spacing:-.015em; margin:56px 0 16px;
+  padding-bottom:10px; border-bottom:1px solid var(--line); }
+h3 { font-size:18px; margin:34px 0 10px; color:var(--accent); }
+h4 { font-size:15px; margin:24px 0 8px; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.07em; }
+p { margin:0 0 15px; }
+ul,ol { margin:0 0 16px; padding-left:22px; }
+li { margin-bottom:7px; }
+hr { border:0; border-top:1px solid var(--line); margin:44px 0; }
+blockquote { margin:0 0 20px; padding:14px 20px; background:var(--panel);
+  border-left:3px solid var(--accent2); border-radius:0 10px 10px 0;
+  font-size:17px; color:var(--text); }
+blockquote p:last-child { margin-bottom:0; }
+code { font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:var(--code); padding:2px 6px; border-radius:5px; }
+pre.code { background:var(--code); border:1px solid var(--line);
+  border-radius:12px; padding:16px 18px; overflow-x:auto; margin:0 0 18px; }
+pre.code code { background:none; padding:0; font-size:13px; }
+.tablewrap { overflow-x:auto; margin:0 0 20px;
+  border:1px solid var(--line); border-radius:12px; }
+table { border-collapse:collapse; width:100%; font-size:14.5px; }
+th { text-align:left; padding:11px 15px; background:var(--panel);
+  font-weight:650; border-bottom:1px solid var(--line);
+  font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--muted); white-space:nowrap; }
+td { padding:11px 15px; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+tr:last-child td { border-bottom:0; }
+strong { color:var(--accent2); font-weight:640; }
+@media (max-width:900px) {
+  .wrap { grid-template-columns:1fr; gap:0; padding:32px 20px 80px; }
+  nav { position:static; margin-bottom:36px; }
+}
+</style></head><body>
+<div class="wrap">
+<nav><div class="navtitle">Contents</div><a href="#problem">Problem</a><a href="#decisions">Decisions</a><a href="#composition">Target composition</a><a href="#doors">The four doors</a><a href="#deletions">Deletions</a><a href="#additions">Additions</a><a href="#out-of-scope">Out of scope</a><a href="#risks">Risks</a><a href="#testing">Testing</a><a href="#done">Definition of done</a></nav>
+<main><h1 id="home-screen-launcher-design">Home Screen — Launcher Redesign</h1>
+<p><strong>Date:</strong> 2026-08-09 &nbsp;·&nbsp; <strong>Branch:</strong> <code>feature/reader-hypnotic-visuals</code> &nbsp;·&nbsp; <strong>Status:</strong> Design approved, not implemented</p>
+
+<h2 id="problem">Problem</h2>
+<p><code>HomeView.swift</code> is 838 lines rendering nine stacked sections that offer six distinct ways to start something.</p>
+<div class="tablewrap"><table><thead><tr><th>Affordance</th><th>Source</th><th>Starts</th></tr></thead><tbody>
+<tr><td>Begin orb</td><td><code>portalSection</code></td><td>a bundled light session</td></tr>
+<tr><td>State chips</td><td><code>stateChipsRow</code></td><td>a filtered list sheet</td></tr>
+<tr><td>Audio / Reader</td><td><code>HomeCoreActionsView</code></td><td>two of four modalities</td></tr>
+<tr><td>Continue card</td><td><code>continueSessionCard</code></td><td>last session or audio</td></tr>
+<tr><td>Session lists</td><td><code>mySessions</code>, <code>featuredSessions</code></td><td>a specific session</td></tr>
+<tr><td>Quick presets</td><td><code>quickStartSection</code></td><td>a flash session</td></tr>
+</tbody></table></div>
+
+<p>Three concrete defects sit behind that sprawl:</p>
+<ol>
+<li><strong>The chips lie.</strong> <code>CategorySessionSheet</code> filters by the frequency of a session's first moment, then falls back to <em>all sessions</em> when the filter is empty (<code>HomeView.swift:746</code>). <code>.trance</code> returns everything by design. Tapping "Sleep" and tapping "Focus" can present identical lists.</li>
+<li><strong>Two vocabularies for one concept.</strong> <code>stateChipsRow</code> names brainwave bands by intent (Sleep / Relax / Focus / Energy); <code>quickStartSection</code> names the same bands by Greek letter (Delta / Theta / Alpha). They map one-to-one and behave incompatibly — one shows a list, the other launches a session.</li>
+<li><strong>The recommender only sees canned content.</strong> <code>PortalRecommender.recommend</code> draws exclusively from the bundled <code>sessions</code> array (<code>PortalRecommender.swift:25</code>). It never considers imported audio or generated sessions, so home's primary action is a shortcut to shipped content.</li>
+</ol>
+
+<h3 id="root-cause">The root cause is navigational</h3>
+<p>The tab bar's four slots do not match the four things the product actually is.</p>
+<div class="tablewrap"><table><thead><tr><th>Product surface</th><th>Front door today</th><th>Depth</th></tr></thead><tbody>
+<tr><td>Reader</td><td><code>.read</code> tab</td><td>tab</td></tr>
+<tr><td>Audio analyzer</td><td><code>AudioLibraryView</code>, a sheet off home</td><td>sheet, no tab</td></tr>
+<tr><td>Hypnotic visuals</td><td>4th segment of Create's picker (<code>CreateSessionKind.swift:18</code>)</td><td>tab → segment</td></tr>
+<tr><td>Synced audio</td><td>tap an analyzed file in the audio library</td><td>sheet → row → player</td></tr>
+</tbody></table></div>
+<p>Meanwhile <code>Library</code> — browsing light sessions — holds a whole tab. Home has been compensating for that mismatch by growing a new entry point per modality.</p>
+
+<h2 id="decisions">Decisions</h2>
+<div class="tablewrap"><table><thead><tr><th>#</th><th>Question</th><th>Choice</th></tr></thead><tbody>
+<tr><td>1</td><td>What is home for?</td><td><strong>Launcher.</strong> One tap in, then get out of the way. Lists move to Library.</td></tr>
+<tr><td>2</td><td>What does it launch?</td><td><strong>No default modality.</strong> Reader, audio analysis, hypnotic visuals and synced audio are equal citizens.</td></tr>
+<tr><td>3</td><td>Does home adapt?</td><td><strong>Fixed doors, adaptive resume.</strong> The doors never move; one row above them reflects the last activity.</td></tr>
+<tr><td>4</td><td>Settings route</td><td><strong>Pinned gear in the home toolbar.</strong> <code>HomeView</code> already sits in a <code>NavigationStack</code>.</td></tr>
+<tr><td>5</td><td>Chips and presets</td><td><strong>Delete both rows.</strong> Intent and frequency selection belong in Create and Library.</td></tr>
+<tr><td>6</td><td>Tab bar</td><td><strong>Leave it alone this round.</strong> Home compensates via deep links.</td></tr>
+<tr><td>7</td><td>Visual direction</td><td><strong>D — quadrant field.</strong></td></tr>
+</tbody></table></div>
+
+<h3 id="on-decision-2">On decision 2</h3>
+<blockquote><p>"I don't want to pick the feature that the user wants. I want them to explore them all and then facilitate them using whatever part(s) of the app they enjoy."</p></blockquote>
+<p>Every downstream choice follows from this — notably the rejection of direction C (bento), whose asymmetric tile sizes encode a ranking the product does not want to assert.</p>
+
+<h3 id="on-decision-7">On decision 7</h3>
+<p>Four directions were mocked. <strong>D</strong> was chosen because it is the only one where all four doors are equal in size and none can be scrolled past, which is what "explore them all" requires. <strong>A</strong> (orb ritual) makes resume the hero and quietly biases toward repeating the last session. <strong>B</strong> (utility stack) is the accessibility fallback if the quadrants read as too bold on glass.</p>
+<p><strong>The quadrants are translucent, not flat fills.</strong> Solid colour blocks would fight <code>AuroraBackground</code> and <code>Color.bgPrimary</code>. Each quadrant is a <code>LiminalCard</code>-style glass surface (<code>DesignSystem/LiminalSurface.swift:79</code>) tinted with its modality colour, letting the aurora through.</p>
+
+<h2 id="composition">Target composition</h2>
+<ol>
+<li><strong>Toolbar</strong> — gear, trailing, pinned. Opens <code>ProfileSettingsView</code>.</li>
+<li><strong>Greeting</strong> — time-aware line plus name, from <code>portalSection</code>. Streak folds in as one muted line rather than <code>HomeStreakPill</code>'s own card.</li>
+<li><strong>Door quadrants</strong> — 2×2, equal weight, fixed order, filling the bulk of the screen.</li>
+<li><strong>Resume pill</strong> — full width, below the quadrants. Present only when there is something to resume.</li>
+</ol>
+<p><code>HomeView.swift</code> drops from 838 lines to roughly 200, with the quadrants extracted to their own file.</p>
+
+<h2 id="doors">The four doors</h2>
+<div class="tablewrap"><table><thead><tr><th>Door</th><th>Subtitle</th><th>Routes to</th></tr></thead><tbody>
+<tr><td>Listen</td><td>your audio, light-synced</td><td><code>showingAudioLibrary = true</code></td></tr>
+<tr><td>Read</td><td>scripts, paced</td><td><code>onOpenReader()</code> → <code>selectedTab = .read</code></td></tr>
+<tr><td>Visuals</td><td>a wordless field</td><td><code>selectedTab = .create</code>, kind <code>.visualField</code></td></tr>
+<tr><td>Pulse</td><td>flash entrainment</td><td><code>selectedTab = .create</code>, kind <code>.flash</code></td></tr>
+</tbody></table></div>
+<p>Audio analysis and synced playback are deliberately <strong>one door</strong>, not two. They are a single pipeline — import, analyze, then play synced — and as two doors the user would have to guess which to tap. Analysis is what happens inside Listen.</p>
+<p>The Visuals and Pulse doors land on the Create screen with the segment preselected, <strong>not</strong> straight into a running session. This preserves <code>CreateSessionKind.requiresSafetyWarning</code> on the light path and keeps the deliberate photosensitivity-warning exemption for <code>.visualField</code> intact.</p>
+
+<h2 id="deletions">Deletions</h2>
+<h3 id="removed-from-homeview">Removed from <code>HomeView.swift</code></h3>
+<div class="tablewrap"><table><thead><tr><th>Item</th><th>Lines (approx)</th></tr></thead><tbody>
+<tr><td><code>WordmarkView</code></td><td>100</td></tr>
+<tr><td><code>recentAudioSection</code> + <code>audioFileRow</code></td><td>110</td></tr>
+<tr><td><code>CategorySessionSheet</code></td><td>65</td></tr>
+<tr><td><code>quickStartSection</code> + <code>quickStartMiniCard</code></td><td>50</td></tr>
+<tr><td><code>greetingSection</code></td><td>35</td></tr>
+<tr><td><code>stateChipsRow</code></td><td>20</td></tr>
+</tbody></table></div>
+<h3 id="files-deleted">Files deleted outright</h3>
+<div class="tablewrap"><table><thead><tr><th>File</th><th>Lines</th><th>Note</th></tr></thead><tbody>
+<tr><td><code>HomeView+FeaturedSessions.swift</code></td><td>98</td><td>Library's job</td></tr>
+<tr><td><code>HomeStreakPill.swift</code></td><td>98</td><td>becomes one line in the greeting</td></tr>
+<tr><td><code>HomeCoreActionsView.swift</code></td><td>78</td><td>superseded by <code>HomeDoorsView</code></td></tr>
+<tr><td><code>HomeView+MySessions.swift</code></td><td>67</td><td>Library's job</td></tr>
+</tbody></table></div>
+<p><code>BrainwaveCategory</code> itself <strong>stays</strong> — <code>PortalRecommender</code>, <code>AuroraBackground</code>, <code>ThresholdView</code>, <code>MindMachineModel</code> and <code>LightSession+Metadata</code> all depend on it. Only its use as a home chip row goes away.</p>
+<p>Before deleting the my-sessions and featured sections, confirm Library already covers both. If it does not, that gap is fixed in Library <em>before</em> home drops the sections — not after.</p>
+
+<h2 id="additions">Additions</h2>
+
+<h3 id="last-activity"><code>LastActivity</code> — the one new piece of state</h3>
+<p>Home currently reads <code>lastSessionId</code> and <code>lastSessionProgress</code> from <code>@AppStorage</code> and matches the UUID against <code>sessions</code>, then <code>audioFiles</code>. That two-way guess cannot express "you were reading" or "you were in a visual field". <code>SessionHistoryEntry</code> (<code>SessionHistoryManager.swift:13</code>) records name, category, date, durations and completion — no modality either. <code>PlayerMode.analyticsName</code> (<code>Analytics/PlayerModeAnalytics.swift:19</code>) provides stable string keys but is wire format for TelemetryDeck, not local state.</p>
+<p>Add a small <code>Codable</code>, <code>Sendable</code> value written on player teardown and read once by home:</p>
+<pre class="code"><code>struct LastActivity: Codable, Sendable {
+    let mode: String          // PlayerMode.analyticsName
+    let identifier: String    // session or audio file UUID; empty for reader
+    let title: String         // display title for the pill
+    let progress: Double      // 0...1
+    let date: Date
+}</code></pre>
+<p>Persisted to <code>UserDefaults</code> under <code>lastActivity_v1</code>. Replaces <code>lastSessionId</code> and <code>lastSessionProgress</code> for home's purposes; migrate on first read so an existing in-progress session is not lost.</p>
+<p>Reader has no UUID-addressable item, so <code>identifier</code> is empty for <code>.read</code> and the pill routes to the Read tab rather than to a specific document.</p>
+
+<h3 id="create-kind"><code>CreateView</code> initial kind</h3>
+<p><code>CreateView.kind</code> is private <code>@State</code> defaulting to <code>.visualField</code> (<code>Create/CreateView.swift:15</code>). It needs to accept a requested kind from outside, following the <code>readerQuickStartTrigger</code> pattern already in <code>ContentView</code> so a repeat tap re-applies rather than being swallowed as a no-op.</p>
+
+<h3 id="new-files">New files</h3>
+<ul>
+<li><code>HomeDoorsView.swift</code> — the 2×2 quadrant grid</li>
+<li><code>HomeDoor.swift</code> — the door enum: title, subtitle, symbol, tint, route</li>
+<li><code>HomeResumePill.swift</code> — the resume affordance</li>
+<li><code>LastActivity.swift</code> — the record plus its store</li>
+</ul>
+
+<h2 id="out-of-scope">Out of scope</h2>
+<ul>
+<li>Reworking <code>TranceTabBar</code> to match the four modalities (decision 6 — follow-up).</li>
+<li>Reviving <code>ProfileView</code>, which is dead code: nothing constructs it but its own <code>#Preview</code>, so its stats, weekly chart and history are unreachable. <code>plan.md:113</code> claims this as done, which is true of the code and false of the product. Track separately: either give it a door or delete it.</li>
+<li>Collapsing <code>SettingsView</code>, a one-line wrapper returning <code>ProfileSettingsView()</code> (<code>SettingsView.swift:17</code>).</li>
+<li>Extending <code>PortalRecommender</code> to consider imported and generated content. The orb it fed is gone; if a first-run starter suggestion is wanted later, fix the recommender then.</li>
+</ul>
+
+<h2 id="risks">Risks</h2>
+<div class="tablewrap"><table><thead><tr><th>Risk</th><th>Mitigation</th></tr></thead><tbody>
+<tr><td>Quadrants read as too bold over the aurora</td><td>Glass tint, not flat fill. B (utility stack) is the pre-agreed fallback.</td></tr>
+<tr><td>Home and tab bar tell different stories</td><td>Accepted for this round; decision 6 revisits it.</td></tr>
+<tr><td>Deleting home's lists orphans content</td><td>Verify Library covers my-sessions and featured before deleting.</td></tr>
+<tr><td>Dynamic Type breaks the 2×2 grid</td><td>Quadrants must reflow to a single column at accessibility sizes.</td></tr>
+<tr><td><code>LastActivity</code> migration loses in-progress state</td><td>Migrate from <code>lastSessionId</code> / <code>lastSessionProgress</code> on first read.</td></tr>
+</tbody></table></div>
+
+<h2 id="testing">Testing</h2>
+<p>Swift Testing (<code>import Testing</code>), matching the existing suite.</p>
+<ul>
+<li><code>LastActivity</code> round-trips through <code>UserDefaults</code>; migration from the legacy <code>lastSessionId</code> / <code>lastSessionProgress</code> pair preserves an in-progress session.</li>
+<li>Each <code>HomeDoor</code> case maps to its expected route.</li>
+<li>The resume pill is absent when there is no last activity, and present with the correct title and remaining time when there is.</li>
+<li><code>CreateView</code> honours an injected initial kind, and re-applies it on a repeat trigger with the same value.</li>
+<li>Reader activity produces a pill that routes to the Read tab with an empty identifier.</li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests
+
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests</code></pre>
+
+<h2 id="done">Definition of done</h2>
+<ul>
+<li>Home renders greeting, 2×2 quadrants and a conditional resume pill — nothing else.</li>
+<li>The settings gear is reachable without scrolling, on both iOS and macOS.</li>
+<li>All four doors route correctly, with safety warnings intact on the light path.</li>
+<li>No reference to <code>WordmarkView</code>, <code>CategorySessionSheet</code>, <code>stateChipsRow</code> or <code>quickStartSection</code> remains.</li>
+<li>Quadrants reflow to one column at accessibility text sizes.</li>
+<li>Tests pass on macOS and iOS Simulator.</li>
+</ul>
+</main></div></body></html>
