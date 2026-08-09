@@ -24,7 +24,6 @@ struct ContentView: View {
     @State private var sessions: [LightSession] = []
     @State private var audioFiles: [AudioFile] = []
     @State private var selectedSession: LightSession?
-    @State private var showingAudioLibrary = false
     @State private var showingOnboarding = false
     @State private var showingAnalyticsConsentPrompt = false
     @State private var showingResumedPlayer = false
@@ -74,9 +73,6 @@ struct ContentView: View {
         }
         .platformFullScreenCover(item: $selectedSession) { session in
             UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
-        }
-        .sheet(isPresented: $showingAudioLibrary) {
-            AudioLibraryView(engine: engine)
         }
         .platformFullScreenCover(isPresented: $showingResumedPlayer) {
             if let resumedViewModel = nowPlaying.viewModel {
@@ -157,26 +153,22 @@ struct ContentView: View {
             if selectedTab == .home {
                 NavigationStack {
                     HomeView(
-                        showingAudioLibrary: $showingAudioLibrary,
                         selectedSession: $selectedSession,
                         sessions: sessions,
                         audioFiles: audioFiles,
                         engine: engine,
                         onRefresh: loadSessions,
+                        onOpenLibrary: { selectedTab = .library },
                         onOpenReader: { selectedTab = .read },
-                        onOpenCreate: openCreate
+                        onOpenCreate: openCreate,
+                        onOpenNowPlaying: { showingResumedPlayer = true },
+                        onContinueReading: openReaderQuickStart
                     )
                 }
                 .transition(.opacity)
             } else if selectedTab == .library {
-                LibraryView(
-                    engine: engine,
-                    onContinueReading: {
-                        selectedTab = .read
-                        readerQuickStartTrigger += 1
-                    }
-                )
-                .transition(.opacity)
+                LibraryView(engine: engine)
+                    .transition(.opacity)
             } else if selectedTab == .read {
                 TextTranceRootView(
                     sharedImportTrigger: readerSharedImportTrigger,
@@ -195,6 +187,12 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: selectedTab)
+    }
+
+    /// Home carries its own "Current" section, so the floating bar there would
+    /// put the same track on screen twice. Every other tab keeps it.
+    private var showsMiniPlayer: Bool {
+        nowPlaying.isActive && selectedTab != .home
     }
 
     private func bottomChrome(showsTabBar: Bool) -> some View {
@@ -224,7 +222,7 @@ struct ContentView: View {
                     BottomChromeMetrics.shared.analysisOverlayHeight = height
                 }
 
-                if nowPlaying.isActive {
+                if showsMiniPlayer {
                     MiniPlayerBar(nowPlaying: nowPlaying) {
                         showingResumedPlayer = true
                     }
@@ -235,7 +233,7 @@ struct ContentView: View {
                     TranceTabBar(selected: $selectedTab)
                 }
             }
-            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: nowPlaying.isActive)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showsMiniPlayer)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.currentAnalysis)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.failedAnalyses.count)
         }
@@ -304,6 +302,13 @@ struct ContentView: View {
         createRequestedKind = kind
         createKindRequestToken += 1
         selectedTab = .create
+    }
+
+    /// Sends the user to the reader and re-arms its quick-start card. The
+    /// trigger is bumped so asking twice in a row is not swallowed as a no-op.
+    private func openReaderQuickStart() {
+        selectedTab = .read
+        readerQuickStartTrigger += 1
     }
 
     private func handleDeepLink(_ url: URL) {

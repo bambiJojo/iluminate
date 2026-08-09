@@ -25,7 +25,6 @@ enum LibraryDestination: Hashable {
 struct LibraryView: View {
 
     @Bindable var engine: LightEngine
-    let onContinueReading: () -> Void
 
     @State private var audioFiles: [AudioFile] = []
     @State private var playlists: [Playlist] = []
@@ -41,8 +40,6 @@ struct LibraryView: View {
     @State private var cachedFilterChips: [LibraryFilterChip] = []
     @State private var searchText = ""
     @State private var quickFilter: LibraryQuickFilter = .all
-    @State private var readingContinuation: LibraryReadingContinuation?
-    @State private var playbackProgressStore = PlaybackProgressStore.shared
     @State private var savedSessionStore = SavedSessionStore.shared
     @State private var analysisManager = AnalysisStateManager.shared
     @State private var navPath = NavigationPath()
@@ -210,7 +207,6 @@ struct LibraryView: View {
                 loadPlaylists()
                 loadBuiltInSessions()
                 recomputeDerivedCollections()
-                loadReadingContinuation()
             }
             .onChange(of: audioFiles) { _, _ in recomputeDerivedCollections() }
             .onChange(of: analysisManager.partialResultsRevision) {
@@ -223,16 +219,10 @@ struct LibraryView: View {
 
     /// The default shelf stack. "Analyzed" is deliberately absent — it duplicated
     /// All Files card-for-card, and every card now carries its own analyzed seal.
+    /// "Continue" is absent too: it lives on home, next to the Current section,
+    /// so resuming does not require a tab hop first.
     @ViewBuilder
     private var browseShelves: some View {
-        LibraryContinuationSection(
-            listening: listeningContinuations,
-            reading: readingContinuation,
-            onContinueListening: continueListening,
-            onContinueReading: onContinueReading
-        )
-        .padding(.horizontal, TranceSpacing.screen)
-
         LibraryAnalysisStatusSection(
             manager: analysisManager,
             partialFiles: partialAnalysisFiles,
@@ -419,14 +409,6 @@ struct LibraryView: View {
     private var savedSessions: [LightSession] {
         builtInSessions.filter { savedSessionStore.contains($0.id.uuidString) }
     }
-    private var listeningContinuations: [PlaybackProgressSnapshot] {
-        playbackProgressStore.snapshots.filter { snapshot in
-            switch snapshot.kind {
-            case .audio: audioFiles.contains { $0.id.uuidString == snapshot.contentID }
-            case .session: builtInSessions.contains { $0.id.uuidString == snapshot.contentID }
-            }
-        }
-    }
     private var partialAnalysisFiles: [AudioFile] {
         audioFiles.filter { $0.hasTranscription && $0.isAnalyzed == false }
     }
@@ -525,17 +507,6 @@ struct LibraryView: View {
         navPath.append(file)
     }
 
-    private func continueListening(_ snapshot: PlaybackProgressSnapshot) {
-        switch snapshot.kind {
-        case .audio:
-            guard let file = audioFiles.first(where: { $0.id.uuidString == snapshot.contentID }) else { return }
-            playWithLights(file)
-        case .session:
-            guard let session = builtInSessions.first(where: { $0.id.uuidString == snapshot.contentID }) else { return }
-            playSession(session)
-        }
-    }
-
     private func openAnalysisQueue() {
         TranceHaptics.shared.light()
         showingAnalysisQueue = true
@@ -545,30 +516,6 @@ struct LibraryView: View {
         Task {
             analysisManager.evictCachedResult(for: file)
             await analysisManager.queueForAnalysis(file)
-        }
-    }
-
-    private func loadReadingContinuation() {
-        guard let state = ReaderProgressStore.shared.recentStates.first else {
-            readingContinuation = nil
-            return
-        }
-        let imported = ImportedTranceScriptStore.shared.importedScripts
-        let scripts = imported + TranceScriptLibrary.bundled().filter { candidate in
-            imported.contains { $0.id == candidate.id } == false
-        }
-        if let script = scripts.first(where: { $0.id == state.scriptId }) {
-            readingContinuation = LibraryReadingContinuation(
-                title: script.title,
-                wordIndex: state.wordIndex
-            )
-            return
-        }
-        if let document = ReadingDocumentStore.shared.documents.first(where: { $0.scriptID == state.scriptId }) {
-            readingContinuation = LibraryReadingContinuation(
-                title: document.title,
-                wordIndex: state.wordIndex
-            )
         }
     }
 

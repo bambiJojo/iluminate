@@ -10,7 +10,7 @@ struct HomeDoorTests {
 
     @Test
     func eachDoorRoutesToItsSurface() {
-        #expect(HomeDoor.listen.route == .audioLibrary)
+        #expect(HomeDoor.listen.route == .library)
         #expect(HomeDoor.read.route == .reader)
         #expect(HomeDoor.visuals.route == .create(.visualField))
         #expect(HomeDoor.pulse.route == .create(.flash))

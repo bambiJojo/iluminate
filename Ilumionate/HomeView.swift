@@ -10,6 +10,11 @@
 //  match the four things the app actually is. The doors below are that
 //  compensation, made explicit and made equal.
 //
+//  Under the doors sit the two "where was I" sections, in that order: Current
+//  is what is playing this second, Continue is what was left unfinished. They
+//  are deliberately below the doors — leading with resume would quietly bias
+//  every launch toward repeating the last session.
+//
 
 import SwiftUI
 
@@ -58,20 +63,24 @@ enum BrainwaveCategory: String, CaseIterable, Identifiable {
 // MARK: - HomeView
 
 struct HomeView: View {
-    @Binding var showingAudioLibrary: Bool
     @Binding var selectedSession: LightSession?
 
     let sessions: [LightSession]
     let audioFiles: [AudioFile]
     let engine: LightEngine
     let onRefresh: (() -> Void)?
+    let onOpenLibrary: () -> Void
     let onOpenReader: () -> Void
     let onOpenCreate: (CreateSessionKind) -> Void
+    let onOpenNowPlaying: () -> Void
+    let onContinueReading: () -> Void
 
     @State private var showingProfile = false
     @State private var playerFile: AudioFile?
     @State private var cardsVisible = false
+    @State private var readingContinuation: LibraryReadingContinuation?
     @State private var progressStore = PlaybackProgressStore.shared
+    @State private var nowPlaying = NowPlayingState.shared
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -97,9 +106,21 @@ struct HomeView: View {
                     HomeDoorsView(onSelect: open)
                         .cardEntrance(visible: cardsVisible, delay: 0.06, reduceMotion: reduceMotion)
 
-                    if let resume {
-                        HomeResumePill(state: resume) { open(resume) }
+                    // Gated here rather than inside the subviews: an empty
+                    // section still earns a VStack gap, which reads as a hole.
+                    if nowPlaying.isActive {
+                        HomeCurrentCard(nowPlaying: nowPlaying, onOpen: onOpenNowPlaying)
                             .cardEntrance(visible: cardsVisible, delay: 0.12, reduceMotion: reduceMotion)
+                    }
+
+                    if hasContinuations {
+                        LibraryContinuationSection(
+                            listening: listeningContinuations,
+                            reading: readingContinuation,
+                            onContinueListening: continueListening,
+                            onContinueReading: onContinueReading
+                        )
+                        .cardEntrance(visible: cardsVisible, delay: 0.18, reduceMotion: reduceMotion)
                     }
                 }
                 .padding(.horizontal, TranceSpacing.screen)
@@ -118,6 +139,7 @@ struct HomeView: View {
         }
         .onAppear {
             cardsVisible = false
+            loadReadingContinuation()
             Task {
                 try? await Task.sleep(for: .milliseconds(30))
                 cardsVisible = true
@@ -181,10 +203,27 @@ struct HomeView: View {
         return "\(currentGreeting) \(name)"
     }
 
-    // MARK: - Resume
+    // MARK: - Continue
 
-    private var resume: HomeResumeState? {
-        HomeResumeState(snapshot: progressStore.snapshots.first)
+    private var listeningContinuations: [PlaybackProgressSnapshot] {
+        HomeContinuationContent.listening(
+            snapshots: progressStore.snapshots,
+            audioFiles: audioFiles,
+            sessions: sessions
+        )
+    }
+
+    private var hasContinuations: Bool {
+        listeningContinuations.isEmpty == false || readingContinuation != nil
+    }
+
+    private func loadReadingContinuation() {
+        readingContinuation = HomeContinuationContent.reading(
+            state: ReaderProgressStore.shared.recentStates.first,
+            importedScripts: ImportedTranceScriptStore.shared.importedScripts,
+            bundledScripts: TranceScriptLibrary.bundled(),
+            documents: ReadingDocumentStore.shared.documents
+        )
     }
 
     // MARK: - Actions
@@ -193,8 +232,8 @@ struct HomeView: View {
         TranceHaptics.shared.light()
         UsageAnalytics.shared.homeCoreActionSelected(door.analyticsAction)
         switch door.route {
-        case .audioLibrary:
-            showingAudioLibrary = true
+        case .library:
+            onOpenLibrary()
         case .reader:
             onOpenReader()
         case .create(let kind):
@@ -202,19 +241,20 @@ struct HomeView: View {
         }
     }
 
-    private func open(_ state: HomeResumeState) {
+    private func continueListening(_ snapshot: PlaybackProgressSnapshot) {
         TranceHaptics.shared.medium()
-        switch state.kind {
+        switch snapshot.kind {
         case .audio:
-            playerFile = audioFiles.first { $0.id.uuidString == state.contentID }
+            playerFile = audioFiles.first { $0.id.uuidString == snapshot.contentID }
         case .session:
-            selectedSession = sessions.first { $0.id.uuidString == state.contentID }
+            selectedSession = sessions.first { $0.id.uuidString == snapshot.contentID }
         }
     }
 
     private func handleRefresh() async {
         TranceHaptics.shared.light()
         try? await Task.sleep(for: .seconds(0.8))
+        loadReadingContinuation()
         onRefresh?()
     }
 }
@@ -242,21 +282,22 @@ private extension View {
 
 #Preview {
     struct HomeViewPreview: View {
-        @State private var showingAudioLibrary = false
         @State private var selectedSession: LightSession?
         @State private var engine = LightEngine()
 
         var body: some View {
             NavigationStack {
                 HomeView(
-                    showingAudioLibrary: $showingAudioLibrary,
                     selectedSession: $selectedSession,
                     sessions: [],
                     audioFiles: [],
                     engine: engine,
                     onRefresh: nil,
+                    onOpenLibrary: {},
                     onOpenReader: {},
-                    onOpenCreate: { _ in }
+                    onOpenCreate: { _ in },
+                    onOpenNowPlaying: {},
+                    onContinueReading: {}
                 )
             }
         }

@@ -15,7 +15,7 @@ import SwiftUI
 
 /// Where a door sends you. `create` carries the segment to preselect.
 enum HomeDoorRoute: Equatable, Sendable {
-    case audioLibrary
+    case library
     case reader
     case create(CreateSessionKind)
 }
@@ -69,13 +69,16 @@ enum HomeDoor: String, CaseIterable, Identifiable, Sendable {
     /// gates the flash.
     var route: HomeDoorRoute {
         switch self {
-        case .listen:  .audioLibrary
+        case .listen:  .library
         case .read:    .reader
         case .visuals: .create(.visualField)
         case .pulse:   .create(.flash)
         }
     }
 
+    /// `listen` keeps the `audioLibrary` wire value even though it now opens the
+    /// Library tab. The case identifies *which door was tapped*, and renaming it
+    /// would split the metric in two at the point the destination changed.
     var analyticsAction: HomeCoreAction {
         switch self {
         case .listen:  .audioLibrary
