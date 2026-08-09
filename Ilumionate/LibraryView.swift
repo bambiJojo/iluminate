@@ -25,10 +25,14 @@ enum LibraryDestination: Hashable {
 struct LibraryView: View {
 
     @Bindable var engine: LightEngine
+    /// Decoded once by `ContentView` and handed down. Library used to re-run
+    /// `LightScoreReader` for all twelve bundled sessions in its own `.task`,
+    /// which meant a synchronous JSON decode on the main actor every single
+    /// time the Library tab was tapped.
+    let builtInSessions: [LightSession]
 
     @State private var audioFiles: [AudioFile] = []
     @State private var playlists: [Playlist] = []
-    @State private var builtInSessions: [LightSession] = []
     // Cached derived collections — recomputed only when audioFiles change
     @State private var cachedRecentFiles: [AudioFile] = []
     @State private var cachedFavoriteFiles: [AudioFile] = []
@@ -205,7 +209,6 @@ struct LibraryView: View {
             .task {
                 await loadAudioFiles()
                 loadPlaylists()
-                loadBuiltInSessions()
                 recomputeDerivedCollections()
             }
             .onChange(of: audioFiles) { _, _ in recomputeDerivedCollections() }
@@ -473,18 +476,6 @@ struct LibraryView: View {
 
     private func loadPlaylists() {
         playlists = PlaylistStore.load()
-    }
-
-    private func loadBuiltInSessions() {
-        var sessions: [LightSession] = []
-        for name in LightScoreReader.discoverBundledSessions() {
-            do {
-                sessions.append(try LightScoreReader.loadSession(named: name))
-            } catch {
-                Log.ui.info("Library: failed to load bundled session '\(name)': \(error)")
-            }
-        }
-        builtInSessions = sessions
     }
 
     private func playPlaylist(_ playlist: Playlist) {

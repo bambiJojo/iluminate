@@ -78,6 +78,7 @@ struct HomeView: View {
     @State private var showingProfile = false
     @State private var playerFile: AudioFile?
     @State private var cardsVisible = false
+    @State private var streakText: String?
     @State private var readingContinuation: LibraryReadingContinuation?
     @State private var progressStore = PlaybackProgressStore.shared
     @State private var nowPlaying = NowPlayingState.shared
@@ -140,6 +141,7 @@ struct HomeView: View {
         .onAppear {
             cardsVisible = false
             loadReadingContinuation()
+            refreshStreakText()
             Task {
                 try? await Task.sleep(for: .milliseconds(30))
                 cardsVisible = true
@@ -178,11 +180,17 @@ struct HomeView: View {
 
     /// Only shown once there is momentum worth protecting — a "0 day streak"
     /// is a discouragement, not a metric.
-    private var streakText: String? {
-        guard historyEnabled else { return nil }
+    ///
+    /// Cached in `@State` rather than computed in `body`: `currentStreak` walks
+    /// every history entry and builds a `Set` of days, and `body` can run many
+    /// times per second while the aurora drifts behind it.
+    private func refreshStreakText() {
+        guard historyEnabled else {
+            streakText = nil
+            return
+        }
         let streak = history.currentStreak
-        guard streak > 0 else { return nil }
-        return streak == 1 ? "1 day streak" : "\(streak) day streak"
+        streakText = streak > 0 ? (streak == 1 ? "1 day streak" : "\(streak) day streak") : nil
     }
 
     private var currentGreeting: String {
@@ -255,6 +263,7 @@ struct HomeView: View {
         TranceHaptics.shared.light()
         try? await Task.sleep(for: .seconds(0.8))
         loadReadingContinuation()
+        refreshStreakText()
         onRefresh?()
     }
 }

@@ -61,32 +61,56 @@ struct AuroraBackground: View {
         .ignoresSafeArea()
     }
 
+    /// Drives the drift. Flipped once on appear; the repeating animations below
+    /// carry it from there.
+    @State private var drifting = false
+
+    /// The drift used to run through `TimelineView(.animation)`, which re-evaluated
+    /// the whole stack every display frame — up to 120 times a second on ProMotion.
+    /// Since only the offsets changed, that re-rendered three identical blurs per
+    /// frame for nothing, and forced every `.ultraThinMaterial` surface above to
+    /// re-sample its backdrop just as often.
+    ///
+    /// Now the offsets are driven by repeating implicit animations, so the blobs
+    /// rasterize once and the compositor only moves them. Periods are mutually
+    /// prime-ish so the three never fall into lockstep.
     private var animatedBlobs: some View {
-        TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let phase = t * (2 * .pi / LiminalMotion.breathDuration)
-            ZStack {
-                blob(blobColors[0])
-                    .offset(x: -120 + CGFloat(sin(phase) * 40),
-                            y: -200 + CGFloat(cos(phase * 0.8) * 30))
-                blob(blobColors[1])
-                    .offset(x: 130 + CGFloat(cos(phase) * 35),
-                            y: 240 + CGFloat(sin(phase * 0.9) * 30))
-                blob(blobColors[2])
-                    .opacity(0.5)
-                    .offset(x: 60 + CGFloat(sin(phase * 1.1) * 30),
-                            y: 40 + CGFloat(cos(phase) * 40))
-            }
-            .ignoresSafeArea()
+        ZStack {
+            blob(blobColors[0])
+                .offset(x: drifting ? -80 : -160, y: drifting ? -170 : -230)
+                .animation(breath(LiminalMotion.breathDuration), value: drifting)
+
+            blob(blobColors[1])
+                .offset(x: drifting ? 165 : 95, y: drifting ? 270 : 210)
+                .animation(breath(LiminalMotion.breathDuration * 1.27), value: drifting)
+
+            blob(blobColors[2])
+                .opacity(0.5)
+                .offset(x: drifting ? 90 : 30, y: drifting ? 80 : 0)
+                .animation(breath(LiminalMotion.breathDuration * 1.63), value: drifting)
         }
+        .ignoresSafeArea()
+        .onAppear { drifting = true }
     }
 
+    private func breath(_ duration: Double) -> Animation {
+        .easeInOut(duration: duration).repeatForever(autoreverses: true)
+    }
+
+    /// A radial gradient rather than a solid circle behind `.blur(radius: 90)`.
+    /// The blur was an offscreen Gaussian pass per blob per frame; the gradient
+    /// is the same soft falloff drawn directly, with no extra pass.
     private func blob(_ color: Color) -> some View {
         Circle()
-            .fill(color)
+            .fill(
+                RadialGradient(
+                    colors: [color.opacity(blobOpacity), color.opacity(0)],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 210
+                )
+            )
             .frame(width: 420, height: 420)
-            .blur(radius: 90)
-            .opacity(blobOpacity)
     }
 }
 

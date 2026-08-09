@@ -165,16 +165,13 @@ struct ContentView: View {
                         onContinueReading: openReaderQuickStart
                     )
                 }
-                .transition(.opacity)
             } else if selectedTab == .library {
-                LibraryView(engine: engine)
-                    .transition(.opacity)
+                LibraryView(engine: engine, builtInSessions: sessions)
             } else if selectedTab == .read {
                 TextTranceRootView(
                     sharedImportTrigger: readerSharedImportTrigger,
                     quickStartTrigger: readerQuickStartTrigger
                 )
-                .transition(.opacity)
             } else if selectedTab == .create {
                 NavigationStack {
                     CreateView(
@@ -183,10 +180,8 @@ struct ContentView: View {
                         requestedKind: createRequestedKind
                     )
                 }
-                .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: selectedTab)
     }
 
     /// Home carries its own "Current" section, so the floating bar there would
