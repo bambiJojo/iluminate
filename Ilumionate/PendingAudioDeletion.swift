@@ -140,6 +140,28 @@ final class PendingAudioDeletion {
         staged = []
     }
 
+    // MARK: - Launch cleanup
+
+    /// Clears anything left in staging by a session that was killed mid-undo.
+    /// Those files are already absent from the library, so the delete stood —
+    /// this only reclaims the disk space. Call once at launch.
+    func sweepOrphans() {
+        guard staged.isEmpty else { return }
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: stagingRoot,
+            includingPropertiesForKeys: nil
+        ) else {
+            return
+        }
+
+        for url in contents {
+            try? fileManager.removeItem(at: url)
+        }
+        if !contents.isEmpty {
+            Log.audio.info("🧹 Swept \(contents.count) orphaned pending deletion(s)")
+        }
+    }
+
     // MARK: - Helpers
 
     /// One folder per file ID, so two files sharing a last path component

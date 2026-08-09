@@ -218,4 +218,49 @@ struct PendingAudioDeletionTests {
         subject.restore()
         #expect(sessionsDeleted.isEmpty, "undo must not destroy the light session")
     }
+
+    // MARK: - Launch cleanup
+
+    @Test
+    func sweepOrphansEmptiesTheStagingDirectory() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+
+        // Simulate a batch left over from a killed session.
+        let orphan = fixture.stagingURL.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: true)
+        try Data("stale".utf8).write(to: orphan.appending(path: "stale.mp3"))
+
+        let subject = makeSubject(fixture)
+        subject.sweepOrphans()
+
+        let leftovers = try FileManager.default.contentsOfDirectory(
+            at: fixture.stagingURL,
+            includingPropertiesForKeys: nil
+        )
+        #expect(leftovers.isEmpty)
+    }
+
+    @Test
+    func sweepOrphansLeavesALiveBatchAlone() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let subject = makeSubject(fixture)
+        let file = try fixture.makeFile(named: "one.mp3")
+
+        subject.stage([StagedAudioFile(file: file, originalURL: file.url, originalIndex: 0)])
+        subject.sweepOrphans()
+
+        // Still recoverable — sweeping must never eat a pending undo.
+        #expect(subject.restore().count == 1)
+        #expect(FileManager.default.fileExists(atPath: file.url.path))
+    }
+
+    @Test
+    func sweepOrphansOnAMissingDirectoryIsHarmless() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        // stagingURL was never created — nothing has been staged yet.
+        makeSubject(fixture).sweepOrphans()
+    }
 }
