@@ -144,34 +144,45 @@ before home drops the sections — not after.
 
 ## Additions
 
-### `LastActivity` — the one new piece of state
+### Resume reads the store that already exists
 
-Home currently reads `lastSessionId` and `lastSessionProgress` from `@AppStorage` and
-matches the UUID against `sessions`, then `audioFiles`. That two-way guess cannot
-express "you were reading" or "you were in a visual field".
-`SessionHistoryEntry` (`SessionHistoryManager.swift:13`) records name, category, date,
-durations and completion — no modality either. `PlayerMode.analyticsName`
-(`Analytics/PlayerModeAnalytics.swift:19`) provides stable string keys but is wire
-format for TelemetryDeck, not local state.
-
-Add a small `Codable`, `Sendable` value written on player teardown and read once by home:
+An earlier draft of this spec proposed a new `LastActivity` record. That was wrong —
+`PlaybackProgressStore` (`PlaybackProgressStore.swift`) already persists everything
+the pill needs:
 
 ```swift
-struct LastActivity: Codable, Sendable {
-    let mode: String          // PlayerMode.analyticsName
-    let identifier: String    // session or audio file UUID; empty for reader
-    let title: String         // display title for the pill
-    let progress: Double      // 0...1
-    let date: Date
+struct PlaybackProgressSnapshot: Codable, Identifiable, Equatable, Sendable {
+    let contentID: String
+    let kind: ResumablePlaybackKind   // .session | .audio
+    let title: String
+    let progress: Double
+    let duration: TimeInterval
+    let updatedAt: Date
 }
 ```
 
-Persisted to `UserDefaults` under `lastActivity_v1`. Replaces `lastSessionId` and
-`lastSessionProgress` for home's purposes; migrate on first read so an existing
-in-progress session is not lost.
+It keeps up to 20 snapshots ordered most-recent-first, is already consumed by
+`LibraryView:44`, and already has coverage in `PlaybackProgressStoreTests.swift`.
 
-Reader has no UUID-addressable item, so `identifier` is empty for `.read` and the
-pill routes to the Read tab rather than to a specific document.
+**The resume pill reads `PlaybackProgressStore.shared.snapshots.first`.** No new type,
+no new `UserDefaults` key, no migration. `kind` distinguishes session from audio,
+which is all the routing needs; `title`, `progress` and `duration` render the pill.
+
+Home stops reading `lastSessionId` / `lastSessionProgress` entirely.
+`UnifiedPlayerViewModel` keeps writing them — they still back
+`storedResumeID` / `storedResumeProgress` as a legacy fallback
+(`UnifiedPlayerViewModel.swift:1379`) — so nothing is removed from the player and
+there is no migration risk.
+
+#### Reader is not resumable, and that is not a regression
+
+`ResumablePlaybackKind` has only `.session` and `.audio`, and TextTrance never writes
+to the store. `resumableContentID` returns `nil` for flash, colour pulse, visual field
+and playlist (`UnifiedPlayerViewModel.swift:1402`), so those were never resumable
+either. The pill therefore covers sessions and audio — exactly what
+`continueSessionCard` and `ContinueAudioCard` cover today. Making the reader resumable
+means teaching TextTrance to write snapshots and adding a `.reader` case; that is its
+own piece of work, tracked separately.
 
 ### `CreateView` initial kind
 
@@ -185,7 +196,6 @@ tap re-applies rather than being swallowed as a no-op.
 - `HomeDoorsView.swift` — the 2×2 quadrant grid
 - `HomeDoor.swift` — the door enum: title, subtitle, symbol, tint, route
 - `HomeResumePill.swift` — the resume affordance
-- `LastActivity.swift` — the record plus its store
 
 ## Out of scope
 
@@ -208,21 +218,20 @@ tap re-applies rather than being swallowed as a no-op.
 | Home and tab bar tell different stories | Accepted for this round; decision 6 revisits it. |
 | Deleting home's lists orphans content | Verify Library covers my-sessions and featured before deleting. |
 | Dynamic Type breaks the 2×2 grid | Quadrants must reflow to a single column at accessibility sizes. |
-| `LastActivity` migration loses in-progress state | Migrate from `lastSessionId` / `lastSessionProgress` on first read. |
 
 ## Testing
 
 Swift Testing (`import Testing`), matching the existing suite.
 
-- `LastActivity` round-trips through `UserDefaults`; migration from the legacy
-  `lastSessionId` / `lastSessionProgress` pair preserves an in-progress session.
+- The resume pill renders the most recent `PlaybackProgressSnapshot`, and is absent
+  when the store is empty.
 - Each `HomeDoor` case maps to its expected route.
 - The resume pill is absent when there is no last activity, and present with the
   correct title and remaining time when there is.
 - `CreateView` honours an injected initial kind, and re-applies it on a repeat
   trigger with the same value.
-- Reader activity produces a pill that routes to the Read tab with an empty
-  identifier.
+- A snapshot with `kind == .audio` routes to the audio player; `kind == .session`
+  routes to the session player.
 
 Run on both destinations:
 

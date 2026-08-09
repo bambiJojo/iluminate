@@ -153,18 +153,22 @@ strong { color:var(--accent2); font-weight:640; }
 
 <h2 id="additions">Additions</h2>
 
-<h3 id="last-activity"><code>LastActivity</code> — the one new piece of state</h3>
-<p>Home currently reads <code>lastSessionId</code> and <code>lastSessionProgress</code> from <code>@AppStorage</code> and matches the UUID against <code>sessions</code>, then <code>audioFiles</code>. That two-way guess cannot express "you were reading" or "you were in a visual field". <code>SessionHistoryEntry</code> (<code>SessionHistoryManager.swift:13</code>) records name, category, date, durations and completion — no modality either. <code>PlayerMode.analyticsName</code> (<code>Analytics/PlayerModeAnalytics.swift:19</code>) provides stable string keys but is wire format for TelemetryDeck, not local state.</p>
-<p>Add a small <code>Codable</code>, <code>Sendable</code> value written on player teardown and read once by home:</p>
-<pre class="code"><code>struct LastActivity: Codable, Sendable {
-    let mode: String          // PlayerMode.analyticsName
-    let identifier: String    // session or audio file UUID; empty for reader
-    let title: String         // display title for the pill
-    let progress: Double      // 0...1
-    let date: Date
+<h3 id="resume-store">Resume reads the store that already exists</h3>
+<p>An earlier draft of this spec proposed a new <code>LastActivity</code> record. That was wrong — <code>PlaybackProgressStore</code> (<code>PlaybackProgressStore.swift</code>) already persists everything the pill needs:</p>
+<pre class="code"><code>struct PlaybackProgressSnapshot: Codable, Identifiable, Equatable, Sendable {
+    let contentID: String
+    let kind: ResumablePlaybackKind   // .session | .audio
+    let title: String
+    let progress: Double
+    let duration: TimeInterval
+    let updatedAt: Date
 }</code></pre>
-<p>Persisted to <code>UserDefaults</code> under <code>lastActivity_v1</code>. Replaces <code>lastSessionId</code> and <code>lastSessionProgress</code> for home's purposes; migrate on first read so an existing in-progress session is not lost.</p>
-<p>Reader has no UUID-addressable item, so <code>identifier</code> is empty for <code>.read</code> and the pill routes to the Read tab rather than to a specific document.</p>
+<p>It keeps up to 20 snapshots ordered most-recent-first, is already consumed by <code>LibraryView:44</code>, and already has coverage in <code>PlaybackProgressStoreTests.swift</code>.</p>
+<p><strong>The resume pill reads <code>PlaybackProgressStore.shared.snapshots.first</code>.</strong> No new type, no new <code>UserDefaults</code> key, no migration. <code>kind</code> distinguishes session from audio, which is all the routing needs; <code>title</code>, <code>progress</code> and <code>duration</code> render the pill.</p>
+<p>Home stops reading <code>lastSessionId</code> / <code>lastSessionProgress</code> entirely. <code>UnifiedPlayerViewModel</code> keeps writing them — they still back <code>storedResumeID</code> / <code>storedResumeProgress</code> as a legacy fallback (<code>UnifiedPlayerViewModel.swift:1379</code>) — so nothing is removed from the player and there is no migration risk.</p>
+
+<h4 id="reader-resume">Reader is not resumable, and that is not a regression</h4>
+<p><code>ResumablePlaybackKind</code> has only <code>.session</code> and <code>.audio</code>, and TextTrance never writes to the store. <code>resumableContentID</code> returns <code>nil</code> for flash, colour pulse, visual field and playlist (<code>UnifiedPlayerViewModel.swift:1402</code>), so those were never resumable either. The pill therefore covers sessions and audio — exactly what <code>continueSessionCard</code> and <code>ContinueAudioCard</code> cover today. Making the reader resumable means teaching TextTrance to write snapshots and adding a <code>.reader</code> case; that is its own piece of work, tracked separately.</p>
 
 <h3 id="create-kind"><code>CreateView</code> initial kind</h3>
 <p><code>CreateView.kind</code> is private <code>@State</code> defaulting to <code>.visualField</code> (<code>Create/CreateView.swift:15</code>). It needs to accept a requested kind from outside, following the <code>readerQuickStartTrigger</code> pattern already in <code>ContentView</code> so a repeat tap re-applies rather than being swallowed as a no-op.</p>
@@ -174,7 +178,6 @@ strong { color:var(--accent2); font-weight:640; }
 <li><code>HomeDoorsView.swift</code> — the 2×2 quadrant grid</li>
 <li><code>HomeDoor.swift</code> — the door enum: title, subtitle, symbol, tint, route</li>
 <li><code>HomeResumePill.swift</code> — the resume affordance</li>
-<li><code>LastActivity.swift</code> — the record plus its store</li>
 </ul>
 
 <h2 id="out-of-scope">Out of scope</h2>
@@ -191,17 +194,16 @@ strong { color:var(--accent2); font-weight:640; }
 <tr><td>Home and tab bar tell different stories</td><td>Accepted for this round; decision 6 revisits it.</td></tr>
 <tr><td>Deleting home's lists orphans content</td><td>Verify Library covers my-sessions and featured before deleting.</td></tr>
 <tr><td>Dynamic Type breaks the 2×2 grid</td><td>Quadrants must reflow to a single column at accessibility sizes.</td></tr>
-<tr><td><code>LastActivity</code> migration loses in-progress state</td><td>Migrate from <code>lastSessionId</code> / <code>lastSessionProgress</code> on first read.</td></tr>
 </tbody></table></div>
 
 <h2 id="testing">Testing</h2>
 <p>Swift Testing (<code>import Testing</code>), matching the existing suite.</p>
 <ul>
-<li><code>LastActivity</code> round-trips through <code>UserDefaults</code>; migration from the legacy <code>lastSessionId</code> / <code>lastSessionProgress</code> pair preserves an in-progress session.</li>
+<li>The resume pill renders the most recent <code>PlaybackProgressSnapshot</code>, and is absent when the store is empty.</li>
 <li>Each <code>HomeDoor</code> case maps to its expected route.</li>
 <li>The resume pill is absent when there is no last activity, and present with the correct title and remaining time when there is.</li>
 <li><code>CreateView</code> honours an injected initial kind, and re-applies it on a repeat trigger with the same value.</li>
-<li>Reader activity produces a pill that routes to the Read tab with an empty identifier.</li>
+<li>A snapshot with <code>kind == .audio</code> routes to the audio player; <code>kind == .session</code> routes to the session player.</li>
 </ul>
 <pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
   -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests
