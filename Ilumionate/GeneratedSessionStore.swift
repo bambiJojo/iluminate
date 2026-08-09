@@ -71,8 +71,31 @@ final class GeneratedSessionStore {
         return decodeSession(at: url)
     }
 
+    /// Whether a generated score exists, without paying to decode it.
+    ///
+    /// This used to be `load(for:) != nil`, which read the file, JSON-decoded it,
+    /// and on a miss attempted a legacy migration and decoded again — then
+    /// consulted the 830 KB known-audio catalog. Callers hit it once per row
+    /// (`AudioFileRow`) and once per file (`readyCount`), so a library of any
+    /// size spent that on the main actor on every appear.
+    ///
+    /// The cheap checks come first and answer for anything already on disk. Only
+    /// a file with no score anywhere falls through to the catalog.
+    ///
+    /// Trade-off: a present-but-corrupt score now reports `true` here while
+    /// `load(for:)` still returns nil. Badging a row optimistically is the
+    /// better failure than stalling the list.
     func exists(for audioFile: AudioFile) -> Bool {
-        load(for: audioFile) != nil
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: sessionURL(forAudioFileID: audioFile.id).path) {
+            return true
+        }
+        if legacySessionURLs(for: audioFile).contains(where: {
+            fileManager.fileExists(atPath: $0.path)
+        }) {
+            return true
+        }
+        return goldSessionProvider(audioFile) != nil
     }
 
     func delete(for audioFile: AudioFile) {

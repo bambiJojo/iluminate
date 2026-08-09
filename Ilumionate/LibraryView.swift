@@ -422,9 +422,11 @@ struct LibraryView: View {
         cachedAnalyzedFiles = LibraryShelfContent.analyzed(from: audioFiles)
         cachedAllFiles = LibraryShelfContent.allFiles(from: audioFiles)
         cachedRecommendedFiles = LibraryShelfContent.recommendedNext(from: audioFiles)
-        cachedGeneratedSessions = LibraryShelfContent.generatedSessions(from: audioFiles) { file in
-            GeneratedSessionStore.shared.load(for: file)
-        }
+        cachedGeneratedSessions = LibraryShelfContent.generatedSessions(
+            from: audioFiles,
+            hasSession: { GeneratedSessionStore.shared.exists(for: $0) },
+            sessionLookup: { GeneratedSessionStore.shared.load(for: $0) }
+        )
         cachedFilterChips = LibraryBrowseFilter.chips(for: audioFiles)
         if cachedFilterChips.contains(where: { $0.filter == quickFilter }) == false {
             quickFilter = .all
