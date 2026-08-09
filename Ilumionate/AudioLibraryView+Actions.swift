@@ -143,6 +143,25 @@ extension AudioLibraryView {
     /// Stages the whole selection as one batch, so a single Undo brings all of
     /// it back. Calling `deleteFile` in a loop would not — each `stage(_:)`
     /// commits the batch before it.
+    /// True when every *visible* file is selected. Scoped to the filtered set —
+    /// "Select All" must never reach files the current filter is hiding.
+    var allVisibleSelected: Bool {
+        !filteredAudioFiles.isEmpty && filteredAudioFiles.allSatisfy { selectedFiles.contains($0.id) }
+    }
+
+    func toggleSelectAll() {
+        TranceHaptics.shared.light()
+        if allVisibleSelected {
+            for file in filteredAudioFiles {
+                selectedFiles.remove(file.id)
+            }
+        } else {
+            for file in filteredAudioFiles {
+                selectedFiles.insert(file.id)
+            }
+        }
+    }
+
     func deleteSelectedFiles() {
         let entries = audioFiles.enumerated()
             .filter { selectedFiles.contains($0.element.id) }

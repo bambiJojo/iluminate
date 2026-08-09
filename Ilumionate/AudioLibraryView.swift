@@ -189,12 +189,20 @@ struct AudioLibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if !audioFiles.isEmpty {
-                        Button(isSelectionMode ? "Done" : "Select") {
-                            TranceHaptics.shared.light()
-                            if isSelectionMode {
-                                selectedFiles.removeAll()
+                        HStack(spacing: TranceSpacing.list) {
+                            Button(isSelectionMode ? "Done" : "Select") {
+                                TranceHaptics.shared.light()
+                                if isSelectionMode {
+                                    selectedFiles.removeAll()
+                                }
+                                isSelectionMode.toggle()
                             }
-                            isSelectionMode.toggle()
+
+                            if isSelectionMode {
+                                Button(allVisibleSelected ? "Deselect All" : "Select All") {
+                                    toggleSelectAll()
+                                }
+                            }
                         }
                         .font(TranceTypography.body)
                         .foregroundStyle(.roseGold)

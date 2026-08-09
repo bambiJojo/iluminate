@@ -15,18 +15,30 @@ extension AudioLibraryView {
                 GlassCard(label: resultsHeaderText) {
                     LazyVStack(spacing: TranceSpacing.card) {
                         ForEach(filteredAudioFiles) { file in
-                            // Every file gets a detail route — the detail screen
-                            // renders a "not analyzed yet" state for unanalyzed files.
-                            NavigationLink(value: file) {
-                                audioFileRow(for: file)
-                            }
-                            .buttonStyle(.plain)
-                            .swipeToDelete(
-                                id: file.id,
-                                openRowID: $openSwipeRowID,
-                                isEnabled: !isSelectionMode
-                            ) {
-                                deleteFile(file)
+                            if isSelectionMode {
+                                // The whole row is the target. Wrapping it in a
+                                // NavigationLink here sent taps to the detail
+                                // screen instead, leaving only the 52pt
+                                // thumbnail able to toggle selection.
+                                Button {
+                                    toggleSelection(for: file)
+                                } label: {
+                                    audioFileRow(for: file)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                // Every file gets a detail route — the detail screen
+                                // renders a "not analyzed yet" state for unanalyzed files.
+                                NavigationLink(value: file) {
+                                    audioFileRow(for: file)
+                                }
+                                .buttonStyle(.plain)
+                                .swipeToDelete(
+                                    id: file.id,
+                                    openRowID: $openSwipeRowID
+                                ) {
+                                    deleteFile(file)
+                                }
                             }
 
                             if file.id != filteredAudioFiles.last?.id {
