@@ -84,7 +84,9 @@ struct AudioLibraryView: View {
     @State var showingAddSheet = false
     @State var showingFilters = false
     // TODO: Replace with actual playlist model
-    @State var showingDeleteSelectedAlert = false
+    @State var pendingDeletion = PendingAudioDeletion.shared
+    /// Which row currently has its swipe action revealed. Only one at a time.
+    @State var openSwipeRowID: AudioFile.ID?
     @Environment(\.dismiss) private var dismiss
 
     private var analysisAttentionCount: Int {
@@ -120,8 +122,7 @@ struct AudioLibraryView: View {
                                 Spacer()
 
                                 Button {
-                                    TranceHaptics.shared.medium()
-                                    showingDeleteSelectedAlert = true
+                                    deleteSelectedFiles()
                                 } label: {
                                     Image(systemName: "trash.circle.fill")
                                         .symbolRenderingMode(.hierarchical)
@@ -234,14 +235,6 @@ struct AudioLibraryView: View {
             }
             .sheet(isPresented: $showingFilters) {
                 filtersSheet
-            }
-            .alert("Delete \(selectedFiles.count) Files?", isPresented: $showingDeleteSelectedAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Delete", role: .destructive) {
-                    deleteSelectedFiles()
-                }
-            } message: {
-                Text("Are you sure you want to delete these audio files? This action cannot be undone.")
             }
             .alert("Rename File", isPresented: $showingRenameAlert) {
                 TextField("New name", text: $newFilename)

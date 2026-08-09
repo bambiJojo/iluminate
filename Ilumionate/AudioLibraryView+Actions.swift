@@ -72,17 +72,23 @@ extension AudioLibraryView {
         Log.audio.info("✅ Added audio file: \(reviewedFile.filename)")
     }
 
+    /// Removes the row and stages the file for undo. Nothing is destroyed here —
+    /// `PendingAudioDeletion.commit()` does that once the undo window closes.
     func deleteFile(_ file: AudioFile) {
-        // Delete the audio file
-        try? FileManager.default.removeItem(at: file.url)
+        guard let index = audioFiles.firstIndex(where: { $0.id == file.id }) else { return }
 
-        // Delete the generated session if it exists
-        GeneratedSessionStore.shared.delete(for: file)
+        let staged = pendingDeletion.stage([
+            StagedAudioFile(file: file, originalURL: file.url, originalIndex: index)
+        ])
 
-        // Remove from list
-        audioFiles.removeAll { $0.id == file.id }
+        // The move failed, so the file is still sitting in Documents. Keep the
+        // row: dropping it would let the next library scan re-register the file
+        // as a duplicate.
+        guard !staged.isEmpty else { return }
+
+        audioFiles.remove(at: index)
         Task { await saveAudioFiles() }
-        Log.audio.info("🗑 Deleted: \(file.filename)")
+        TranceHaptics.shared.medium()
     }
 
     func renameFile(_ file: AudioFile, newName: String) {
@@ -134,15 +140,39 @@ extension AudioLibraryView {
         Log.audio.info("📋 Total selected: \(selectedFiles.count)")
     }
 
+    /// Stages the whole selection as one batch, so a single Undo brings all of
+    /// it back. Calling `deleteFile` in a loop would not — each `stage(_:)`
+    /// commits the batch before it.
     func deleteSelectedFiles() {
-        let filesToDelete = audioFiles.filter { selectedFiles.contains($0.id) }
-        for file in filesToDelete {
-            deleteFile(file)
-        }
+        let entries = audioFiles.enumerated()
+            .filter { selectedFiles.contains($0.element.id) }
+            .map { index, file in
+                StagedAudioFile(file: file, originalURL: file.url, originalIndex: index)
+            }
+        guard !entries.isEmpty else { return }
 
-        // Exit selection mode
+        let staged = pendingDeletion.stage(entries)
+        let stagedIDs = Set(staged.map(\.file.id))
+        audioFiles.removeAll { stagedIDs.contains($0.id) }
+        Task { await saveAudioFiles() }
+        TranceHaptics.shared.medium()
+
         selectedFiles.removeAll()
         isSelectionMode = false
+    }
+
+    /// Puts the staged batch back where it came from.
+    func undoDelete() {
+        let recovered = pendingDeletion.restore()
+        // Ascending by original index, so inserting in order reproduces the
+        // original arrangement. Clamped because filters or a concurrent reload
+        // may have changed the array's length in the meantime.
+        for entry in recovered {
+            audioFiles.insert(entry.file, at: min(entry.originalIndex, audioFiles.count))
+        }
+        Task { await saveAudioFiles() }
+        TranceHaptics.shared.light()
+        Log.audio.info("↩️ Restored \(recovered.count) deleted file(s)")
     }
 
     func analyzeSelectedFiles() {
@@ -233,6 +263,13 @@ extension AudioLibraryView {
                         isDownloadingURL = false
                         downloadError = "Download completed but the file could not be saved. Please try again."
                     }
+                }
+            } catch let rejection as AudioDownloadValidation.Rejection {
+                // Already counted as .audioURLServerRejected at the point of
+                // rejection, where the Content-Type is still in scope.
+                await MainActor.run {
+                    isDownloadingURL = false
+                    downloadError = rejection.userFacingMessage
                 }
             } catch let urlError as URLError where urlError.code == .badServerResponse {
                 UsageAnalytics.shared.errorOccurred(.audioURLServerRejected)
