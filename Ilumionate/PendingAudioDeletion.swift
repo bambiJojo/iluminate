@@ -118,8 +118,25 @@ final class PendingAudioDeletion {
 
     // MARK: - Commit
 
-    // TEMPORARY (Task 1 only) — replaced by the real implementation in Task 2.
+    /// Destroys the staged batch for real: the staged copies and each file's
+    /// generated light session. Called by the undo timer, banner dismissal,
+    /// the library disappearing, or the next `stage(_:)`.
     func commit() {
+        guard !staged.isEmpty else { return }
+
+        for entry in staged {
+            do {
+                try fileManager.removeItem(at: folderURL(for: entry))
+            } catch {
+                // sweepOrphans() reclaims this at next launch.
+                Log.audio.error(
+                    "Could not remove staged \(entry.file.filename, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
+            }
+            deleteGeneratedSession(entry.file)
+            Log.audio.info("🗑 Deleted: \(entry.file.filename, privacy: .public)")
+        }
+
         staged = []
     }
 

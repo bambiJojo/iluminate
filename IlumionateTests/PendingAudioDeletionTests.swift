@@ -154,4 +154,68 @@ struct PendingAudioDeletionTests {
         #expect(staged.first?.file.id == real.id)
         #expect(subject.staged.count == 1)
     }
+
+    // MARK: - Commit
+
+    @Test
+    func commitDeletesTheStagedFileAndItsGeneratedSession() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+
+        var sessionsDeleted: [AudioFile.ID] = []
+        let subject = makeSubject(fixture) { sessionsDeleted.append($0.id) }
+        let file = try fixture.makeFile(named: "one.mp3")
+
+        subject.stage([StagedAudioFile(file: file, originalURL: file.url, originalIndex: 0)])
+        subject.commit()
+
+        #expect(subject.staged.isEmpty)
+        #expect(sessionsDeleted == [file.id])
+        #expect(FileManager.default.fileExists(atPath: file.url.path) == false)
+        // Nothing left behind in staging.
+        let leftovers = try FileManager.default.contentsOfDirectory(
+            at: fixture.stagingURL,
+            includingPropertiesForKeys: nil
+        )
+        #expect(leftovers.isEmpty)
+    }
+
+    @Test
+    func stagingANewBatchCommitsThePreviousOne() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+
+        var sessionsDeleted: [AudioFile.ID] = []
+        let subject = makeSubject(fixture) { sessionsDeleted.append($0.id) }
+        let first = try fixture.makeFile(named: "first.mp3")
+        let second = try fixture.makeFile(named: "second.mp3")
+
+        subject.stage([StagedAudioFile(file: first, originalURL: first.url, originalIndex: 0)])
+        subject.stage([StagedAudioFile(file: second, originalURL: second.url, originalIndex: 0)])
+
+        // The first batch is gone for good; only the second is recoverable.
+        #expect(sessionsDeleted == [first.id])
+        #expect(subject.staged.map(\.file.id) == [second.id])
+
+        let recovered = subject.restore()
+        #expect(recovered.count == 1)
+        #expect(FileManager.default.fileExists(atPath: second.url.path))
+        #expect(FileManager.default.fileExists(atPath: first.url.path) == false)
+    }
+
+    @Test
+    func generatedSessionSurvivesUntilCommit() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+
+        var sessionsDeleted: [AudioFile.ID] = []
+        let subject = makeSubject(fixture) { sessionsDeleted.append($0.id) }
+        let file = try fixture.makeFile(named: "one.mp3")
+
+        subject.stage([StagedAudioFile(file: file, originalURL: file.url, originalIndex: 0)])
+        #expect(sessionsDeleted.isEmpty, "the light session must outlive the undo window")
+
+        subject.restore()
+        #expect(sessionsDeleted.isEmpty, "undo must not destroy the light session")
+    }
 }
