@@ -104,6 +104,13 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ✅ Glass card layout, deterministic waveform thumbnails
 - ✅ Import from Files, URL, in-app browser (shown in toolbar + empty state)
 - ✅ Analysis status indicators, batch delete + analyze-all
+- 🔄 Duplicate detection on import — content fingerprint and publisher provenance
+      checked at all three import doors before any bytes are written, so a repeat
+      BambiCloud playlist costs nothing and no `Name (1).mp3` is created. "Find
+      Duplicates" in the toolbar merges existing duplicates, folding in play
+      counts and ratings and repointing playlists. Automated coverage complete on
+      macOS and iOS; **awaiting on-device verification against real playlists**.
+      Design: `docs/superpowers/specs/2026-08-10-audio-duplicate-detection-design.md`
 - 🔄 "Analyze & Generate Session" per-file flow — backend ready, UI wiring pending
 
 ### Session Library (LibraryView)
