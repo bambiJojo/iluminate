@@ -80,18 +80,22 @@ struct FocusSpotSettingsTests {
         )
     }
 
-    @Test("The detent tolerance boundary is inclusive")
-    func detentToleranceBoundaryIsInclusive() {
-        // `.nextDown` nudges by one ULP: `1.0/3.0 + detentTolerance` computed and
-        // then subtracted back from 1.0/3.0 inside `snappingVerticalPosition`
-        // rounds to a hair over `detentTolerance` (0.020000000000000018), which
-        // would make this boundary spuriously fail an exact-equality test. The
-        // nudge keeps the case honest — right at the edge of the tolerance
-        // window — without asserting on a value floating-point can't represent.
-        let atTolerance = (1.0 / 3.0 + FocusSpotSettings.detentTolerance).nextDown
+    @Test("Values within the detent tolerance snap; values past it do not")
+    func detentToleranceIsRespected() {
+        // `1.0/3.0 + detentTolerance`, subtracted back from 1.0/3.0 inside
+        // `snappingVerticalPosition`, rounds to a hair OVER the tolerance
+        // (0.020000000000000018) and so would not snap. `.nextDown` steps one
+        // ULP below that, to 0.019999999999999962, which does.
+        //
+        // This case pins the tolerance MAGNITUDE — it fails if detentTolerance
+        // moves to 0.019 or 0.021. It does not pin the `<=` in
+        // `snappingVerticalPosition`: the ULP near 0.353 is ~16x coarser than
+        // the ULP of 0.02, so no Double distance equals the tolerance exactly
+        // and `<=` versus `<` is unobservable for every possible input.
+        let withinTolerance = (1.0 / 3.0 + FocusSpotSettings.detentTolerance).nextDown
         let justPastTolerance = 1.0 / 3.0 + 0.021
 
-        #expect(FocusSpotSettings.snappingVerticalPosition(atTolerance) == 1.0 / 3.0)
+        #expect(FocusSpotSettings.snappingVerticalPosition(withinTolerance) == 1.0 / 3.0)
         #expect(FocusSpotSettings.snappingVerticalPosition(justPastTolerance) == justPastTolerance)
     }
 
