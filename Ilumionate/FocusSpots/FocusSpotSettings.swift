@@ -16,10 +16,17 @@
 //  inherently proportional and should hold across portrait, landscape, and a
 //  resized Mac window.
 //
+//  Horizontal spacing and diameter are clamped independently, and a small
+//  spacing paired with a large diameter is permitted even though the two
+//  spots then overlap into a single blob. A cross-field invariant would mean
+//  a slider that refuses to shrink, which is worse than the overlap it would
+//  prevent — the calibration screen (Task 6) renders the pair live, so the
+//  user sees and can correct an overlap immediately.
+//
 
 import Foundation
 
-struct FocusSpotSettings: Codable, Equatable, Sendable {
+nonisolated struct FocusSpotSettings: Codable, Equatable, Sendable {
     /// Fraction of field height where the spot centres sit. 0 = top, 1 = bottom.
     var verticalPosition: Double
     /// Points between the two spot centres.
@@ -90,8 +97,9 @@ struct FocusSpotSettings: Codable, Equatable, Sendable {
         return abs(nearest - bounded) <= detentTolerance ? nearest : bounded
     }
 
-    /// `.nan` and `.infinity` survive `min`/`max` in ways that produce an
-    /// unrenderable field, so they are rejected before clamping.
+    /// `.nan` fails every comparison `min`/`max` make, so it is caught and
+    /// replaced with the default explicitly; `.infinity` compares correctly
+    /// and clamps to the relevant bound like any other out-of-range value.
     private static func clamp(
         _ value: Double,
         to range: ClosedRange<Double>,
@@ -106,9 +114,10 @@ struct FocusSpotSettings: Codable, Equatable, Sendable {
 
 /// Reads and writes the stored preference.
 ///
-/// Falls back to `.default` for an unset key, an undecodable value, and an
-/// out-of-range one — a bad write can never leave the field unrenderable.
-enum FocusSpotPreference {
+/// Falls back to `.default` for an unset key or an undecodable value, and
+/// clamps every field of a decoded value into range — a bad write can never
+/// leave the field unrenderable.
+nonisolated enum FocusSpotPreference {
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: AppSettingsManager.Key.focusSpotsEnabled)
