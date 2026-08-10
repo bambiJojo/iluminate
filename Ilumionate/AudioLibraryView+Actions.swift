@@ -66,6 +66,13 @@ extension AudioLibraryView {
     }
 
     func addAudioFile(_ file: AudioFile) async {
+        // The import may have resolved to a file already on the shelf, in which
+        // case there is nothing to add — inserting would put the same entry in
+        // the list twice.
+        guard !audioFiles.contains(where: { $0.id == file.id }) else {
+            Log.audio.info("↩️ Already in the library, not added again: \(file.filename)")
+            return
+        }
         let reviewedFile = KnownAudioCatalog.shared.applyingReviewedAnalysis(to: file) ?? file
         audioFiles.insert(reviewedFile, at: 0)
         await saveAudioFiles()

@@ -130,22 +130,29 @@ class AudioManager: NSObject {
 
     func importAudio(from url: URL) async -> AudioFile? {
         do {
-            let audioFile = try await AudioImportWorker.prepareAudioFile(
+            let outcome = try await AudioImportWorker.prepareAudioFile(
                 from: url,
                 targetFilename: url.lastPathComponent,
                 transferMode: .copy,
-                durationTimeout: .seconds(3)
+                durationTimeout: .seconds(3),
+                existing: DuplicateAudioIndex(AudioLibraryStore.load())
             )
 
-            let restoredAudioFile = AnalysisStateManager.shared.restoringCachedData(in: audioFile)
-            if restoredAudioFile.isAnalyzed {
-                Log.audio.info("⚡ Restored cached analysis for: \(audioFile.filename)")
+            switch outcome {
+            case .alreadyInLibrary(let existingID):
+                Log.audio.info("↩️ Already in the library: \(url.lastPathComponent, privacy: .public)")
+                return AudioLibraryStore.load().first { $0.id == existingID }
+
+            case .imported(let audioFile):
+                let restoredAudioFile = AnalysisStateManager.shared.restoringCachedData(in: audioFile)
+                if restoredAudioFile.isAnalyzed {
+                    Log.audio.info("⚡ Restored cached analysis for: \(audioFile.filename)")
+                }
+
+                Log.audio.info("✅ Imported audio: \(audioFile.filename) (Duration: \(audioFile.duration)s)")
+                UsageAnalytics.shared.audioImported(source: .files)
+                return restoredAudioFile
             }
-
-            Log.audio.info("✅ Imported audio: \(audioFile.filename) (Duration: \(audioFile.duration)s)")
-            UsageAnalytics.shared.audioImported(source: .files)
-            return restoredAudioFile
-
         } catch {
             Log.audio.info("❌ Failed to import audio: \(error)")
             UsageAnalytics.shared.errorOccurred(.audioFileImportFailed)
@@ -202,12 +209,22 @@ class AudioManager: NSObject {
         }
 
         do {
-            let audioFile = try await AudioImportWorker.prepareAudioFile(
+            let outcome = try await AudioImportWorker.prepareAudioFile(
                 from: tempURL,
                 targetFilename: targetName,
                 transferMode: .move,
-                durationTimeout: .seconds(5)
+                durationTimeout: .seconds(5),
+                existing: DuplicateAudioIndex(AudioLibraryStore.load())
             )
+
+            guard case .imported(let audioFile) = outcome else {
+                if case .alreadyInLibrary(let existingID) = outcome {
+                    try? FileManager.default.removeItem(at: tempURL)
+                    Log.audio.info("↩️ Downloaded audio was already in the library")
+                    return AudioLibraryStore.load().first { $0.id == existingID }
+                }
+                return nil
+            }
 
             let restoredAudioFile = AnalysisStateManager.shared.restoringCachedData(in: audioFile)
             if restoredAudioFile.isAnalyzed {
