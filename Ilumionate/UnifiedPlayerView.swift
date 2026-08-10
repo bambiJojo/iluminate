@@ -53,6 +53,14 @@ struct UnifiedPlayerView: View {
             // Layer 1: Background visual surface
             backgroundLayer
 
+            // Layer 1.5: Optional focus spots — holes in the light for the
+            // eye to rest on. Draws only over a lit field.
+            FocusSpotOverlay(
+                mode: viewModel.mode,
+                mindMachineEnabled: viewModel.mindMachineEnabled,
+                lightSyncEnabled: viewModel.lightSyncEnabled
+            )
+
             // Layer 2: Session lock overlay
             SessionLockView {
                 viewModel.stopAll()
