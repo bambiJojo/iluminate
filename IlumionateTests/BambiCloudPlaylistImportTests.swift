@@ -409,4 +409,32 @@ struct BambiCloudPlaylistImportTests {
         #expect(plan.rows[0].selectedAudioFileID == owned.id)
         #expect(plan.downloadableRows.isEmpty)
     }
+
+    // BambiCloud numbers its tracks from zero, so a user's 1-based "01 …"
+    // filename prefix is a different namespace from `trackNum`. Comparing the
+    // two made every file conflict with the track it belonged to, rejecting a
+    // whole numbered library at once.
+    @Test func aZeroBasedPublisherNumberIsNotComparedToAFilenamePrefix() throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
+             {"uuid":"\(UUID().uuidString)","name":"Rapid Induction","duration":162000,"trackNum":0},
+             {"uuid":"\(UUID().uuidString)","name":"Bubble Induction","duration":300000,"trackNum":1}
+            ]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        let first = AudioFile(filename: "01 Rapid Induction.mp3", duration: 162, fileSize: 1)
+        let second = AudioFile(filename: "02 Bubble Induction.mp3", duration: 300, fileSize: 2)
+
+        let plan = BambiCloudPlaylistImporter().makePlan(
+            for: playlist,
+            availableAudioFiles: [first, second]
+        )
+
+        #expect(plan.rows[0].selectedAudioFileID == first.id)
+        #expect(plan.rows[1].selectedAudioFileID == second.id)
+    }
 }

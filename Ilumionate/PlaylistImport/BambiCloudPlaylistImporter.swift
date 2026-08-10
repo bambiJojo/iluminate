@@ -151,23 +151,27 @@ struct BambiCloudPlaylistImporter {
         return min(titleScore + durationBonus, 1)
     }
 
-    /// True when both sides state a track position and the positions disagree.
+    /// True when both *names* open with a track position and they disagree.
     ///
     /// A numbered series is otherwise near-indistinguishable: every entry
     /// shares the same words, so title similarity alone ranks the wrong file
     /// as highly as the right one, and `automaticallyUsedIDs` then pushes the
     /// loser to `.missing` — where it gets downloaded as a duplicate.
+    ///
+    /// Only leading digits on both sides are compared. `track.trackNumber` is
+    /// deliberately not consulted: BambiCloud numbers from zero, so treating it
+    /// as the remote position made every `01 …` file conflict with the track it
+    /// belongs to and rejected an entire numbered library at once.
     private func hasTrackNumberConflict(
         track: BambiCloudPlaylist.Track,
         audioFile: AudioFile
     ) -> Bool {
         let localNumber = AudioTitleNormalizer.leadingTrackNumber(audioFile.filename)
             ?? AudioTitleNormalizer.leadingTrackNumber(audioFile.displayName)
-        guard let localNumber else { return false }
-
-        let remoteNumber = AudioTitleNormalizer.leadingTrackNumber(track.name)
-            ?? track.trackNumber
-        guard let remoteNumber else { return false }
+        guard let localNumber,
+              let remoteNumber = AudioTitleNormalizer.leadingTrackNumber(track.name) else {
+            return false
+        }
 
         return localNumber != remoteNumber
     }
