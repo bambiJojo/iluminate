@@ -97,6 +97,8 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ✅ Visual mode selector: Flash / Color Pulse / Bilateral
 - ✅ Safety warning before entering flash mode
 - ✅ Screen brightness set to 1.0 during flash, restored on stop
+- ✅ Focus Spots — optional black fixation spots over the light field, with a
+      calibration screen for vertical position, spacing, and diameter
 
 ### Audio Library (AudioLibraryView)
 - ✅ Glass card layout, deterministic waveform thumbnails
