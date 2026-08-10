@@ -332,4 +332,81 @@ struct BambiCloudPlaylistImportTests {
 
         #expect(plan.rows[0].selectedAudioFileID == local.id)
     }
+
+    @Test func aLikelyDuplicateIsOfferedRatherThanDownloaded() async throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
+             {"uuid":"\(UUID().uuidString)","name":"Renamed Beyond Recognition","duration":600000,
+              "audioURL":"https://cdn.bambicloud.com/x.mp3","trackNum":1}
+            ]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        // Same byte size and duration — strong, but not conclusive.
+        let owned = AudioFile(
+            filename: "Original Name.mp3",
+            duration: 600,
+            fileSize: 5_000_000
+        )
+
+        let model = BambiCloudPlaylistImportViewModel(
+            availableAudioFiles: [owned],
+            downloader: PlaylistTrackDownloader(
+                documentsURL: URL.temporaryDirectory,
+                probe: { _ in
+                    (Data(), URLResponse(
+                        url: URL(string: "https://cdn.bambicloud.com/x.mp3")!,
+                        mimeType: nil,
+                        expectedContentLength: 5_000_000,
+                        textEncodingName: nil
+                    ))
+                }
+            ) { _ in
+                Issue.record("A likely duplicate was downloaded without asking")
+                throw PlaylistTrackDownloadError.networkUnavailable
+            },
+            isAutoAnalyseEnabled: { false }
+        )
+        model.adoptPlanForTesting(
+            BambiCloudPlaylistImporter().makePlan(
+                for: playlist,
+                availableAudioFiles: [owned]
+            )
+        )
+
+        let row = try #require(model.plan?.rows.first)
+        await model.requestDownload(of: row)
+
+        #expect(model.plan?.rows.first?.status == .possibleDuplicate(existing: owned.id))
+        #expect(model.plan?.rows.first?.selectedAudioFileID == nil)
+    }
+
+    @Test func useExistingResolvesAPossibleDuplicate() throws {
+        let owned = AudioFile(filename: "Original Name.mp3", duration: 600, fileSize: 5_000_000)
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
+             {"uuid":"\(UUID().uuidString)","name":"Renamed Beyond Recognition","duration":600000,
+              "audioURL":"https://cdn.bambicloud.com/x.mp3","trackNum":1}]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        var plan = BambiCloudPlaylistImporter().makePlan(
+            for: playlist,
+            availableAudioFiles: [owned]
+        )
+        let rowID = try #require(plan.rows.first?.id)
+
+        plan.markPossibleDuplicate(existing: owned.id, forRow: rowID)
+        #expect(plan.rows[0].status == .possibleDuplicate(existing: owned.id))
+
+        plan.select(audioFileID: owned.id, forRow: rowID)
+        #expect(plan.rows[0].selectedAudioFileID == owned.id)
+        #expect(plan.downloadableRows.isEmpty)
+    }
 }

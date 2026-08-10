@@ -95,13 +95,43 @@ final class BambiCloudPlaylistImportViewModel {
         downloadingRowIDs.contains(rowID)
     }
 
-    /// Entry point for the per-track Download button. Large files are held for
-    /// confirmation rather than refused; everything else starts immediately.
+    /// Entry point for the per-track Download button.
+    ///
+    /// Three outcomes before a single byte is fetched: the library already has
+    /// this (bind and stop), the library probably has this (ask), or the file
+    /// is large enough to be worth confirming.
     func requestDownload(of row: BambiCloudPlaylistImportPlan.Row) async {
         guard !downloadingRowIDs.contains(row.id) else { return }
 
         downloadErrors[row.id] = nil
+
         let size = try? await downloader.expectedSize(of: row.track)
+        let verdict = DuplicateAudioIndex(availableAudioFiles).verdict(
+            for: DuplicateAudioCandidate(
+                remoteSource: row.track.audioURL.map { url in
+                    RemoteAudioSource(
+                        service: RemoteAudioSource.bambiCloudService,
+                        trackID: row.track.id.uuidString,
+                        url: url
+                    )
+                },
+                fileSize: size,
+                duration: row.track.duration,
+                title: row.track.name
+            )
+        )
+
+        switch verdict {
+        case .identical(let existingID):
+            plan?.select(audioFileID: existingID, forRow: row.id)
+            plan?.markResolvedAsExisting(rowID: row.id)
+            return
+        case .likely(let existingID, _):
+            plan?.markPossibleDuplicate(existing: existingID, forRow: row.id)
+            return
+        case .distinct:
+            break
+        }
 
         if let size, size > PlaylistTrackDownloader.confirmationThresholdBytes {
             pendingDownload = PendingLargeDownload(
@@ -112,6 +142,11 @@ final class BambiCloudPlaylistImportViewModel {
         }
 
         await downloadRow(row)
+    }
+
+    /// The user chose to fetch a fresh copy despite the likely match.
+    func downloadAnyway(_ row: BambiCloudPlaylistImportPlan.Row) async {
+        await downloadRow(row, allowingLargeFile: true)
     }
 
     func requestDownloadOfAllMissingTracks() async {

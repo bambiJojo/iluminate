@@ -40,6 +40,12 @@ struct BambiCloudPlaylistImportView: View {
                         onDownload: { row in
                             Task { await model.requestDownload(of: row) }
                         },
+                        onUseExisting: { row, existingID in
+                            model.select(audioFileID: existingID, forRow: row.id)
+                        },
+                        onDownloadAnyway: { row in
+                            Task { await model.downloadAnyway(row) }
+                        },
                         onDownloadAll: {
                             Task { await model.requestDownloadOfAllMissingTracks() }
                         },

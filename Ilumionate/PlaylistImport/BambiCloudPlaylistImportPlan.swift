@@ -9,13 +9,17 @@ import Foundation
 /// user's library.
 struct BambiCloudPlaylistImportPlan {
     struct Row: Identifiable {
-        enum Status: String, Equatable {
+        /// Raw type deliberately absent: `.possibleDuplicate` carries the
+        /// library file it may duplicate, and `rawValue` had no readers.
+        enum Status: Equatable {
             case exact
             case probable
             case needsReview
             case missing
             case manual
             case downloaded
+            /// Strong but circumstantial evidence the user already has this.
+            case possibleDuplicate(existing: AudioFile.ID)
         }
 
         /// Identity belongs to the position in the playlist, not the track: a
@@ -86,6 +90,13 @@ struct BambiCloudPlaylistImportPlan {
             return
         }
         rows[index].status = .exact
+    }
+
+    /// Flags a row as probably already in the library, without acting on it.
+    /// The user chooses between the existing file and a fresh download.
+    mutating func markPossibleDuplicate(existing: AudioFile.ID, forRow rowID: Row.ID) {
+        guard let index = rows.firstIndex(where: { $0.id == rowID }) else { return }
+        rows[index].status = .possibleDuplicate(existing: existing)
     }
 
     /// Adds a freshly downloaded file to the library snapshot and assigns it to
