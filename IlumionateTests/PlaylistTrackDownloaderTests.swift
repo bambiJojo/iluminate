@@ -251,4 +251,23 @@ struct PlaylistTrackDownloaderTests {
             try await downloader.download(track)
         }
     }
+
+    @Test("A saved download carries its fingerprint and its provenance")
+    func savedDownloadCarriesIdentity() async throws {
+        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/a.mp3")
+        let documents = try temporaryDirectory()
+
+        let downloader = PlaylistTrackDownloader(documentsURL: documents) { _ in
+            let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
+            try Data("audio-bytes".utf8).write(to: temp)
+            return (temp, URLResponse())
+        }
+
+        let audioFile = try await downloader.download(track)
+
+        #expect(audioFile.contentFingerprint?.count == 64)
+        #expect(audioFile.remoteSource?.service == RemoteAudioSource.bambiCloudService)
+        #expect(audioFile.remoteSource?.trackID == track.id.uuidString)
+        #expect(audioFile.remoteSource?.url.absoluteString == "https://cdn.bambicloud.com/a.mp3")
+    }
 }

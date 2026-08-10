@@ -106,7 +106,13 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
         return AudioFile(
             filename: destination.lastPathComponent,
             duration: await measuredDuration(of: destination, fallback: track.duration),
-            fileSize: Int64(byteCount)
+            fileSize: Int64(byteCount),
+            contentFingerprint: AudioFingerprintService.computeFingerprint(for: destination),
+            remoteSource: RemoteAudioSource(
+                service: RemoteAudioSource.bambiCloudService,
+                trackID: track.id.uuidString,
+                url: source
+            )
         )
     }
 
