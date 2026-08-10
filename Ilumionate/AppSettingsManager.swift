@@ -20,6 +20,8 @@ enum AppSettingsManager {
         static let countdownDuration = "countdownDuration"
         static let steadyLightEnabled = "steadyLightEnabled"
         static let flashTint = "flashTint"
+        static let focusSpotsEnabled = "focusSpotsEnabled"
+        static let focusSpots = "focusSpots"
         static let mindMachineEnabled = "mindMachineEnabled"
         static let listeningHistoryEnabled = "listeningHistoryEnabled"
         static let nsfwSourcesEnabled = "nsfwSourcesEnabled"
@@ -169,6 +171,8 @@ enum AppSettingsManager {
         defaults.set(3, forKey: Key.countdownDuration)
         defaults.set(false, forKey: Key.steadyLightEnabled)
         defaults.removeObject(forKey: Key.flashTint)
+        defaults.set(false, forKey: Key.focusSpotsEnabled)
+        defaults.removeObject(forKey: Key.focusSpots)
         defaults.set(true, forKey: Key.mindMachineEnabled)
         defaults.set(false, forKey: Key.listeningHistoryEnabled)
         defaults.set(false, forKey: Key.nsfwSourcesEnabled)
