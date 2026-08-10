@@ -32,7 +32,10 @@ struct LibraryView: View {
     let builtInSessions: [LightSession]
 
     @State private var audioFiles: [AudioFile] = []
-    @State private var playlists: [Playlist] = []
+    /// Seeded at construction, not in `.task`. `.task` runs after the first
+    /// paint, so loading there left the playlist shelf empty for a frame.
+    /// `PlaylistStore.load()` is cached, so this is free on re-entry.
+    @State private var playlists: [Playlist] = PlaylistStore.load()
     // Cached derived collections — recomputed only when audioFiles change
     @State private var cachedRecentFiles: [AudioFile] = []
     @State private var cachedFavoriteFiles: [AudioFile] = []
@@ -207,9 +210,9 @@ struct LibraryView: View {
                 )
             }
             .task {
-                await loadAudioFiles()
                 loadPlaylists()
                 recomputeDerivedCollections()
+                await loadAudioFiles()
             }
             .onChange(of: audioFiles) { _, _ in recomputeDerivedCollections() }
             .onChange(of: analysisManager.partialResultsRevision) {
