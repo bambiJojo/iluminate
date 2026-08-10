@@ -119,9 +119,8 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ✅ Settings split into 3 files (SwiftLint compliant)
 - ✅ Session Notifications toggle, Export Session Data
 - ✅ Intensity, duration, bilateral, frequency scale, listening history toggles
-- ❌ Profile with weekly activity chart, session history — `ProfileView` exists but is
-      unreachable (nothing constructs it but its own `#Preview`); either give it an
-      entry point or delete it
+- ✅ Profile with weekly activity chart, session history — in `ProfileSettingsView`,
+      reached from the home toolbar gear ("Profile & Settings")
 - 🔄 Accessibility options — Steady Light toggle ✅ (Session Defaults); Dynamic Type toggles still open
 - ❌ Achievements / milestones section
 
