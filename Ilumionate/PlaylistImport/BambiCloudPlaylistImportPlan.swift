@@ -76,6 +76,18 @@ struct BambiCloudPlaylistImportPlan {
         rows[index].status = audioFileID == nil ? .missing : .manual
     }
 
+    /// Marks a row filled from audio the library already held.
+    ///
+    /// `select` reports `.manual` because it is the user's own choice; a
+    /// duplicate resolved automatically is an exact match, and reads as one.
+    mutating func markResolvedAsExisting(rowID: Row.ID) {
+        guard let index = rows.firstIndex(where: { $0.id == rowID }),
+              rows[index].selectedAudioFileID != nil else {
+            return
+        }
+        rows[index].status = .exact
+    }
+
     /// Adds a freshly downloaded file to the library snapshot and assigns it to
     /// the row it was fetched for — and to any other unfilled row listing the
     /// same track, so a repeated track is not downloaded twice.

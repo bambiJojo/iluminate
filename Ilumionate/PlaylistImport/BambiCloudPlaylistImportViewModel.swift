@@ -155,33 +155,64 @@ final class BambiCloudPlaylistImportViewModel {
         pendingDownload = nil
     }
 
-    /// Fetches the publisher's own copy of a track the user does not have and
-    /// files it in the library, so the imported playlist can be complete.
+    /// Fills a row the matcher could not resolve — from the library when the
+    /// track is already there, and from the publisher only when it is not.
     func downloadRow(
         _ row: BambiCloudPlaylistImportPlan.Row,
         allowingLargeFile: Bool = false
     ) async {
         guard !downloadingRowIDs.contains(row.id) else { return }
 
+        let index = DuplicateAudioIndex(availableAudioFiles)
+
+        // Free, and it runs before any request: a track fetched from a previous
+        // playlist is recognised by the publisher's own identifier.
+        if let audioURL = row.track.audioURL {
+            let verdict = index.verdict(
+                for: DuplicateAudioCandidate(
+                    remoteSource: RemoteAudioSource(
+                        service: RemoteAudioSource.bambiCloudService,
+                        trackID: row.track.id.uuidString,
+                        url: audioURL
+                    ),
+                    duration: row.track.duration,
+                    title: row.track.name
+                )
+            )
+            if case .identical(let existingID) = verdict {
+                plan?.select(audioFileID: existingID, forRow: row.id)
+                plan?.markResolvedAsExisting(rowID: row.id)
+                return
+            }
+        }
+
         downloadingRowIDs.insert(row.id)
         downloadErrors[row.id] = nil
         defer { downloadingRowIDs.remove(row.id) }
 
         do {
-            let audioFile = try await downloader.download(
+            let outcome = try await downloader.download(
                 row.track,
-                allowingLargeFile: allowingLargeFile
+                allowingLargeFile: allowingLargeFile,
+                existing: index
             )
 
-            // Re-read the library so a download never clobbers changes made
-            // elsewhere while this sheet has been open.
-            var library = AudioLibraryStore.load()
-            library.insert(audioFile, at: 0)
-            await AudioLibraryStore.save(library)
+            switch outcome {
+            case .alreadyInLibrary(let existingID):
+                plan?.select(audioFileID: existingID, forRow: row.id)
+                plan?.markResolvedAsExisting(rowID: row.id)
 
-            availableAudioFiles.insert(audioFile, at: 0)
-            plan?.adopt(downloadedFile: audioFile, forRow: row.id)
-            await queueForAnalysis(audioFile)
+            case .saved(let audioFile):
+                // Re-read the library so a download never clobbers changes made
+                // elsewhere while this sheet has been open.
+                var library = AudioLibraryStore.load()
+                library.insert(audioFile, at: 0)
+                await AudioLibraryStore.save(library)
+
+                availableAudioFiles.insert(audioFile, at: 0)
+                plan?.adopt(downloadedFile: audioFile, forRow: row.id)
+                await queueForAnalysis(audioFile)
+            }
         } catch PlaylistTrackDownloadError.confirmationRequired(let byteCount) {
             // The server under-reported the size up front; ask rather than fail.
             pendingDownload = PendingLargeDownload(

@@ -228,4 +228,54 @@ struct BambiCloudPlaylistImportTests {
             expectedID: playlistID
         )
     }
+
+    // The user's actual complaint: a second playlist sharing tracks with the
+    // first re-downloaded every one of them. Provenance makes that free.
+    @Test func aPreviouslyDownloadedTrackIsNotRequestedAgain() async throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let trackID = try #require(UUID(uuidString: "c311778b-d79b-4f3a-8729-3474cda134b4"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"Second",
+             "files":[{"uuid":"\(trackID.uuidString.lowercased())","name":"Shared Track",
+             "duration":600000,"audioURL":"https://cdn.bambicloud.com/shared.mp3","trackNum":1}]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        var owned = AudioFile(
+            filename: "Something The Matcher Will Never Guess.mp3",
+            duration: 600,
+            fileSize: 5_000_000
+        )
+        owned.remoteSource = RemoteAudioSource(
+            service: RemoteAudioSource.bambiCloudService,
+            trackID: trackID.uuidString,
+            url: try #require(URL(string: "https://cdn.bambicloud.com/shared.mp3"))
+        )
+
+        let model = BambiCloudPlaylistImportViewModel(
+            availableAudioFiles: [owned],
+            downloader: PlaylistTrackDownloader(
+                documentsURL: URL.temporaryDirectory
+            ) { _ in
+                Issue.record("A track already in the library was downloaded again")
+                throw PlaylistTrackDownloadError.networkUnavailable
+            },
+            isAutoAnalyseEnabled: { false }
+        )
+        model.adoptPlanForTesting(
+            BambiCloudPlaylistImporter().makePlan(
+                for: playlist,
+                availableAudioFiles: [owned]
+            )
+        )
+
+        let row = try #require(model.plan?.rows.first)
+        await model.downloadRow(row)
+
+        #expect(model.plan?.rows.first?.selectedAudioFileID == owned.id)
+        #expect(model.plan?.rows.first?.status == .exact)
+        #expect(model.downloadErrors.isEmpty)
+    }
 }
