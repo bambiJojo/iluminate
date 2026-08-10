@@ -278,4 +278,58 @@ struct BambiCloudPlaylistImportTests {
         #expect(model.plan?.rows.first?.status == .exact)
         #expect(model.downloadErrors.isEmpty)
     }
+
+    // With the old normalizer both local files reduced to "bambi sleep", so
+    // row 01 claimed one, row 02 found it taken, and row 02 was downloaded.
+    @Test func aNumberedSeriesMatchesRowForRow() throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"Series","files":[
+             {"uuid":"\(UUID().uuidString)","name":"01 Bambi Sleep","duration":600000,"trackNum":1},
+             {"uuid":"\(UUID().uuidString)","name":"02 Bambi Sleep","duration":600000,"trackNum":2}
+            ]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        let first = AudioFile(filename: "01 Bambi Sleep.mp3", duration: 600, fileSize: 1)
+        let second = AudioFile(filename: "02 Bambi Sleep.mp3", duration: 600, fileSize: 2)
+
+        let plan = BambiCloudPlaylistImporter().makePlan(
+            for: playlist,
+            availableAudioFiles: [first, second]
+        )
+
+        #expect(plan.rows[0].selectedAudioFileID == first.id)
+        #expect(plan.rows[1].selectedAudioFileID == second.id)
+        #expect(plan.downloadableRows.isEmpty)
+    }
+
+    @Test func theSourceFilenameMatchesWhenTheTitleDoesNot() throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
+             {"uuid":"\(UUID().uuidString)","name":"Bambi Sleep — Uniform Acceptance",
+              "duration":600000,
+              "audioURL":"https://cdn.bambicloud.com/bs-uniform-acceptance.mp3","trackNum":1}
+            ]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        let local = AudioFile(
+            filename: "bs-uniform-acceptance.mp3",
+            duration: 600,
+            fileSize: 1
+        )
+
+        let plan = BambiCloudPlaylistImporter().makePlan(
+            for: playlist,
+            availableAudioFiles: [local]
+        )
+
+        #expect(plan.rows[0].selectedAudioFileID == local.id)
+    }
 }

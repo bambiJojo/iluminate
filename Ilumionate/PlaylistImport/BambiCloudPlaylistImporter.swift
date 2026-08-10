@@ -97,8 +97,21 @@ struct BambiCloudPlaylistImporter {
         track: BambiCloudPlaylist.Track,
         audioFile: AudioFile
     ) -> Double {
-        let remoteTitle = normalize(track.name)
+        let remoteTitle = AudioTitleNormalizer.normalize(track.name)
         guard remoteTitle.count >= 4 else { return 0 }
+        guard !hasTrackNumberConflict(track: track, audioFile: audioFile) else { return 0 }
+
+        // The publisher names the track twice: once for people, once in the URL
+        // it serves the audio from. A file fetched from that URL carries the
+        // second name, which is often nothing like the first — an abbreviated
+        // slug the title's own words cannot be recovered from. Both are scored,
+        // and the better one wins.
+        let remoteTitles = [
+            remoteTitle,
+            track.audioURL.map { AudioTitleNormalizer.normalize($0.lastPathComponent) }
+        ]
+        .compactMap { $0 }
+        .filter { $0.count >= 4 }
 
         var localTitles = [
             audioFile.filename,
@@ -113,10 +126,14 @@ struct BambiCloudPlaylistImporter {
             localTitles.append(catalogTitle)
         }
 
-        let titleScore = localTitles
+        let normalizedLocalTitles = localTitles
             .compactMap { $0 }
-            .map(normalize)
-            .map { titleSimilarity(remote: remoteTitle, local: $0) }
+            .map(AudioTitleNormalizer.normalize)
+
+        let titleScore = remoteTitles
+            .flatMap { remote in
+                normalizedLocalTitles.map { titleSimilarity(remote: remote, local: $0) }
+            }
             .max() ?? 0
         guard titleScore >= 0.55 else { return 0 }
 
@@ -132,6 +149,27 @@ struct BambiCloudPlaylistImporter {
         }
 
         return min(titleScore + durationBonus, 1)
+    }
+
+    /// True when both sides state a track position and the positions disagree.
+    ///
+    /// A numbered series is otherwise near-indistinguishable: every entry
+    /// shares the same words, so title similarity alone ranks the wrong file
+    /// as highly as the right one, and `automaticallyUsedIDs` then pushes the
+    /// loser to `.missing` — where it gets downloaded as a duplicate.
+    private func hasTrackNumberConflict(
+        track: BambiCloudPlaylist.Track,
+        audioFile: AudioFile
+    ) -> Bool {
+        let localNumber = AudioTitleNormalizer.leadingTrackNumber(audioFile.filename)
+            ?? AudioTitleNormalizer.leadingTrackNumber(audioFile.displayName)
+        guard let localNumber else { return false }
+
+        let remoteNumber = AudioTitleNormalizer.leadingTrackNumber(track.name)
+            ?? track.trackNumber
+        guard let remoteNumber else { return false }
+
+        return localNumber != remoteNumber
     }
 
     /// Scores how much of the remote title survives in a local name.
@@ -167,40 +205,6 @@ struct BambiCloudPlaylistImporter {
             return 0.68
         }
         return 0
-    }
-
-    private func normalize(_ value: String) -> String {
-        let filename = URL(filePath: value)
-            .deletingPathExtension()
-            .lastPathComponent
-            .folding(
-                options: [.caseInsensitive, .diacriticInsensitive],
-                locale: Locale(identifier: "en_US_POSIX")
-            )
-            .lowercased()
-        var tokens = filename
-            .replacing(
-                /[^a-z0-9]+/,
-                with: " "
-            )
-            .split(separator: " ")
-            .map(String.init)
-
-        if let first = tokens.first,
-           first.allSatisfy(\.isNumber),
-           first.count <= 3 {
-            tokens.removeFirst()
-        }
-
-        let disposableSuffixes: Set<String> = [
-            "audio", "final", "hq", "official", "remastered",
-            "mp3", "m4a", "wav", "aac", "flac", "v2", "320kbps"
-        ]
-        while let last = tokens.last, disposableSuffixes.contains(last) {
-            tokens.removeLast()
-        }
-
-        return tokens.joined(separator: " ")
     }
 
     private struct Candidate {
