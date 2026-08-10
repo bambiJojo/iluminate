@@ -38,16 +38,19 @@ struct PlaylistWholeSessionAnalyzer: Sendable {
     ) throws -> PlaylistWholeSessionBuildResult {
         guard !playlist.items.isEmpty else { throw PlaylistWholeSessionAnalysisError.emptyPlaylist }
 
-        let fileLookup = Dictionary(uniqueKeysWithValues: audioFiles.map { ($0.id, $0) })
+        // Keyed by the item, not by `audioFileId`: the recorded id can be stale
+        // (see `PlaylistTrackBinding`), and a library holding one id twice used
+        // to trap `Dictionary(uniqueKeysWithValues:)` outright.
+        let fileLookup = PlaylistTrackBinding.resolvedFiles(for: playlist.items, in: audioFiles)
         let missingFiles = playlist.items
-            .filter { fileLookup[$0.audioFileId] == nil }
+            .filter { fileLookup[$0.id] == nil }
             .map(\.displayName)
         guard missingFiles.isEmpty else {
             throw PlaylistWholeSessionAnalysisError.missingAudioFiles(missingFiles)
         }
 
         let tracks = playlist.items.enumerated().compactMap { index, item -> TrackAnalysis? in
-            guard let file = fileLookup[item.audioFileId] else { return nil }
+            guard let file = fileLookup[item.id] else { return nil }
             return TrackAnalysis(index: index, item: item, audioFile: file, analysis: file.analysisResult)
         }
 

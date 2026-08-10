@@ -123,11 +123,23 @@ struct LibraryAudioShelf: View {
             Button {
                 onPlay(file)
             } label: {
-                AudioShelfCard(file: file, showsHeart: showsHeart, showsAnalyzedSeal: showsAnalyzedSeal)
+                AudioShelfCard(
+                    file: file,
+                    showsHeart: showsHeart,
+                    showsAnalyzedSeal: showsAnalyzedSeal,
+                    reservesInfoSlot: onOpenInfo != nil
+                )
             }
             .buttonStyle(.plain)
-            // The compact card has no room for an info control, so the detail
-            // route moves to a long press — the same destination, one gesture in.
+            // Layered outside the play button rather than inside its label, so
+            // the info control wins the tap instead of the card behind it.
+            .overlay(alignment: .bottomTrailing) {
+                if let onOpenInfo {
+                    ShelfInfoButton { onOpenInfo(file) }
+                        .accessibilityLabel("About \(file.displayName)")
+                }
+            }
+            // Long press keeps the same destination for anyone already used to it.
             .contextMenu {
                 Button("Play", systemImage: "play.fill") { onPlay(file) }
                 if let onOpenInfo {
@@ -135,6 +147,28 @@ struct LibraryAudioShelf: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Shelf Info Button
+
+/// Trailing "about this card" control shared by the audio and playlist shelves.
+/// Sits in the card's bottom-right corner, opposite the badges, where neither
+/// the wrapped title nor the meta line reaches it.
+private struct ShelfInfoButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 16))
+                .foregroundStyle(Color.textLight)
+                .frame(width: 32, height: 32)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, TranceSpacing.icon)
+        .padding(.bottom, TranceSpacing.micro)
     }
 }
 
@@ -147,12 +181,15 @@ enum LibraryShelfMetrics {
     /// session names wrap, and truncating them defeats the point of the shelf.
     static let audioCardHeight: CGFloat = 118
     static let artistCardHeight: CGFloat = 72
+    /// Trailing room a card's meta line gives up to `ShelfInfoButton`.
+    static let infoSlotWidth: CGFloat = 30
 }
 
 private struct AudioShelfCard: View {
     let file: AudioFile
     var showsHeart = false
     var showsAnalyzedSeal = false
+    var reservesInfoSlot = false
 
     /// Creator carries more signal than duration when scanning a shelf, so it
     /// leads the meta line and duration follows.
@@ -194,6 +231,7 @@ private struct AudioShelfCard: View {
                 .font(TranceTypography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
+                .padding(.trailing, reservesInfoSlot ? LibraryShelfMetrics.infoSlotWidth : 0)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
@@ -211,6 +249,8 @@ struct LibraryPlaylistShelf: View {
     let onPlay: (Playlist) -> Void
     let onCreate: () -> Void
     let onOpenLibrary: () -> Void
+    /// Opens the playlist's own detail screen — tracks, transitions, artwork.
+    var onOpenInfo: ((Playlist) -> Void)? = nil
 
     /// The create card trails the shelf so real playlists occupy the first
     /// slots — leading with it hid every playlist behind a swipe.
@@ -233,12 +273,23 @@ struct LibraryPlaylistShelf: View {
                 Button {
                     onPlay(playlist)
                 } label: {
-                    PlaylistShelfCard(playlist: playlist)
+                    PlaylistShelfCard(playlist: playlist, reservesInfoSlot: onOpenInfo != nil)
                 }
                 .buttonStyle(.plain)
+                .overlay(alignment: .bottomTrailing) {
+                    if let onOpenInfo {
+                        ShelfInfoButton { onOpenInfo(playlist) }
+                            .accessibilityLabel("About \(playlist.name)")
+                    }
+                }
                 .contextMenu {
                     Button("Play", systemImage: "play.fill") {
                         onPlay(playlist)
+                    }
+                    if let onOpenInfo {
+                        Button("Playlist Details", systemImage: "info.circle") {
+                            onOpenInfo(playlist)
+                        }
                     }
                     Button("Open Playlists", systemImage: "music.note.list") {
                         onOpenLibrary()
@@ -287,6 +338,7 @@ private struct NewPlaylistCard: View {
 
 private struct PlaylistShelfCard: View {
     let playlist: Playlist
+    var reservesInfoSlot = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: TranceSpacing.inner) {
@@ -314,6 +366,7 @@ private struct PlaylistShelfCard: View {
                 .font(TranceTypography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
+                .padding(.trailing, reservesInfoSlot ? LibraryShelfMetrics.infoSlotWidth : 0)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
@@ -464,8 +517,27 @@ struct LibraryEmptyCard: View {
 struct LibraryPlaylistResultRow: View {
     let playlist: Playlist
     let onPlay: () -> Void
+    var onOpenInfo: (() -> Void)? = nil
 
     var body: some View {
+        HStack(spacing: TranceSpacing.inner) {
+            playButton
+
+            if let onOpenInfo {
+                Button(action: onOpenInfo) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 17))
+                        .foregroundStyle(Color.textLight)
+                        .frame(width: 32, height: 32)
+                        .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("About \(playlist.name)")
+            }
+        }
+    }
+
+    private var playButton: some View {
         Button(action: onPlay) {
             HStack(spacing: TranceSpacing.list) {
                 RoundedRectangle(cornerRadius: 8)

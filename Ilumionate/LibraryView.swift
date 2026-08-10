@@ -270,7 +270,8 @@ struct LibraryView: View {
             playlists: shelfPlaylists,
             onPlay: { playPlaylist($0) },
             onCreate: { editingPlaylist = Playlist(name: "") },
-            onOpenLibrary: { showingPlaylists = true }
+            onOpenLibrary: { showingPlaylists = true },
+            onOpenInfo: { openPlaylistInfo($0) }
         )
 
         if !artists.isEmpty {
@@ -329,7 +330,11 @@ struct LibraryView: View {
 
                 LazyVStack(spacing: 0) {
                     ForEach(playlistResults) { playlist in
-                        LibraryPlaylistResultRow(playlist: playlist) { playPlaylist(playlist) }
+                        LibraryPlaylistResultRow(
+                            playlist: playlist,
+                            onPlay: { playPlaylist(playlist) },
+                            onOpenInfo: { openPlaylistInfo(playlist) }
+                        )
                         if playlist.id != playlistResults.last?.id {
                             LibraryRowSeparator()
                         }
@@ -510,6 +515,13 @@ struct LibraryView: View {
     /// Pushes the file's detail screen (metadata, phases, transcript).
     private func openFileInfo(_ file: AudioFile) {
         navPath.append(file)
+    }
+
+    /// Opens the playlist's detail screen (tracks, transitions, artwork) —
+    /// the playlist counterpart to `openFileInfo`.
+    private func openPlaylistInfo(_ playlist: Playlist) {
+        TranceHaptics.shared.light()
+        editingPlaylist = playlist
     }
 
     private func openAnalysisQueue() {

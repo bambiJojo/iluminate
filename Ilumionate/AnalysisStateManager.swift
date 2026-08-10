@@ -641,10 +641,25 @@ class AnalysisStateManager {
         transcription: String,
         trackMetadata: AudioTrackMetadata?
     ) {
-        guard let data = UserDefaults.standard.data(forKey: Self.audioFilesUserDefaultsKey),
-              var files = try? JSONDecoder().decode([AudioFile].self, from: data) else {
+        guard let data = UserDefaults.standard.data(forKey: Self.audioFilesUserDefaultsKey) else {
             Log.analysis.info("⚠️ Could not load audio files from UserDefaults to persist analysis")
             return
+        }
+
+        // Element-wise, matching `AudioLibraryStore.load`. Decoding the array
+        // whole meant a single unreadable entry threw, this bailed out, and the
+        // finished analysis was never written — while the analyzer UI, reading
+        // its own cache, still showed the file complete. Every playlist built
+        // from those files then reported them unanalyzed.
+        let decoded = ResilientDecoding.array(AudioFile.self, from: data)
+        var files = decoded.values
+        let dropped = decoded.dropped
+        guard files.isEmpty == false else {
+            Log.analysis.info("⚠️ Could not load audio files from UserDefaults to persist analysis")
+            return
+        }
+        if dropped > 0 {
+            Log.analysis.error("Dropped \(dropped) unreadable audio file(s) while persisting analysis")
         }
 
         guard let index = files.firstIndex(where: { $0.id == audioFileID }) else {

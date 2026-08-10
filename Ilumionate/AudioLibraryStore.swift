@@ -243,11 +243,18 @@ private actor AudioLibraryPersistence {
         save(files, defaults: defaults)
     }
 
+    /// Element-wise, matching `AudioLibraryStore.load`. Whole-array decoding let
+    /// one unreadable entry turn every edit below — favourite, play count,
+    /// partial transcript — into a silent no-op.
     private func decode(_ defaults: ThreadSafeUserDefaults) -> [AudioFile]? {
         guard let data = defaults.value.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey) else {
             return nil
         }
-        return try? JSONDecoder().decode([AudioFile].self, from: data)
+        let (files, dropped) = ResilientDecoding.array(AudioFile.self, from: data)
+        if dropped > 0 {
+            Log.audio.error("Dropped \(dropped) unreadable audio file(s) while updating the library")
+        }
+        return files.isEmpty ? nil : files
     }
 }
 
