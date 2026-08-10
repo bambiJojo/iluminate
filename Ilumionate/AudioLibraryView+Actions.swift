@@ -187,6 +187,47 @@ extension AudioLibraryView {
         isSelectionMode = false
     }
 
+    /// Collapses each selected duplicate group to one entry.
+    ///
+    /// The redundant files must actually leave `Documents`. Dropping only the
+    /// row would leave the file in place for `discoverUnregisteredDocumentFiles`
+    /// to re-register under a fresh identifier on the next load, recreating the
+    /// duplicate this just removed.
+    ///
+    /// Everything is staged as one batch so a single Undo reverses the whole
+    /// merge — `PendingAudioDeletion` holds exactly one batch, and staging in a
+    /// loop would commit each group before the next.
+    func mergeDuplicates(_ resolution: DuplicateAudioReviewViewModel.Resolution) async {
+        guard !resolution.removed.isEmpty else { return }
+
+        let entries = resolution.removed.map { file in
+            StagedAudioFile(
+                file: file,
+                originalURL: file.url,
+                originalIndex: audioFiles.firstIndex { $0.id == file.id } ?? 0
+            )
+        }
+        let staged = pendingDeletion.stage(entries)
+        let stagedIDs = Set(staged.map(\.file.id))
+        guard !stagedIDs.isEmpty else { return }
+
+        // A file that would not move stays in the library, so its merged
+        // history must stay with it rather than being folded into the keeper.
+        let applicable = stagedIDs == Set(resolution.removed.map(\.id))
+            ? resolution.audioFiles
+            : resolution.audioFiles.filter { !stagedIDs.contains($0.id) }
+
+        audioFiles = applicable.filter { !stagedIDs.contains($0.id) }
+        await saveAudioFiles()
+
+        PlaylistStore.rebindAll(to: audioFiles, remapping: resolution.remap)
+
+        TranceHaptics.shared.medium()
+        Log.audio.info(
+            "🧹 Merged \(resolution.merged.count) duplicate group(s), removed \(stagedIDs.count) file(s)"
+        )
+    }
+
     /// Puts the staged batch back where it came from.
     func undoDelete() {
         let recovered = pendingDeletion.restore()

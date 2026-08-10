@@ -204,6 +204,30 @@ struct PlaylistStore {
         }
     }
 
+    /// Repoints every stored playlist at surviving library entries.
+    ///
+    /// Called after a duplicate merge retires an `AudioFile.ID`. Writing through
+    /// `save` rather than the defaults key keeps the in-memory cache correct —
+    /// `LibraryView` reads that cache during its rebuild and would otherwise
+    /// show the retired identifiers until the next launch.
+    static func rebindAll(
+        to audioFiles: [AudioFile],
+        remapping: [UUID: UUID]
+    ) {
+        guard !remapping.isEmpty else { return }
+
+        let rebound = load().map { playlist in
+            var updated = playlist
+            updated.items = PlaylistTrackBinding.rebinding(
+                playlist.items,
+                to: audioFiles,
+                remapping: remapping
+            )
+            return updated
+        }
+        save(rebound)
+    }
+
     /// Drops the cache so the next `load()` re-reads from disk. For tests and
     /// for anything that writes the defaults key without going through `save`.
     static func invalidateCache() {

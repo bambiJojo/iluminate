@@ -82,6 +82,7 @@ struct AudioLibraryView: View {
     @State var showingDownloadError = false
     @State var showingBrowser = false
     @State var showingAddSheet = false
+    @State var showingDuplicateReview = false
     @State var showingFilters = false
     // TODO: Replace with actual playlist model
     @State var pendingDeletion = PendingAudioDeletion.shared
@@ -232,6 +233,17 @@ struct AudioLibraryView: View {
                             }
                         }
 
+                        // Needs at least two files before a duplicate is even
+                        // possible.
+                        if audioFiles.count > 1 {
+                            Button("Find Duplicates", systemImage: "doc.on.doc") {
+                                TranceHaptics.shared.light()
+                                showingDuplicateReview = true
+                            }
+                            .labelStyle(.iconOnly)
+                            .tint(.roseGold)
+                        }
+
                         // Add button — triggers action sheet.
                         // Hidden while empty, where the inline import cards already
                         // present the same options.
@@ -266,6 +278,11 @@ struct AudioLibraryView: View {
             }
             .sheet(isPresented: $showingFilters) {
                 filtersSheet
+            }
+            .sheet(isPresented: $showingDuplicateReview) {
+                DuplicateAudioReviewView(audioFiles: audioFiles) { resolution in
+                    Task { await mergeDuplicates(resolution) }
+                }
             }
             .alert("Rename File", isPresented: $showingRenameAlert) {
                 TextField("New name", text: $newFilename)
