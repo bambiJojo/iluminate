@@ -36,6 +36,12 @@ struct ProfileSettingsView: View {
     @AppStorage("steadyLightEnabled") var steadyLightEnabled = false
     @State var flashTint: FlashTint = .default
     @State var showingFlashTintSheet = false
+    @AppStorage("focusSpotsEnabled") var focusSpotsEnabled = false
+    @State var showingFocusSpotCalibration = false
+    /// True when calibration was opened by switching the toggle on, so
+    /// cancelling has to switch it back off — backing out of the automatic
+    /// screen must not leave the feature on with untuned defaults.
+    @State var focusSpotCalibrationOpenedByToggle = false
 
     // Privacy
     @AppStorage("listeningHistoryEnabled") var listeningHistoryEnabled = true
@@ -105,6 +111,28 @@ struct ProfileSettingsView: View {
             .sheet(isPresented: $showAbout) { aboutSheet }
             .sheet(isPresented: $showingFlashTintSheet) {
                 FlashTintSheet(selection: $flashTint)
+            }
+            .platformFullScreenCover(isPresented: $showingFocusSpotCalibration) {
+                FocusSpotCalibrationView(
+                    initialSettings: FocusSpotPreference.current(),
+                    onSave: { settings in
+                        FocusSpotPreference.set(settings)
+                        showingFocusSpotCalibration = false
+                    },
+                    onCancel: {
+                        if focusSpotCalibrationOpenedByToggle {
+                            focusSpotsEnabled = false
+                        }
+                        showingFocusSpotCalibration = false
+                    }
+                )
+            }
+            .onChange(of: focusSpotsEnabled) { _, enabled in
+                // Cancelling sets this false, which re-enters here; the guard
+                // stops that from re-presenting the screen.
+                guard enabled else { return }
+                focusSpotCalibrationOpenedByToggle = true
+                showingFocusSpotCalibration = true
             }
             .task { flashTint = FlashTintPreference.current() }
             .onChange(of: flashTint) { _, newValue in
