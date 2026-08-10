@@ -45,11 +45,30 @@ nonisolated enum PlaylistTrackBinding {
     ///
     /// The item keeps its own `id`, filename and duration — only the library
     /// reference moves, so ordering, artwork and the timeline are untouched.
-    static func rebinding(_ items: [PlaylistItem], to audioFiles: [AudioFile]) -> [PlaylistItem] {
+    ///
+    /// - Parameter remapping: retired identifier → surviving identifier, as
+    ///   produced by a duplicate merge. Applied before resolution, because the
+    ///   retired entry is already gone from `audioFiles` and would otherwise
+    ///   fall through to the filename heuristic.
+    static func rebinding(
+        _ items: [PlaylistItem],
+        to audioFiles: [AudioFile],
+        remapping: [UUID: UUID] = [:]
+    ) -> [PlaylistItem] {
         items.map { item in
-            guard let file = resolve(item, in: audioFiles),
+            let remapped = remapping[item.audioFileId] ?? item.audioFileId
+            let probe = remapped == item.audioFileId
+                ? item
+                : PlaylistItem(
+                    id: item.id,
+                    audioFileId: remapped,
+                    filename: item.filename,
+                    duration: item.duration
+                )
+
+            guard let file = resolve(probe, in: audioFiles),
                   file.id != item.audioFileId else {
-                return item
+                return probe
             }
             return PlaylistItem(
                 id: item.id,
