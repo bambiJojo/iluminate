@@ -137,10 +137,18 @@ classify content type and mood. Only the phase timeline fell back. Nothing disti
 two in the log or the UI, so a session built on keyword phases is indistinguishable from one
 built on model phases.
 
-The light scores generated in that run scored 87%, 81% and 98% alignment, with two logging
+Now five for five across two runs, including `Sucked Stupid.m4a` and `Platinum Slut.exe.mp3`.
+
+The light scores generated scored 87%, 81%, 98% and 96% alignment, with two logging
 `⚠️ Light score alignment below target after 2 repair pass(es)`. Phase alignment was the
 weakest component both times (`phase=72`, `phase=63`), which is consistent with a timeline
 that did not come from the model.
+
+**An observation worth chasing separately.** Alignment ran *inversely* to phase count: 43
+segments scored 81% and 46 scored 87%, while 8 segments scored 96% and 98%. If the alignment
+metric rewards a sparse timeline, it is not a good proxy for session quality and should not
+be read as one — including in the paragraph above. Which way that causation runs is
+unestablished.
 
 **Where**
 `Ilumionate/ChunkedPhaseAnalyzer.swift:144` — `distinctCount` counts *distinct* phases across
@@ -192,16 +200,24 @@ Every long file in a device run failed its first AI attempt the same way:
 ↻ Retrying with minimal prompt
 ```
 
-Four for four: 4,816, 4,765, 4,829 and 4,864 tokens against a 4,096 limit. The retry with the
-compact prompt then succeeded in three cases, so the analysis completed — but each file paid
-a full wasted round trip through the on-device model first. In the fourth
+Five for five: 4,816, 4,765, 4,829, 4,864 and 4,771 tokens against a 4,096 limit. The retry
+with the compact prompt then succeeded in most cases, so the analysis completed — but every
+file paid a full wasted round trip through the on-device model first. In one
 (`Sucked Stupid.m4a`) the retry hit a content guardrail and the file fell back to keyword
 analysis, so the wasted first attempt was the only chance the model had at the full context.
 
-The token counts are the tell. Transcripts of 3,265, 3,663, 1,179 and 2,272 words all
-produced ~4,800 tokens — a threefold spread in input for a 2% spread in prompt size. The
-prompt is not scaling with the transcript: it is a fixed-size template that lands about 17%
-over the ceiling every time, for any file with a full chunk.
+| Transcript | Prompt tokens |
+|---|---|
+| 1,179 words | 4,829 |
+| 2,272 words | 4,864 |
+| 3,265 words | 4,816 |
+| 3,663 words | 4,765 |
+| **6,387 words** | **4,771** |
+
+The largest transcript produced *fewer* tokens than the smallest. Input varies 5.4×; prompt
+size varies 2%. The prompt does not scale with the transcript at all — it is a fixed-size
+template sitting about 17% over the ceiling, every time, for any file long enough to fill the
+sample.
 
 **Where**
 `Ilumionate/AIAnalysisManager+Prompts.swift:25` — `maxChunkSize: Int = 600`, used by the
@@ -213,25 +229,40 @@ Analyse any file whose transcript fills a 600-word chunk and read the log. Every
 captured so far shows it.
 
 **Root cause**
-Not measured, but narrow: a 600-word chunk is roughly 800 tokens, so the remaining ~4,000
-come from the instructions, metadata and response schema around it. The default was presumably
-chosen before the prompt template grew, and nothing checks the total against the model's
-limit before sending.
+Confirmed. `AIAnalysisManager+Prompts.swift:69` samples the transcript through
+`AIAnalysisManager.sampleTranscript(_:chunkSize:)` into **four** windows — labelled in the
+prompt as "beginning / 50% / 75% / end" — each up to `maxChunkSize` words. At the default of
+600 that is up to 2,400 words of transcript, and once a transcript exceeds that the sample
+saturates and the prompt stops growing. That is exactly the plateau in the table above.
+
+The rest is fixed text: a 1,500-character introduction excerpt (`:66`), the metadata guidance
+block, the sparse-transcript hints, and the classification guidance. Roughly: 2,400 sampled
+words ≈ 3,200 tokens, plus ~400 for the introduction, plus ~1,200 of guidance ≈ 4,800 —
+matching the observed counts.
+
+So the budget is a constant that was set too high, and nothing measures it against the
+model's 4,096 limit before sending.
 
 **Proposed fix**
-Count tokens before sending rather than discovering the limit by failing. Failing that,
-lower the default `maxChunkSize` until the assembled prompt fits with headroom, and add a
-test that asserts the assembled first-attempt prompt for a realistic transcript stays under
-4,096 — otherwise the same drift recurs the next time the template grows.
+Lower the default `maxChunkSize` so four windows plus the fixed text fit under 4,096 with
+headroom — roughly 400 words per window on the arithmetic above — and add a test that
+assembles the first-attempt prompt for a realistic transcript and asserts it stays under the
+limit. Without that test the same drift recurs the next time the guidance text grows, which
+is how this happened.
+
+Better still, measure rather than estimate: `LanguageModelSession` can report a token count,
+so the builder could shrink the sample until it fits instead of relying on a constant.
 
 Worth noting the interaction with ERR-006: `.contextWindow` is deliberately retryable, and
 that policy is correct. The waste here is that attempt 1 is *known* to be too large before it
 is sent.
 
 **Risks / blockers**
-A smaller chunk means less context per model call, which may change classification quality.
-Whatever number is chosen should be justified against the measured token count, not guessed
-again.
+A smaller sample means less transcript per model call, which may change classification
+quality. Note that long files are *already* truncated hard — a 6,387-word transcript
+contributes at most 2,400 words today — so for those the change is smaller than it looks.
+Short files, which currently fit almost entirely, lose the most. Whatever number is chosen
+should be justified against a measured token count rather than guessed again.
 
 ---
 
