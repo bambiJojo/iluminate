@@ -138,12 +138,24 @@ nonisolated struct ChunkedPhaseAnalyzer {
                 duration: duration,
                 onProgress: onProgress
             )
-            timeline = Self.collapseShortRuns(timeline, minRun: max(20, Int(duration * 0.035)))
+            // Counted before anything reshapes the timeline. Every device run
+            // so far ended in the fallback below, and the log could not say
+            // whether the classifier returned one phase for the whole file or
+            // whether the steps that follow flattened a varied one — two
+            // unrelated causes with two unrelated fixes. See ERRORS.md ERR-008.
+            let classifiedCount = Set(timeline).count
+
+            let minRun = max(20, Int(duration * 0.035))
+            timeline = Self.collapseShortRuns(timeline, minRun: minRun)
+            let collapsedCount = Set(timeline).count
+
             timeline = Self.enforcePhaseOrdering(timeline: timeline)
             let segments = Self.consolidatePhaseSegments(timeline: timeline, duration: duration)
             let distinctCount = Set(segments.map(\.phase)).count
             guard distinctCount >= 2 else {
-                Log.analysis.info("⚠️ ChunkedPhaseAnalyzer: \(distinctCount) phase(s) detected — keyword fallback")
+                Log.analysis.info(
+                    "⚠️ ChunkedPhaseAnalyzer: \(distinctCount) phase(s) — keyword fallback (classified \(classifiedCount), after collapse \(collapsedCount), minRun \(minRun) of \(timeline.count) chunks)"
+                )
                 return nil
             }
             return segments

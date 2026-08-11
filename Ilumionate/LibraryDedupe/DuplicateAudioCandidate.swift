@@ -17,7 +17,11 @@ nonisolated struct DuplicateAudioCandidate: Sendable {
     var contentFingerprint: String?
     /// Nil when the server did not report a length.
     var fileSize: Int64?
-    var duration: TimeInterval
+    /// Nil when the duration is not known yet — the Files-picker path has not
+    /// loaded the asset at the point it asks. Distinct from zero, which would
+    /// silently claim a zero-length recording and let a real library entry of
+    /// about that length match on it.
+    var duration: TimeInterval?
     /// A filename or a track title — `AudioTitleNormalizer` handles both.
     var title: String
 
@@ -25,7 +29,7 @@ nonisolated struct DuplicateAudioCandidate: Sendable {
         remoteSource: RemoteAudioSource? = nil,
         contentFingerprint: String? = nil,
         fileSize: Int64? = nil,
-        duration: TimeInterval,
+        duration: TimeInterval? = nil,
         title: String
     ) {
         self.remoteSource = remoteSource

@@ -232,4 +232,40 @@ struct DuplicateAudioIndexTests {
 
         #expect(verdict == .identical(existing: transcribed.id))
     }
+
+    // ERR-003: the Files-picker path cannot know the source duration before it
+    // copies, and used to pass zero. That silently disabled both duration
+    // signals while reading as though all four ran.
+    @Test("An unknown duration skips the signals that need one")
+    func unknownDurationSkipsDurationSignals() {
+        let existing = makeFile(filename: "Deep Relaxation.mp3", duration: 600, fileSize: 5_000_000)
+        let index = DuplicateAudioIndex([existing])
+
+        let verdict = index.verdict(
+            for: DuplicateAudioCandidate(
+                fileSize: 5_000_000,
+                duration: nil,
+                title: "Deep Relaxation"
+            )
+        )
+
+        #expect(verdict == .distinct)
+    }
+
+    @Test("An unknown duration still resolves an exact fingerprint match")
+    func unknownDurationStillMatchesOnFingerprint() {
+        let existing = makeFile(fingerprint: "abc123")
+        let index = DuplicateAudioIndex([existing])
+
+        let verdict = index.verdict(
+            for: DuplicateAudioCandidate(
+                contentFingerprint: "abc123",
+                fileSize: 1,
+                duration: nil,
+                title: "Anything At All"
+            )
+        )
+
+        #expect(verdict == .identical(existing: existing.id))
+    }
 }

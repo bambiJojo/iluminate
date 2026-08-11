@@ -48,7 +48,12 @@ nonisolated enum AudioImportWorker {
             for: DuplicateAudioCandidate(
                 contentFingerprint: sourceFingerprint,
                 fileSize: sourceSize,
-                duration: 0,
+                // The source's duration is not known here — loading it means an
+                // AVURLAsset, which this path defers until after the transfer.
+                // Nil skips the duration-corroborated signals rather than
+                // passing a zero that silently disables them while reading as
+                // though four checks ran.
+                duration: nil,
                 title: targetFilename
             )
         )

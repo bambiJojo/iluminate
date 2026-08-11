@@ -41,3 +41,56 @@ struct RemoteAudioSourceTests {
         #expect(decoded.filename == "a.mp3")
     }
 }
+
+// ERR-004: `==` listed fields explicitly and had never been revisited when
+// contentFingerprint or remoteSource were added, so two values referring to
+// different audio compared equal.
+struct AudioFileIdentityEqualityTests {
+    private func makeFile() -> AudioFile {
+        AudioFile(filename: "Track.mp3", duration: 600, fileSize: 5_000_000)
+    }
+
+    @Test("Files differing only in content fingerprint are not equal")
+    func fingerprintParticipatesInEquality() {
+        var a = makeFile()
+        var b = a
+        a.contentFingerprint = "aaa"
+        b.contentFingerprint = "bbb"
+
+        #expect(a != b)
+    }
+
+    @Test("Files differing only in provenance are not equal")
+    func provenanceParticipatesInEquality() throws {
+        var a = makeFile()
+        var b = a
+        a.remoteSource = RemoteAudioSource(
+            service: RemoteAudioSource.bambiCloudService,
+            trackID: "one",
+            url: try #require(URL(string: "https://cdn.bambicloud.com/one.mp3"))
+        )
+        b.remoteSource = RemoteAudioSource(
+            service: RemoteAudioSource.bambiCloudService,
+            trackID: "two",
+            url: try #require(URL(string: "https://cdn.bambicloud.com/two.mp3"))
+        )
+
+        #expect(a != b)
+    }
+
+    @Test("An unchanged copy is still equal")
+    func identicalCopiesRemainEqual() {
+        let a = makeFile()
+        #expect(a == a)
+    }
+
+    // The reason `==` is not narrowed to `id`: SwiftUI diffs on it.
+    @Test("An in-place edit still reports a change")
+    func inPlaceEditIsVisible() {
+        let a = makeFile()
+        var b = a
+        b.userTitle = "Renamed"
+
+        #expect(a != b)
+    }
+}

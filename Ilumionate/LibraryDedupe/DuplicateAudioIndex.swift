@@ -37,11 +37,17 @@ nonisolated struct DuplicateAudioIndex: Sendable {
             return .identical(existing: match.file.id)
         }
 
+        // Both remaining signals need a duration to corroborate them. When the
+        // caller does not have one, they are skipped rather than compared
+        // against a stand-in — matching on size alone is not strong enough to
+        // put a review row in front of the user.
+        guard let duration = candidate.duration else { return .distinct }
+
         if let size = candidate.fileSize,
            size > 0,
            let match = best(where: {
                $0.file.fileSize == size
-                   && abs($0.file.duration - candidate.duration) <= Self.sizeMatchDurationTolerance
+                   && abs($0.file.duration - duration) <= Self.sizeMatchDurationTolerance
            }) {
             return .likely(existing: match.file.id, reason: .sizeAndDuration)
         }
@@ -50,7 +56,7 @@ nonisolated struct DuplicateAudioIndex: Sendable {
         if !title.isEmpty,
            let match = best(where: {
                $0.title == title
-                   && abs($0.file.duration - candidate.duration) <= Self.titleMatchDurationTolerance
+                   && abs($0.file.duration - duration) <= Self.titleMatchDurationTolerance
            }) {
             return .likely(existing: match.file.id, reason: .titleAndDuration)
         }

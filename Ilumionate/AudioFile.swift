@@ -143,8 +143,18 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
 }
 
 extension AudioFile: Equatable {
+    /// Field-wise rather than identity-only, because SwiftUI diffs on this:
+    /// narrowing it to `id` would stop rows refreshing when a rating or title
+    /// changes in place.
+    ///
+    /// The two identity fields are included so that values differing only in
+    /// which audio they refer to never compare equal — `PlaylistTrackDownloadOutcome`
+    /// wraps an `AudioFile` and is `Equatable`, and without these a downloaded
+    /// file and a different one with the same metadata were indistinguishable.
     static func == (lhs: AudioFile, rhs: AudioFile) -> Bool {
         lhs.id == rhs.id &&
+        lhs.contentFingerprint == rhs.contentFingerprint &&
+        lhs.remoteSource == rhs.remoteSource &&
         lhs.filename == rhs.filename &&
         lhs.isFavorite == rhs.isFavorite &&
         lhs.rating == rhs.rating &&
