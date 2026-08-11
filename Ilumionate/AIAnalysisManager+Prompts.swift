@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Prompt Construction
 
@@ -15,6 +16,17 @@ extension AIAnalysisManager {
     /// Word count below which a transcript is considered too sparse to classify
     /// reliably (e.g. subliminal audio where speech is below audible threshold).
     private static let sparseTranscriptThreshold = 40
+
+    /// A ceiling on the assembled prompt *string*, as a regression guard.
+    ///
+    /// Not the model's context limit, and deliberately not presented as one.
+    /// Measured on 2026-08-11: this prompt assembles to ~7,500 characters
+    /// (~2,100 tokens) for a saturated transcript, while the device reported
+    /// 4,816 tokens for the whole request — so roughly 2,700 tokens come from
+    /// the system instructions and the response schema, neither of which is in
+    /// this string. This guard only catches the template itself growing.
+    /// See ERRORS.md ERR-007.
+    static let promptCharacterBudget = 9_000
 
     /// Builds the analysis prompt for a transcribed audio file.
     /// - Parameter maxChunkSize: Characters per transcript sample section (default 600).

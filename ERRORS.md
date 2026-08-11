@@ -316,40 +316,67 @@ Analyse any file whose transcript fills a 600-word chunk and read the log. Every
 captured so far shows it.
 
 **Root cause**
-Confirmed. `AIAnalysisManager+Prompts.swift:69` samples the transcript through
-`AIAnalysisManager.sampleTranscript(_:chunkSize:)` into **four** windows — labelled in the
-prompt as "beginning / 50% / 75% / end" — each up to `maxChunkSize` words. At the default of
-600 that is up to 2,400 words of transcript, and once a transcript exceeds that the sample
-saturates and the prompt stops growing. That is exactly the plateau in the table above.
+Confirmed by measurement on 2026-08-11, and **not what the first two versions of this entry
+said**. Both claimed the transcript sample dominated the prompt; both were wrong, the first
+because it assumed `chunkSize` counted words when it counts **characters**.
 
-The rest is fixed text: a 1,500-character introduction excerpt (`:66`), the metadata guidance
-block, the sparse-transcript hints, and the classification guidance. Roughly: 2,400 sampled
-words ≈ 3,200 tokens, plus ~400 for the introduction, plus ~1,200 of guidance ≈ 4,800 —
-matching the observed counts.
+Measured directly by assembling the prompt for a saturated transcript:
 
-So the budget is a constant that was set too high, and nothing measures it against the
-model's 4,096 limit before sending.
+| Sample size | Assembled prompt |
+|---|---|
+| 600 (the default) | 7,502 characters |
+| 400 | 6,702 |
+| 250 | 6,102 |
+| 150 | 5,702 |
+
+7,502 characters is roughly 2,100 tokens. The device reported **4,816** for the whole
+request. So about **2,700 tokens — the majority — come from outside this string**: the
+system instructions (`AVESystemPrompt`) and the `AIAnalysisResponse` generable schema, which
+`session.respond(to:generating:)` injects into the same context window.
+
+That explains the plateau in the table above, and it explains why the retry succeeds: the
+retry at `AIAnalysisManager.swift:183` builds a **new session with
+`AVESystemPrompt.minimalInstructions`**. Swapping the instructions is what saves it, not the
+smaller chunk — dropping the sample from 600 to 150 recovers only ~510 tokens, nowhere near
+the ~720 needed.
+
+**Trimming the transcript sample therefore cannot fix this.** Even a zero-length sample
+leaves the request over the ceiling.
+
+**Already done** _(2026-08-11, commit pending)_
+Measured the above and added `AnalysisPromptBudgetTests`, which pins the assembled prompt
+string under a 9,000-character guard so the template cannot grow unnoticed. That is a
+regression guard on one component, **not a fix** — the overflow is still there.
+
+A sample-size ladder was implemented and then reverted: it never engaged, because 7,502 was
+already under the budget it was given. Shipping it would have been a fix that fixed nothing
+while implying otherwise.
 
 **Proposed fix**
-Lower the default `maxChunkSize` so four windows plus the fixed text fit under 4,096 with
-headroom — roughly 400 words per window on the arithmetic above — and add a test that
-assembles the first-attempt prompt for a realistic transcript and asserts it stays under the
-limit. Without that test the same drift recurs the next time the guidance text grows, which
-is how this happened.
+The choice is between three, and it is a product decision about classification quality rather
+than a technical one:
 
-Better still, measure rather than estimate: `LanguageModelSession` can report a token count,
-so the builder could shrink the sample until it fits instead of relying on a constant.
+1. **Skip the doomed first attempt.** The overflow is deterministic for any non-sparse
+   transcript, so start with the minimal-instruction session and keep the full one only for
+   sparse transcripts, which are small enough to fit. Costs nothing in quality relative to
+   today, because today's successful result *already* comes from the minimal path — it just
+   stops paying for a failed round trip first.
+2. **Trim `AVESystemPrompt`'s full instructions** until the request fits. Preserves a
+   single path, but requires deciding which guidance is worth its tokens.
+3. **Shrink the response schema.** `AIAnalysisResponse` is generable, so every field and
+   description costs context on every request. Worth auditing regardless.
 
-Worth noting the interaction with ERR-006: `.contextWindow` is deliberately retryable, and
-that policy is correct. The waste here is that attempt 1 is *known* to be too large before it
-is sent.
+Option 1 is the smallest change and strictly better than the status quo. Options 2 and 3
+would let the model see the full guidance again, which is what the first attempt was for.
+
+Whichever is chosen, measure the real token count rather than estimating from characters —
+the estimate is what made both earlier versions of this entry wrong.
 
 **Risks / blockers**
-A smaller sample means less transcript per model call, which may change classification
-quality. Note that long files are *already* truncated hard — a 6,387-word transcript
-contributes at most 2,400 words today — so for those the change is smaller than it looks.
-Short files, which currently fit almost entirely, lose the most. Whatever number is chosen
-should be justified against a measured token count rather than guessed again.
+Option 1 means the richer instruction set never runs for ordinary files, so any classification
+quality it was buying is lost — though in practice it is already lost, since every observed
+first attempt failed. Establishing whether the full instructions actually classify better
+needs an A/B on real files, which the corpus tooling could do offline.
 
 ---
 
