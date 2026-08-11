@@ -257,12 +257,26 @@ returns a single phase for every chunk (a prompting or model problem) or returns
 phases that `collapseShortRuns` then flattens (a threshold problem). The log does not say,
 because the timeline is not logged before consolidation.
 
+**Already done** _(2026-08-11, commit `7a77889`)_
+The fallback log now reports the distinct phase count at three points — as classified, after
+`collapseShortRuns`, and after consolidation — plus the computed `minRun` and the chunk count:
+
+```
+⚠️ ChunkedPhaseAnalyzer: 1 phase(s) — keyword fallback
+   (classified 4, after collapse 1, minRun 31 of 210 chunks)
+```
+
+That distinguishes the two causes from a single device log. `classified 1` means the model
+returns one phase per chunk — a prompting problem. `classified 4, after collapse 1` means
+`minRun` is flattening a varied timeline — a threshold problem.
+
+**Nothing is fixed yet.** The next device run will say which it is.
+
 **Proposed fix**
-First make the failure diagnosable: log the pre-consolidation distinct phase count alongside
-the post-consolidation one, so the two causes can be told apart from a device log. Then fix
-whichever it is. Separately, record on the result that phases came from the fallback — the
-same treatment `AIGenerationDiagnosis` now gives content analysis (ERR-006) — so a keyword
-timeline is visible rather than silent.
+Read the numbers above from a device run, then fix whichever cause they name. Separately,
+record on the result that phases came from the fallback — the same treatment
+`AIGenerationDiagnosis` now gives content analysis (ERR-006) — so a keyword timeline is
+visible rather than silent.
 
 **Risks / blockers**
 `minRun` exists to stop a jittery timeline producing dozens of one-chunk phases; lowering it
@@ -380,56 +394,14 @@ needs an A/B on real files, which the corpus tooling could do offline.
 
 ---
 
-### ERR-004 — `AudioFile.==` ignores content fingerprint and remote provenance
-
-- **Date discovered:** 2026-08-11
-- **Status:** identified
-- **Severity:** low
-- **Area:** models, playlist import
-
-**Symptom**
-Two `AudioFile` values holding different audio compare equal, provided their id, filename,
-ratings, tags, metadata and play history match. `contentFingerprint` and `remoteSource` are
-both absent from the equality implementation.
-
-**Where**
-`Ilumionate/AudioFile.swift:139` — the hand-written `==`.
-First consumer that can be misled: `PlaylistTrackDownloadOutcome` in
-`Ilumionate/PlaylistImport/PlaylistTrackDownloader.swift:11`, which is `Equatable` and wraps
-an `AudioFile` in its `.saved` case.
-
-**Reproduction**
-No failing test today. Construct two `AudioFile` values that differ only in
-`contentFingerprint`, wrap each in `PlaylistTrackDownloadOutcome.saved`, and compare — they
-compare equal.
-
-**Root cause**
-The custom `==` predates content fingerprinting and lists fields explicitly. It was never
-revisited when `contentFingerprint` was added, and `remoteSource` (added 2026-08-11 in
-commit `6895041`) followed the same omission for consistency with the existing shape.
-
-**Already done**
-Nothing. Noticed while adding `remoteSource`; deliberately left alone rather than widened
-mid-feature, because the identity semantics of `==` are used in view diffing and changing
-them is not a local decision.
-
-**Proposed fix**
-Decide what `==` means for this type first. Either (a) narrow it to `lhs.id == rhs.id`,
-matching `hash(into:)` at `AudioFile.swift:157` which already combines only `id` — the
-current pair arguably violates the Hashable contract's spirit; or (b) add the two identity
-fields to the existing list. Option (a) is the smaller, more defensible surface.
-
-**Risks / blockers**
-`==` is consumed by SwiftUI diffing wherever `AudioFile` appears in a `ForEach` or as
-`Equatable` view state. Narrowing it to id-only would stop views refreshing when a file's
-rating or title changes in place. Audit those call sites before changing.
-
 ---
+
+## Resolved
 
 ### ERR-003 — Files-picker duplicate check cannot use the duration signals
 
 - **Date discovered:** 2026-08-11
-- **Status:** identified
+- **Status:** completed
 - **Severity:** low
 - **Area:** audio import
 
@@ -473,9 +445,79 @@ is absent. The second is cheaper and removes the trap.
 None significant. The second option touches `DuplicateAudioCandidate`'s initialiser, which
 has three call sites.
 
+**Resolution** _(2026-08-11, commit `7a77889`)_
+`DuplicateAudioCandidate.duration` is now `TimeInterval?`, and `DuplicateAudioIndex.verdict`
+returns `.distinct` before the two duration-corroborated signals when it is absent — the
+second option from the proposal, taken because loading an `AVURLAsset` on the import path is
+the cost that path deliberately defers.
+
+`AudioImportWorker` passes `nil` with a comment saying why. Behaviour is unchanged, which was
+the point: the call site only ever acted on `.identical`, which comes from the fingerprint.
+What is gone is the trap — the code no longer reads as though four checks run where one does.
+
+Covered by two tests in `DuplicateAudioIndexTests`: an unknown duration skips the signals that
+need one, and still resolves an exact fingerprint match.
+
 ---
 
-## Resolved
+### ERR-004 — `AudioFile.==` ignores content fingerprint and remote provenance
+
+- **Date discovered:** 2026-08-11
+- **Status:** completed
+- **Severity:** low
+- **Area:** models, playlist import
+
+**Symptom**
+Two `AudioFile` values holding different audio compare equal, provided their id, filename,
+ratings, tags, metadata and play history match. `contentFingerprint` and `remoteSource` are
+both absent from the equality implementation.
+
+**Where**
+`Ilumionate/AudioFile.swift:139` — the hand-written `==`.
+First consumer that can be misled: `PlaylistTrackDownloadOutcome` in
+`Ilumionate/PlaylistImport/PlaylistTrackDownloader.swift:11`, which is `Equatable` and wraps
+an `AudioFile` in its `.saved` case.
+
+**Reproduction**
+No failing test today. Construct two `AudioFile` values that differ only in
+`contentFingerprint`, wrap each in `PlaylistTrackDownloadOutcome.saved`, and compare — they
+compare equal.
+
+**Root cause**
+The custom `==` predates content fingerprinting and lists fields explicitly. It was never
+revisited when `contentFingerprint` was added, and `remoteSource` (added 2026-08-11 in
+commit `6895041`) followed the same omission for consistency with the existing shape.
+
+**Already done**
+Nothing. Noticed while adding `remoteSource`; deliberately left alone rather than widened
+mid-feature, because the identity semantics of `==` are used in view diffing and changing
+them is not a local decision.
+
+**Proposed fix**
+Decide what `==` means for this type first. Either (a) narrow it to `lhs.id == rhs.id`,
+matching `hash(into:)` at `AudioFile.swift:157` which already combines only `id` — the
+current pair arguably violates the Hashable contract's spirit; or (b) add the two identity
+fields to the existing list. Option (a) is the smaller, more defensible surface.
+
+**Risks / blockers**
+`==` is consumed by SwiftUI diffing wherever `AudioFile` appears in a `ForEach` or as
+`Equatable` view state. Narrowing it to id-only would stop views refreshing when a file's
+rating or title changes in place. Audit those call sites before changing.
+
+**Resolution** _(2026-08-11, commit `7a77889`)_
+`contentFingerprint` and `remoteSource` joined the field list in `AudioFile.swift:154`.
+
+Option (a) from the proposal — narrowing to `id` only — was **rejected** after checking the
+consumers named under Risks. SwiftUI diffs on this type, so identity-only equality would stop
+a row refreshing when its rating or title changed in place. The field list stays; it simply
+now includes the two fields that say *which audio this is*.
+
+Covered by `AudioFileIdentityEqualityTests` in
+`IlumionateTests/RemoteAudioSourceTests.swift`: values differing only in fingerprint, and only
+in provenance, are unequal; an unchanged copy is equal; and an in-place edit still reports a
+change, which pins the reason the narrowing was rejected.
+
+---
 
 ### ERR-001 — Six timing tests fail under full-suite parallel load
 
