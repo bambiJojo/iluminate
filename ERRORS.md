@@ -70,57 +70,6 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
-### ERR-006 — Foundation Models blocked by Game Mode; every analysis silently degrades
-
-- **Date discovered:** 2026-08-11
-- **Status:** identified
-- **Severity:** medium
-- **Area:** analysis pipeline
-
-**Symptom**
-On a device run, **every** AI content analysis failed and fell back to keyword extraction —
-six for six. The underlying error each time:
-
-```
-Failed model manager query for model com.apple.fm.language.instruct_300m.safety:
-Not executed due to current system state ["StandardGameMode"], try again later
-```
-
-The pipeline retries once with a minimal prompt, fails the same way, then logs
-`❌ AI generation gave up (other) — using keyword fallback`. The resulting sessions are
-keyword-quality: `Yes Brain Loop.mp3` produced 3 phase segments, `C-U-M.mp3` produced 1.
-
-Nothing surfaces this in the UI. The user sees a completed analysis and a generated session
-with no indication it was built without the language model.
-
-**Where**
-`Ilumionate/AIContentAnalyzer.swift` / `Ilumionate/AIAnalysisManager*.swift` — the retry and
-fallback path that emits `⚠️ AI attempt 1 failed (other)` and `↻ Retrying with minimal prompt`.
-
-**Reproduction**
-Run analysis on device while the system reports `StandardGameMode`. Not reproducible in the
-simulator or on macOS.
-
-**Root cause**
-Not the app's code. iOS declines to run the on-device safety model
-(`com.apple.fm.language.instruct_300m.safety`) while the system is in that state, and
-`FoundationModels` surfaces it as a generic `GenerationError Code=-1`. The graceful fallback
-is working as designed; what is missing is any signal that it happened.
-
-**Proposed fix**
-Two parts, both small. First, record on `AnalysisResult` whether the language model or the
-keyword fallback produced it, and show that in the analysis detail so a keyword-only session
-is identifiable after the fact. Second, treat this specific error as retryable-later rather
-than terminal — it is a transient system state, unlike a genuine model failure — and offer
-re-analysis once the device leaves that state.
-
-**Risks / blockers**
-Detecting the state reliably means string-matching `"StandardGameMode"` inside a nested
-`NSMultipleUnderlyingErrorsKey` chain, which is fragile across OS versions. Prefer keying the
-retry decision on the outer `Code=1013` from `ModelManagerServices.ModelManagerError`.
-
----
-
 ### ERR-004 — `AudioFile.==` ignores content fingerprint and remote provenance
 
 - **Date discovered:** 2026-08-11
@@ -329,6 +278,91 @@ expensive to verify and is the real cost of leaving it.
 ---
 
 ## Resolved
+
+### ERR-006 — Foundation Models blocked by Game Mode; every analysis silently degrades
+
+- **Date discovered:** 2026-08-11
+- **Status:** completed
+- **Severity:** medium
+- **Area:** analysis pipeline
+
+**Symptom**
+On a device run, **every** AI content analysis failed and fell back to keyword extraction —
+six for six. The underlying error each time:
+
+```
+Failed model manager query for model com.apple.fm.language.instruct_300m.safety:
+Not executed due to current system state ["StandardGameMode"], try again later
+```
+
+The pipeline retries once with a minimal prompt, fails the same way, then logs
+`❌ AI generation gave up (other) — using keyword fallback`. The resulting sessions are
+keyword-quality: `Yes Brain Loop.mp3` produced 3 phase segments, `C-U-M.mp3` produced 1.
+
+**Correction to the original write-up:** it was claimed here that nothing surfaced this.
+That was wrong — `SessionDetailView.swift:436` already labelled such results "Keyword
+Analysis" rather than "AI Analyzed". What was missing was the *reason*:
+`AIGenerationDiagnosis.Kind.userFacingReason` existed but had no callers outside tests.
+
+**Where**
+`Ilumionate/AIContentAnalyzer.swift` / `Ilumionate/AIAnalysisManager*.swift` — the retry and
+fallback path that emits `⚠️ AI attempt 1 failed (other)` and `↻ Retrying with minimal prompt`.
+
+**Reproduction**
+Run analysis on device while the system reports `StandardGameMode`. Not reproducible in the
+simulator or on macOS.
+
+**Root cause**
+Not the app's code. iOS declines to run the on-device safety model
+(`com.apple.fm.language.instruct_300m.safety`) while the system is in that state, and
+`FoundationModels` surfaces it as a generic `GenerationError Code=-1`. The graceful fallback
+is working as designed; what is missing is any signal that it happened.
+
+**Proposed fix**
+Two parts, both small. First, record on `AnalysisResult` whether the language model or the
+keyword fallback produced it, and show that in the analysis detail so a keyword-only session
+is identifiable after the fact. Second, treat this specific error as retryable-later rather
+than terminal — it is a transient system state, unlike a genuine model failure — and offer
+re-analysis once the device leaves that state.
+
+**Risks / blockers**
+Detecting the state reliably means string-matching `"StandardGameMode"` inside a nested
+`NSMultipleUnderlyingErrorsKey` chain, which is fragile across OS versions. Prefer keying the
+retry decision on the outer `Code=1013` from `ModelManagerServices.ModelManagerError`.
+
+**Resolution** _(2026-08-11, commit `94589d3`)_
+The real defect was a misclassification, not just a missing message.
+
+`classify` checked for a safety-host failure **only inside** a `guardrailViolation`. Foundation
+Models reports the same underlying failure a second way — a bare bridged `NSError` chain with
+no Swift case name, which is the form the device produced — so it fell through to `.other`.
+`.other` is retryable, so every one of the six failures paid for a second full round-trip
+that could not succeed. The `↻ Retrying with minimal prompt` line in the log is that waste.
+
+- The busy-system and safety-host checks now run first, independently of the guardrail branch.
+- New `Kind.systemBusy`, matched on `ModelManagerError Code=1013` and on the
+  `"Not executed due to current system state"` phrasing, since the numeric code is
+  undocumented and may not be the only one used.
+- New `Kind.isTransient`, distinct from `isRetryable`: the first asks whether a second
+  *immediate* attempt with a shorter prompt is worth it, the second whether the same file
+  would succeed later untouched. Only `.systemBusy` is transient.
+- `fetchAIResponse` returns `AIResponseOutcome` rather than `AIAnalysisResponse?`, so the
+  diagnosis reaches `makeKeywordFallbackResult` instead of being logged and dropped.
+- `AnalysisResult.keywordFallbackReason` recovers it, and the detail screen renders it under
+  the badge. `usedKeywordFallback` moved from equality to prefix matching so results stored
+  before this still read as fallbacks.
+
+Verified by `IlumionateTests/AIGenerationDiagnosisTests.swift`, including the device error
+text captured verbatim from the 2026-08-11 log, and the two policy tests that pin which kinds
+are retryable and which are transient. Green on macOS and iOS Simulator.
+
+**Outstanding.** Two things this does not do. Nothing automatically re-analyses a file that
+failed transiently — the user is told it is worth doing and must start it. And the string
+matching is inherently fragile: if Apple rewords the message or changes the code, this
+degrades to `.other` again, which is the safe direction but silent. A test would not catch
+that; only another device log would.
+
+---
 
 ### ERR-005 — Audio library exceeds the 4 MiB UserDefaults limit; writes are silently dropped
 
