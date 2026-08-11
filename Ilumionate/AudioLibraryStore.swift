@@ -29,10 +29,10 @@ nonisolated enum AudioLibraryStore {
     /// awaits, so results cross back on assignment.
     @concurrent
     nonisolated static func loadRepairingStoredFiles(
-        defaults: UserDefaults = .standard,
+        storage: AudioLibraryStorage = .standard,
         documentsURL: URL = .documentsDirectory
     ) async -> [AudioFile] {
-        var files = load(defaults: defaults)
+        var files = load(storage: storage)
         let repair = await discoverUnregisteredDocumentFiles(
             existingFiles: files,
             documentsURL: documentsURL
@@ -53,19 +53,40 @@ nonisolated enum AudioLibraryStore {
 
         guard didChange else { return files }
 
-        await save(files, defaults: defaults)
+        await save(files, storage: storage)
         if !repair.addedFiles.isEmpty {
             Log.audio.info("📦 Registered \(repair.addedFiles.count) audio file(s) discovered in Documents")
         }
         return files
     }
 
-    static func load(defaults: UserDefaults = .standard) -> [AudioFile] {
-        guard let data = defaults.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey) else {
-            return []
+    static func load(storage: AudioLibraryStorage = .standard) -> [AudioFile] {
+        migrateFromUserDefaultsIfNeeded(storage)
+
+        if let data = try? Data(contentsOf: storage.fileURL) {
+            return decoded(data)
         }
-        // Per-element. Decoding the array whole meant one unreadable audio file
-        // silently emptied the user's entire library.
+
+        // The file could not be read and migration did not manage to create it,
+        // so the old store is still the library. Reporting an empty library here
+        // would be far worse than reading stale data: `loadRepairingStoredFiles`
+        // would find every file in Documents unregistered and re-register it
+        // under a fresh identifier, discarding the analysis, rating and play
+        // count attached to the old one, and orphaning every playlist.
+        if let defaults = storage.legacyDefaults,
+           let legacy = defaults.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey) {
+            Log.audio.error(
+                "Falling back to the legacy audio library — the stored file could not be read"
+            )
+            return decoded(legacy)
+        }
+
+        return []
+    }
+
+    /// Per-element. Decoding the array whole meant one unreadable audio file
+    /// silently emptied the user's entire library.
+    private static func decoded(_ data: Data) -> [AudioFile] {
         let (files, dropped) = ResilientDecoding.array(AudioFile.self, from: data)
         if dropped > 0 {
             Log.audio.error("Dropped \(dropped) unreadable audio file(s) while loading the library")
@@ -73,44 +94,123 @@ nonisolated enum AudioLibraryStore {
         return files
     }
 
-    static func save(_ files: [AudioFile], defaults: UserDefaults = .standard) async {
-        await persistence.save(files, defaults: ThreadSafeUserDefaults(defaults))
+    /// - Returns: whether the library reached disk. Unlike `UserDefaults.set`,
+    ///   a file write can fail loudly, and callers that care may check.
+    @discardableResult
+    static func save(
+        _ files: [AudioFile],
+        storage: AudioLibraryStorage = .standard
+    ) async -> Bool {
+        await persistence.save(files, storage: storage)
     }
 
+    @discardableResult
     static func recordPlayback(
         audioFileID: UUID,
         at date: Date = .now,
-        defaults: UserDefaults = .standard
-    ) async {
+        storage: AudioLibraryStorage = .standard
+    ) async -> Bool {
         await persistence.recordPlayback(
             audioFileID: audioFileID,
             at: date,
-            defaults: ThreadSafeUserDefaults(defaults)
+            storage: storage
         )
     }
 
+    @discardableResult
     static func setFavorite(
         _ isFavorite: Bool,
         audioFileID: UUID,
-        defaults: UserDefaults = .standard
-    ) async {
+        storage: AudioLibraryStorage = .standard
+    ) async -> Bool {
         await persistence.setFavorite(
             isFavorite,
             audioFileID: audioFileID,
-            defaults: ThreadSafeUserDefaults(defaults)
+            storage: storage
         )
     }
 
+    @discardableResult
     static func savePartialTranscription(
         _ transcription: String,
         audioFileID: UUID,
-        defaults: UserDefaults = .standard
-    ) async {
+        storage: AudioLibraryStorage = .standard
+    ) async -> Bool {
         await persistence.savePartialTranscription(
             transcription,
             audioFileID: audioFileID,
-            defaults: ThreadSafeUserDefaults(defaults)
+            storage: storage
         )
+    }
+
+    /// Records a finished analysis against its library entry.
+    ///
+    /// Lives here rather than in `AnalysisStateManager` so every library write
+    /// goes through one serialized actor and one store. The analyzer used to
+    /// read and write `UserDefaults` directly, which is how a rejected write
+    /// could be logged as `💾 Persisted analysis result`.
+    ///
+    /// - Returns: `false` when the file is absent from the library or the write
+    ///   failed — the caller should say so rather than claim success.
+    @discardableResult
+    static func saveAnalysis(
+        _ analysis: AnalysisResult,
+        transcription: String,
+        trackMetadata: AudioTrackMetadata?,
+        audioFileID: UUID,
+        storage: AudioLibraryStorage = .standard
+    ) async -> Bool {
+        await persistence.saveAnalysis(
+            analysis,
+            transcription: transcription,
+            trackMetadata: trackMetadata,
+            audioFileID: audioFileID,
+            storage: storage
+        )
+    }
+
+    /// Moves a library written by an older build out of `UserDefaults`.
+    ///
+    /// The raw bytes are copied rather than decoded and re-encoded, so nothing
+    /// `ResilientDecoding` would have dropped is lost in the move. The old key
+    /// is cleared **only** once the file is on disk: clearing first would
+    /// destroy the library outright if the write failed.
+    private static func migrateFromUserDefaultsIfNeeded(_ storage: AudioLibraryStorage) {
+        guard !FileManager.default.fileExists(atPath: storage.fileURL.path),
+              let defaults = storage.legacyDefaults,
+              let legacy = defaults.data(
+                  forKey: AnalysisStateManager.audioFilesUserDefaultsKey
+              )
+        else {
+            return
+        }
+
+        guard write(legacy, to: storage.fileURL) else {
+            Log.audio.error(
+                "Could not migrate the audio library out of UserDefaults — leaving the old copy in place"
+            )
+            return
+        }
+
+        defaults.removeObject(forKey: AnalysisStateManager.audioFilesUserDefaultsKey)
+        Log.audio.info("📦 Migrated the audio library out of UserDefaults (\(legacy.count) bytes)")
+    }
+
+    /// Atomic, so a crash mid-write cannot leave a half-written library.
+    fileprivate static func write(_ data: Data, to url: URL) -> Bool {
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: url, options: .atomic)
+            return true
+        } catch {
+            Log.audio.error(
+                "Failed to write the audio library: \(error.localizedDescription, privacy: .public)"
+            )
+            return false
+        }
     }
 
     private static func needsCatalogHydration(_ audioFile: AudioFile) -> Bool {
@@ -207,47 +307,70 @@ nonisolated enum AudioLibraryStore {
 /// Serializes library writes away from the main actor. Keeping one persistence
 /// actor also prevents two rapid UI edits from writing snapshots concurrently.
 private actor AudioLibraryPersistence {
-    func save(_ files: [AudioFile], defaults: ThreadSafeUserDefaults) {
+    @discardableResult
+    func save(_ files: [AudioFile], storage: AudioLibraryStorage) -> Bool {
         guard let data = try? JSONEncoder().encode(files) else {
-            Log.audio.info("❌ Failed to encode \(files.count) audio file(s)")
-            return
+            Log.audio.error("❌ Failed to encode \(files.count) audio file(s)")
+            return false
         }
 
-        defaults.value.set(data, forKey: AnalysisStateManager.audioFilesUserDefaultsKey)
+        return AudioLibraryStore.write(data, to: storage.fileURL)
     }
 
-    func recordPlayback(audioFileID: UUID, at date: Date, defaults: ThreadSafeUserDefaults) {
-        guard var files = decode(defaults),
-              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return }
+    func recordPlayback(audioFileID: UUID, at date: Date, storage: AudioLibraryStorage) -> Bool {
+        guard var files = decode(storage),
+              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return false }
         files[index].lastPlayedDate = date
         files[index].playCount = (files[index].playCount ?? 0) + 1
-        save(files, defaults: defaults)
+        return save(files, storage: storage)
     }
 
-    func setFavorite(_ isFavorite: Bool, audioFileID: UUID, defaults: ThreadSafeUserDefaults) {
-        guard var files = decode(defaults),
-              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return }
+    func setFavorite(_ isFavorite: Bool, audioFileID: UUID, storage: AudioLibraryStorage) -> Bool {
+        guard var files = decode(storage),
+              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return false }
         files[index].isFavorite = isFavorite
-        save(files, defaults: defaults)
+        return save(files, storage: storage)
     }
 
     func savePartialTranscription(
         _ transcription: String,
         audioFileID: UUID,
-        defaults: ThreadSafeUserDefaults
-    ) {
+        storage: AudioLibraryStorage
+    ) -> Bool {
         guard transcription.isEmpty == false,
-              var files = decode(defaults),
-              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return }
+              var files = decode(storage),
+              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return false }
         files[index].transcription = transcription
-        save(files, defaults: defaults)
+        return save(files, storage: storage)
+    }
+
+    func saveAnalysis(
+        _ analysis: AnalysisResult,
+        transcription: String,
+        trackMetadata: AudioTrackMetadata?,
+        audioFileID: UUID,
+        storage: AudioLibraryStorage
+    ) -> Bool {
+        guard var files = decode(storage) else {
+            Log.analysis.error("⚠️ Could not read the audio library to persist analysis")
+            return false
+        }
+        guard let index = files.firstIndex(where: { $0.id == audioFileID }) else {
+            Log.analysis.error("⚠️ AudioFile \(audioFileID) not found in the stored library")
+            return false
+        }
+
+        files[index].analysisResult = analysis
+        files[index].transcription = transcription
+        files[index].trackMetadata = trackMetadata
+        return save(files, storage: storage)
     }
 
     /// Element-wise, matching `AudioLibraryStore.load`. Whole-array decoding let
     /// one unreadable entry turn every edit below — favourite, play count,
     /// partial transcript — into a silent no-op.
-    private func decode(_ defaults: ThreadSafeUserDefaults) -> [AudioFile]? {
-        guard let data = defaults.value.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey) else {
+    private func decode(_ storage: AudioLibraryStorage) -> [AudioFile]? {
+        guard let data = try? Data(contentsOf: storage.fileURL) else {
             return nil
         }
         let (files, dropped) = ResilientDecoding.array(AudioFile.self, from: data)
@@ -255,16 +378,5 @@ private actor AudioLibraryPersistence {
             Log.audio.error("Dropped \(dropped) unreadable audio file(s) while updating the library")
         }
         return files.isEmpty ? nil : files
-    }
-}
-
-/// `UserDefaults` supports concurrent access, but Foundation does not yet mark
-/// the reference type Sendable. This wrapper is confined to the persistence
-/// actor and is never mutated outside the documented thread-safe API.
-private nonisolated struct ThreadSafeUserDefaults: @unchecked Sendable {
-    let value: UserDefaults
-
-    init(_ value: UserDefaults) {
-        self.value = value
     }
 }

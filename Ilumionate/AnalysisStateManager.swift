@@ -594,14 +594,23 @@ class AnalysisStateManager {
         // Persist the complete result, keyed by the audio's full content fingerprint.
         cache(completed, for: audioFile)
 
-        // Write results back to the persisted AudioFile list in UserDefaults
-        // so all views see the file as analyzed on next load.
-        persistAnalysisToAudioFiles(
-            audioFileID: audioFile.id,
-            analysis: completed.analysis,
+        // Write results back to the stored library so all views see the file as
+        // analyzed on next load.
+        let didPersist = await AudioLibraryStore.saveAnalysis(
+            completed.analysis,
             transcription: completed.transcription.fullText,
-            trackMetadata: metadata.isEmpty ? nil : metadata
+            trackMetadata: metadata.isEmpty ? nil : metadata,
+            audioFileID: audioFile.id
         )
+        if didPersist {
+            Log.analysis.info("💾 Persisted analysis result to the stored library")
+        } else {
+            // Previously this was announced as a success regardless. A dropped
+            // write is how a finished analysis disappeared without a trace.
+            Log.analysis.error(
+                "❌ Analysis for \(audioFile.filename, privacy: .public) was NOT persisted"
+            )
+        }
 
         // Remove from queue
         analysisQueue.removeAll { $0.id == audioFile.id }
@@ -631,51 +640,6 @@ class AnalysisStateManager {
 
     /// Key used by AudioLibraryView to store/load the audio file list.
     nonisolated static let audioFilesUserDefaultsKey = "audioFiles"
-
-    /// Updates the persisted AudioFile in UserDefaults with analysis results.
-    /// This bridges AnalysisStateManager (which owns results) with the AudioFile
-    /// persistence layer (UserDefaults) so every view sees the file as analyzed.
-    private func persistAnalysisToAudioFiles(
-        audioFileID: UUID,
-        analysis: AnalysisResult,
-        transcription: String,
-        trackMetadata: AudioTrackMetadata?
-    ) {
-        guard let data = UserDefaults.standard.data(forKey: Self.audioFilesUserDefaultsKey) else {
-            Log.analysis.info("⚠️ Could not load audio files from UserDefaults to persist analysis")
-            return
-        }
-
-        // Element-wise, matching `AudioLibraryStore.load`. Decoding the array
-        // whole meant a single unreadable entry threw, this bailed out, and the
-        // finished analysis was never written — while the analyzer UI, reading
-        // its own cache, still showed the file complete. Every playlist built
-        // from those files then reported them unanalyzed.
-        let decoded = ResilientDecoding.array(AudioFile.self, from: data)
-        var files = decoded.values
-        let dropped = decoded.dropped
-        guard files.isEmpty == false else {
-            Log.analysis.info("⚠️ Could not load audio files from UserDefaults to persist analysis")
-            return
-        }
-        if dropped > 0 {
-            Log.analysis.error("Dropped \(dropped) unreadable audio file(s) while persisting analysis")
-        }
-
-        guard let index = files.firstIndex(where: { $0.id == audioFileID }) else {
-            Log.analysis.info("⚠️ AudioFile \(audioFileID) not found in persisted list")
-            return
-        }
-
-        files[index].analysisResult = analysis
-        files[index].transcription = transcription
-        files[index].trackMetadata = trackMetadata
-
-        if let encoded = try? JSONEncoder().encode(files) {
-            UserDefaults.standard.set(encoded, forKey: Self.audioFilesUserDefaultsKey)
-            Log.analysis.info("💾 Persisted analysis result to AudioFile in UserDefaults")
-        }
-    }
 
     /// Get completed analysis for a file
     func getCompletedAnalysis(for audioFile: AudioFile) -> CompletedAnalysis? {

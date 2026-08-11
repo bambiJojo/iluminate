@@ -520,9 +520,7 @@ struct SessionDetailView: View {
     // MARK: - Helpers
 
     private func refreshAudioFile() {
-        guard let data = UserDefaults.standard.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey),
-              let files = try? JSONDecoder().decode([AudioFile].self, from: data),
-              let updated = files.first(where: { $0.id == audioFileID }) else {
+        guard let updated = AudioLibraryStore.load().first(where: { $0.id == audioFileID }) else {
             return
         }
 
