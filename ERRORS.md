@@ -70,6 +70,147 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
+### ERR-006 — Foundation Models blocked by Game Mode; every analysis silently degrades
+
+- **Date discovered:** 2026-08-11
+- **Status:** identified
+- **Severity:** medium
+- **Area:** analysis pipeline
+
+**Symptom**
+On a device run, **every** AI content analysis failed and fell back to keyword extraction —
+six for six. The underlying error each time:
+
+```
+Failed model manager query for model com.apple.fm.language.instruct_300m.safety:
+Not executed due to current system state ["StandardGameMode"], try again later
+```
+
+The pipeline retries once with a minimal prompt, fails the same way, then logs
+`❌ AI generation gave up (other) — using keyword fallback`. The resulting sessions are
+keyword-quality: `Yes Brain Loop.mp3` produced 3 phase segments, `C-U-M.mp3` produced 1.
+
+Nothing surfaces this in the UI. The user sees a completed analysis and a generated session
+with no indication it was built without the language model.
+
+**Where**
+`Ilumionate/AIContentAnalyzer.swift` / `Ilumionate/AIAnalysisManager*.swift` — the retry and
+fallback path that emits `⚠️ AI attempt 1 failed (other)` and `↻ Retrying with minimal prompt`.
+
+**Reproduction**
+Run analysis on device while the system reports `StandardGameMode`. Not reproducible in the
+simulator or on macOS.
+
+**Root cause**
+Not the app's code. iOS declines to run the on-device safety model
+(`com.apple.fm.language.instruct_300m.safety`) while the system is in that state, and
+`FoundationModels` surfaces it as a generic `GenerationError Code=-1`. The graceful fallback
+is working as designed; what is missing is any signal that it happened.
+
+**Proposed fix**
+Two parts, both small. First, record on `AnalysisResult` whether the language model or the
+keyword fallback produced it, and show that in the analysis detail so a keyword-only session
+is identifiable after the fact. Second, treat this specific error as retryable-later rather
+than terminal — it is a transient system state, unlike a genuine model failure — and offer
+re-analysis once the device leaves that state.
+
+**Risks / blockers**
+Detecting the state reliably means string-matching `"StandardGameMode"` inside a nested
+`NSMultipleUnderlyingErrorsKey` chain, which is fragile across OS versions. Prefer keying the
+retry decision on the outer `Code=1013` from `ModelManagerServices.ModelManagerError`.
+
+---
+
+### ERR-005 — Audio library exceeds the 4 MiB UserDefaults limit; writes are silently dropped
+
+- **Date discovered:** 2026-08-11
+- **Status:** identified
+- **Severity:** critical
+- **Area:** persistence, audio library
+
+**Symptom**
+On a device run with 97 audio files, iOS rejected the library write:
+
+```
+CFPrefsPlistSource<0x1021ec800> (Domain: com.byronquine.lumenSync, ...): Attempting to store
+>= 4194304 bytes of data in CFPreferences/NSUserDefaults on this platform is invalid.
+This is a bug in Ilumionate or a library it uses.
+<decode: bad range for [%@] got [offs:359 len:661 within:0]>
+CFPrefsPlistSource<0x1021ec800> ...: Transitioning into direct mode
+```
+
+The consequence appeared minutes later in the same run: after analysing `Z*C*D*O.m4a` the
+app logged `⚠️ AudioFile D905A69B-… not found in persisted list` and the finished analysis
+was discarded. Every other file in the run logged `💾 Persisted analysis result…` — but that
+line is printed unconditionally and does not mean the write landed.
+
+**Where**
+`Ilumionate/AnalysisStateManager.swift:675` and `Ilumionate/AudioLibraryStore.swift:216` —
+both call `UserDefaults.set(_:forKey:)` with the whole encoded library under the
+`audioFiles` key (`AnalysisStateManager.swift:633`). Neither can detect failure:
+`UserDefaults.set` returns `Void`.
+
+`AnalysisStateManager.swift:673` logs `💾 Persisted analysis result to AudioFile in
+UserDefaults` immediately after the `set`, so the log actively misreports a dropped write.
+
+**Reproduction**
+Build a library large enough to cross 4 MiB when encoded — roughly 90–100 analysed files,
+since each carries `transcription` (observed up to 3,145 words) plus a full `AnalysisResult`
+with phase segments, linguistic markers, technique detection and prosodic profile. Analyse
+one more file and watch for `not found in persisted list`, or read the encoded size directly:
+
+```swift
+UserDefaults.standard.data(forKey: "audioFiles")?.count
+```
+
+**Root cause**
+The entire audio library is persisted as a single JSON blob in `UserDefaults`, which iOS
+caps at 4 MiB per value. The design predates transcripts and full analysis results being
+stored on `AudioFile`. The analysis cache already lives in a file
+(`AnalysisStateManager.swift:546`, `analysisCacheURL`); the library never moved.
+
+The `audioFiles` key is the only plausible multi-megabyte value in this domain — every other
+`UserDefaults` writer in the app stores scalars or short strings
+(`Ilumionate/AnalysisPreferences.swift:247` onward).
+
+**Already done**
+Nothing fixed. Note that the duplicate-detection work committed on
+`feature/audio-duplicate-detection` **adds** to the blob: a 64-character
+`contentFingerprint` and a `remoteSource` record per file. Marginal against 4 MiB, but it
+moves in the wrong direction.
+
+**Why this matters beyond lost analysis**
+It defeats duplicate detection. `DuplicateAudioIndex` is built from the *persisted* library
+(`Ilumionate/AudioManager.swift:138`, `Ilumionate/PlaylistImport/BambiCloudPlaylistImportViewModel.swift:170`).
+When a write is rejected, a downloaded file is absent from the library on next launch, the
+index cannot know about it, the verdict is `.distinct`, and `uniqueDestination`
+(`PlaylistTrackDownloader.swift:139`) writes `Name (1).mp3`. That is very likely a
+contributor to the duplicate accumulation the feature was built to stop, and no amount of
+import-time checking fixes it while the store silently drops writes.
+
+**Proposed fix**
+Move the library off `UserDefaults` to a file in Application Support, written atomically —
+the same shape `AnalysisStateManager` already uses for its analysis cache and
+`GeneratedSessionStore` uses for sessions. Migrate once on first launch by reading the
+existing `UserDefaults` value, writing the file, and removing the key. Make the write path
+`throws` so a failure is logged as a failure rather than announced as a success.
+
+A smaller stopgap, if the move is deferred: keep `transcription` and `analysisResult` out of
+the persisted `AudioFile` entirely and read them from the existing analysis cache file on
+demand. That is where they already live — `CachedAudioAnalysis` holds both — so the library
+blob would shrink to metadata and drop well under the limit.
+
+**Risks / blockers**
+`audioFiles` is read from at least four places
+(`AudioLibraryStore.swift:64` and `:250`, `AnalysisStateManager.swift:644`,
+`SessionDetailView.swift:523`); all must move together or the library will appear to empty.
+Migration must be idempotent and must not run while an analysis is mid-write. Worth pairing
+with the memory pressure seen in the same run (`⚠️ High memory usage: 274MB` at launch,
+`🔥 CRITICAL memory usage: 450MB` later), which has the same cause: the whole library,
+transcripts included, is decoded into memory on every load.
+
+---
+
 ### ERR-004 — `AudioFile.==` ignores content fingerprint and remote provenance
 
 - **Date discovered:** 2026-08-11
