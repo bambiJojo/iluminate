@@ -70,6 +70,171 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
+### ERR-009 — Memory climbs past 500 MB during queued analysis
+
+- **Date discovered:** 2026-08-11
+- **Status:** identified
+- **Severity:** medium
+- **Area:** analysis pipeline, memory
+
+**Symptom**
+A device run reported `⚠️ High memory usage: 269MB` at launch and `🔥 CRITICAL memory usage:
+565MB` a few seconds later, while WhisperKit was initialising and the analysis queue was
+filling. The previous run peaked at 450 MB, so it is getting worse, not better.
+
+The app's own pressure handling reacts (`🔥 Performing aggressive memory cleanup...`,
+`🧹 Performing moderate memory cleanup...`) and the app survives, so this is a headroom
+problem rather than a crash today. On a lower-memory device or with a longer queue it would
+be a termination.
+
+**Where**
+Not attributed. Candidates, in rough order of size: the WhisperKit model
+(`🔄 Initializing WhisperKit...` immediately precedes the 565 MB reading), the 108 entries of
+`cachedResults` held by `AnalysisStateManager` (`📂 Loaded 108 cached analysis result(s)`),
+and the audio library itself — every `AudioFile` carries its full transcript and
+`AnalysisResult`, and `AudioLibraryStore.load` decodes all of them into memory on every call.
+
+**Reproduction**
+Run on device with a ~100-file analysed library and queue several files. Watch for the
+`🔥 CRITICAL memory usage` line. Instruments' Allocations template would attribute it; the
+log alone does not.
+
+**Root cause**
+Unknown — not yet investigated. The log records a total, not a breakdown.
+
+**Proposed fix**
+Measure before changing anything. If the library decode is a material share, the fix pairs
+naturally with ERR-005's note: keep `transcription` and `analysisResult` out of the in-memory
+`AudioFile` and read them from the analysis cache file on demand, so the resident library is
+metadata only.
+
+**Risks / blockers**
+`AudioLibraryStore.load()` is called from many places and returns a full `[AudioFile]`; making
+the heavy fields lazy changes the shape of the type every consumer sees.
+
+---
+
+### ERR-008 — Chunked phase detection collapses to one phase and always falls back
+
+- **Date discovered:** 2026-08-11
+- **Status:** identified
+- **Severity:** high
+- **Area:** analysis pipeline
+
+**Symptom**
+Every file in a device run logged:
+
+```
+⚠️ ChunkedPhaseAnalyzer: 1 phase(s) detected — keyword fallback
+```
+
+Three for three, across transcripts of 3,265, 3,663 and 1,179 words. The phase timeline that
+reached the light score came from keyword classification each time — 46, 43 and 8 segments —
+not from the chunked analyzer.
+
+`✅ AI Analysis completed` is still logged immediately afterwards, because the model *did*
+classify content type and mood. Only the phase timeline fell back. Nothing distinguishes the
+two in the log or the UI, so a session built on keyword phases is indistinguishable from one
+built on model phases.
+
+The light scores generated in that run scored 87%, 81% and 98% alignment, with two logging
+`⚠️ Light score alignment below target after 2 repair pass(es)`. Phase alignment was the
+weakest component both times (`phase=72`, `phase=63`), which is consistent with a timeline
+that did not come from the model.
+
+**Where**
+`Ilumionate/ChunkedPhaseAnalyzer.swift:144` — `distinctCount` counts *distinct* phases across
+consolidated segments, and `:145` requires at least two before the result is used.
+
+The collapse happens upstream of that guard, in some combination of `classifyChunks`,
+`collapseShortRuns(_:minRun:)` at `:141` — whose `minRun` is `max(20, duration * 0.035)`, so
+a 15-minute file demands runs of ~31 chunks before a phase survives — and
+`enforcePhaseOrdering` at `:142`.
+
+**Reproduction**
+Analyse any hypnosis file of a few thousand words on device and watch for the warning. Not
+yet reproduced in a unit test; `ChunkedPhaseAnalyzerTests` covers the helpers in isolation,
+not the whole path against a realistic transcript.
+
+**Root cause**
+Unknown — not yet investigated. The distinguishing question is whether `classifyChunks`
+returns a single phase for every chunk (a prompting or model problem) or returns varied
+phases that `collapseShortRuns` then flattens (a threshold problem). The log does not say,
+because the timeline is not logged before consolidation.
+
+**Proposed fix**
+First make the failure diagnosable: log the pre-consolidation distinct phase count alongside
+the post-consolidation one, so the two causes can be told apart from a device log. Then fix
+whichever it is. Separately, record on the result that phases came from the fallback — the
+same treatment `AIGenerationDiagnosis` now gives content analysis (ERR-006) — so a keyword
+timeline is visible rather than silent.
+
+**Risks / blockers**
+`minRun` exists to stop a jittery timeline producing dozens of one-chunk phases; lowering it
+without care trades this failure for that one. Any change wants a fixture built from a real
+transcript, which the suite does not currently have.
+
+---
+
+### ERR-007 — The first analysis prompt always exceeds the context window
+
+- **Date discovered:** 2026-08-11
+- **Status:** identified
+- **Severity:** high
+- **Area:** analysis pipeline
+
+**Symptom**
+Every long file in a device run failed its first AI attempt the same way:
+
+```
+⚠️ AI attempt 1 failed (contextWindow). Reason: exceededContextWindowSize(... Content contains
+4816 tokens, which exceeds the maximum allowed context size of 4096.)
+↻ Retrying with minimal prompt
+```
+
+Four for four: 4,816, 4,765, 4,829 and 4,864 tokens against a 4,096 limit. The retry with the
+compact prompt then succeeded in three cases, so the analysis completed — but each file paid
+a full wasted round trip through the on-device model first. In the fourth
+(`Sucked Stupid.m4a`) the retry hit a content guardrail and the file fell back to keyword
+analysis, so the wasted first attempt was the only chance the model had at the full context.
+
+The token counts are the tell. Transcripts of 3,265, 3,663, 1,179 and 2,272 words all
+produced ~4,800 tokens — a threefold spread in input for a 2% spread in prompt size. The
+prompt is not scaling with the transcript: it is a fixed-size template that lands about 17%
+over the ceiling every time, for any file with a full chunk.
+
+**Where**
+`Ilumionate/AIAnalysisManager+Prompts.swift:25` — `maxChunkSize: Int = 600`, used by the
+first attempt at `Ilumionate/AIAnalysisManager.swift:65`. The retry at
+`AIAnalysisManager.swift:183` passes `maxChunkSize: 120`, which fits.
+
+**Reproduction**
+Analyse any file whose transcript fills a 600-word chunk and read the log. Every device run
+captured so far shows it.
+
+**Root cause**
+Not measured, but narrow: a 600-word chunk is roughly 800 tokens, so the remaining ~4,000
+come from the instructions, metadata and response schema around it. The default was presumably
+chosen before the prompt template grew, and nothing checks the total against the model's
+limit before sending.
+
+**Proposed fix**
+Count tokens before sending rather than discovering the limit by failing. Failing that,
+lower the default `maxChunkSize` until the assembled prompt fits with headroom, and add a
+test that asserts the assembled first-attempt prompt for a realistic transcript stays under
+4,096 — otherwise the same drift recurs the next time the template grows.
+
+Worth noting the interaction with ERR-006: `.contextWindow` is deliberately retryable, and
+that policy is correct. The waste here is that attempt 1 is *known* to be too large before it
+is sent.
+
+**Risks / blockers**
+A smaller chunk means less context per model call, which may change classification quality.
+Whatever number is chosen should be justified against the measured token count, not guessed
+again.
+
+---
+
 ### ERR-004 — `AudioFile.==` ignores content fingerprint and remote provenance
 
 - **Date discovered:** 2026-08-11
