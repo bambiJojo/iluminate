@@ -45,6 +45,27 @@ xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platfo
 xcodebuild -project Ilumionate.xcodeproj clean
 ```
 
+### Running a subset of tests
+
+**A `-only-testing:` filter that matches nothing still reports success.** `xcodebuild` runs
+zero tests and prints `** TEST SUCCEEDED **`, so a failing test reads as passing. Swift
+Testing identifiers end in `()`; XCTest method names do not:
+
+```bash
+-only-testing:IlumionateTests/MyTests/myTest()   # runs the test
+-only-testing:IlumionateTests/MyTests/myTest     # matches nothing, "succeeds"
+```
+
+Filter at suite level (`-only-testing:IlumionateTests/MyTests`) unless you need one test.
+
+Prefer the wrapper, which fails when zero test cases ran:
+
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests
+```
+
+See ERRORS.md ERR-002.
+
 ### Targets
 
 | Target | Purpose |

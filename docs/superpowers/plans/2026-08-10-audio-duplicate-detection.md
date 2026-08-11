@@ -28,10 +28,13 @@ xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platfo
 xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests
 ```
 
-To run one test, append the type and function name:
+To run one test, append the type and function name — **with the trailing `()`**. Without it
+the filter matches nothing, no tests run, and `xcodebuild` still prints `** TEST SUCCEEDED **`
+(ERRORS.md ERR-002). `Scripts/run-tests.sh` wraps `xcodebuild` and fails when zero tests ran,
+which is the safer way to invoke any filtered run.
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests/AudioTitleNormalizerTests/numberedSeriesStayDistinct
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests/AudioTitleNormalizerTests/numberedSeriesStayDistinct()
 ```
 
 Run the iOS Simulator destination too before the final commit of each phase:
@@ -911,7 +914,7 @@ Append to the `PlaylistTrackDownloaderTests` struct in `IlumionateTests/Playlist
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests/PlaylistTrackDownloaderTests/savedDownloadCarriesIdentity
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests/PlaylistTrackDownloaderTests/savedDownloadCarriesIdentity()
 ```
 
 Expected: FAIL — `contentFingerprint` is nil, so `.count == 64` is false.
@@ -1278,7 +1281,7 @@ Append to the `BambiCloudPlaylistImportTests` struct:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests/BambiCloudPlaylistImportTests/aPreviouslyDownloadedTrackIsNotRequestedAgain
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests/BambiCloudPlaylistImportTests/aPreviouslyDownloadedTrackIsNotRequestedAgain()
 ```
 
 Expected: FAIL — `Issue.record` fires, the loader was called.
