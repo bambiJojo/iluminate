@@ -20,6 +20,14 @@ nonisolated enum AudioTitleNormalizer {
         "mp3", "m4a", "wav", "aac", "flac", "v2", "320kbps"
     ]
 
+    /// Hoisted deliberately. A regex literal written inline is built where it
+    /// appears, so it was recompiled on every call — and `DuplicateAudioIndex`
+    /// calls this once per library file, which is ~100 compilations per import
+    /// on a real library. A Time Profiler trace showed the Swift Regex parser
+    /// (`Parser.parseCustomCharacterClass` and friends) running on the main
+    /// thread here. It was a small share of the total, but it is pure waste.
+    private static let separators = /[^a-z0-9]+/
+
     /// A filename or title reduced to lowercase, unaccented, punctuation-free
     /// tokens.
     ///
@@ -62,7 +70,7 @@ nonisolated enum AudioTitleNormalizer {
             .lowercased()
 
         var tokens = base
-            .replacing(/[^a-z0-9]+/, with: " ")
+            .replacing(Self.separators, with: " ")
             .split(separator: " ")
             .map(String.init)
 

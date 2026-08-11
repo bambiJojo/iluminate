@@ -135,13 +135,13 @@ class AudioManager: NSObject {
                 targetFilename: url.lastPathComponent,
                 transferMode: .copy,
                 durationTimeout: .seconds(3),
-                existing: DuplicateAudioIndex(AudioLibraryStore.load())
+                existing: await AudioLibraryStore.duplicateIndex()
             )
 
             switch outcome {
             case .alreadyInLibrary(let existingID):
                 Log.audio.info("↩️ Already in the library: \(url.lastPathComponent, privacy: .public)")
-                return AudioLibraryStore.load().first { $0.id == existingID }
+                return await AudioLibraryStore.file(withID: existingID)
 
             case .imported(let audioFile):
                 let restoredAudioFile = AnalysisStateManager.shared.restoringCachedData(in: audioFile)
@@ -214,14 +214,14 @@ class AudioManager: NSObject {
                 targetFilename: targetName,
                 transferMode: .move,
                 durationTimeout: .seconds(5),
-                existing: DuplicateAudioIndex(AudioLibraryStore.load())
+                existing: await AudioLibraryStore.duplicateIndex()
             )
 
             guard case .imported(let audioFile) = outcome else {
                 if case .alreadyInLibrary(let existingID) = outcome {
                     try? FileManager.default.removeItem(at: tempURL)
                     Log.audio.info("↩️ Downloaded audio was already in the library")
-                    return AudioLibraryStore.load().first { $0.id == existingID }
+                    return await AudioLibraryStore.file(withID: existingID)
                 }
                 return nil
             }

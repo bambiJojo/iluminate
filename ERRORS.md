@@ -70,6 +70,66 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
+### ERR-010 — 23 main-thread hangs in a 6-minute session, one lasting 13.3 seconds
+
+- **Date discovered:** 2026-08-11
+- **Status:** identified
+- **Severity:** high
+- **Area:** main thread / UI responsiveness
+
+**Symptom**
+A Time Profiler trace of a 348-second session on an iPhone 17 Pro Max (iOS 26.6) recorded 23
+hangs, every one on the main thread:
+
+| Type | Count | Worst |
+|---|---|---|
+| Severe Hang | 1 | **13.31 s** at 01:15.304 |
+| Hang | 3 | 874 ms at 00:07.224 |
+| Microhang (>250 ms) | 19 | 581 ms |
+
+The severe hang alone freezes the UI for over thirteen seconds. The 874 ms one lands at
+00:07, during launch.
+
+Main-thread samples total 123,035 at 1 ms weight across a 348 s run, so the main thread was
+executing roughly 35% of wall-clock time.
+
+**Where**
+Not attributed. See the root cause note — this is the open question.
+
+Trace: `/Users/byronquine/Developer/instrumentRuns/run3.trace` (Time Profiler template,
+process `Ilumionate` pid 12056, 2026-08-11T08:09:43+03:00).
+
+**Reproduction**
+Launch on device with a ~100-file analysed library and let the analysis queue run. The hangs
+in this trace cluster around launch, WhisperKit initialisation and queue processing.
+
+**Root cause**
+Unknown. Attribution is blocked: `xcrun xctrace export` yields backtraces whose frames are
+almost entirely unsymbolicated raw addresses (`0x1042e411d`). Only 521 distinct symbol names
+resolved across the whole export, and those are disproportionately system libraries, so
+ranking them describes what happened to symbolicate rather than what consumed the time.
+
+An initial read of that ranking wrongly pointed at `AudioTitleNormalizer.tokens(in:)`.
+Counting properly across all main-thread samples put it at **20 of 123,035 — 0.0%**. It is
+not the cause. Recorded here because the same mistake is easy to repeat: the symbolicated
+subset of this export is not a sample of the whole.
+
+**Proposed fix**
+Symbolicate before analysing. Open the trace in Instruments with the matching dSYM, or
+re-export once the app's symbols resolve, and read the heaviest main-thread stacks in the
+13.3 s window (75.304 s – 88.614 s on the trace clock). Only then decide what to change.
+
+Two structural candidates worth checking against the symbolicated trace rather than assuming:
+`AudioLibraryStore.load()` decodes the entire library synchronously and has `@MainActor`
+callers (`AudioManager.importAudio`, `AudioManager.downloadAudio`), and WhisperKit
+initialisation coincides with the launch-time hang.
+
+**Risks / blockers**
+Needs the dSYM for the exact build that produced the trace. Without symbolication this is not
+diagnosable from the export, only observable.
+
+---
+
 ### ERR-009 — Memory climbs past 500 MB during queued analysis
 
 - **Date discovered:** 2026-08-11
@@ -99,8 +159,35 @@ Run on device with a ~100-file analysed library and queue several files. Watch f
 `🔥 CRITICAL memory usage` line. Instruments' Allocations template would attribute it; the
 log alone does not.
 
+**The allocation rate is the sharper signal.** Three Allocations traces were attempted on
+2026-08-11. Two crashed Instruments by growing past **30 GB**; the two that could be saved are
+**10 GB** and **4.1 GB**. The 4.1 GB one covers **55.6 seconds**
+(`allocationRun002.trace`, template `Allocations`, pid 14007) — about **74 MB of allocation
+records per second**.
+
+An Allocations trace records roughly one event per malloc/free, so that implies tens of
+millions of allocation events in under a minute. The problem is therefore **churn**, not only
+the 565 MB resident peak: something in the analysis path is allocating and freeing
+continuously. A steady 565 MB of retained objects would produce a small trace.
+
 **Root cause**
-Unknown — not yet investigated. The log records a total, not a breakdown.
+Unknown. The traces are too large to analyse on the machine that produced them — exporting
+the 81 MB Time Profiler trace expanded it 2.3× to 189 MB and filled the disk, so exporting a
+4.1 GB one is not viable at present.
+
+Note the capture strategy is the obstacle, not the bug. Full Allocations recording is the
+wrong instrument for a churn-heavy app: it records every event. Better options, cheapest
+first:
+
+1. **Memory Graph Debugger** (Xcode, Debug Navigator → capture) at the 565 MB peak. A
+   point-in-time snapshot of what is *retained*, with object counts. No trace at all, and it
+   answers "what is holding 565 MB" directly.
+2. **Allocations with "Discard events for freed memory" enabled** — records only live
+   allocations and drops the churn, shrinking the trace by orders of magnitude.
+3. **Mark Generation** snapshots either side of one file's analysis, then diff — this
+   attributes growth to a specific operation rather than to a whole session.
+4. Failing all that, record a much shorter window: launch, let it settle, then start
+   recording immediately before the suspect operation.
 
 **Proposed fix**
 Measure before changing anything. If the library decode is a material share, the fix pairs

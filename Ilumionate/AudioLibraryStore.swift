@@ -84,6 +84,31 @@ nonisolated enum AudioLibraryStore {
         return []
     }
 
+    /// The library's duplicate index, built off the main actor.
+    ///
+    /// `@concurrent` is load-bearing for the same reason it is on
+    /// `loadRepairingStoredFiles`: this decodes the entire library — every
+    /// `AudioFile`, and with it every transcript and `AnalysisResult` — then
+    /// normalises a title per file. Both callers in `AudioManager` are
+    /// `@MainActor`, so without this the whole cost lands on the main thread
+    /// on every single import.
+    @concurrent
+    nonisolated static func duplicateIndex(
+        storage: AudioLibraryStorage = .standard
+    ) async -> DuplicateAudioIndex {
+        DuplicateAudioIndex(load(storage: storage))
+    }
+
+    /// One entry by identifier, without decoding the library on the caller's
+    /// actor. Used after an import resolves to a file already on the shelf.
+    @concurrent
+    nonisolated static func file(
+        withID id: AudioFile.ID,
+        storage: AudioLibraryStorage = .standard
+    ) async -> AudioFile? {
+        load(storage: storage).first { $0.id == id }
+    }
+
     /// Per-element. Decoding the array whole meant one unreadable audio file
     /// silently emptied the user's entire library.
     private static func decoded(_ data: Data) -> [AudioFile] {
