@@ -9,41 +9,40 @@ import Testing
 
 @MainActor
 struct AudioImportWorkerTests {
-    @Test func slowFileTransferDoesNotBlockMainActor() async throws {
+    // Asserts the property directly — the transfer runs off the main actor —
+    // rather than timing how quickly the main actor notices. The timed version
+    // measured the machine, not the code: under the full suite, where dozens of
+    // `@MainActor` suites queue on one actor, it recorded a 22-second delay and
+    // failed while the code under test was behaving perfectly.
+    @Test func fileTransferRunsOffTheMainActor() async throws {
         let sourceURL = URL.temporaryDirectory
             .appending(path: "import-source-\(UUID().uuidString).mp3")
         try Data("test audio".utf8).write(to: sourceURL)
         defer { try? FileManager.default.removeItem(at: sourceURL) }
 
-        let (transferStarted, startedContinuation) = AsyncStream<Void>.makeStream()
-        let clock = ContinuousClock()
-        let startedAt = clock.now
+        let documents = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: documents) }
 
-        async let importedFile = AudioImportWorker.prepareAudioFile(
+        let observed = TransferThreadProbe()
+
+        let outcome = try await AudioImportWorker.prepareAudioFile(
             from: sourceURL,
-            targetFilename: "import-test-\(UUID().uuidString).mp3",
+            targetFilename: "off-main.mp3",
             transferMode: .copy,
             durationTimeout: .milliseconds(50),
+            documentsURL: documents,
             transferOperation: { source, destination, _ in
-                startedContinuation.yield()
-                Thread.sleep(forTimeInterval: 0.5)
+                observed.record(isMain: Thread.isMainThread)
                 try FileManager.default.copyItem(at: source, to: destination)
             }
         )
 
-        for await _ in transferStarted {
-            break
-        }
-
-        let notificationDelay = startedAt.duration(to: clock.now)
-        #expect(notificationDelay < .milliseconds(250))
-
-        guard case .imported(let result) = try await importedFile else {
+        guard case .imported = outcome else {
             Issue.record("Expected the file to be imported")
             return
         }
-        defer { try? FileManager.default.removeItem(at: result.url) }
-        #expect(result.fileSize > 0)
+        #expect(observed.ranOnMainThread == false)
     }
 
     @Test("Importing the same file twice does not create a second copy")
@@ -83,5 +82,24 @@ struct AudioImportWorkerTests {
             includingPropertiesForKeys: nil
         )
         #expect(stored.contains { $0.lastPathComponent == "Track (1).mp3" } == false)
+    }
+}
+
+/// Records which thread the injected transfer ran on. A plain `var` captured by
+/// the `@Sendable` transfer closure will not compile under strict concurrency.
+private final class TransferThreadProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var wasMain: Bool?
+
+    func record(isMain: Bool) {
+        lock.lock()
+        wasMain = isMain
+        lock.unlock()
+    }
+
+    var ranOnMainThread: Bool? {
+        lock.lock()
+        defer { lock.unlock() }
+        return wasMain
     }
 }

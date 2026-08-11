@@ -35,16 +35,28 @@ final class PlayerControlsVisibility {
         }
     }
 
+    /// How the idle countdown waits.
+    ///
+    /// Injectable so tests need no wall clock. Sleeping for a short real delay
+    /// and then sleeping a bit longer to observe the result only works while the
+    /// machine is idle: run under the full suite, where dozens of `@MainActor`
+    /// suites queue on one actor, the countdown's task was not scheduled for
+    /// tens of seconds and the assertions read a stale value.
+    typealias IdleWait = @Sendable (Duration) async -> Void
+
     private let voiceOverActive: @MainActor () -> Bool
     private let autoHideDelay: Double
+    private let idleWait: IdleWait
     private var hideTask: Task<Void, Never>?
 
     init(
         voiceOverActive: @escaping @MainActor () -> Bool = { PlatformAccessibility.isVoiceOverRunning },
-        autoHideDelay: Double = LiminalMotion.controlsAutoHideDelay
+        autoHideDelay: Double = LiminalMotion.controlsAutoHideDelay,
+        idleWait: @escaping IdleWait = { try? await Task.sleep(for: $0) }
     ) {
         self.voiceOverActive = voiceOverActive
         self.autoHideDelay = autoHideDelay
+        self.idleWait = idleWait
     }
 
     /// Whether auto-hide is currently allowed.
@@ -65,12 +77,20 @@ final class PlayerControlsVisibility {
     /// Begin/refresh the idle countdown.
     func scheduleAutoHide() {
         hideTask?.cancel()
+        let wait = idleWait
+        let delay = Duration.seconds(autoHideDelay)
         hideTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(self?.autoHideDelay ?? LiminalMotion.controlsAutoHideDelay))
+            await wait(delay)
             guard let self, !Task.isCancelled else { return }
             self.hideNow()
         }
     }
 
     func cancel() { hideTask?.cancel() }
+
+    /// Awaits the pending countdown, so a test can observe the result without
+    /// guessing how long the machine will take to get round to it.
+    func awaitPendingAutoHide() async {
+        await hideTask?.value
+    }
 }

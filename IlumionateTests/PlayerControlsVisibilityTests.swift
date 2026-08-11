@@ -3,6 +3,7 @@
 //  IlumionateTests
 //
 
+import Foundation
 import Testing
 @testable import Ilumionate
 
@@ -62,17 +63,21 @@ struct PlayerControlsVisibilityTests {
 
     // MARK: - Idle timer
 
-    /// Short delay so these run fast; 0.2s is a generous settle window.
-    private static let testDelay: Double = 0.05
-    private static let settle: UInt64 = 200_000_000
+    // No wall clock. The countdown's wait is injected and returns immediately,
+    // and `awaitPendingAutoHide()` reports when the hide has actually run — so
+    // these no longer depend on the machine getting round to a 50ms timer
+    // inside a 200ms window, which is what failed under the full suite.
+    private static func immediateHide() -> PlayerControlsVisibility {
+        PlayerControlsVisibility(idleWait: { _ in })
+    }
 
     @Test("Controls hide once the idle delay elapses")
     func idleTimerHides() async {
-        let v = PlayerControlsVisibility(autoHideDelay: Self.testDelay)
+        let v = Self.immediateHide()
         v.registerInteraction()
         #expect(v.isVisible == true)
 
-        try? await Task.sleep(nanoseconds: Self.settle)
+        await v.awaitPendingAutoHide()
         #expect(v.isVisible == false)
     }
 
@@ -81,42 +86,74 @@ struct PlayerControlsVisibilityTests {
     /// controls stayed on screen forever once the sheet was dismissed.
     @Test("Closing a drawer re-arms the idle timer")
     func closingDrawerReArmsTimer() async {
-        let v = PlayerControlsVisibility(autoHideDelay: Self.testDelay)
+        let v = Self.immediateHide()
         v.registerInteraction()
         v.isDrawerOpen = true
 
-        // Let the original timer fire and get swallowed by the drawer guard.
-        try? await Task.sleep(nanoseconds: Self.settle)
+        // The original countdown fires and is swallowed by the drawer guard.
+        await v.awaitPendingAutoHide()
         #expect(v.isVisible == true)
 
         v.isDrawerOpen = false
 
-        try? await Task.sleep(nanoseconds: Self.settle)
+        await v.awaitPendingAutoHide()
         #expect(v.isVisible == false)
     }
 
     @Test("Opening a drawer does not itself hide the controls")
     func openingDrawerKeepsControlsUp() async {
-        let v = PlayerControlsVisibility(autoHideDelay: Self.testDelay)
+        let v = Self.immediateHide()
         v.registerInteraction()
         v.isDrawerOpen = true
 
-        try? await Task.sleep(nanoseconds: Self.settle)
+        await v.awaitPendingAutoHide()
         #expect(v.isVisible == true)
     }
 
     @Test("Each interaction postpones the hide")
     func interactionPostponesHide() async {
-        let v = PlayerControlsVisibility(autoHideDelay: Self.testDelay)
+        // A countdown that only completes once released, so "still inside the
+        // idle window" is a fact rather than a race against a 20ms sleep.
+        let gate = IdleGate()
+        let v = PlayerControlsVisibility(idleWait: { _ in await gate.wait() })
         v.registerInteraction()
 
         for _ in 0..<3 {
-            try? await Task.sleep(nanoseconds: 20_000_000)   // inside the idle window
             v.registerInteraction()
             #expect(v.isVisible == true)
         }
 
-        try? await Task.sleep(nanoseconds: Self.settle)
+        gate.release()
+        await v.awaitPendingAutoHide()
         #expect(v.isVisible == false)
+    }
+}
+
+/// A countdown the test decides the length of.
+private final class IdleGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isOpen = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if isOpen {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                waiting.append(continuation)
+                lock.unlock()
+            }
+        }
+    }
+
+    func release() {
+        lock.lock()
+        isOpen = true
+        let pending = waiting
+        waiting.removeAll()
+        lock.unlock()
+        for continuation in pending { continuation.resume() }
     }
 }

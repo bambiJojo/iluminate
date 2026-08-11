@@ -122,7 +122,15 @@ struct GeneratedSessionStoreTests {
         #expect(FileManager.default.fileExists(atPath: store.sessionURL(forAudioFileID: audioFile.id).path))
     }
 
-    @Test func corruptSessionIsNotReportedAsReady() throws {
+    /// `exists(for:)` stopped decoding in `86e37db` so the Library shelves would
+    /// not read a session per row, and it now reports a present-but-corrupt file
+    /// as ready — deliberately, per the note on the method: badging a row
+    /// optimistically beats stalling the list. `load(for:)` is what must not
+    /// hand back a broken session.
+    ///
+    /// This test asserted the pre-`86e37db` behaviour and had been failing ever
+    /// since, in isolation as well as under load.
+    @Test func corruptSessionIsBadgedButNeverLoaded() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -130,7 +138,9 @@ struct GeneratedSessionStoreTests {
         let audioFile = makeAudioFile(filename: "corrupt.mp3")
         try Data("not-json".utf8).write(to: store.sessionURL(forAudioFileID: audioFile.id))
 
-        #expect(store.exists(for: audioFile) == false)
+        #expect(store.exists(for: audioFile))
+        #expect(store.hasGeneratedScoreOnDisk(for: audioFile))
+        // The one that matters: nothing broken reaches playback.
         #expect(store.load(for: audioFile) == nil)
     }
 
