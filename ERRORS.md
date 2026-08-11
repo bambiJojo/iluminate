@@ -165,56 +165,6 @@ has three call sites.
 
 ---
 
-### ERR-002 — Function-level `-only-testing` filters run zero tests and report success
-
-- **Date discovered:** 2026-08-11
-- **Status:** identified
-- **Severity:** high
-- **Area:** build / test tooling
-
-**Symptom**
-`xcodebuild test` with a filter naming an individual Swift Testing function runs **no tests
-at all** and prints `** TEST SUCCEEDED **`. There is no warning that the filter matched
-nothing. A red test looks green.
-
-This was hit twice during the duplicate-detection work. In one case a test written to fail
-first — `savedDownloadCarriesIdentity`, before its implementation existed — reported
-`** TEST SUCCEEDED **`, which would have been accepted as a passing TDD step had the result
-not been obviously impossible.
-
-**Where**
-Not repository code. The interaction is between `xcodebuild`'s `-only-testing:` filter and
-Swift Testing's `@Test` functions. Affects every verification command in
-`docs/superpowers/plans/2026-08-10-audio-duplicate-detection.md`, which uses function-level
-filters in several steps, and the same pattern in `CLAUDE.md`'s test section.
-
-**Reproduction**
-```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
-  -destination 'platform=macOS,arch=arm64' test \
-  -only-testing:IlumionateTests/AudioTitleNormalizerTests/emptyNameNormalizesToEmpty
-```
-Prints `** TEST SUCCEEDED **` with no `Test case '…' passed` line. Dropping the trailing
-function name runs the five tests in the struct and reports honestly.
-
-**Root cause**
-Unknown — not yet investigated. Likely that `-only-testing` addresses XCTest-style method
-identifiers and does not resolve a Swift Testing `@Test` function name, leaving an empty
-test set that is not treated as an error.
-
-**Proposed fix**
-Short term, and already the working practice: filter at struct level only, never at function
-level, and confirm the expected `Test case '…' passed` lines appear rather than trusting the
-summary banner. Longer term, check whether `swift test --filter` or the `TEST_RUNNER_`
-environment resolves individual `@Test` names, and correct the filters quoted in `CLAUDE.md`
-and the plan document.
-
-**Risks / blockers**
-The danger is silent: any agent or engineer verifying a single test this way gets a false
-green. Worth fixing in the documented commands before it costs someone a real bug.
-
----
-
 ### ERR-001 — Six timing tests fail under full-suite parallel load
 
 - **Date discovered:** 2026-08-11
@@ -278,6 +228,80 @@ expensive to verify and is the real cost of leaving it.
 ---
 
 ## Resolved
+
+### ERR-002 — Function-level `-only-testing` filters run zero tests and report success
+
+- **Date discovered:** 2026-08-11
+- **Status:** completed
+- **Severity:** high
+- **Area:** build / test tooling
+
+**Symptom**
+`xcodebuild test` with a filter naming an individual Swift Testing function runs **no tests
+at all** and prints `** TEST SUCCEEDED **`. There is no warning that the filter matched
+nothing. A red test looks green.
+
+This was hit twice during the duplicate-detection work. In one case a test written to fail
+first — `savedDownloadCarriesIdentity`, before its implementation existed — reported
+`** TEST SUCCEEDED **`, which would have been accepted as a passing TDD step had the result
+not been obviously impossible.
+
+**Where**
+Not repository code. The interaction is between `xcodebuild`'s `-only-testing:` filter and
+Swift Testing's `@Test` functions. Affects every verification command in
+`docs/superpowers/plans/2026-08-10-audio-duplicate-detection.md`, which uses function-level
+filters in several steps, and the same pattern in `CLAUDE.md`'s test section.
+
+**Reproduction**
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination 'platform=macOS,arch=arm64' test \
+  -only-testing:IlumionateTests/AudioTitleNormalizerTests/emptyNameNormalizesToEmpty
+```
+Prints `** TEST SUCCEEDED **` with no `Test case '…' passed` line. Dropping the trailing
+function name runs the five tests in the struct and reports honestly.
+
+**Root cause**
+A Swift Testing identifier ends in `()`; an XCTest method name does not. `-only-testing`
+matches the identifier literally, so the form without parentheses selects nothing — and
+`xcodebuild` treats an empty test set as a successful run rather than an error.
+
+Measured directly, counting `^Test case ` lines:
+
+| Filter | Test cases run |
+|---|---|
+| `…/AudioTitleNormalizerTests/emptyNameNormalizesToEmpty` | **0**, exits 0 |
+| `…/AudioTitleNormalizerTests/emptyNameNormalizesToEmpty()` | 1, exits 0 |
+
+**Proposed fix**
+Short term, and already the working practice: filter at struct level only, never at function
+level, and confirm the expected `Test case '…' passed` lines appear rather than trusting the
+summary banner. Longer term, check whether `swift test --filter` or the `TEST_RUNNER_`
+environment resolves individual `@Test` names, and correct the filters quoted in `CLAUDE.md`
+and the plan document.
+
+**Risks / blockers**
+The danger is silent: any agent or engineer verifying a single test this way gets a false
+green. Worth fixing in the documented commands before it costs someone a real bug.
+
+**Resolution** _(2026-08-11, commit `8f5c941`)_
+`Scripts/run-tests.sh` wraps `xcodebuild test`, passes every argument through, and fails when
+`xcodebuild` reports success having run zero test cases — printing the likely cause and the
+correct identifier form. Verified against all three cases: the filter without `()` now exits
+1, the same filter with `()` exits 0 having run the test, and a suite-level filter exits 0
+having run ten.
+
+`CLAUDE.md` gained a "Running a subset of tests" section stating the identifier rule and
+pointing at the wrapper. The three function-level filters in
+`docs/superpowers/plans/2026-08-10-audio-duplicate-detection.md` were corrected. The filter
+quoted in the Reproduction above is deliberately left without `()` — it documents the broken
+form.
+
+**Outstanding.** The wrapper is opt-in: a bare `xcodebuild test` invocation still reports a
+false green, and nothing enforces its use. Wiring it into a pre-commit or CI step would close
+that, and is worth doing if this repository gains CI.
+
+---
 
 ### ERR-006 — Foundation Models blocked by Game Mode; every analysis silently degrades
 
