@@ -151,19 +151,30 @@ struct SessionDetailView: View {
 
                 // Analysis status badge
                 if audioFile.isAnalyzed {
-                    HStack(spacing: TranceSpacing.inner) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(Color.roseGold)
-                        Text(analysisProvenanceLabel)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.roseGold)
+                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                        HStack(spacing: TranceSpacing.inner) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundStyle(Color.roseGold)
+                            Text(analysisProvenanceLabel)
+                                .font(TranceTypography.caption)
+                                .foregroundStyle(Color.roseGold)
 
-                        if let confidence = analysis?.classificationConfidence?.overallConfidence {
-                            Text("·")
-                                .foregroundStyle(Color.textLight)
-                            Text("\(confidence, format: .percent.precision(.fractionLength(0))) confidence")
+                            if let confidence = analysis?.classificationConfidence?.overallConfidence {
+                                Text("·")
+                                    .foregroundStyle(Color.textLight)
+                                Text("\(confidence, format: .percent.precision(.fractionLength(0))) confidence")
+                                    .font(TranceTypography.caption)
+                                    .foregroundStyle(Color.textSecondary)
+                            }
+                        }
+
+                        // The badge alone says the model did not run; this says
+                        // why, and whether analysing again is worth the time.
+                        if let reason = analysis?.keywordFallbackReason {
+                            Text(reason)
                                 .font(TranceTypography.caption)
                                 .foregroundStyle(Color.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 } else if audioFile.hasTranscription {

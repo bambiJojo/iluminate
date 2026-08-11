@@ -67,6 +67,55 @@ struct AIGenerationDiagnosisTests {
         #expect(kind.isRetryable == false)
     }
 
+    /// Captured verbatim from a device log, 2026-08-11. Note what is *absent*:
+    /// no `guardrailViolation`, because Foundation Models surfaced this one as a
+    /// bridged `NSError` chain rather than the Swift enum case. The old
+    /// classifier only looked for a safety-host failure nested inside a
+    /// guardrail violation, so this fell through to `.other` — which is
+    /// retryable, and bought a second full round-trip that failed identically.
+    private static let gameModeFailure = StubError(description: """
+    Error Domain=FoundationModels.LanguageModelSession.GenerationError Code=-1 \
+    "(null)" UserInfo={NSMultipleUnderlyingErrorsKey=("Error Domain=\
+    com.apple.SensitiveContentAnalysisML Code=15 "Failed model manager query for \
+    model com.apple.fm.language.instruct_300m.safety: Not executed due to current \
+    system state [\\"StandardGameMode\\"], try again later" UserInfo={\
+    NSUnderlyingError=Error Domain=ModelManagerServices.ModelManagerError \
+    Code=1013 "Not executed due to current system state [\\"StandardGameMode\\"], \
+    try again later"})}
+    """)
+
+    @Test("A device too busy to run the model is not an unknown error")
+    func systemBusyIsIdentified() {
+        let kind = AIGenerationDiagnosis.classify(Self.gameModeFailure)
+
+        #expect(kind == .systemBusy)
+        // A shorter prompt cannot change the system's state.
+        #expect(kind.isRetryable == false)
+        // Unlike the other failures, this one is worth trying again later.
+        #expect(kind.isTransient)
+    }
+
+    @Test("A safety-host failure is caught even without a guardrail wrapper")
+    func safetyHostFailureOutsideAGuardrailIsIdentified() {
+        let error = StubError(description: """
+        Error Domain=com.apple.SensitiveContentAnalysisML Code=15 "Failed model \
+        manager query for model com.apple.fm.language.instruct_300m.safety: \
+        InferenceError::hostFailed"
+        """)
+
+        let kind = AIGenerationDiagnosis.classify(error)
+
+        #expect(kind == .safetyHostUnavailable)
+        #expect(kind.isRetryable == false)
+    }
+
+    @Test("Only a passing system condition is worth another attempt later")
+    func transiencePolicyIsExplicit() {
+        let transient = AIGenerationDiagnosis.Kind.allCases.filter(\.isTransient)
+
+        #expect(Set(transient) == [.systemBusy])
+    }
+
     @Test("An unrecognised error stays retryable rather than being written off")
     func unknownErrorsStayRetryable() {
         let kind = AIGenerationDiagnosis.classify(
@@ -89,5 +138,55 @@ struct AIGenerationDiagnosisTests {
         let retryable = AIGenerationDiagnosis.Kind.allCases.filter(\.isRetryable)
 
         #expect(Set(retryable) == [.contextWindow, .other])
+    }
+
+    // MARK: - Carrying the reason onto the result
+
+    private func makeResult(aiSummary: String) -> AnalysisResult {
+        AnalysisResult(
+            mood: .relaxing,
+            energyLevel: 0.2,
+            suggestedFrequencyRange: 4...8,
+            suggestedIntensity: 0.5,
+            keyMoments: [],
+            aiSummary: aiSummary,
+            recommendedPreset: "Test"
+        )
+    }
+
+    @Test("A fallback result is still recognised once it carries a reason")
+    func fallbackIsRecognisedWithAReasonAppended() {
+        let result = makeResult(
+            aiSummary: AIGenerationDiagnosis.fallbackSummary(for: .systemBusy)
+        )
+
+        #expect(result.usedKeywordFallback)
+    }
+
+    @Test("The reason is recoverable from the stored result")
+    func reasonSurvivesOnTheResult() throws {
+        let result = makeResult(
+            aiSummary: AIGenerationDiagnosis.fallbackSummary(for: .systemBusy)
+        )
+
+        let reason = try #require(result.keywordFallbackReason)
+        #expect(reason == AIGenerationDiagnosis.Kind.systemBusy.userFacingReason)
+    }
+
+    @Test("An AI-produced result reports no fallback and no reason")
+    func aiResultHasNoFallbackReason() {
+        let result = makeResult(aiSummary: "A genuine model summary of the recording.")
+
+        #expect(result.usedKeywordFallback == false)
+        #expect(result.keywordFallbackReason == nil)
+    }
+
+    // Results written before the reason was recorded carry the bare marker.
+    @Test("A result stored before reasons existed is still a fallback")
+    func legacyFallbackMarkerStillCounts() {
+        let result = makeResult(aiSummary: AIGenerationDiagnosis.keywordFallbackSummary)
+
+        #expect(result.usedKeywordFallback)
+        #expect(result.keywordFallbackReason == nil)
     }
 }

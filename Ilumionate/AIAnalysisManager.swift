@@ -101,11 +101,13 @@ actor AIAnalysisManager {
 
         await onProgress(ProgressInfo(progress: 0.80, message: "Classifying content..."))
 
-        guard let aiResponse = try await aiResponseAsync else {
+        let aiOutcome = try await aiResponseAsync
+        guard case .generated(let aiResponse) = aiOutcome else {
             return makeKeywordFallbackResult(
                 audioFile: audioFile,
                 detectedPhases: detectedPhases,
-                verifiedMetadata: bundledMetadata
+                verifiedMetadata: bundledMetadata,
+                diagnosis: aiOutcome.diagnosis
             )
         }
 
@@ -128,15 +130,33 @@ actor AIAnalysisManager {
         return result
     }
 
-    /// Runs the AI classification with one automatic retry on any error.
-    /// Sets `currentTask` so cancellation remains supported. Returns `nil`
-    /// when both attempts fail, signalling the caller to use keyword fallback.
+    /// What the on-device model produced, or why it did not.
+    ///
+    /// The reason used to be logged and dropped, so the keyword fallback that
+    /// followed could say only *that* it had run, never *why* — which matters
+    /// most when the cause is a passing one worth trying again.
+    enum AIResponseOutcome {
+        case generated(AIAnalysisResponse)
+        case unavailable(AIGenerationDiagnosis.Kind)
+
+        var diagnosis: AIGenerationDiagnosis.Kind? {
+            switch self {
+            case .generated: nil
+            case .unavailable(let kind): kind
+            }
+        }
+    }
+
+    /// Runs the AI classification with one automatic retry on a retryable error.
+    /// Sets `currentTask` so cancellation remains supported. Reports
+    /// `.unavailable` when both attempts fail, signalling the caller to use
+    /// keyword fallback.
     private func fetchAIResponse(
         session: LanguageModelSession,
         prompt: String,
         transcription: AudioTranscriptionResult,
         audioFile: AudioFile
-    ) async throws -> AIAnalysisResponse? {
+    ) async throws -> AIResponseOutcome {
         let task = Task<AIAnalysisResponse, Error> {
             do {
                 return try await session.respond(
@@ -171,16 +191,19 @@ actor AIAnalysisManager {
         do {
             let response = try await task.value
             currentTask = nil
-            return response
+            return .generated(response)
         } catch is CancellationError {
             currentTask = nil
             throw CancellationError()
         } catch {
             let diagnosis = AIGenerationDiagnosis.classify(error)
             Log.analysis.info("❌ AI generation gave up (\(diagnosis.rawValue)) — using keyword fallback. Reason: \(String(describing: error))")
+            if diagnosis.isTransient {
+                Log.analysis.info("↺ Transient — analysing this file again later should succeed")
+            }
             await UsageAnalytics.shared.aiGenerationFallback(reason: diagnosis)
             currentTask = nil
-            return nil
+            return .unavailable(diagnosis)
         }
     }
 
@@ -631,7 +654,8 @@ private extension AIAnalysisManager {
     func makeKeywordFallbackResult(
         audioFile: AudioFile,
         detectedPhases: [PhaseSegment]?,
-        verifiedMetadata: AudioTrackMetadata? = nil
+        verifiedMetadata: AudioTrackMetadata? = nil,
+        diagnosis: AIGenerationDiagnosis.Kind? = nil
     ) -> AnalysisResult {
         let contentType = inferContentType(from: audioFile.displayName)
             ?? (hasMeaningfulHypnosisPhaseEvidence(detectedPhases, duration: audioFile.duration) ? .hypnosis : .unknown)
@@ -688,7 +712,8 @@ private extension AIAnalysisManager {
             suggestedIntensity: intensity,
             suggestedColorTemperature: colorTemp,
             keyMoments: keyMoments,
-            aiSummary: AIGenerationDiagnosis.keywordFallbackSummary,
+            aiSummary: diagnosis.map(AIGenerationDiagnosis.fallbackSummary(for:))
+                ?? AIGenerationDiagnosis.keywordFallbackSummary,
             recommendedPreset: presetName,
             contentType: contentType,
             hypnosisMetadata: hypnosisMetadata,
