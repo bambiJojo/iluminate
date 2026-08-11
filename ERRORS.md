@@ -121,96 +121,6 @@ retry decision on the outer `Code=1013` from `ModelManagerServices.ModelManagerE
 
 ---
 
-### ERR-005 — Audio library exceeds the 4 MiB UserDefaults limit; writes are silently dropped
-
-- **Date discovered:** 2026-08-11
-- **Status:** identified
-- **Severity:** critical
-- **Area:** persistence, audio library
-
-**Symptom**
-On a device run with 97 audio files, iOS rejected the library write:
-
-```
-CFPrefsPlistSource<0x1021ec800> (Domain: com.byronquine.lumenSync, ...): Attempting to store
->= 4194304 bytes of data in CFPreferences/NSUserDefaults on this platform is invalid.
-This is a bug in Ilumionate or a library it uses.
-<decode: bad range for [%@] got [offs:359 len:661 within:0]>
-CFPrefsPlistSource<0x1021ec800> ...: Transitioning into direct mode
-```
-
-The consequence appeared minutes later in the same run: after analysing `Z*C*D*O.m4a` the
-app logged `⚠️ AudioFile D905A69B-… not found in persisted list` and the finished analysis
-was discarded. Every other file in the run logged `💾 Persisted analysis result…` — but that
-line is printed unconditionally and does not mean the write landed.
-
-**Where**
-`Ilumionate/AnalysisStateManager.swift:675` and `Ilumionate/AudioLibraryStore.swift:216` —
-both call `UserDefaults.set(_:forKey:)` with the whole encoded library under the
-`audioFiles` key (`AnalysisStateManager.swift:633`). Neither can detect failure:
-`UserDefaults.set` returns `Void`.
-
-`AnalysisStateManager.swift:673` logs `💾 Persisted analysis result to AudioFile in
-UserDefaults` immediately after the `set`, so the log actively misreports a dropped write.
-
-**Reproduction**
-Build a library large enough to cross 4 MiB when encoded — roughly 90–100 analysed files,
-since each carries `transcription` (observed up to 3,145 words) plus a full `AnalysisResult`
-with phase segments, linguistic markers, technique detection and prosodic profile. Analyse
-one more file and watch for `not found in persisted list`, or read the encoded size directly:
-
-```swift
-UserDefaults.standard.data(forKey: "audioFiles")?.count
-```
-
-**Root cause**
-The entire audio library is persisted as a single JSON blob in `UserDefaults`, which iOS
-caps at 4 MiB per value. The design predates transcripts and full analysis results being
-stored on `AudioFile`. The analysis cache already lives in a file
-(`AnalysisStateManager.swift:546`, `analysisCacheURL`); the library never moved.
-
-The `audioFiles` key is the only plausible multi-megabyte value in this domain — every other
-`UserDefaults` writer in the app stores scalars or short strings
-(`Ilumionate/AnalysisPreferences.swift:247` onward).
-
-**Already done**
-Nothing fixed. Note that the duplicate-detection work committed on
-`feature/audio-duplicate-detection` **adds** to the blob: a 64-character
-`contentFingerprint` and a `remoteSource` record per file. Marginal against 4 MiB, but it
-moves in the wrong direction.
-
-**Why this matters beyond lost analysis**
-It defeats duplicate detection. `DuplicateAudioIndex` is built from the *persisted* library
-(`Ilumionate/AudioManager.swift:138`, `Ilumionate/PlaylistImport/BambiCloudPlaylistImportViewModel.swift:170`).
-When a write is rejected, a downloaded file is absent from the library on next launch, the
-index cannot know about it, the verdict is `.distinct`, and `uniqueDestination`
-(`PlaylistTrackDownloader.swift:139`) writes `Name (1).mp3`. That is very likely a
-contributor to the duplicate accumulation the feature was built to stop, and no amount of
-import-time checking fixes it while the store silently drops writes.
-
-**Proposed fix**
-Move the library off `UserDefaults` to a file in Application Support, written atomically —
-the same shape `AnalysisStateManager` already uses for its analysis cache and
-`GeneratedSessionStore` uses for sessions. Migrate once on first launch by reading the
-existing `UserDefaults` value, writing the file, and removing the key. Make the write path
-`throws` so a failure is logged as a failure rather than announced as a success.
-
-A smaller stopgap, if the move is deferred: keep `transcription` and `analysisResult` out of
-the persisted `AudioFile` entirely and read them from the existing analysis cache file on
-demand. That is where they already live — `CachedAudioAnalysis` holds both — so the library
-blob would shrink to metadata and drop well under the limit.
-
-**Risks / blockers**
-`audioFiles` is read from at least four places
-(`AudioLibraryStore.swift:64` and `:250`, `AnalysisStateManager.swift:644`,
-`SessionDetailView.swift:523`); all must move together or the library will appear to empty.
-Migration must be idempotent and must not run while an analysis is mid-write. Worth pairing
-with the memory pressure seen in the same run (`⚠️ High memory usage: 274MB` at launch,
-`🔥 CRITICAL memory usage: 450MB` later), which has the same cause: the whole library,
-transcripts included, is decoded into memory on every load.
-
----
-
 ### ERR-004 — `AudioFile.==` ignores content fingerprint and remote provenance
 
 - **Date discovered:** 2026-08-11
@@ -420,4 +330,121 @@ expensive to verify and is the real cost of leaving it.
 
 ## Resolved
 
-_None yet._
+### ERR-005 — Audio library exceeds the 4 MiB UserDefaults limit; writes are silently dropped
+
+- **Date discovered:** 2026-08-11
+- **Status:** completed
+- **Severity:** critical
+- **Area:** persistence, audio library
+
+**Symptom**
+On a device run with 97 audio files, iOS rejected the library write:
+
+```
+CFPrefsPlistSource<0x1021ec800> (Domain: com.byronquine.lumenSync, ...): Attempting to store
+>= 4194304 bytes of data in CFPreferences/NSUserDefaults on this platform is invalid.
+This is a bug in Ilumionate or a library it uses.
+<decode: bad range for [%@] got [offs:359 len:661 within:0]>
+CFPrefsPlistSource<0x1021ec800> ...: Transitioning into direct mode
+```
+
+The consequence appeared minutes later in the same run: after analysing `Z*C*D*O.m4a` the
+app logged `⚠️ AudioFile D905A69B-… not found in persisted list` and the finished analysis
+was discarded. Every other file in the run logged `💾 Persisted analysis result…` — but that
+line is printed unconditionally and does not mean the write landed.
+
+**Where**
+`Ilumionate/AnalysisStateManager.swift:675` and `Ilumionate/AudioLibraryStore.swift:216` —
+both call `UserDefaults.set(_:forKey:)` with the whole encoded library under the
+`audioFiles` key (`AnalysisStateManager.swift:633`). Neither can detect failure:
+`UserDefaults.set` returns `Void`.
+
+`AnalysisStateManager.swift:673` logs `💾 Persisted analysis result to AudioFile in
+UserDefaults` immediately after the `set`, so the log actively misreports a dropped write.
+
+**Reproduction**
+Build a library large enough to cross 4 MiB when encoded — roughly 90–100 analysed files,
+since each carries `transcription` (observed up to 3,145 words) plus a full `AnalysisResult`
+with phase segments, linguistic markers, technique detection and prosodic profile. Analyse
+one more file and watch for `not found in persisted list`, or read the encoded size directly:
+
+```swift
+UserDefaults.standard.data(forKey: "audioFiles")?.count
+```
+
+**Root cause**
+The entire audio library is persisted as a single JSON blob in `UserDefaults`, which iOS
+caps at 4 MiB per value. The design predates transcripts and full analysis results being
+stored on `AudioFile`. The analysis cache already lives in a file
+(`AnalysisStateManager.swift:546`, `analysisCacheURL`); the library never moved.
+
+The `audioFiles` key is the only plausible multi-megabyte value in this domain — every other
+`UserDefaults` writer in the app stores scalars or short strings
+(`Ilumionate/AnalysisPreferences.swift:247` onward).
+
+**Already done**
+Nothing fixed. Note that the duplicate-detection work committed on
+`feature/audio-duplicate-detection` **adds** to the blob: a 64-character
+`contentFingerprint` and a `remoteSource` record per file. Marginal against 4 MiB, but it
+moves in the wrong direction.
+
+**Why this matters beyond lost analysis**
+It defeats duplicate detection. `DuplicateAudioIndex` is built from the *persisted* library
+(`Ilumionate/AudioManager.swift:138`, `Ilumionate/PlaylistImport/BambiCloudPlaylistImportViewModel.swift:170`).
+When a write is rejected, a downloaded file is absent from the library on next launch, the
+index cannot know about it, the verdict is `.distinct`, and `uniqueDestination`
+(`PlaylistTrackDownloader.swift:139`) writes `Name (1).mp3`. That is very likely a
+contributor to the duplicate accumulation the feature was built to stop, and no amount of
+import-time checking fixes it while the store silently drops writes.
+
+**Proposed fix**
+Move the library off `UserDefaults` to a file in Application Support, written atomically —
+the same shape `AnalysisStateManager` already uses for its analysis cache and
+`GeneratedSessionStore` uses for sessions. Migrate once on first launch by reading the
+existing `UserDefaults` value, writing the file, and removing the key. Make the write path
+`throws` so a failure is logged as a failure rather than announced as a success.
+
+A smaller stopgap, if the move is deferred: keep `transcription` and `analysisResult` out of
+the persisted `AudioFile` entirely and read them from the existing analysis cache file on
+demand. That is where they already live — `CachedAudioAnalysis` holds both — so the library
+blob would shrink to metadata and drop well under the limit.
+
+**Risks / blockers**
+`audioFiles` is read from at least four places
+(`AudioLibraryStore.swift:64` and `:250`, `AnalysisStateManager.swift:644`,
+`SessionDetailView.swift:523`); all must move together or the library will appear to empty.
+Migration must be idempotent and must not run while an analysis is mid-write. Worth pairing
+with the memory pressure seen in the same run (`⚠️ High memory usage: 274MB` at launch,
+`🔥 CRITICAL memory usage: 450MB` later), which has the same cause: the whole library,
+transcripts included, is decoded into memory on every load.
+
+**Resolution** _(2026-08-11, commit `ff03c0f`)_
+The library moved to `Application Support/AudioLibrary/library.json`, written atomically via
+`AudioLibraryStore.write(_:to:)`. `AudioLibraryStorage`
+(`Ilumionate/AudioLibraryStorage.swift`) names the location and carries the legacy
+`UserDefaults` only so the one-time migration can read it.
+
+- Every mutator on the persistence actor now returns `Bool`, and
+  `AudioLibraryStore.save` is `@discardableResult -> Bool`, so a failed write is reported
+  rather than assumed.
+- `AnalysisStateManager.persistAnalysisToAudioFiles` was deleted; the analyzer calls
+  `AudioLibraryStore.saveAnalysis` and logs `❌ Analysis … was NOT persisted` on failure
+  instead of announcing success unconditionally.
+- `SessionDetailView.refreshAudioFile` reads the store rather than `UserDefaults`.
+- Migration copies raw bytes, so nothing `ResilientDecoding` would drop is lost, and clears
+  the old key only after the file lands.
+- **If the migrating write fails, `load` falls back to the legacy copy.** Returning an empty
+  library instead would have let `discoverUnregisteredDocumentFiles` re-register every file
+  in `Documents` under a fresh identifier, discarding the analysis, rating and play count on
+  each and orphaning every playlist. This was caught by
+  `AudioLibraryStorageTests.failedMigrationKeepsLegacyCopy`, which failed against the first
+  implementation.
+
+Verified by `IlumionateTests/AudioLibraryStorageTests.swift` — six tests including a
+round-trip of a library asserted to exceed 4 MiB when encoded — plus the existing
+`AudioLibraryStoreTests` retargeted at the new store. Green on macOS and iOS Simulator. The
+full suite shows only the ERR-001 flaky set.
+
+**Not yet verified on device.** The migration path has only been exercised against synthetic
+`UserDefaults` fixtures; the real 97-file library has not been migrated yet.
+
