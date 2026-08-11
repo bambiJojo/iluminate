@@ -165,10 +165,12 @@ has three call sites.
 
 ---
 
+## Resolved
+
 ### ERR-001 — Six timing tests fail under full-suite parallel load
 
 - **Date discovered:** 2026-08-11
-- **Status:** identified
+- **Status:** completed
 - **Severity:** medium
 - **Area:** test suite
 
@@ -184,8 +186,11 @@ failing set is **not stable between runs**. Observed members across four runs:
 - `AudioLibraryStoreTests/savingLargeLibraryDoesNotBlockMainActor()`
 - `StagedAnalysisPipelineTests/keepsWhisperPrefetchOutOfContentAnalysis()`
 
-Each takes 36–59 seconds inside the suite. The same tests pass in roughly 0.15 seconds when
-their struct is run alone.
+**Correction to the original write-up.** Two claims here were wrong. The per-test seconds
+reported by `xcodebuild` are cumulative from the start of the run, not per test, so "36–59
+seconds" said nothing about how long any test took. And "the same tests pass in isolation"
+was verified for exactly one of them and generalised to all six —
+`corruptSessionIsNotReportedAsReady` fails in isolation too, in 0.08 seconds.
 
 **Where**
 `IlumionateTests/PlayerControlsVisibilityTests.swift`,
@@ -225,9 +230,46 @@ Until this is resolved, a full-suite run cannot answer "did my change break some
 without a stashed baseline comparison for contrast. That makes every future change more
 expensive to verify and is the real cost of leaving it.
 
----
+**Resolution** _(2026-08-11, commit `c6a8d49`)_
+The result bundle — `xcrun xcresulttool get test-results tests` — gave the actual messages the
+console had omitted, and they showed **two unrelated causes**.
 
-## Resolved
+*Main-actor starvation (five tests).* Not mild contention: the heartbeat in
+`savingLargeLibraryDoesNotBlockMainActor` was delayed **43.9 seconds** against a 150 ms limit,
+and `slowFileTransferDoesNotBlockMainActor` recorded **22.4 seconds** against 250 ms. Dozens
+of `@MainActor` test suites run in parallel and all queue on the one main actor, so any test
+measuring main-actor responsiveness was measuring the machine.
+
+- `PlayerControlsVisibility` gained an injectable `idleWait` and `awaitPendingAutoHide()`.
+  The three timer tests now use no clock: two release the countdown immediately, and
+  `interactionPostponesHide` drives a gate the test opens itself.
+- The import test asserts the property directly — the transfer runs off the main thread —
+  instead of timing how quickly the main actor notices.
+- `StagedAnalysisProbe` gained `waitForActiveAnalysis()`, replacing a poll against a
+  15-second deadline with a continuation. It now waits as long as the machine needs and would
+  hang visibly if the pipeline never got there, rather than failing an arbitrary timeout.
+- `savingLargeLibraryDoesNotBlockMainActor` was **deleted**. Its property is structural now —
+  `AudioLibraryPersistence` is a non-main actor and `save` is `async`, so the encode cannot
+  run on the main actor — and the functional half is covered deterministically by
+  `AudioLibraryStorageTests.oversizedLibraryRoundTrips`.
+
+*A stale test (one test).* `corruptSessionIsNotReportedAsReady` was never flaky. Commit
+`86e37db` ("perf: stop the Library shelves decoding a session per audio file") deliberately
+made `exists(for:)` stop decoding, so a present-but-corrupt score reports `true` — documented
+on the method: badging a row optimistically beats stalling the list. The test asserted the
+old behaviour and had been failing ever since. Renamed to
+`corruptSessionIsBadgedButNeverLoaded` and rewritten to the documented intent, keeping the
+assertion that matters: `load(for:)` returns nil, so nothing broken reaches playback.
+
+Verified by three consecutive full-suite runs on macOS with no failures, and 1471 test cases
+passing on iOS Simulator.
+
+**Outstanding.** One deliberate coverage loss, recorded rather than hidden: nothing now
+asserts that saving a large library keeps the main actor free. That property rests on
+`AudioLibraryPersistence` remaining a non-main actor. Making it `@MainActor` would reintroduce
+the original bug and no test would object.
+
+---
 
 ### ERR-002 — Function-level `-only-testing` filters run zero tests and report success
 
