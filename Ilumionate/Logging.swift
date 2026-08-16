@@ -25,8 +25,6 @@ enum Log {
     nonisolated static let audio = Logger(subsystem: subsystem, category: "audio")
     /// Real-time light engine and entrainment.
     nonisolated static let engine = Logger(subsystem: subsystem, category: "engine")
-    /// Streaming sources and in-app browser.
-    nonisolated static let streaming = Logger(subsystem: subsystem, category: "streaming")
     /// SwiftUI views and presentation.
     nonisolated static let ui = Logger(subsystem: subsystem, category: "ui")
     /// Anything that doesn't fit a more specific category.
