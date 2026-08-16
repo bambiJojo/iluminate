@@ -70,6 +70,64 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
+### ERR-014 — Failed analysis tasks persist and accumulate in the Dynamic Island
+
+- **Date discovered:** 2026-08-14
+- **Status:** completed
+- **Severity:** medium
+- **Area:** BackgroundTasks / continued-processing lifecycle
+
+**Symptom**
+After an analysis is interrupted, iOS displays an Ilumionate-owned "Analyzing audio — Task
+failed" item in the Dynamic Island. Repeated interruptions can produce multiple independent
+failed items that remain after the app is quit. A device screenshot on 2026-08-16 captured two
+of these entries simultaneously with the Ilumionate app icon.
+
+**Where**
+
+- `Ilumionate/BackgroundAnalysisScheduler.swift` — continued-task submission, completion,
+  expiration, and foreground restoration.
+- `IlumionateTests/BackgroundAnalysisTests.swift` — task-lifecycle regressions.
+
+**Reproduction**
+
+1. Start an audio analysis, which submits a `BGContinuedProcessingTaskRequest` titled
+   "Analyzing audio".
+2. Background the app and allow the task to expire while a durable checkpoint remains.
+3. The operation unwinds with incomplete work and completes the system task unsuccessfully.
+4. Foreground restoration submits another uniquely identified continued task; repeating the
+   interruption leaves multiple failed Live Activity entries.
+
+**Root cause**
+
+`BGContinuedProcessingTaskRequest` supplies its title, subtitle, progress, and app identity to
+an iOS-managed Live Activity; it does not require an ActivityKit extension. The scheduler used
+the queue's durable-work result directly as `setTaskCompleted(success:)`. When expiration left
+a resumable checkpoint, that value was `false`, which explicitly asks iOS to present the task
+as failed rather than dismissing it. The expiration and normal-unwind paths could also both run
+completion-side effects. Finally, `resumeWhenForegrounded()` automatically submitted another
+continued task with a new UUID even though foreground restoration was not a new user action.
+
+**Fix**
+
+- Added a one-shot task finisher so expiration and normal unwind cannot complete or recover the
+  same background task twice.
+- Continued-processing tasks now finish their system presentation cleanly after the app has
+  either completed the work or safely preserved it for internal recovery. Domain failures
+  remain visible in Ilumionate instead of becoming persistent system failure cards.
+- Deferred `BGProcessingTask` work still reports unsuccessful completion when work remains, so
+  its scheduler retry semantics are unchanged.
+- Foreground restoration now uses deferred processing only and does not create a new continued
+  Live Activity. A new one is submitted only for an explicit analysis or retry action.
+- Added regressions for checkpointed expiration, one-shot completion, deferred failure
+  signaling, and foreground restoration.
+
+**Resolution**
+Fixed 2026-08-16. The focused `BackgroundAnalysisTests` suite passes all 15 tests on an iOS 26
+simulator.
+
+---
+
 ### ERR-010 — 23 main-thread hangs in a 6-minute session, one lasting 13.3 seconds
 
 - **Date discovered:** 2026-08-11

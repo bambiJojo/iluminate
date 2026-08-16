@@ -10,6 +10,41 @@ import Testing
 
 @MainActor
 struct BackgroundAnalysisTests {
+    @Test("Checkpointed interruption dismisses continued-processing UI exactly once")
+    func continuedProcessingInterruptionCompletesWithoutSystemFailure() {
+        var systemCompletions: [Bool] = []
+        let finisher = BackgroundAnalysisTaskFinisher(kind: .continuedProcessing) { success in
+            systemCompletions.append(success)
+        }
+
+        // Expiration preserves the checkpoint, so the analysis work itself has
+        // not completed. Its system UI still needs to finish cleanly; the later
+        // operation unwind must not complete the same BGTask a second time.
+        finisher.finish(workSucceeded: false)
+        finisher.finish(workSucceeded: true)
+
+        #expect(systemCompletions == [true])
+        #expect(finisher.isFinished)
+    }
+
+    @Test("Deferred recovery still reports incomplete work to BackgroundTasks")
+    func deferredProcessingPreservesSystemRetrySignal() {
+        var systemCompletions: [Bool] = []
+        let finisher = BackgroundAnalysisTaskFinisher(kind: .deferredProcessing) { success in
+            systemCompletions.append(success)
+        }
+
+        finisher.finish(workSucceeded: false)
+
+        #expect(systemCompletions == [false])
+    }
+
+    @Test("Foreground restoration does not create another continued-processing activity")
+    func foregroundRestorationUsesDeferredProcessingOnly() {
+        #expect(BackgroundAnalysisSchedulingSource.explicitUserAction.presentsContinuedProcessingUI)
+        #expect(!BackgroundAnalysisSchedulingSource.foregroundRestoration.presentsContinuedProcessingUI)
+    }
+
     #if os(iOS) && !targetEnvironment(macCatalyst)
     @Test func continuedProcessingUsesConcreteRegisteredIdentifier() {
         let identifier = BackgroundAnalysisScheduler.makeContinuedIdentifier()
