@@ -70,6 +70,54 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
+### ERR-017 — Session Complete prints raw Swift source to the user
+
+- **Date discovered:** 2026-08-16
+- **Status:** identified
+- **Severity:** high
+- **Area:** player / session completion
+
+**Symptom**
+The completion overlay's duration line renders the literal text:
+
+```
+You completed (Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))).
+```
+
+instead of `You completed 12:30.` The backslash is missing from the string interpolation, so
+the expression is inert string content, not code. It compiles cleanly because it is a valid
+string literal.
+
+**Where**
+`Ilumionate/PlayerCompletionOverlay.swift:39`
+
+**Reproduction**
+Play any session to its natural end so `PlayerCompletionOverlay` is presented with
+`duration > 0`. The line appears under the session title. No test covers the rendered text,
+which is why it survived two commits (`0d54ef6`, `ef22342`).
+
+**Root cause**
+Missing `\` before `(` in the interpolation. Because `duration > 0` gates the line, an
+`isSaved`/`canSave` code path is not involved — every completed session with a nonzero
+duration shows it.
+
+**Proposed fix**
+Restore the interpolation:
+
+```swift
+Text("You completed \(Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))).")
+```
+
+Add a unit test that asserts the formatted string rather than the view, so the format is
+covered without a snapshot test.
+
+**Risks / blockers**
+None for the fix itself. Worth grepping for the same slip elsewhere — a `Text("...(` with a
+`.formatted(` or `.count` inside and no preceding backslash is the signature. This entry is
+one instance of a pattern that string-literal validation would not catch anywhere in the app.
+
+---
+
 ### ERR-013 — Failed analyses can never be dismissed and are restored on every launch
 
 - **Date discovered:** 2026-08-14
@@ -149,54 +197,6 @@ Not yet fixed. The dismissal semantics this entry deferred are settled in
 `docs/superpowers/specs/2026-08-16-analysis-task-center-design.md`: `dismiss` persists
 `dismissedAt` inside `AnalysisManualRecovery` and leaves the checkpoint intact, while a
 separate explicit `remove` clears both.
-
----
-
-### ERR-017 — Session Complete prints raw Swift source to the user
-
-- **Date discovered:** 2026-08-16
-- **Status:** identified
-- **Severity:** high
-- **Area:** player / session completion
-
-**Symptom**
-The completion overlay's duration line renders the literal text:
-
-```
-You completed (Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))).
-```
-
-instead of `You completed 12:30.` The backslash is missing from the string interpolation, so
-the expression is inert string content, not code. It compiles cleanly because it is a valid
-string literal.
-
-**Where**
-`Ilumionate/PlayerCompletionOverlay.swift:39`
-
-**Reproduction**
-Play any session to its natural end so `PlayerCompletionOverlay` is presented with
-`duration > 0`. The line appears under the session title. No test covers the rendered text,
-which is why it survived two commits (`0d54ef6`, `ef22342`).
-
-**Root cause**
-Missing `\` before `(` in the interpolation. Because `duration > 0` gates the line, an
-`isSaved`/`canSave` code path is not involved — every completed session with a nonzero
-duration shows it.
-
-**Proposed fix**
-Restore the interpolation:
-
-```swift
-Text("You completed \(Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))).")
-```
-
-Add a unit test that asserts the formatted string rather than the view, so the format is
-covered without a snapshot test.
-
-**Risks / blockers**
-None for the fix itself. Worth grepping for the same slip elsewhere — a `Text("...(` with a
-`.formatted(` or `.count` inside and no preceding backslash is the signature. This entry is
-one instance of a pattern that string-literal validation would not catch anywhere in the app.
 
 ## Resolved
 

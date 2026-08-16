@@ -105,12 +105,19 @@ nonisolated enum AnalysisTaskState: Equatable, Sendable {
     case queued(position: Int)          // one-based
     case preparing(ModelDownloadProgress)
     case running(stage: AnalysisStage, progress: Double, startedAt: Date)
-    case partial
+    /// A durable checkpoint exists and nothing is scheduled. Named for what the
+    /// user sees, not for what was saved: `recovery` may be `.none` when a
+    /// cancellation left a checkpoint with no partial result yet.
+    case paused
     case failed
     case ready
 }
 
 nonisolated struct ModelDownloadProgress: Equatable, Sendable {
+    /// The file whose analysis this download is bootstrapping. A speculative
+    /// prefetch downloads for the *next* file, not the active one.
+    let audioFileID: UUID
+    let attemptID: UUID
     let completedUnitCount: Int64
     let totalUnitCount: Int64
     let fractionCompleted: Double
@@ -133,8 +140,10 @@ nonisolated struct AnalysisFailureSnapshot: Equatable, Sendable {
         )
     }
 
-    /// Tier-1 eligibility. Automatic retries are deliberately excluded.
-    var isActionRequired: Bool {
+    /// True when this failure needs a decision *regardless of queue state*.
+    /// Tier-1 eligibility is broader — see `Failure assembly and tiers`, because
+    /// an `.automatic` failure that is no longer queued is also stranded.
+    var needsDecisionIntrinsically: Bool {
         dismissedAt == nil && (retryState == .manual || retryState == .unavailable)
     }
 }
@@ -172,14 +181,40 @@ input and returning `[AnalysisTask]`:
 ```swift
 nonisolated struct AnalysisTaskProjectionInput: Equatable, Sendable {
     let libraryFiles: [AudioFile]
-    let activeAnalysis: ActiveAnalysisSnapshot?      // file id, stage, progress, startedAt
+    let activeAnalysis: ActiveAnalysisSnapshot?
     let modelDownload: ModelDownloadProgress?
-    let queue: [UUID]                                // audio file ids, in queue order
+    /// Audio file ids in queue order. Duplicates are not permitted; the
+    /// assembler enforces uniqueness and the projection uses first occurrence.
+    let queue: [UUID]
     let failures: [UUID: AnalysisFailureSnapshot]
-    let recoveries: [UUID: AnalysisRecoveryStage]    // from checkpoints
+    let checkpoints: [UUID: AnalysisCheckpointSnapshot]
     let ready: [UUID: AnalysisReadySnapshot]
 }
+
+nonisolated struct ActiveAnalysisSnapshot: Equatable, Sendable {
+    let audioFileID: UUID
+    let attemptID: UUID
+    let stage: AnalysisStage
+    let progress: Double
+    let startedAt: Date
+
+    /// `.complete` and `.failed` are terminal: the pipeline leaves
+    /// `currentAnalysis` populated after it has stopped working on the file.
+    var isTerminal: Bool { stage == .complete || stage == .failed }
+}
+
+nonisolated struct AnalysisCheckpointSnapshot: Equatable, Sendable {
+    let recoveryStage: AnalysisRecoveryStage
+    let startedAt: Date
+    /// Drives tier-4 ordering and the staleness comparison against `readyAt`.
+    let lastUpdated: Date
+}
 ```
+
+`AnalysisCheckpointSnapshot` carries `lastUpdated` rather than a bare
+`AnalysisRecoveryStage` for three reasons: tier-4 ordering needs it; a checkpoint whose
+`recoveryStage` is `.none` must still produce a task (see rule 5); and it is the only way to detect
+a checkpoint that has been overtaken by a completed session.
 
 It is not a property on `AnalysisStateManager`: that file is 1,406 lines, well past the
 200–400-line norm and the 800-line ceiling in the global coding-style rules, and putting the
@@ -197,11 +232,11 @@ matching rule wins.
 
 | # | Condition | Result |
 |---|---|---|
-| 1 | active analysis for this file **and** its stage is non-terminal **and** a model download is in flight | `.preparing(progress)` |
-| 2 | active analysis for this file **and** its stage is non-terminal | `.running(stage:progress:startedAt:)` |
-| 3 | present in `queue` | `.queued(position:)`, one-based |
+| 1 | active, non-terminal, **and** `modelDownload` matches both `audioFileID` and `attemptID` | `.preparing(progress)` |
+| 2 | active, non-terminal | `.running(stage:progress:startedAt:)` |
+| 3 | present in `queue` | `.queued(position:)`, one-based, first occurrence |
 | 4 | a failure snapshot exists | `.failed` |
-| 5 | a recovery stage other than `.none` exists | `.partial` |
+| 5 | a checkpoint exists **and** is not overtaken by a ready session | `.paused` |
 | 6 | a ready snapshot exists | `.ready` |
 | — | otherwise | no task emitted |
 
@@ -210,24 +245,47 @@ matching rule wins.
 simultaneously re-appended to the queue (`:1330`) and added to `failedAnalyses`. Under a naive
 "any active analysis wins" rule the task would collapse to `.running(stage: .failed)` and defeat
 criterion 7 entirely. Non-terminal means the stage is one of `.starting`, `.transcribing`,
-`.analyzing`, `.generatingSession`; `.failed` and `.complete` both fall through — `.failed` to
-rule 3 or 4, `.complete` to rule 6.
+`.analyzing`, `.generatingSession`; `.failed` and `.complete` both fall through to rule 3 and
+below.
+
+**`.complete` does not synthesise a ready snapshot.** A terminal `.complete` active analysis falls
+through like any other terminal stage. It reaches `.ready` only if the `ready` map actually
+contains an entry for the file, which happens once the generated session is on disk and the
+assembler has seen it. Between those two moments the task legitimately collapses to `.paused` (the
+checkpoint still exists) or emits nothing.
 
 **Rule 3 above rule 4 is load-bearing.** A failure with `retryState == .automatic` is re-queued, so
 the file is both failed and queued; collapsing to `.queued` is what satisfies criterion 7. The
 failure is not lost — it is carried as `lastFailure`.
 
-**`.preparing` versus `.running`.** The model download is a property of the analyzer, not of a
-file, but it always blocks exactly one active analysis. `.preparing` is selected only while an
-active non-terminal analysis coincides with an in-flight download; the download's own progress is
-shown instead of the analysis progress, which is pinned near zero during bootstrap. When the
-download completes the same task transitions to `.running` with no change of identity.
+**Rule 5's staleness comparison.** A session saved immediately before a crash can coexist with a
+checkpoint that was never cleared. Rule 5 applies only when there is no ready snapshot, or when
+`checkpoint.lastUpdated > ready.readyAt`. Otherwise the checkpoint is stale progress that has
+already been superseded by completed work, and the task falls to rule 6. Without this, a crashed
+run would permanently outrank a session the user can actually play.
 
-**Speculative transcription stays `.queued`.** The prefetch (`startPrefetchingNextTranscription`)
-transcribes the next queued file opportunistically and may be discarded if the queue is reordered.
-Surfacing it as a live state would show progress for a file that may never be promoted, and would
-make the queue appear to process two files at once. It therefore remains `.queued` to the user.
-The watchdog still covers it internally — see [Coverage of speculative transcription](#coverage-of-speculative-transcription).
+**Rule 5 does not require a partial result.** Cancelling after `saveQueued` leaves a checkpoint
+whose `recoveryStage` is `.none`. That file has durable state and nothing scheduled, so it must
+still appear — as paused, with `recovery == .none` telling the UI that nothing was salvaged. Gating
+rule 5 on a non-`.none` recovery stage would make cancelled work vanish from every surface while
+still occupying disk.
+
+**`.preparing` versus `.running`.** The model download is **not** a property of the active
+analysis. `onTranscriptionReady()` starts the lookahead prefetch as soon as content analysis is
+checkpointed and before the current file enters `.generatingSession`
+(`AnalysisStateManager.swift:1186-1189`, whose comment states the overlap explicitly), so a
+speculative Whisper bootstrap for file N+1 can run while file N is generating. A global download
+flag would relabel the actively-generating file as `.preparing`.
+
+`.preparing` is therefore selected only when the download snapshot's `audioFileID` **and**
+`attemptID` both match the active analysis. A speculative download changes nothing the user sees:
+its file stays `.queued`, because showing bootstrap progress for a file that may never be promoted
+would imply the queue is processing two files at once.
+
+**Speculative transcription stays `.queued`** for the same reason. The prefetch
+(`startPrefetchingNextTranscription`) transcribes the next queued file opportunistically and may be
+discarded if the queue is reordered. The watchdog still covers it internally — see
+[Coverage of speculative transcription](#coverage-of-speculative-transcription).
 
 ### Attributes, not states
 
@@ -236,22 +294,56 @@ is happening now*; attributes answer *what has been salvaged*. This satisfies cr
 `.failed` task still renders "Transcript saved", a `.queued` auto-retry still knows what it resumes
 from, and a file being re-analysed still knows it has a playable session from last time.
 
+### Failure assembly and tiers
+
+**Two sources hold failures** and must be merged before projection:
+
+- **Durable manual recoveries** — `AnalysisProgressStore.manualRecoveryCheckpoints()`, which carry
+  `dismissedAt` and survive relaunch. These exist only for `.manual` failures.
+- **Runtime `failedAnalyses`** — holds `.automatic` and `.unavailable` entries too, but loses them
+  on termination.
+
+**Merge rule:** the durable record is authoritative when both exist for a file and their `failedAt`
+values are equal. When they differ, the **later `failedAt` wins**, because a newer occurrence has
+genuinely superseded the older one and `markRequiresManualRetry` writes a fresh recovery per
+occurrence. A durable record with no runtime counterpart is included (this is the post-relaunch
+case); a runtime record with no durable counterpart is included (this is the `.automatic` and
+`.unavailable` case). The merge is a total function over the union of both key sets.
+
+**Tier-1 eligibility** is computed by the projection, not by the snapshot, because it depends on
+queue membership:
+
+```
+needsDecision(task) =
+    lastFailure != nil
+    && lastFailure.dismissedAt == nil
+    && (lastFailure.needsDecisionIntrinsically || !queue.contains(task.id))
+```
+
+The second clause closes a real hole. An `.automatic` failure is only harmless because something
+will retry it; once the queue is cleared — `clearQueue()` is a user-facing toolbar action — nothing
+will. Under the narrower rule that file sat in no tier at all: not tier 1 (`.automatic`), not
+tier 3 (no longer queued), not tier 5 (not dismissed). It would have been invisible, which is the
+exact defect class this design exists to remove.
+
 ### Cross-file sort
 
-Tiers, then a deterministic order within each tier, then a stable tie-breaker on `audioFile.id`:
+Tiers, then a deterministic order within each tier, then a stable tie-breaker on `audioFile.id`
+so equal timestamps never reorder between projections:
 
 | Tier | Contents | Within-tier order |
 |---|---|---|
-| 1 | `lastFailure?.isActionRequired == true` | `failedAt` descending |
+| 1 | `needsDecision(task) == true` | `failedAt` descending |
 | 2 | `.preparing`, `.running` | `startedAt` descending |
 | 3 | `.queued` | queue position ascending |
-| 4 | `.partial` | checkpoint `lastUpdated` descending |
+| 4 | `.paused` | checkpoint `lastUpdated` descending |
 | 5 | `.failed` with `dismissedAt != nil` | `failedAt` descending |
 | 6 | `.ready` | `readyAt` descending |
 
-Only tier 1 outranks active work, and automatic retries cannot reach tier 1 because
-`isActionRequired` excludes `.automatic` *and* they collapsed to `.queued`. Criteria 6 and 7 both
-fall out of the structure with no special cases.
+Every task lands in exactly one tier: tier 1 is evaluated first and overrides the state-derived
+tier, so a `.queued` task whose failure needs a decision sorts to tier 1 while still *rendering* as
+queued. Criteria 6 and 7 both fall out of the structure — automatic retries that are still queued
+fail the `needsDecision` test and stay in tier 3.
 
 ### Ready semantics
 
@@ -265,8 +357,11 @@ fall out of the structure with no special cases.
   deletion, satisfying criterion 9.
 - **Deleted or corrupt:** if the audio file is gone from the library inventory, no task is emitted
   at all — the library is the spine of the projection. If the session file is missing or fails to
-  decode, `ready` is `nil` and the task falls through to a lower rule; a task never advertises a
-  session that cannot be loaded.
+  decode, **the assembler omits the file from the `ready` map**, so the projection simply never sees
+  it and the task falls through to a lower rule. A task therefore never advertises a session that
+  cannot be loaded. This is an input-assembly responsibility, not a projection one: the projection
+  receives an already-built map and does no disk access, so its tests cannot and should not cover
+  decode failure. That belongs to the assembler's tests.
 
 ## Snapshot ownership and refresh
 
@@ -278,27 +373,64 @@ surface constructs its own.
 
 **Two refresh paths**, because the inputs have very different frequencies:
 
-- **Structural refresh** rebuilds the whole `AnalysisTaskProjectionInput` from disk and stores.
-  Triggered by: audio-library change, checkpoint write, analysis completion or failure, session
-  save or delete, audio-file delete, `restoreManualRecoveries()`, dismissal, and removal.
-  `AnalysisProgressStore` is `private` on the manager, so the manager gains a
-  `nonisolated func recoverySnapshot() async -> ([UUID: AnalysisRecoveryStage], [UUID: AnalysisFailureSnapshot])`
-  rather than the model reaching into the actor.
-- **Progress refresh** updates only `activeAnalysis` and `modelDownload` in the existing input and
-  re-runs the projection. It **never touches disk**. This is the high-frequency path — WhisperKit
-  reports roughly every 28 seconds of audio, the download callback more often — and keeping it off
-  disk is what stops progress ticks from causing library reads.
+- **Structural refresh** rebuilds the disk- and store-backed fields of
+  `AnalysisTaskProjectionInput`: `libraryFiles`, `queue`, `failures`, `checkpoints`, `ready`.
+- **Progress refresh** replaces only `activeAnalysis` and `modelDownload` and re-runs the
+  projection. It **never touches disk**. This is the high-frequency path — WhisperKit reports per
+  ~28s audio window, the download callback more often.
+
+**Structural triggers.** Any mutation of a structural field, which means all of:
+
+| Source | Events |
+|---|---|
+| Queue | enqueue, dequeue, promotion to active, cancellation, reorder, `clearQueue` |
+| Failures | failure recorded, retry started, dismissal, removal, `restoreManualRecoveries()` |
+| Checkpoints | `saveQueued`, `saveTranscription`, `saveAnalysis`, `markRequiresManualRetry`, `clear` |
+| Sessions | generated-session save, delete |
+| Library | audio file added, renamed, deleted |
+
+Queue mutations matter as much as the rest: queue position is projection input, so a reorder that
+does not trigger a refresh leaves every position stale.
+
+**Notification.** `AnalysisProgressStore` is a `private` actor on the manager and
+`GeneratedSessionStore` publishes nothing, so neither can be observed directly. Rather than making
+them observable, the manager exposes one `nonisolated` accessor returning the structural fields as
+plain values, and every mutating path above calls a single `invalidateStructure()` on the model
+after its write completes. One funnel, called from the places that already exist, instead of five
+observation mechanisms.
+
+### The refresh loop
+
+Structural refresh is asynchronous (disk reads, actor hops) and progress refresh is synchronous and
+frequent, so an in-flight structural read can complete *after* a newer progress tick and clobber it.
+A single coalesced, generation-guarded loop prevents that:
+
+1. **Observers are installed before bootstrap starts.** Any invalidation racing the first load is
+   recorded rather than lost.
+2. **Invalidations during an in-flight pass set a dirty flag** rather than starting a second pass.
+   When the pass commits and the flag is set, exactly one more pass runs. Bursts — importing forty
+   files — coalesce into two passes, not forty.
+3. **Each structural pass carries a monotonically increasing generation.** A pass whose generation
+   is older than the last committed one is discarded at commit time, so a slow read can never
+   overwrite a newer one.
+4. **A structural commit merges the live `activeAnalysis` and `modelDownload`** held by the model
+   at commit time, never the values captured when the pass began. This is what stops a structural
+   refresh from rewinding progress.
+5. **Disk-backed reads happen off the main actor.** Only the commit — assembling the input and
+   publishing the projected snapshot — is main-actor work.
 
 **Startup ordering** is fixed and observable:
 
-1. Load the audio-library inventory.
-2. Restore manual recoveries and read checkpoints.
-3. Enumerate ready sessions for the loaded inventory.
-4. Publish the first snapshot.
+1. Install observers.
+2. Load the audio-library inventory.
+3. Restore manual recoveries and read checkpoints.
+4. Enumerate ready sessions for the loaded inventory.
+5. Publish the first snapshot.
 
-The published snapshot is `nil` (distinct from empty) until step 4, so surfaces can distinguish
+The published snapshot is `nil` (distinct from empty) until step 5, so surfaces can distinguish
 "still loading" from "nothing to show" and neither the pill nor the Library row flashes an empty
-state on launch.
+state on launch. If anything invalidated during steps 2–4, another pass runs immediately after
+step 5 per rule 2.
 
 **Invalidation.** Deleting an audio file or its generated session triggers a structural refresh;
 the projection then omits the task or clears `ready` respectively. Because tasks are keyed on
@@ -310,13 +442,18 @@ All four filter the shared snapshot.
 
 | Surface | Slice |
 |---|---|
-| Pill | `preparing`/`running`/`queued` + tasks where `lastFailure?.isActionRequired == true` |
+| Pill | `preparing`/`running`/`queued` + tasks where `needsDecision(task)` |
 | Task Center | Everything, grouped by sort tier |
 | Library | One entry row summarising counts |
 | Session Detail | `tasks.first { $0.id == audioFile.id }` |
 
-**Deleted:** `AnalysisStatusBar.swift` (dead), `LibraryAnalysisStatusSection.swift` (duplicate),
-`AnalysisRecoveryStatusOverlay` (folded into the pill).
+**Deleted:**
+
+- `AnalysisStatusBar.swift` — dead code, no references.
+- `LibraryAnalysisStatusSection.swift` — duplicate summary, replaced by the Library entry row.
+- `AnalysisStatusOverlay.swift` — the whole file. It holds **both** `AnalysisStatusOverlay` (active
+  progress) and `AnalysisRecoveryStatusOverlay` (last failure), and the pill replaces both. Deleting
+  one and keeping the other would leave the either/or split that this design exists to remove.
 
 **`AnalyzerView`'s fate.** Its Live Status and Ready Sessions sections are replaced by the Task
 Center. Its third section, `AnalyzerLibraryIntelligenceSection`, is out of scope and has no other
@@ -420,7 +557,12 @@ entering `failedAnalyses`, and `restoreManualRecoveries()` rebuilds only from
 | Failure kind | Dismissal behaviour |
 |---|---|
 | `.manual` | persisted in the recovery; checkpoint survives; task restores as dismissed at tier 5 |
-| `.unavailable` | no checkpoint exists to annotate; `dismiss` succeeds immediately with **no disk write**, removes the entry from `failedAnalyses`, and the task disappears entirely rather than joining tier 5. It does not return after relaunch because nothing durable ever referenced it. |
+| `.unavailable` | no checkpoint exists to annotate; `dismiss` succeeds immediately with **no disk write**, removes the entry from `failedAnalyses`, and the task does not join tier 5. It does not return after relaunch because nothing durable ever referenced it. |
+
+Dismissing an `.unavailable` failure removes the *failure*, not the file. If the audio file still
+has a generated session from an earlier successful analysis, its task falls through to `.ready` at
+tier 6 rather than disappearing; only a file with no failure, no checkpoint, and no session emits
+no task at all.
 
 Persisting `.unavailable` failure history would require a separate durable failure-history store.
 Out of scope.
@@ -560,21 +702,42 @@ filter matching nothing fails rather than reporting success (ERR-002).
 
 - per-file collapse precedence, rule by rule
 - terminal `currentAnalysis` (`.failed`) collapses to `.queued`, not `.running`
-- terminal `currentAnalysis` (`.complete`) collapses to `.ready`
+- terminal `currentAnalysis` (`.complete`) collapses to `.ready` **only when a ready snapshot
+  exists**, and to `.paused` when only a checkpoint does
 - auto-retry collapses to `.queued` and sorts below active work
 - `lastFailure`, `recovery`, and `ready` survive a `.queued` or `.failed` collapse
-- queue positions are one-based and follow queue order
-- `.preparing` is selected only while an active non-terminal analysis coincides with a download
+- queue positions are one-based, follow queue order, and use first occurrence on a duplicate id
+- `.preparing` requires both `audioFileID` and `attemptID` to match the active analysis
+- a speculative download for the next file leaves the active file `.running`, not `.preparing`,
+  and leaves the downloading file `.queued`
+- a checkpoint with `recoveryStage == .none` still produces a `.paused` task
+- a checkpoint older than `readyAt` yields `.ready`, not `.paused`
+- an `.automatic` failure that is no longer queued lands in tier 1
+- an `.automatic` failure that is still queued stays in tier 3
+- failure merge: durable wins on equal `failedAt`, later `failedAt` wins when they differ, and
+  records present in only one source are retained
 - within-tier ordering and the `audioFile.id` tie-breaker are deterministic
 - identical inputs produce equal snapshots (guards the `SyncPlayerItem` identity trap)
 - a file absent from the library inventory emits no task
-- a ready snapshot whose session file is missing or undecodable leaves `ready == nil`
+
+**Input assembly** — disk-backed, not part of the pure projection:
+
+- a session file that is missing or fails to decode is omitted from the `ready` map
+- `readyAt` comes from the session file's modification date, with import-date fallback for a
+  bundled gold session
+- the queue is de-duplicated before it reaches the projection
 
 **Ownership and refresh:**
 
 - progress refresh performs no disk reads
+- an invalidation raised during an in-flight structural pass causes exactly one further pass,
+  not one per invalidation
+- a structural pass with a stale generation is discarded at commit
+- a structural commit preserves progress values newer than the pass's own start
+- an invalidation raised during bootstrap is not lost
 - first publication happens only after library, recoveries, and ready enumeration complete
 - the snapshot is `nil` rather than empty before first publication
+- queue reorder, cancellation, and `clearQueue` each trigger a structural refresh
 - session delete and audio delete invalidate correctly
 
 **Persistence:**
