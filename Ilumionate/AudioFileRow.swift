@@ -8,7 +8,6 @@ import SwiftUI
 
 struct AudioFileRow: View {
     let file: AudioFile
-    let audioManager: AudioManager
     let analysisManager: AnalysisStateManager
     let isSelectionMode: Bool
     let isSelected: Bool

@@ -49,10 +49,7 @@ struct PlayerTitleBlock: View {
                 .foregroundStyle(viewModel.secondaryLabelColor)
                 .lineLimit(1)
         } else {
-            Text(viewModel.formatTime(viewModel.currentTime) + " / " + viewModel.formatTime(viewModel.duration))
-                .font(TranceTypography.caption)
-                .foregroundStyle(viewModel.secondaryLabelColor)
-                .monospacedDigit()
+            PlayerElapsedDuration(viewModel: viewModel)
         }
     }
 }

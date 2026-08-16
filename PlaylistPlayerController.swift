@@ -7,6 +7,7 @@
 
 import Foundation
 import AVFoundation
+import os
 
 @MainActor
 @Observable
@@ -56,17 +57,23 @@ class PlaylistPlayerController: Sendable {
     private var isCrossfading = false
     private var crossfadeTimer: Timer?
     private var crossfadeStep = 0
+    private var crossfadeTrace: PerformanceInterval?
 
     private var playbackTimer: Timer?
     private var audioFiles: [UUID: AudioFile] = [:]
+    private let storage: AudioLibraryStorage
 
     // MARK: - Initialization
 
-    init(playlist: Playlist, engine: LightEngine) {
+    init(
+        playlist: Playlist,
+        engine: LightEngine,
+        storage: AudioLibraryStorage = .standard
+    ) {
         self.playlist = playlist
         self.lightEngine = engine
+        self.storage = storage
         self.smartTransitions = playlist.smartTransitions
-        loadAudioFileLookup()
         loadWholePlaylistLightSessionIfAvailable()
     }
 
@@ -74,6 +81,22 @@ class PlaylistPlayerController: Sendable {
 
     /// Start playback from the beginning or current item
     func startPlayback() async {
+        let trace = PerformanceTrace.begin("Playlist Start")
+        defer { PerformanceTrace.end(trace) }
+
+        await loadAudioLibrary()
+
+        // Without this the failure below is invisible: `loadAndPlayItem` skips
+        // each unresolvable item in turn, so a playlist that resolves nothing
+        // silently runs to its last index and stops, looking to the user like
+        // playback jumped to the end at 0:00.
+        if !playlist.items.isEmpty,
+           !playlist.items.contains(where: { audioFile(for: $0) != nil }) {
+            Log.audio.error(
+                "Playlist '\(self.playlist.name, privacy: .public)' resolved none of its \(self.playlist.items.count) item(s) against a library of \(self.audioFiles.count) file(s) — nothing will play"
+            )
+        }
+
         if wholePlaylistLightPlayer == nil {
             loadWholePlaylistLightSessionIfAvailable()
         }
@@ -149,6 +172,7 @@ class PlaylistPlayerController: Sendable {
     /// Skip to next track
     func skipNext() async {
         guard !isLastItem else { return }
+        PerformanceTrace.event("Playlist Skip Next")
         cancelCrossfade()
         stopCurrent()
         currentItemIndex += 1
@@ -157,6 +181,7 @@ class PlaylistPlayerController: Sendable {
 
     /// Skip to previous track
     func skipPrevious() async {
+        PerformanceTrace.event("Playlist Skip Previous")
         // If more than 3 seconds in, restart current track
         if currentTime > 3 {
             seek(to: 0)
@@ -175,6 +200,7 @@ class PlaylistPlayerController: Sendable {
     /// Jump to a specific track
     func jumpToItem(at index: Int) async {
         guard index >= 0, index < playlist.items.count else { return }
+        PerformanceTrace.event("Playlist Jump To Track")
         cancelCrossfade()
         stopCurrent()
         currentItemIndex = index
@@ -208,13 +234,30 @@ class PlaylistPlayerController: Sendable {
 
     // MARK: - Private: Loading & Playback
 
-    private func loadAudioFileLookup() {
-        if let data = UserDefaults.standard.data(forKey: "audioFiles"),
-           let files = try? JSONDecoder().decode([AudioFile].self, from: data) {
-            for file in files {
-                audioFiles[file.id] = file
-            }
+    /// Reads the audio library that playlist items are resolved against.
+    ///
+    /// Called from `startPlayback` rather than `init` for two reasons. The
+    /// library lives in a file now, not `UserDefaults`, and decoding it is
+    /// expensive enough that `AudioLibraryStore.allFiles` is `@concurrent` —
+    /// awaiting it here keeps that work off the main actor while the player is
+    /// appearing. It also means a track imported since the controller was
+    /// constructed is still found.
+    ///
+    /// Reading `UserDefaults` directly, as this used to, silently stopped
+    /// working the moment the library migrated to disk and the old key was
+    /// cleared: the lookup came back empty, no item resolved, and the playlist
+    /// ran itself to its last index and stopped. See ERRORS.md ERR-011.
+    func loadAudioLibrary() async {
+        let files = await AudioLibraryStore.allFiles(storage: storage)
+        audioFiles = files.reduce(into: [:]) { lookup, file in
+            lookup[file.id] = file
         }
+    }
+
+    /// The library entry backing a playlist item, or `nil` when the playlist
+    /// references audio the library no longer holds.
+    func audioFile(for item: PlaylistItem) -> AudioFile? {
+        audioFiles[item.audioFileId]
     }
 
     private var activeLightPlayer: LightScorePlayer? {
@@ -237,7 +280,7 @@ class PlaylistPlayerController: Sendable {
     }
 
     /// Analyze playlist audio files for dead time in the background.
-    /// Results are cached on the AudioFile model and persisted to UserDefaults.
+    /// Results are cached on the AudioFile model and persisted to the library.
     private func preAnalyzeDeadTime() {
         let itemIds = playlist.items.map(\.audioFileId)
         let filesToAnalyze = itemIds.compactMap { id -> (UUID, URL)? in
@@ -248,42 +291,35 @@ class PlaylistPlayerController: Sendable {
         guard !filesToAnalyze.isEmpty else { return }
         print("🔍 Analyzing \(filesToAnalyze.count) tracks for dead-time detection...")
 
-        Task(priority: .utility) {
-            let analyzer = AudioEnergyAnalyzer()
+        let storage = storage
+        Task(priority: .utility) { [weak self] in
             for (id, url) in filesToAnalyze {
                 do {
-                    let profile = try analyzer.analyze(url: url)
-                    await MainActor.run { [weak self] in
-                        guard let self else { return }
-                        self.audioFiles[id]?.deadTimeProfile = profile
-                        self.persistAudioFileUpdate(id: id)
-                        let tail = String(format: "%.1f", profile.tailDeadTime)
-                        let head = String(format: "%.1f", profile.headDeadTime)
-                        print("  ✅ Dead-time: tail=\(tail)s (\(profile.tailClassification)), head=\(head)s (\(profile.headClassification))")
-                    }
+                    let profile = try await PlaylistDeadTimeWorker.analyze(url: url)
+                    self?.audioFiles[id]?.deadTimeProfile = profile
+                    await AudioLibraryStore.saveDeadTimeProfile(
+                        profile,
+                        audioFileID: id,
+                        storage: storage
+                    )
+                    let tail = profile.tailDeadTime.formatted(.number.precision(.fractionLength(1)))
+                    let head = profile.headDeadTime.formatted(.number.precision(.fractionLength(1)))
+                    Log.audio.debug(
+                        "Dead-time: tail=\(tail)s (\(profile.tailClassification.rawValue)), head=\(head)s (\(profile.headClassification.rawValue))"
+                    )
                 } catch {
-                    print("  ⚠️ Dead-time analysis failed: \(error.localizedDescription)")
+                    Log.audio.error(
+                        "Dead-time analysis failed: \(error.localizedDescription, privacy: .public)"
+                    )
                 }
             }
         }
     }
 
-    /// Persist a single AudioFile update back to the shared UserDefaults store.
-    private func persistAudioFileUpdate(id: UUID) {
-        // Reload the full list, update the matching entry, and re-save
-        guard let data = UserDefaults.standard.data(forKey: "audioFiles"),
-              var files = try? JSONDecoder().decode([AudioFile].self, from: data) else { return }
-
-        if let idx = files.firstIndex(where: { $0.id == id }),
-           let updated = audioFiles[id] {
-            files[idx] = updated
-            if let encoded = try? JSONEncoder().encode(files) {
-                UserDefaults.standard.set(encoded, forKey: "audioFiles")
-            }
-        }
-    }
-
     private func loadAndPlayItem(at index: Int) async {
+        let trace = PerformanceTrace.begin("Playlist Load Track")
+        defer { PerformanceTrace.end(trace) }
+
         guard index < playlist.items.count else {
             // End of playlist
             stop()
@@ -292,8 +328,10 @@ class PlaylistPlayerController: Sendable {
 
         let item = playlist.items[index]
 
-        guard let audioFile = audioFiles[item.audioFileId] else {
-            print("❌ Audio file not found for playlist item: \(item.filename)")
+        guard let audioFile = audioFile(for: item) else {
+            Log.audio.error(
+                "Audio file not found for playlist item: \(item.filename, privacy: .public)"
+            )
             // Skip to next
             if !isLastItem {
                 currentItemIndex += 1
@@ -349,20 +387,7 @@ class PlaylistPlayerController: Sendable {
     }
 
     private func loadGeneratedSession(for audioFile: AudioFile) -> LightSession? {
-        if let session = GeneratedSessionStore.shared.load(for: audioFile) {
-            return session
-        }
-
-        let documentsURL = URL.documentsDirectory
-        let sessionsURL = documentsURL.appendingPathComponent("GeneratedSessions", isDirectory: true)
-        let baseName = audioFile.filename
-            .replacing(".mp3", with: "")
-            .replacing(".m4a", with: "")
-            .replacing(".wav", with: "")
-        let sessionFile = sessionsURL.appendingPathComponent("\(baseName)_session.json")
-
-        guard FileManager.default.fileExists(atPath: sessionFile.path) else { return nil }
-        return try? LightScoreReader.loadSession(from: sessionFile)
+        GeneratedSessionStore.shared.load(for: audioFile)
     }
 
     /// Stop current item without fully stopping the controller
@@ -389,13 +414,17 @@ class PlaylistPlayerController: Sendable {
         let nextIndex = currentItemIndex + 1
         let nextItem = playlist.items[nextIndex]
 
-        guard let nextAudioFile = audioFiles[nextItem.audioFileId] else { return }
+        guard let nextAudioFile = audioFile(for: nextItem) else { return }
+        let trace = PerformanceTrace.begin("Playlist Crossfade")
 
         // Determine crossfade duration based on session content
         let crossfadeDuration = determineCrossfadeDuration()
 
         // Pre-load next audio
-        guard let nextAudio = try? AVAudioPlayer(contentsOf: nextAudioFile.url) else { return }
+        guard let nextAudio = try? AVAudioPlayer(contentsOf: nextAudioFile.url) else {
+            PerformanceTrace.end(trace)
+            return
+        }
         nextAudio.prepareToPlay()
         nextAudio.volume = 0 // Start silent
         nextAudioPlayer = nextAudio
@@ -412,6 +441,7 @@ class PlaylistPlayerController: Sendable {
         }
 
         isCrossfading = true
+        crossfadeTrace = trace
         nextAudio.play()
         if !usesWholePlaylistLightSession {
             nextLightPlayer?.play()
@@ -474,6 +504,10 @@ class PlaylistPlayerController: Sendable {
         currentTime = audioPlayer?.currentTime ?? 0
         isCrossfading = false
         crossfadeTimer = nil
+        if let crossfadeTrace {
+            PerformanceTrace.end(crossfadeTrace)
+            self.crossfadeTrace = nil
+        }
 
         print("✅ Crossfade complete, now playing [\(currentItemIndex + 1)/\(playlist.items.count)]")
     }
@@ -486,6 +520,10 @@ class PlaylistPlayerController: Sendable {
         nextLightPlayer?.stop()
         nextLightPlayer = nil
         isCrossfading = false
+        if let crossfadeTrace {
+            PerformanceTrace.end(crossfadeTrace)
+            self.crossfadeTrace = nil
+        }
     }
 
     /// Determine crossfade duration using dead-time analysis + light session data.
@@ -493,8 +531,8 @@ class PlaylistPlayerController: Sendable {
         let nextIndex = currentItemIndex + 1
         guard nextIndex < playlist.items.count else { return 8.0 }
 
-        let currentFile = audioFiles[playlist.items[currentItemIndex].audioFileId]
-        let nextFile = audioFiles[playlist.items[nextIndex].audioFileId]
+        let currentFile = audioFile(for: playlist.items[currentItemIndex])
+        let nextFile = audioFile(for: playlist.items[nextIndex])
 
         // Dead-time-based duration: cover all dead air plus a 3s musical overlap
         let tailDead = currentFile?.deadTimeProfile?.tailDeadTime ?? 0
@@ -511,7 +549,7 @@ class PlaylistPlayerController: Sendable {
     /// Dead time at the end of the currently playing track.
     private func currentTrackTailDeadTime() -> TimeInterval {
         guard let item = currentItem,
-              let file = audioFiles[item.audioFileId] else { return 0 }
+              let file = audioFile(for: item) else { return 0 }
         return file.deadTimeProfile?.tailDeadTime ?? 0
     }
 
@@ -524,7 +562,7 @@ class PlaylistPlayerController: Sendable {
 
         let nextIndex = currentItemIndex + 1
         guard nextIndex < playlist.items.count,
-              let nextAudioFile = audioFiles[playlist.items[nextIndex].audioFileId],
+              let nextAudioFile = audioFile(for: playlist.items[nextIndex]),
               let nextSession = loadGeneratedSession(for: nextAudioFile) else {
             return 8.0
         }
@@ -589,6 +627,7 @@ class PlaylistPlayerController: Sendable {
     }
 
     private func handleTrackFinished() {
+        PerformanceTrace.event("Playlist Track Finished")
         print("🏁 Track finished: \(currentItem?.filename ?? "?")")
 
         if isLastItem {

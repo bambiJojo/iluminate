@@ -17,24 +17,35 @@ extension AIAnalysisManager {
     /// reliably (e.g. subliminal audio where speech is below audible threshold).
     private static let sparseTranscriptThreshold = 40
 
+    /// Characters sampled from each of the transcript's four positions.
+    ///
+    /// This used to be 600. Combined with the detailed system instructions and
+    /// response schema, that produced a 4,562-token request before the model had
+    /// room to answer. The compact request was already the successful retry.
+    static let transcriptSampleCharacterCount = 120
+
     /// A ceiling on the assembled prompt *string*, as a regression guard.
     ///
     /// Not the model's context limit, and deliberately not presented as one.
-    /// Measured on 2026-08-11: this prompt assembles to ~7,500 characters
-    /// (~2,100 tokens) for a saturated transcript, while the device reported
-    /// 4,816 tokens for the whole request — so roughly 2,700 tokens come from
-    /// the system instructions and the response schema, neither of which is in
-    /// this string. This guard only catches the template itself growing.
+    /// Measured on 2026-08-11: the compact prompt and minimal instructions make
+    /// a 3,029-token request including the structured response schema. This
+    /// guard catches template growth, while the Foundation Models token-count
+    /// regression test covers the complete request on supported test hosts.
     /// See ERRORS.md ERR-007.
-    static let promptCharacterBudget = 9_000
+    static let promptCharacterBudget = 6_000
+
+    /// Measured input ceiling for the complete compact request. This is not a
+    /// declaration of the model's context size; it preserves the headroom that
+    /// made the former retry succeed and catches growth in the response schema.
+    static let primaryRequestTokenBudget = 3_300
 
     /// Builds the analysis prompt for a transcribed audio file.
-    /// - Parameter maxChunkSize: Characters per transcript sample section (default 600).
+    /// - Parameter maxChunkSize: Characters per transcript sample section (default 120).
     ///   Pass a smaller value to reduce prompt size when retrying after context overflow.
     func buildTranscriptionPrompt(
         transcription: AudioTranscriptionResult,
         audioFile: AudioFile,
-        maxChunkSize: Int = 600
+        maxChunkSize: Int = AIAnalysisManager.transcriptSampleCharacterCount
     ) -> String {
         let wordCount = transcription.fullText
             .components(separatedBy: .whitespacesAndNewlines)

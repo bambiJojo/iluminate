@@ -22,7 +22,10 @@ struct ContentView: View {
     @State private var selectedTab: TranceTab = .home
     @State private var engine = LightEngine()
     @State private var sessions: [LightSession] = []
-    @State private var audioFiles: [AudioFile] = []
+    /// Observe the shared library snapshot directly. Keeping a second array in
+    /// ContentView left the launch-time decode alive after Library refreshed
+    /// the cache, retaining an entire duplicate set of transcript statistics.
+    @State private var audioLibraryCache = AudioLibraryCache.shared
     @State private var selectedSession: LightSession?
     @State private var showingOnboarding = false
     @State private var showingAnalyticsConsentPrompt = false
@@ -47,6 +50,7 @@ struct ContentView: View {
     var body: some View {
         mainLayout
         .task {
+            await analysisManager.prepareCachedResults()
             await analysisManager.restoreManualRecoveries()
             loadSessions()
             await loadAudioFiles()
@@ -155,7 +159,7 @@ struct ContentView: View {
                     HomeView(
                         selectedSession: $selectedSession,
                         sessions: sessions,
-                        audioFiles: audioFiles,
+                        audioFiles: audioLibraryCache.files,
                         engine: engine,
                         onRefresh: loadSessions,
                         onOpenLibrary: { selectedTab = .library },
@@ -255,8 +259,7 @@ struct ContentView: View {
     /// Publishes through the shared cache so Library can paint its shelves
     /// immediately on first entry instead of waiting for its own load.
     private func loadAudioFiles() async {
-        await AudioLibraryCache.shared.refresh()
-        audioFiles = AudioLibraryCache.shared.files
+        await audioLibraryCache.refresh()
     }
 
     private func checkForFirstLaunch() {

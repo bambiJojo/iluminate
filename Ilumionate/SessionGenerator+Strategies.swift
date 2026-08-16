@@ -73,20 +73,23 @@ extension SessionGenerator {
             let segDuration = max(0, endTime - startTime)
             guard segDuration > 0 else { continue }
 
-            let baseFreq = targetFrequencyForPhase(
-                seg.phase,
+            let baseFreq = LightScorePhaseTargeting.targetFrequency(
+                phase: seg.phase,
                 tranceDepth: seg.tranceDepthEstimate,
-                segmentProgress: 0.0,
+                progress: 0.0,
                 config: config
             )
-            let baseAmp    = phaseIntensity(
+            let baseAmp = LightScorePhaseTargeting.intensity(
                 phase: seg.phase,
                 tranceDepth: seg.tranceDepthEstimate,
                 confidence: seg.confidenceLevel
             ) * mul
-            let colorTemp  = colorTemperatureForPhase(seg.phase)
-            let waveform   = waveformTypeForPhase(seg.phase)
-            let useBilat   = bilateralForPhase(seg.phase)
+            let colorTemp = LightScorePhaseTargeting.colorTemperature(for: seg.phase)
+            let waveform = LightScorePhaseTargeting.waveform(
+                for: seg.phase,
+                longSegment: segDuration >= 120
+            )
+            let useBilat = LightScorePhaseTargeting.bilateral(for: seg.phase)
             let rampDuration = min(max(segDuration * 0.12, 6.0), 30.0)
 
             moments.append(moment(
@@ -98,16 +101,16 @@ extension SessionGenerator {
 
             for progress in contourProgressPoints(for: segDuration) {
                 let pointTime = startTime + segDuration * progress
-                let pointFreq = targetFrequencyForPhase(
-                    seg.phase,
+                let pointFreq = LightScorePhaseTargeting.targetFrequency(
+                    phase: seg.phase,
                     tranceDepth: seg.tranceDepthEstimate,
-                    segmentProgress: progress,
+                    progress: progress,
                     config: config
                 )
                 moments.append(moment(
                     time: pointTime, freq: pointFreq,
                     amp: baseAmp * intensityContour(for: seg.phase, progress: progress),
-                    waveform: segDuration > 120 ? .noiseModulatedSine : waveform,
+                    waveform: waveform,
                     ramp: rampDuration, colorTemp: colorTemp,
                     bilateral: useBilat ? true : nil
                 ))
@@ -117,10 +120,10 @@ extension SessionGenerator {
                 let holdProgress = 0.92
                 moments.append(moment(
                     time: startTime + segDuration * holdProgress,
-                    freq: targetFrequencyForPhase(
-                        seg.phase,
+                    freq: LightScorePhaseTargeting.targetFrequency(
+                        phase: seg.phase,
                         tranceDepth: seg.tranceDepthEstimate,
-                        segmentProgress: holdProgress,
+                        progress: holdProgress,
                         config: config
                     ),
                     amp: baseAmp * intensityContour(for: seg.phase, progress: holdProgress),
@@ -449,90 +452,6 @@ extension SessionGenerator {
         return moments
     }
 
-    // MARK: - Phase Mapping Helpers
-
-    /// Returns the calibrated target frequency for a phase using research-backed
-    /// band-fraction targets. Fractions sourced from AVE phase-response studies:
-    ///   induction=75%, deepening=40%, therapy=10%,
-    ///   suggestions=25%, conditioning=40%, emergence=60%
-    func targetFrequencyForPhase(_ phase: HypnosisMetadata.Phase, config: GenerationConfig) -> Double {
-        let range = frequencyRangeForPhase(phase)
-        let lo = range.lowerBound
-        let hi = range.upperBound
-        let bandWidth = hi - lo
-
-        let fraction: Double
-        switch phase {
-        case .preTalk, .induction: fraction = 0.75   // upper alpha
-        case .fractionation:fraction = 0.55   // light re-alert + re-drop cycling
-        case .deepening, .confusion: fraction = 0.35   // confusion is a deepening modifier
-        case .therapy:      fraction = 0.10   // deep theta floor
-        case .suggestions:  fraction = 0.25   // lower theta (active commands need slight uplift)
-        case .eroticSuggestions: fraction = 0.35 // slightly lifted low-theta for rhythmic drive
-        case .brainwashing: fraction = 0.15   // deep repetitive programming
-        case .conditioning: fraction = 0.40   // mid theta
-        case .emergence:    fraction = 0.60   // alpha-SMR
-        case .transitional: fraction = 0.50   // midpoint
-        }
-
-        let target = lo + bandWidth * fraction
-        return clamp(target, lower: config.minFrequency, upper: config.maxFrequency)
-    }
-
-    /// Phase target adjusted by the analyzer's estimated trance depth and
-    /// by the listener's position inside the segment. This lets the light map
-    /// follow the creator's arc inside a phase rather than holding one flat
-    /// value until the next boundary.
-    func targetFrequencyForPhase(
-        _ phase: HypnosisMetadata.Phase,
-        tranceDepth: Double,
-        segmentProgress: Double,
-        config: GenerationConfig
-    ) -> Double {
-        let range = frequencyRangeForPhase(phase)
-        let anchor = targetFrequencyForPhase(phase, config: config)
-        let expectedDepth = expectedDepthForPhase(phase)
-        let depthShift = (clamp(tranceDepth, lower: 0, upper: 1) - expectedDepth)
-            * (range.upperBound - range.lowerBound)
-            * 0.45
-        let contourShift: Double
-
-        switch phase {
-        case .preTalk, .induction:
-            contourShift = -0.65 * segmentProgress
-        case .deepening, .confusion:
-            contourShift = -0.85 * segmentProgress
-        case .therapy, .suggestions, .conditioning:
-            contourShift = sin(segmentProgress * .pi * 2.0) * 0.22
-        case .fractionation:
-            contourShift = sin(segmentProgress * .pi * 3.0) * 0.75
-        case .emergence:
-            contourShift = 1.25 * segmentProgress
-        case .eroticSuggestions, .brainwashing:
-            contourShift = -0.35 * segmentProgress
-        case .transitional:
-            contourShift = 0
-        }
-
-        return clamp(
-            anchor - depthShift + contourShift,
-            lower: max(config.minFrequency, range.lowerBound),
-            upper: min(config.maxFrequency, range.upperBound)
-        )
-    }
-
-    func phaseIntensity(
-        phase: HypnosisMetadata.Phase,
-        tranceDepth: Double,
-        confidence: HypnosisMetadata.ConfidenceLevel
-    ) -> Double {
-        let base = intensityForPhase(phase)
-        let confidenceScale = 0.82 + confidence.numericValue * 0.18
-        let depthDimming = max(0, clamp(tranceDepth, lower: 0, upper: 1) - 0.55) * 0.12
-        let emergenceLift = phase == .emergence ? 0.04 : 0
-        return clamp(base * confidenceScale - depthDimming + emergenceLift, lower: 0.05, upper: 1.0)
-    }
-
     func contourProgressPoints(for duration: TimeInterval) -> [Double] {
         if duration >= 120 { return [0.25, 0.50, 0.75] }
         if duration >= 45 { return [0.33, 0.66] }
@@ -552,20 +471,6 @@ extension SessionGenerator {
             return 0.95 + progress * 0.10
         default:
             return 1.0
-        }
-    }
-
-    func expectedDepthForPhase(_ phase: HypnosisMetadata.Phase) -> Double {
-        switch phase {
-        case .preTalk, .induction: return 0.30
-        case .fractionation: return 0.45
-        case .deepening, .confusion: return 0.58
-        case .therapy, .suggestions: return 0.72
-        case .eroticSuggestions: return 0.78
-        case .brainwashing: return 0.82
-        case .conditioning: return 0.66
-        case .emergence: return 0.20
-        case .transitional: return 0.45
         }
     }
 
@@ -608,79 +513,6 @@ extension SessionGenerator {
                 bilateral_transition_duration: original.bilateral_transition_duration,
                 color_temperature: original.color_temperature
             )
-        }
-    }
-
-    func frequencyRangeForPhase(_ phase: HypnosisMetadata.Phase) -> ClosedRange<Double> {
-        if let band = analyzerConfig.phaseBand(for: phase) {
-            return band.closedRange
-        }
-        switch phase {
-        case .preTalk, .induction: return 8.0...12.0
-        case .fractionation:return 6.5...9.5
-        case .deepening, .confusion: return 5.0...8.0
-        case .therapy:      return 4.5...6.5
-        case .suggestions:  return 5.0...7.0
-        case .eroticSuggestions: return 3.5...5.5
-        case .brainwashing: return 4.0...5.8
-        case .conditioning: return 5.5...7.5
-        case .emergence:    return 8.0...14.0
-        case .transitional: return 6.0...10.0
-        }
-    }
-
-    func intensityForPhase(_ phase: HypnosisMetadata.Phase) -> Double {
-        switch phase {
-        case .preTalk, .induction: return 0.45
-        case .fractionation: return 0.41
-        case .deepening, .confusion: return 0.38
-        case .therapy:     return 0.32
-        case .suggestions: return 0.34
-        case .eroticSuggestions: return 0.33
-        case .brainwashing: return 0.31
-        case .conditioning: return 0.36
-        case .emergence:   return 0.44
-        case .transitional: return 0.40
-        }
-    }
-
-    func colorTemperatureForPhase(_ phase: HypnosisMetadata.Phase) -> Double {
-        switch phase {
-        case .preTalk, .induction: return 4000
-        case .fractionation: return 3400
-        case .deepening, .confusion: return 3000
-        case .therapy:     return 2400
-        case .suggestions: return 2600
-        case .eroticSuggestions: return 2250
-        case .brainwashing: return 2100
-        case .conditioning: return 2800
-        case .emergence:   return 4500
-        case .transitional: return 3500
-        }
-    }
-
-    func waveformTypeForPhase(_ phase: HypnosisMetadata.Phase) -> WaveformType {
-        switch phase {
-        case .preTalk:      return .sine
-        case .induction:    return .sine
-        case .fractionation:return .softPulse
-        case .deepening, .confusion: return .softPulse
-        case .therapy:      return .noiseModulatedSine
-        case .suggestions:  return .softPulse
-        case .eroticSuggestions: return .softPulse
-        case .brainwashing: return .noiseModulatedSine
-        case .conditioning: return .softPulse
-        case .emergence:    return .sine
-        case .transitional: return .sine
-        }
-    }
-
-    func bilateralForPhase(_ phase: HypnosisMetadata.Phase) -> Bool {
-        switch phase {
-        case .fractionation, .deepening, .confusion, .therapy, .suggestions,
-             .eroticSuggestions, .brainwashing, .conditioning:
-            return true
-        default: return false
         }
     }
 

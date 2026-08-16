@@ -26,7 +26,9 @@ nonisolated enum AudioTitleNormalizer {
     /// on a real library. A Time Profiler trace showed the Swift Regex parser
     /// (`Parser.parseCustomCharacterClass` and friends) running on the main
     /// thread here. It was a small share of the total, but it is pure waste.
-    private static let separators = /[^a-z0-9]+/
+    // Swift's Regex value is immutable here but does not conform to Sendable.
+    // The unsafe annotation is limited to this read-only compiled cache.
+    nonisolated(unsafe) private static let separators = /[^a-z0-9]+/
 
     /// A filename or title reduced to lowercase, unaccented, punctuation-free
     /// tokens.

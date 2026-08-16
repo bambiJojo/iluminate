@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import Observation
 @testable import Ilumionate
 
 struct AnalysisReassuranceTests {
@@ -73,6 +74,25 @@ struct AnalysisReassuranceTests {
             errorMessage: nil, startedAt: Date(timeIntervalSince1970: 1_000)
         )
         #expect(first == second)
+    }
+
+    @Test func progressDoesNotInvalidateStageObservers() {
+        let analysis = ActiveAnalysis(
+            audioFile: AudioFile(filename: "test.m4a", duration: 300, fileSize: 1024),
+            stage: .analyzing,
+            progress: 0.25
+        )
+        var stageInvalidated = false
+
+        withObservationTracking {
+            _ = analysis.stage
+        } onChange: {
+            stageInvalidated = true
+        }
+
+        analysis.progress = 0.5
+
+        #expect(stageInvalidated == false)
     }
 }
 

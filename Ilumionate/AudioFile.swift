@@ -151,7 +151,7 @@ extension AudioFile: Equatable {
     /// which audio they refer to never compare equal — `PlaylistTrackDownloadOutcome`
     /// wraps an `AudioFile` and is `Equatable`, and without these a downloaded
     /// file and a different one with the same metadata were indistinguishable.
-    static func == (lhs: AudioFile, rhs: AudioFile) -> Bool {
+    nonisolated static func == (lhs: AudioFile, rhs: AudioFile) -> Bool {
         lhs.id == rhs.id &&
         lhs.contentFingerprint == rhs.contentFingerprint &&
         lhs.remoteSource == rhs.remoteSource &&
@@ -170,7 +170,7 @@ extension AudioFile: Equatable {
 }
 
 extension AudioFile: Hashable {
-    func hash(into hasher: inout Hasher) {
+    nonisolated func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
 }

@@ -36,8 +36,27 @@ nonisolated enum AudioImportWorker {
         durationTimeout: Duration,
         documentsURL: URL = .documentsDirectory,
         existing: DuplicateAudioIndex = DuplicateAudioIndex([]),
+        remoteSource: RemoteAudioSource? = nil,
+        creator: String? = nil,
         transferOperation: AudioFileTransferOperation? = nil
     ) async throws -> AudioImportOutcome {
+        let trace = PerformanceTrace.begin("Audio File Preparation")
+        defer { PerformanceTrace.end(trace) }
+
+        // Publisher identity is the cheapest and strongest signal available.
+        // Resolve it before hashing or touching the source URL so a repeat
+        // remote import does not download or inspect bytes it already owns.
+        if let remoteSource,
+           case .identical(let existingID) = existing.verdict(
+               for: DuplicateAudioCandidate(
+                   remoteSource: remoteSource,
+                   title: targetFilename
+               )
+           ) {
+            Log.audio.info("↩️ Remote track already in the library: \(targetFilename, privacy: .public)")
+            return .alreadyInLibrary(existing: existingID)
+        }
+
         // Hashed at the source, before anything is written. Copying first and
         // checking after is how `Track (1).mp3` used to come into existence.
         let sourceFingerprint = AudioFingerprintService.computeFingerprint(for: sourceURL)
@@ -46,6 +65,7 @@ nonisolated enum AudioImportWorker {
         )
         let verdict = existing.verdict(
             for: DuplicateAudioCandidate(
+                remoteSource: remoteSource,
                 contentFingerprint: sourceFingerprint,
                 fileSize: sourceSize,
                 // The source's duration is not known here — loading it means an
@@ -87,16 +107,17 @@ nonisolated enum AudioImportWorker {
             )
             async let metadata = AudioMetadataExtractor.metadata(from: destinationURL)
 
-            return await .imported(
-                AudioFile(
-                    filename: destinationURL.lastPathComponent,
-                    duration: duration,
-                    fileSize: fileSize,
-                    trackMetadata: metadata,
-                    contentFingerprint: sourceFingerprint
-                        ?? AudioFingerprintService.computeFingerprint(for: destinationURL)
-                )
+            var audioFile = await AudioFile(
+                filename: destinationURL.lastPathComponent,
+                duration: duration,
+                fileSize: fileSize,
+                trackMetadata: metadata,
+                contentFingerprint: sourceFingerprint
+                    ?? AudioFingerprintService.computeFingerprint(for: destinationURL),
+                remoteSource: remoteSource
             )
+            audioFile.creator = creator
+            return .imported(audioFile)
         } catch {
             try? FileManager.default.removeItem(at: destinationURL)
             throw error

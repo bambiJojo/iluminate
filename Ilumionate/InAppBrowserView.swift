@@ -153,7 +153,7 @@ struct InAppBrowserView: View {
     private func downloadDiscovered(_ link: DiscoveredAudioLink) {
         Task {
             do {
-                if let file = try await AudioManager.shared.downloadAudio(from: link.url) {
+                if let file = try await AudioIntake.shared.downloadAudio(from: link.url) {
                     handleDownload(file)
                 }
             } catch let rejection as AudioDownloadValidation.Rejection {

@@ -417,20 +417,24 @@ extension ProfileSettingsView {
     }
 
     func exportSessionData() {
-        do {
-            let exportURL = try AppSettingsManager.exportSnapshot()
-            presentShareSheet(items: [exportURL])
-        } catch {
-            Log.ui.info("Failed to export settings snapshot: \(error)")
+        Task {
+            do {
+                let exportURL = try await AppSettingsManager.exportSnapshot()
+                presentShareSheet(items: [exportURL])
+            } catch {
+                Log.ui.info("Failed to export settings snapshot: \(error)")
+            }
         }
     }
 
     func clearAllData() {
-        do {
-            try AppSettingsManager.clearAllData()
-            showClearDataDone = true
-        } catch {
-            Log.ui.info("Failed to clear all app data: \(error)")
+        Task {
+            do {
+                try await AppSettingsManager.clearAllData()
+                showClearDataDone = true
+            } catch {
+                Log.ui.info("Failed to clear all app data: \(error)")
+            }
         }
     }
 

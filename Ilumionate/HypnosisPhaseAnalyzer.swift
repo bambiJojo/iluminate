@@ -2348,6 +2348,13 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         _ phaseSegments: [PhaseSegment],
         markers: [LinguisticMarker]
     ) -> [PhaseSegment] {
+        Self.attachLinguisticMarkers(phaseSegments, markers: markers)
+    }
+
+    nonisolated static func attachLinguisticMarkers(
+        _ phaseSegments: [PhaseSegment],
+        markers: [LinguisticMarker]
+    ) -> [PhaseSegment] {
         phaseSegments.map { segment in
             let segmentMarkers = markers
                 .filter { marker in

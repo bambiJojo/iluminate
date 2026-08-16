@@ -120,6 +120,37 @@ struct AudioLibraryStoreTests {
         #expect(updated.isAnalyzed == false)
     }
 
+    @Test func concurrentSemanticMutationsDoNotLoseEachOther() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let existing = AudioFile(filename: "Existing.mp3", duration: 120, fileSize: 10)
+        let added = AudioFile(filename: "Added.mp3", duration: 90, fileSize: 8)
+        await AudioLibraryStore.save([existing], storage: fixture.storage)
+
+        async let favorite = AudioLibraryStore.setFavorite(
+            true,
+            audioFileID: existing.id,
+            storage: fixture.storage
+        )
+        async let rating = AudioLibraryStore.setRating(
+            4,
+            audioFileID: existing.id,
+            storage: fixture.storage
+        )
+        async let insertion = AudioLibraryStore.add(
+            added,
+            storage: fixture.storage
+        )
+
+        _ = await (favorite, rating, insertion)
+
+        let files = AudioLibraryStore.load(storage: fixture.storage)
+        let updated = try #require(files.first { $0.id == existing.id })
+        #expect(updated.isFavorite == true)
+        #expect(updated.rating == 4)
+        #expect(files.contains { $0.id == added.id })
+    }
+
     private func makeFixture() throws -> Fixture {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "AudioLibraryStoreTests-\(UUID().uuidString)", directoryHint: .isDirectory)

@@ -19,6 +19,12 @@ struct LumeOrb: View {
     var size: Size = .hero
     /// Optional target frequency (Hz). When set, breath period = 1/pulse, clamped to a calm range.
     var pulse: Double? = nil
+    /// Freezes the orb without removing it from the hierarchy.
+    ///
+    /// A paused animation schedule matters for more than appearance: leaving
+    /// the timeline live keeps SwiftUI's update graph and async renderer awake
+    /// while the player itself is paused.
+    var isPaused = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -29,7 +35,7 @@ struct LumeOrb: View {
     }
 
     var body: some View {
-        TimelineView(.animation(paused: reduceMotion)) { context in
+        TimelineView(.animation(paused: reduceMotion || isPaused)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let spin = reduceMotion ? 0 : (t / LiminalMotion.orbSpinDuration)
                 .truncatingRemainder(dividingBy: 1) * 360

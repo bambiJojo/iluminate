@@ -91,7 +91,7 @@ final class LightEngine {
         didSet {
             guard oldValue != mindMachineEnabled else { return }
             if mindMachineEnabled {
-                guard isRunning else { return }
+                guard isRunning, !isPaused else { return }
                 // Re-prime the tick: a stale timestamp would produce a huge
                 // deltaTime and blow up the phase accumulator on the first frame.
                 phase = 0.0
@@ -427,6 +427,7 @@ final class LightEngine {
     func pause() {
         guard isRunning else { return }
         isPaused = true
+        stopDisplayLink()
         brightness = 0.0
         brightnessLeft = 0.0
         brightnessRight = 0.0
@@ -436,7 +437,12 @@ final class LightEngine {
     /// Resume the engine from pause state
     func resume() {
         guard isRunning else { return }
+        let wasPaused = isPaused
         isPaused = false
+        if wasPaused, mindMachineEnabled {
+            lastTimestamp = 0.0
+            startDisplayLink()
+        }
         Log.engine.info("▶️ Light engine resumed")
     }
 
@@ -460,9 +466,14 @@ final class LightEngine {
         // score player that is not playing. The timestamp is already refreshed
         // above, which prevents a phase jump on resume.
         if isOutputSuspended {
-            brightness = 0.0
-            brightnessLeft = 0.0
-            brightnessRight = 0.0
+            // Some defensive callers pause only the attached score. Avoid
+            // publishing identical zeroes every display frame in that fallback
+            // path; explicit engine pauses suspend the display link entirely.
+            if brightness != 0 || brightnessLeft != 0 || brightnessRight != 0 {
+                brightness = 0.0
+                brightnessLeft = 0.0
+                brightnessRight = 0.0
+            }
             return
         }
 

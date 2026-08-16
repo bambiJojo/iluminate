@@ -35,7 +35,8 @@ extension AudioLibraryView {
                                 .buttonStyle(.plain)
                                 .swipeToDelete(
                                     id: file.id,
-                                    openRowID: $openSwipeRowID
+                                    openRowID: $openSwipeRowID,
+                                    prioritizesSwipeOverNavigation: true
                                 ) {
                                     deleteFile(file)
                                 }
@@ -60,7 +61,6 @@ extension AudioLibraryView {
     func audioFileRow(for file: AudioFile) -> AudioFileRow {
         AudioFileRow(
             file: file,
-            audioManager: audioManager,
             analysisManager: analysisManager,
             isSelectionMode: isSelectionMode,
             isSelected: selectedFiles.contains(file.id),

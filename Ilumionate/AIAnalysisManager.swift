@@ -53,9 +53,13 @@ actor AIAnalysisManager {
         await onProgress(ProgressInfo(progress: 0.05, message: "Setting up AI session..."))
 
         let addendum = await MainActor.run { AnalysisPreferences.shared.aiSystemAddendum }
+        // The detailed instructions plus the structured response schema consume
+        // the context window before generation begins (4,562 input tokens in a
+        // saturated local measurement). The compact pair below is the request
+        // that already proved successful as the old retry (3,029 tokens).
         let finalInstructions = addendum.isEmpty
-            ? AVESystemPrompt.instructions
-            : AVESystemPrompt.instructions + "\n\n" + addendum
+            ? AVESystemPrompt.minimalInstructions
+            : AVESystemPrompt.minimalInstructions + "\n\n" + addendum
 
         let lmSession = LanguageModelSession(instructions: finalInstructions)
         session = lmSession
@@ -90,7 +94,9 @@ actor AIAnalysisManager {
         // dominates, so classification finishes essentially for free.
         async let aiResponseAsync = fetchAIResponse(
             session: lmSession, prompt: prompt,
-            transcription: transcription, audioFile: audioFile
+            transcription: transcription,
+            audioFile: audioFile,
+            hasCustomInstructions: addendum.isEmpty == false
         )
 
         let detectedPhases: [PhaseSegment]? = try await runPhaseAnalysis(
@@ -147,15 +153,17 @@ actor AIAnalysisManager {
         }
     }
 
-    /// Runs the AI classification with one automatic retry on a retryable error.
-    /// Sets `currentTask` so cancellation remains supported. Reports
-    /// `.unavailable` when both attempts fail, signalling the caller to use
-    /// keyword fallback.
+    /// Runs the AI classification with one automatic retry when a fresh compact
+    /// session can plausibly help. A context overflow is retried only when that
+    /// retry can remove custom instructions; repeating the same compact request
+    /// would spend another model round-trip on the same deterministic failure.
+    /// Sets `currentTask` so cancellation remains supported.
     private func fetchAIResponse(
         session: LanguageModelSession,
         prompt: String,
         transcription: AudioTranscriptionResult,
-        audioFile: AudioFile
+        audioFile: AudioFile,
+        hasCustomInstructions: Bool
     ) async throws -> AIResponseOutcome {
         let task = Task<AIAnalysisResponse, Error> {
             do {
@@ -173,15 +181,24 @@ actor AIAnalysisManager {
                 Log.analysis.info("⚠️ AI attempt 1 failed (\(diagnosis.rawValue)). Reason: \(String(describing: error))")
 
                 // A refusal, a missing model, or a safety host that cannot be
-                // queried will fail identically on a shorter prompt. Rethrowing
-                // skips a second full round-trip that changes nothing.
+                // queried will fail identically in a fresh session. A context
+                // overflow can improve only when there is an addendum to drop.
                 guard diagnosis.isRetryable else { throw error }
-                Log.analysis.info("↻ Retrying with minimal prompt")
+                if diagnosis == .contextWindow, hasCustomInstructions == false {
+                    throw error
+                }
+                if hasCustomInstructions {
+                    Log.analysis.info("↻ Retrying compact request without custom instructions")
+                } else {
+                    Log.analysis.info("↻ Retrying compact request in a fresh session")
+                }
             }
-            // Retry with compact prompt; errors here propagate out of the Task.
+            // Retry in a fresh compact session; errors propagate out of the Task.
             let fallback = LanguageModelSession(instructions: AVESystemPrompt.minimalInstructions)
             let shortPrompt = buildTranscriptionPrompt(
-                transcription: transcription, audioFile: audioFile, maxChunkSize: 120
+                transcription: transcription,
+                audioFile: audioFile,
+                maxChunkSize: Self.transcriptSampleCharacterCount
             )
             return try await fallback.respond(
                 to: shortPrompt, generating: AIAnalysisResponse.self

@@ -15,16 +15,13 @@ import Foundation
 @MainActor
 struct FrequencyRangeForPhaseTests {
 
-    private let gen = SessionGenerator()
-    private let config = SessionGenerator.GenerationConfig.default
-
     @Test func allPhasesHaveValidRange() {
         let phases: [HypnosisMetadata.Phase] = [
             .preTalk, .induction, .deepening, .therapy,
             .suggestions, .conditioning, .emergence, .transitional
         ]
         for phase in phases {
-            let range = gen.frequencyRangeForPhase(phase)
+            let range = LightScorePhaseTargeting.frequencyRange(for: phase)
             #expect(range.lowerBound < range.upperBound,
                 "\(phase.rawValue): lowerBound must be < upperBound")
             #expect(range.lowerBound >= 0.5, "\(phase.rawValue) lower bound below 0.5 Hz")
@@ -34,14 +31,14 @@ struct FrequencyRangeForPhaseTests {
 
     @Test func deepStatesPhasesAreBelowTenHz() {
         for phase in [HypnosisMetadata.Phase.therapy, .deepening] {
-            let range = gen.frequencyRangeForPhase(phase)
+            let range = LightScorePhaseTargeting.frequencyRange(for: phase)
             #expect(range.upperBound <= 10.0,
                 "\(phase.rawValue) upper bound must be ≤10 Hz (theta region)")
         }
     }
 
     @Test func emergenceIsInAlphaOrHigher() {
-        let range = gen.frequencyRangeForPhase(.emergence)
+        let range = LightScorePhaseTargeting.frequencyRange(for: .emergence)
         #expect(range.lowerBound >= 7.0, "emergence must start in alpha/theta-alpha boundary")
     }
 }
@@ -51,7 +48,6 @@ struct FrequencyRangeForPhaseTests {
 @MainActor
 struct TargetFrequencyForPhaseTests {
 
-    private let gen = SessionGenerator()
     private let config = SessionGenerator.GenerationConfig.default
 
     @Test func targetFrequencyIsWithinPhaseRange() {
@@ -60,8 +56,8 @@ struct TargetFrequencyForPhaseTests {
             .suggestions, .conditioning, .emergence, .transitional
         ]
         for phase in phases {
-            let range = gen.frequencyRangeForPhase(phase)
-            let target = gen.targetFrequencyForPhase(phase, config: config)
+            let range = LightScorePhaseTargeting.frequencyRange(for: phase)
+            let target = targetFrequency(for: phase, config: config)
             #expect(target >= range.lowerBound - 0.01,
                 "\(phase.rawValue) target \(target) Hz below range lower \(range.lowerBound)")
             #expect(target <= range.upperBound + 0.01,
@@ -70,16 +66,28 @@ struct TargetFrequencyForPhaseTests {
     }
 
     @Test func deepestPhaseHasLowestTarget() {
-        let therapyFreq = gen.targetFrequencyForPhase(.therapy, config: config)
-        let preTalkFreq = gen.targetFrequencyForPhase(.preTalk, config: config)
+        let therapyFreq = targetFrequency(for: .therapy, config: config)
+        let preTalkFreq = targetFrequency(for: .preTalk, config: config)
         #expect(therapyFreq < preTalkFreq,
             "therapy (\(therapyFreq) Hz) must be lower than pre_talk (\(preTalkFreq) Hz)")
     }
 
     @Test func configMaxClamps() {
         let tight = SessionGenerator.GenerationConfig(maxFrequency: 5.0)
-        let target = gen.targetFrequencyForPhase(.preTalk, config: tight)
+        let target = targetFrequency(for: .preTalk, config: tight)
         #expect(target <= 5.0, "target must be clamped to config.maxFrequency")
+    }
+
+    private func targetFrequency(
+        for phase: HypnosisMetadata.Phase,
+        config: SessionGenerator.GenerationConfig
+    ) -> Double {
+        LightScorePhaseTargeting.targetFrequency(
+            phase: phase,
+            tranceDepth: LightScorePhaseTargeting.expectedDepth(for: phase),
+            progress: 0,
+            config: config
+        )
     }
 }
 
@@ -88,24 +96,30 @@ struct TargetFrequencyForPhaseTests {
 @MainActor
 struct IntensityForPhaseTests {
 
-    private let gen = SessionGenerator()
-
     @Test func allIntensitiesInRange() {
         let phases: [HypnosisMetadata.Phase] = [
             .preTalk, .induction, .deepening, .therapy,
             .suggestions, .conditioning, .emergence, .transitional
         ]
         for phase in phases {
-            let intensity = gen.intensityForPhase(phase)
+            let intensity = canonicalIntensity(for: phase)
             #expect(intensity >= 0.0 && intensity <= 1.0,
                 "\(phase.rawValue) intensity \(intensity) out of [0, 1]")
         }
     }
 
     @Test func therapyIntensityIsLowest() {
-        let therapy = gen.intensityForPhase(.therapy)
-        let preTalk = gen.intensityForPhase(.preTalk)
+        let therapy = canonicalIntensity(for: .therapy)
+        let preTalk = canonicalIntensity(for: .preTalk)
         #expect(therapy < preTalk, "therapy must be dimmer than pre_talk")
+    }
+
+    private func canonicalIntensity(for phase: HypnosisMetadata.Phase) -> Double {
+        LightScorePhaseTargeting.intensity(
+            phase: phase,
+            tranceDepth: LightScorePhaseTargeting.expectedDepth(for: phase),
+            confidence: .high
+        )
     }
 }
 
@@ -114,17 +128,15 @@ struct IntensityForPhaseTests {
 @MainActor
 struct ColorTemperatureForPhaseTests {
 
-    private let gen = SessionGenerator()
-
     @Test func deepStatesAreWarm() {
         for phase in [HypnosisMetadata.Phase.therapy, .deepening] {
-            let kelvin = gen.colorTemperatureForPhase(phase)
+            let kelvin = LightScorePhaseTargeting.colorTemperature(for: phase)
             #expect(kelvin <= 3000, "\(phase.rawValue) must be ≤3000K, got \(kelvin)K")
         }
     }
 
     @Test func emergenceIsCool() {
-        let kelvin = gen.colorTemperatureForPhase(.emergence)
+        let kelvin = LightScorePhaseTargeting.colorTemperature(for: .emergence)
         #expect(kelvin >= 4000, "emergence must be ≥4000K, got \(kelvin)K")
     }
 
@@ -134,7 +146,7 @@ struct ColorTemperatureForPhaseTests {
             .suggestions, .conditioning, .emergence, .transitional
         ]
         for phase in phases {
-            let kelvin = gen.colorTemperatureForPhase(phase)
+            let kelvin = LightScorePhaseTargeting.colorTemperature(for: phase)
             #expect(kelvin >= 2000 && kelvin <= 7000,
                 "\(phase.rawValue) color temp \(kelvin)K out of range [2000, 7000]")
         }
@@ -225,6 +237,27 @@ struct AdvancedSessionStrategyTests {
 
         #expect((moments.last?.frequency ?? 99) < 10.0)
     }
+
+    @Test func longInductionKeepsCanonicalSineWaveform() {
+        let moments = gen.generateHypnosisFromPhases(
+            phases: [
+                PhaseSegment(
+                    phase: .induction,
+                    startTime: 0,
+                    endTime: 180,
+                    characteristics: "induction",
+                    tranceDepthEstimate: 0.3
+                )
+            ],
+            duration: 180,
+            config: config,
+            includeEmergence: false
+        )
+
+        let inductionMoments = moments.filter { $0.time > 0 }
+        #expect(inductionMoments.isEmpty == false)
+        #expect(inductionMoments.allSatisfy { $0.waveform == .sine })
+    }
 }
 
 // MARK: - Confusion Technique Response
@@ -288,13 +321,20 @@ struct ConfusionTechniqueLightResponseTests {
     }
 
     @Test func legacyConfusionPhaseUsesDeepeningTargets() {
-        let config = SessionGenerator.GenerationConfig.default
-
         #expect(
-            generator.targetFrequencyForPhase(.confusion, config: config)
-                == generator.targetFrequencyForPhase(.deepening, config: config)
+            LightScorePhaseTargeting.targetFrequency(
+                phase: .confusion,
+                tranceDepth: LightScorePhaseTargeting.expectedDepth(for: .confusion),
+                progress: 0,
+                config: .default
+            )
+                == LightScorePhaseTargeting.targetFrequency(
+                    phase: .deepening,
+                    tranceDepth: LightScorePhaseTargeting.expectedDepth(for: .deepening),
+                    progress: 0,
+                    config: .default
+                )
         )
-        #expect(generator.frequencyRangeForPhase(.confusion) == generator.frequencyRangeForPhase(.deepening))
         #expect(LightScorePhaseTargeting.frequencyRange(for: .confusion) == LightScorePhaseTargeting.frequencyRange(for: .deepening))
         #expect(LightScorePhaseTargeting.waveform(for: .confusion) == LightScorePhaseTargeting.waveform(for: .deepening))
     }

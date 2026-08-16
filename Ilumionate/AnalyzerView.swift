@@ -35,6 +35,7 @@ struct AnalyzerView: View {
                     }
                     AnalyzerLibraryIntelligenceSection(
                         files: audioFiles,
+                        lightSyncReadyCount: readySessions.count,
                         onAnalyzeAll: { Task { await queueAllUnanalyzed() } }
                     )
                 }
@@ -62,6 +63,7 @@ struct AnalyzerView: View {
             Button("Cancel", role: .cancel) {}
         }
         .task {
+            await analysisManager.prepareCachedResults()
             await analysisManager.restoreManualRecoveries()
             await loadAudioFiles()
             UsageAnalytics.shared.screen(.analysisQueue)
@@ -150,49 +152,8 @@ private struct AnalyzerLiveStatusSection: View {
 
     private func activeAnalysisCard(_ active: ActiveAnalysis) -> some View {
         GlassCard {
-            VStack(spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(active.audioFile.displayName)
-                            .font(TranceTypography.sectionTitle)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(1)
-                        Text(AnalysisStageFeedback.stageSummary(active.stage))
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(active.stage == .failed ? .red : Color.roseGold)
-                        if active.stage == .failed {
-                            Text("See the recovery options below.")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(.red.opacity(0.8))
-                                .lineLimit(2)
-                        }
-                    }
-                    Spacer()
-                    ProgressRing(progress: active.progress, size: 52)
-                }
-                ProgressView(value: active.progress)
-                    .tint(Color.roseGold)
-                    .animation(.easeInOut(duration: 0.3), value: active.progress)
-                TimelineView(.periodic(from: .now, by: 5)) { context in
-                    if let estimate = AnalysisStageFeedback.estimatedRemainingText(
-                        progress: active.progress,
-                        elapsed: context.date.timeIntervalSince(active.startedAt)
-                    ) {
-                        Text("\(estimate). You can leave this screen; processing continues in the background.")
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                HStack {
-                    Text("\(Int(active.progress * 100))% complete")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                    Spacer()
-                    Button("Cancel") { manager.cancelCurrentAnalysis() }
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.roseGold)
-                }
+            AnalyzerActiveAnalysisContent(active: active) {
+                manager.cancelCurrentAnalysis()
             }
         }
     }
@@ -311,6 +272,60 @@ private struct AnalyzerLiveStatusSection: View {
     }
 }
 
+/// Keeps frequently changing progress below `GlassCard`. The card's material,
+/// padding, and static siblings no longer rebuild for each progress sample.
+private struct AnalyzerActiveAnalysisContent: View {
+    let active: ActiveAnalysis
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(active.audioFile.displayName)
+                        .font(TranceTypography.sectionTitle)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                    Text(AnalysisStageFeedback.stageSummary(active.stage))
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(active.stage == .failed ? .red : Color.roseGold)
+                    if active.stage == .failed {
+                        Text("See the recovery options below.")
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(.red.opacity(0.8))
+                            .lineLimit(2)
+                    }
+                }
+                Spacer()
+                ProgressRing(progress: active.progress, size: 52)
+            }
+            ProgressView(value: active.progress)
+                .tint(Color.roseGold)
+                .animation(.easeInOut(duration: 0.3), value: active.progress)
+            TimelineView(.periodic(from: .now, by: 5)) { context in
+                if let estimate = AnalysisStageFeedback.estimatedRemainingText(
+                    progress: active.progress,
+                    elapsed: context.date.timeIntervalSince(active.startedAt)
+                ) {
+                    Text("\(estimate). You can leave this screen; processing continues in the background.")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            HStack {
+                Text("\(Int(active.progress * 100))% complete")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.roseGold)
+            }
+        }
+    }
+}
+
 private struct AnalysisFailureRow: View {
     let failure: FailedAnalysis
     let onRetry: () -> Void
@@ -365,6 +380,7 @@ private struct AnalysisFailureRow: View {
 
 private struct AnalyzerLibraryIntelligenceSection: View {
     let files: [AudioFile]
+    let lightSyncReadyCount: Int
     let onAnalyzeAll: () -> Void
 
     var body: some View {
@@ -478,10 +494,6 @@ private struct AnalyzerLibraryIntelligenceSection: View {
 
     private var analyzedCount: Int {
         files.count(where: \.isAnalyzed)
-    }
-
-    private var lightSyncReadyCount: Int {
-        GeneratedSessionStore.shared.readyCount(for: files)
     }
 
     private var unanalyzedCount: Int { files.count - analyzedCount }

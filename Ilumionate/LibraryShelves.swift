@@ -13,8 +13,11 @@ import SwiftUI
 // MARK: - Header
 
 /// "Library" title with a circular + button, matching the reader's header.
-struct LibraryHubHeader: View {
-    let onAdd: () -> Void
+/// The "+" hosts a menu rather than an action. Both sessions and playlists can
+/// be added from Library, so the affordance has to name which — it previously
+/// opened the Audio manager, which is a management screen, not a way to add.
+struct LibraryHubHeader<Menu: View>: View {
+    @ViewBuilder let menu: () -> Menu
 
     var body: some View {
         HStack {
@@ -24,7 +27,9 @@ struct LibraryHubHeader: View {
 
             Spacer()
 
-            Button(action: onAdd) {
+            SwiftUI.Menu {
+                menu()
+            } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color.roseGold)
@@ -35,7 +40,7 @@ struct LibraryHubHeader: View {
                             .strokeBorder(Color.glassBorder.opacity(0.35), lineWidth: 1)
                     }
             }
-            .accessibilityLabel("Add sessions")
+            .accessibilityLabel("Add")
         }
     }
 }
@@ -236,7 +241,7 @@ private struct AudioShelfCard: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
         .frame(height: LibraryShelfMetrics.audioCardHeight)
-        .liminalSurface()
+        .liminalSurface(glow: false)
     }
 }
 
@@ -371,7 +376,7 @@ private struct PlaylistShelfCard: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
         .frame(height: LibraryShelfMetrics.audioCardHeight)
-        .liminalSurface()
+        .liminalSurface(glow: false)
     }
 }
 
@@ -425,7 +430,7 @@ private struct BuiltInSessionShelfCard: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
         .frame(height: LibraryShelfMetrics.audioCardHeight)
-        .liminalSurface()
+        .liminalSurface(glow: false)
     }
 }
 
@@ -482,7 +487,7 @@ private struct ArtistShelfCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(TranceSpacing.list)
         .frame(height: LibraryShelfMetrics.artistCardHeight)
-        .liminalSurface()
+        .liminalSurface(glow: false)
     }
 }
 

@@ -32,7 +32,11 @@ struct PlayerHeroOrb: View {
                 .scaleEffect(reduceMotion ? 1 : 0.9 + 0.2 * engine.brightness)
                 .animation(.easeOut(duration: 0.2), value: engine.brightness)
 
-            LumeOrb(size: .medium, pulse: isPlaying ? pulse : nil)
+            LumeOrb(
+                size: .medium,
+                pulse: isPlaying ? pulse : nil,
+                isPaused: !isPlaying
+            )
                 .opacity(isPlaying ? 1 : 0.85)
         }
         .frame(width: 240, height: 240)

@@ -9,6 +9,18 @@ import Testing
 
 @MainActor
 struct BambiCloudPlaylistImportTests {
+    @Test func emptyLibraryCanStartPlaylistImport() {
+        let route = PlaylistImportContentRoute.resolve(hasPlan: false)
+
+        #expect(route == .linkEntry)
+    }
+
+    @Test func emptyLibraryCanReviewLoadedPlaylist() {
+        let route = PlaylistImportContentRoute.resolve(hasPlan: true)
+
+        #expect(route == .review)
+    }
+
     @Test func sharedPlaylistLinkProducesPublicAPIRequest() throws {
         let link = try BambiCloudPlaylistLink(
             "https://bambicloud.com/playlist/69b12112-e603-428a-aeb5-9f204481da13"

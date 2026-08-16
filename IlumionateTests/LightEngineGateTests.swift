@@ -132,9 +132,11 @@ struct LightEngineGateTests {
 
         engine.pause()
         #expect(engine.isOutputSuspended)
+        #expect(engine.isDrivingOutput == false)
 
         engine.resume()
         #expect(engine.isOutputSuspended == false)
+        #expect(engine.isDrivingOutput)
 
         engine.stop()
     }

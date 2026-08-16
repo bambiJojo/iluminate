@@ -14,8 +14,7 @@ extension AudioLibraryView {
             VStack(spacing: TranceSpacing.inner) {
                 // --- Import from File (Primary) ---
                 Button {
-                    TranceHaptics.shared.light()
-                    showingImporter = true
+                    acquisition.importFromFiles()
                 } label: {
                     HStack(spacing: TranceSpacing.list) {
                         Image(systemName: "folder.fill")
@@ -55,12 +54,11 @@ extension AudioLibraryView {
 
                 // --- Import from Web (Secondary) ---
                 Button {
-                    TranceHaptics.shared.light()
-                    showingURLDownloader = true
+                    acquisition.importFromURL()
                 } label: {
                     HStack(spacing: TranceSpacing.list) {
                         Group {
-                            if isDownloadingURL {
+                            if acquisition.isDownloading {
                                 ProgressView()
                                     .tint(.roseGold)
                             } else {
@@ -72,12 +70,12 @@ extension AudioLibraryView {
                         .foregroundStyle(.roseGold)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(isDownloadingURL ? "Downloading..." : "Import from Web")
+                            Text(acquisition.isDownloading ? "Downloading..." : "Import from Web")
                                 .font(TranceTypography.body)
                                 .fontWeight(.semibold)
                                 .foregroundStyle(.textPrimary)
 
-                            Text(isDownloadingURL ? "Saving to your library..." : "Paste a link to an audio file")
+                            Text(acquisition.isDownloading ? "Saving to your library..." : "Paste a link to an audio file")
                                 .font(TranceTypography.caption)
                                 .foregroundStyle(.textSecondary)
                         }
@@ -99,12 +97,11 @@ extension AudioLibraryView {
                             )
                     )
                 }
-                .disabled(isDownloadingURL)
+                .disabled(acquisition.isDownloading)
 
                 // --- Browse the Web (Tertiary) ---
                 Button {
-                    TranceHaptics.shared.light()
-                    showingBrowser = true
+                    acquisition.browseTheWeb()
                 } label: {
                     HStack(spacing: TranceSpacing.list) {
                         Image(systemName: "safari.fill")

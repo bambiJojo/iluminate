@@ -280,9 +280,7 @@ struct UnifiedPlayerView: View {
         VStack {
             VStack(spacing: TranceSpacing.micro) {
                 if viewModel.mode.hasFrequencyDisplay || viewModel.mode.hasAudioScrubber {
-                    Text(viewModel.formatTime(viewModel.currentTime))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
+                    PlayerElapsedTime(viewModel: viewModel)
                 }
             }
             .padding(.top, TranceSpacing.statusBar)
@@ -432,31 +430,14 @@ struct UnifiedPlayerView: View {
             .opacity(isScrubbing ? 0 : 1)
 
             if isHeroMode {
-                scrubLine
+                PlayerScrubLine(
+                    viewModel: viewModel,
+                    isScrubbing: $isScrubbing,
+                    onInteraction: controlsVisibility.registerInteraction
+                )
             }
         }
         .padding(.bottom, TranceSpacing.statusBar)
-    }
-
-    private var scrubLine: some View {
-        ScrubWhisperLine(
-            fraction: viewModel.progress,
-            prominent: true,
-            onScrub: { _ in
-                if !isScrubbing { isScrubbing = true }
-                controlsVisibility.registerInteraction()
-            },
-            onScrubEnd: { fraction in
-                viewModel.seekByProgress(fraction)
-                isScrubbing = false
-            }
-        ) { fraction in
-            Text(viewModel.formatTime(fraction * viewModel.duration)
-                 + " / " + viewModel.formatTime(viewModel.duration))
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(viewModel.labelColor)
-        }
-        .padding(.horizontal, TranceSpacing.screen)
     }
 
     private func finishSession() {

@@ -55,13 +55,13 @@ struct AudioLibraryView: View {
 
     @Bindable var engine: LightEngine
     @State var audioFiles: [AudioFile] = []
-    @State var showingImporter = false
+    /// Files, URL and the in-app browser all live here now — Library offers the
+    /// same three, so the flow is owned once rather than per screen.
+    @State var acquisition = AudioAcquisition()
     @State var selectedFile: AudioFile?
     @State var selectedFiles = Set<AudioFile.ID>()
     @State var showingAnalysis = false
-    @State var audioManager = AudioManager.shared
     @State var analysisManager = AnalysisStateManager.shared
-    @State var showingExpandedProgress = false
     @State var playerFile: AudioFile?
     @State var isSelectionMode = false
     @State var showingQueueManagement = false
@@ -75,12 +75,6 @@ struct AudioLibraryView: View {
     @State var showingRenameAlert = false
     @State var newFilename = ""
     @State var fileToRename: AudioFile?
-    @State var showingURLDownloader = false
-    @State var audioURLInput = ""
-    @State var isDownloadingURL = false
-    @State var downloadError: String?
-    @State var showingDownloadError = false
-    @State var showingBrowser = false
     @State var showingAddSheet = false
     @State var showingDuplicateReview = false
     @State var showingFilters = false
@@ -264,20 +258,7 @@ struct AudioLibraryView: View {
                     }
                 }
             }
-            .fileImporter(
-                isPresented: $showingImporter,
-                allowedContentTypes: [.audio],
-                allowsMultipleSelection: true
-            ) { result in
-                handleImport(result)
-            }
-            .sheet(isPresented: $showingExpandedProgress) {
-                if let file = analysisManager.currentAnalysis?.audioFile {
-                    AnalysisProgressView(audioFile: file) { analyzedFile, result in
-                        handleAnalysisComplete(analyzedFile: analyzedFile, result: result)
-                    }
-                }
-            }
+            .audioAcquisition(acquisition)
             .sheet(isPresented: $showingQueueManagement) {
                 NavigationStack {
                     AnalyzerView(engine: engine)
@@ -307,32 +288,10 @@ struct AudioLibraryView: View {
             } message: {
                 Text("Enter a new name for this audio file.")
             }
-            .alert("Download Audio URL", isPresented: $showingURLDownloader) {
-                TextField("https://...", text: $audioURLInput)
-                Button("Cancel", role: .cancel) {
-                    audioURLInput = ""
-                    isDownloadingURL = false
-                }
-                Button("Download") {
-                    handleURLDownload()
-                }
-                .disabled(audioURLInput.isEmpty || isDownloadingURL)
-            } message: {
-                if isDownloadingURL {
-                    Text("Downloading... Please wait.")
-                } else {
-                    Text("Enter a stable URL pointing directly to an MP3, M4A, or WAV file.")
-                }
-            }
-            .alert("Download Failed", isPresented: $showingDownloadError) {
-                Button("OK", role: .cancel) { downloadError = nil }
-            } message: {
-                if let err = downloadError { Text(err) }
-            }
-            .onChange(of: downloadError) { _, newValue in
-                showingDownloadError = newValue != nil
-            }
             .task {
+                acquisition.onImported = { _ in
+                    Task { await loadAudioFiles() }
+                }
                 await loadAudioFiles()
                 UsageAnalytics.shared.screen(.audioLibrary)
             }
@@ -353,29 +312,10 @@ struct AudioLibraryView: View {
                 pendingDeletion.commit()
             }
             .confirmationDialog("Add to Sessions", isPresented: $showingAddSheet, titleVisibility: .visible) {
-                Button("Import from Files") {
-                    TranceHaptics.shared.light()
-                    showingImporter = true
-                }
-                Button("Import from URL") {
-                    TranceHaptics.shared.light()
-                    showingURLDownloader = true
-                }
-                Button("Browse the Web") {
-                    TranceHaptics.shared.light()
-                    showingBrowser = true
-                }
+                Button("Import from Files") { acquisition.importFromFiles() }
+                Button("Import from URL") { acquisition.importFromURL() }
+                Button("Browse the Web") { acquisition.browseTheWeb() }
                 Button("Cancel", role: .cancel) {}
-            }
-            .sheet(isPresented: $showingBrowser) {
-                InAppBrowserView { file in
-                    Task {
-                        await addAudioFile(file)
-                        if AnalysisPreferences.shared.autoAnalyzeOnImport {
-                            await analysisManager.queueForAnalysis([file])
-                        }
-                    }
-                }
             }
             .onChange(of: isSelectionMode) { _, newValue in
                 if !newValue {

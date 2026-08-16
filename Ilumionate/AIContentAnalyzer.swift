@@ -55,6 +55,9 @@ final class AIContentAnalyzer {
         transcription: AudioTranscriptionResult,
         audioFile: AudioFile
     ) async throws -> AnalysisResult {
+        let trace = PerformanceTrace.begin("Content Analysis")
+        defer { PerformanceTrace.end(trace) }
+
         currentTask?.cancel()
         analysisGeneration += 1
         let generation = analysisGeneration
@@ -102,6 +105,9 @@ final class AIContentAnalyzer {
         audioFile: AudioFile,
         audioFeatures: AudioFeatures
     ) async throws -> AnalysisResult {
+        let trace = PerformanceTrace.begin("Content Analysis No Transcript")
+        defer { PerformanceTrace.end(trace) }
+
         guard isModelAvailable else {
             throw AIAnalyzerError.modelUnavailable
         }

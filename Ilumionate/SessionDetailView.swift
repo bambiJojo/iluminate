@@ -16,13 +16,11 @@ struct SessionDetailView: View {
     @State private var showingPlayer = false
     @State private var showingReanalyze = false
     @State private var audioFile: AudioFile
+    @State private var catalogEntry: KnownAudioCatalogEntry?
 
     private var analysis: AnalysisResult? { audioFile.analysisResult }
     private var phases: [PhaseSegment]? { analysis?.hypnosisMetadata?.phases }
     private var transcript: String? { audioFile.transcription }
-    private var catalogEntry: KnownAudioCatalogEntry? {
-        KnownAudioCatalog.shared.match(audioFile: audioFile)?.entry
-    }
     private var hasReviewedGoldScore: Bool {
         guard let catalogEntry else { return false }
         return catalogEntry.goldLightScore.evidenceKind != .catalogMetadata
@@ -32,6 +30,9 @@ struct SessionDetailView: View {
         self.engine = engine
         self.audioFileID = audioFile.id
         _audioFile = State(initialValue: audioFile)
+        _catalogEntry = State(
+            initialValue: KnownAudioCatalog.shared.match(audioFile: audioFile)?.entry
+        )
     }
 
     var body: some View {
@@ -85,17 +86,13 @@ struct SessionDetailView: View {
                 )
             }
         }
-        .onAppear {
-            refreshAudioFile()
-            loadLightSession()
-            UsageAnalytics.shared.screen(.sessionDetail)
-        }
+        .task { await refreshDetail() }
+        .onAppear { UsageAnalytics.shared.screen(.sessionDetail) }
         .onChange(of: AnalysisStateManager.shared.completedAnalyses.count) {
-            refreshAudioFile()
-            loadLightSession()
+            Task { await refreshDetail() }
         }
         .onChange(of: AnalysisStateManager.shared.partialResultsRevision) {
-            refreshAudioFile()
+            Task { await refreshAudioFile() }
         }
     }
 
@@ -467,7 +464,7 @@ struct SessionDetailView: View {
                 } else {
                     GlowButton(title: "Analyze Now", systemImage: "sparkles") {
                         Task {
-                            AnalysisStateManager.shared.evictCachedResult(for: audioFile)
+                            await AnalysisStateManager.shared.evictCachedResult(for: audioFile)
                             await AnalysisStateManager.shared.queueForAnalysis(audioFile)
                         }
                     }
@@ -504,7 +501,7 @@ struct SessionDetailView: View {
                 Button {
                     TranceHaptics.shared.light()
                     Task {
-                        AnalysisStateManager.shared.evictCachedResult(for: audioFile)
+                        await AnalysisStateManager.shared.evictCachedResult(for: audioFile)
                         await AnalysisStateManager.shared.queueForAnalysis(audioFile)
                     }
                 } label: {
@@ -530,12 +527,18 @@ struct SessionDetailView: View {
 
     // MARK: - Helpers
 
-    private func refreshAudioFile() {
-        guard let updated = AudioLibraryStore.load().first(where: { $0.id == audioFileID }) else {
+    private func refreshDetail() async {
+        await refreshAudioFile()
+        loadLightSession()
+    }
+
+    private func refreshAudioFile() async {
+        guard let updated = await AudioLibraryStore.file(withID: audioFileID) else {
             return
         }
 
         audioFile = updated
+        catalogEntry = KnownAudioCatalog.shared.match(audioFile: updated)?.entry
     }
 
     private func loadLightSession() {

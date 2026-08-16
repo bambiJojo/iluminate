@@ -238,11 +238,7 @@ final class BambiCloudPlaylistImportViewModel {
                 plan?.markResolvedAsExisting(rowID: row.id)
 
             case .saved(let audioFile):
-                // Re-read the library so a download never clobbers changes made
-                // elsewhere while this sheet has been open.
-                var library = AudioLibraryStore.load()
-                library.insert(audioFile, at: 0)
-                await AudioLibraryStore.save(library)
+                await AudioLibraryStore.add(audioFile)
 
                 availableAudioFiles.insert(audioFile, at: 0)
                 plan?.adopt(downloadedFile: audioFile, forRow: row.id)

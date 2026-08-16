@@ -3,17 +3,14 @@
 //  IlumionateTests
 //
 //  The first analysis attempt overflowed the model's 4,096-token context on
-//  every device run — 4,816 / 4,765 / 4,829 / 4,864 / 4,771 tokens across
-//  transcripts spanning 1,179 to 6,387 words. The prompt is assembled from a
-//  fixed template plus a fixed-size transcript sample, so it does not scale
-//  with the transcript and the overflow is systematic rather than an edge case.
-//
-//  These pin the assembled prompt under a character budget, so the same drift
-//  cannot recur silently the next time the guidance text grows. See ERRORS.md
-//  ERR-007.
+//  every device run. The prompt string itself was not the cause: the detailed
+//  instructions and generated response schema dominated the complete request.
+//  These tests guard both the compact prompt template and, where Foundation
+//  Models exposes its tokenizer, the complete request. See ERRORS.md ERR-007.
 //
 
 import Foundation
+import FoundationModels
 import Testing
 @testable import Ilumionate
 
@@ -47,8 +44,8 @@ struct AnalysisPromptBudgetTests {
         )
     }
 
-    @Test("The first-attempt prompt fits the model's context window")
-    func firstAttemptPromptFitsContextWindow() async {
+    @Test("The compact prompt stays within its character budget")
+    func primaryPromptFitsTemplateBudget() async {
         let manager = AIAnalysisManager()
 
         let prompt = await manager.buildTranscriptionPrompt(
@@ -59,16 +56,15 @@ struct AnalysisPromptBudgetTests {
         #expect(
             prompt.count <= AIAnalysisManager.promptCharacterBudget,
             """
-            First-attempt prompt is \(prompt.count) characters, over the \
-            \(AIAnalysisManager.promptCharacterBudget) budget. It will be \
-            rejected for exceeding the context window and cost a wasted \
-            round trip before the retry.
+            Primary prompt is \(prompt.count) characters, over the \
+            \(AIAnalysisManager.promptCharacterBudget)-character template \
+            budget. Recalibrate the complete request before increasing it.
             """
         )
     }
 
-    @Test("A sparse transcript also fits")
-    func sparsePromptFitsContextWindow() async {
+    @Test("A sparse prompt stays within its character budget")
+    func sparsePromptFitsTemplateBudget() async {
         let manager = AIAnalysisManager()
         let sparse = AudioTranscriptionResult(
             fullText: "Sleep.",
@@ -83,6 +79,39 @@ struct AnalysisPromptBudgetTests {
         )
 
         #expect(prompt.count <= AIAnalysisManager.promptCharacterBudget)
+    }
+
+    @Test("The complete primary request stays within its measured token budget")
+    func primaryRequestFitsMeasuredTokenBudget() async throws {
+        guard #available(iOS 26.4, macOS 26.4, *),
+              SystemLanguageModel.default.availability == .available else { return }
+
+        let manager = AIAnalysisManager()
+        let prompt = await manager.buildTranscriptionPrompt(
+            transcription: longTranscription(),
+            audioFile: audioFile()
+        )
+        let model = SystemLanguageModel.default
+        let entries: [Transcript.Entry] = [
+            .instructions(
+                Transcript.Instructions(
+                    segments: [.text(.init(content: AVESystemPrompt.minimalInstructions))],
+                    toolDefinitions: []
+                )
+            ),
+            .prompt(
+                Transcript.Prompt(
+                    segments: [.text(.init(content: prompt))],
+                    responseFormat: .init(type: AIAnalysisResponse.self)
+                )
+            )
+        ]
+        let requestTokens = try await model.tokenCount(for: entries)
+
+        #expect(
+            requestTokens <= AIAnalysisManager.primaryRequestTokenBudget,
+            "Primary request is \(requestTokens) input tokens; budget is \(AIAnalysisManager.primaryRequestTokenBudget)."
+        )
     }
 
 }

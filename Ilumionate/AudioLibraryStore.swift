@@ -32,35 +32,28 @@ nonisolated enum AudioLibraryStore {
         storage: AudioLibraryStorage = .standard,
         documentsURL: URL = .documentsDirectory
     ) async -> [AudioFile] {
-        var files = load(storage: storage)
+        let trace = PerformanceTrace.begin("Library Refresh")
+        defer { PerformanceTrace.end(trace) }
+
+        let files = load(storage: storage)
         let repair = await discoverUnregisteredDocumentFiles(
             existingFiles: files,
             documentsURL: documentsURL
         )
-        files = repair.existingFiles
-        files.insert(contentsOf: repair.addedFiles, at: 0)
-
-        var didChange = repair.didChange
-        for index in files.indices where needsCatalogHydration(files[index]) {
-            guard let reviewed = KnownAudioCatalog.shared.applyingReviewedAnalysis(
-                to: files[index]
-            ) else {
-                continue
-            }
-            files[index] = reviewed
-            didChange = true
-        }
-
-        guard didChange else { return files }
-
-        await save(files, storage: storage)
+        let reconciled = await persistence.reconcileRepair(
+            repair,
+            storage: storage
+        )
         if !repair.addedFiles.isEmpty {
             Log.audio.info("📦 Registered \(repair.addedFiles.count) audio file(s) discovered in Documents")
         }
-        return files
+        return reconciled
     }
 
     static func load(storage: AudioLibraryStorage = .standard) -> [AudioFile] {
+        let trace = PerformanceTrace.begin("Library Decode")
+        defer { PerformanceTrace.end(trace) }
+
         migrateFromUserDefaultsIfNeeded(storage)
 
         if let data = try? Data(contentsOf: storage.fileURL) {
@@ -89,7 +82,7 @@ nonisolated enum AudioLibraryStore {
     /// `@concurrent` is load-bearing for the same reason it is on
     /// `loadRepairingStoredFiles`: this decodes the entire library — every
     /// `AudioFile`, and with it every transcript and `AnalysisResult` — then
-    /// normalises a title per file. Both callers in `AudioManager` are
+    /// normalises a title per file. Both callers in `AudioIntake` are
     /// `@MainActor`, so without this the whole cost lands on the main thread
     /// on every single import.
     @concurrent
@@ -97,6 +90,19 @@ nonisolated enum AudioLibraryStore {
         storage: AudioLibraryStorage = .standard
     ) async -> DuplicateAudioIndex {
         DuplicateAudioIndex(load(storage: storage))
+    }
+
+    /// The whole library, decoded off the caller's actor.
+    ///
+    /// `@concurrent` is load-bearing for the same reason it is on
+    /// `duplicateIndex`. Unlike `loadRepairingStoredFiles` this neither walks
+    /// `Documents` nor writes anything back, which is what a reader that only
+    /// needs to resolve known identifiers — `PlaylistPlayerController` — wants.
+    @concurrent
+    nonisolated static func allFiles(
+        storage: AudioLibraryStorage = .standard
+    ) async -> [AudioFile] {
+        load(storage: storage)
     }
 
     /// One entry by identifier, without decoding the library on the caller's
@@ -126,7 +132,61 @@ nonisolated enum AudioLibraryStore {
         _ files: [AudioFile],
         storage: AudioLibraryStorage = .standard
     ) async -> Bool {
-        await persistence.save(files, storage: storage)
+        PerformanceTrace.event("Library Replace")
+        return await persistence.save(files, storage: storage)
+    }
+
+    /// Inserts one file without exposing a read-modify-write snapshot to the
+    /// caller. The returned library is the exact state that reached disk.
+    @discardableResult
+    static func add(
+        _ file: AudioFile,
+        storage: AudioLibraryStorage = .standard
+    ) async -> [AudioFile]? {
+        PerformanceTrace.event("Library Add")
+        return await persistence.add(file, storage: storage)
+    }
+
+    /// Removes entries by identity while preserving unrelated mutations that
+    /// may have reached the persistence actor first.
+    @discardableResult
+    static func remove(
+        audioFileIDs: Set<AudioFile.ID>,
+        storage: AudioLibraryStorage = .standard
+    ) async -> [AudioFile]? {
+        PerformanceTrace.event("Library Remove")
+        return await persistence.remove(audioFileIDs: audioFileIDs, storage: storage)
+    }
+
+    /// Re-inserts a recovered deletion batch at its original positions.
+    @discardableResult
+    static func restore(
+        _ entries: [StagedAudioFile],
+        storage: AudioLibraryStorage = .standard
+    ) async -> [AudioFile]? {
+        PerformanceTrace.event("Library Restore")
+        return await persistence.restore(entries, storage: storage)
+    }
+
+    /// Recomputes duplicate keepers from the latest stored entries, then
+    /// removes only the identifiers whose files were successfully staged.
+    @discardableResult
+    static func mergeDuplicates(
+        remapping: [AudioFile.ID: AudioFile.ID],
+        storage: AudioLibraryStorage = .standard
+    ) async -> [AudioFile]? {
+        PerformanceTrace.event("Library Merge Duplicates")
+        return await persistence.mergeDuplicates(remapping: remapping, storage: storage)
+    }
+
+    /// Removes the file-backed library without exposing its location to callers.
+    /// Serialized with every other library mutation so a reset cannot race a
+    /// write and leave the library behind again.
+    static func deleteLibrary(
+        storage: AudioLibraryStorage = .standard
+    ) async throws {
+        PerformanceTrace.event("Library Delete")
+        try await persistence.deleteLibrary(storage: storage)
     }
 
     @discardableResult
@@ -135,7 +195,8 @@ nonisolated enum AudioLibraryStore {
         at date: Date = .now,
         storage: AudioLibraryStorage = .standard
     ) async -> Bool {
-        await persistence.recordPlayback(
+        PerformanceTrace.event("Library Record Playback")
+        return await persistence.recordPlayback(
             audioFileID: audioFileID,
             at: date,
             storage: storage
@@ -148,8 +209,37 @@ nonisolated enum AudioLibraryStore {
         audioFileID: UUID,
         storage: AudioLibraryStorage = .standard
     ) async -> Bool {
-        await persistence.setFavorite(
+        PerformanceTrace.event("Library Set Favorite")
+        return await persistence.setFavorite(
             isFavorite,
+            audioFileID: audioFileID,
+            storage: storage
+        )
+    }
+
+    @discardableResult
+    static func setUserTitle(
+        _ title: String?,
+        audioFileID: UUID,
+        storage: AudioLibraryStorage = .standard
+    ) async -> Bool {
+        PerformanceTrace.event("Library Set Title")
+        return await persistence.setUserTitle(
+            title,
+            audioFileID: audioFileID,
+            storage: storage
+        )
+    }
+
+    @discardableResult
+    static func setRating(
+        _ rating: Int?,
+        audioFileID: UUID,
+        storage: AudioLibraryStorage = .standard
+    ) async -> Bool {
+        PerformanceTrace.event("Library Set Rating")
+        return await persistence.setRating(
+            rating,
             audioFileID: audioFileID,
             storage: storage
         )
@@ -161,8 +251,28 @@ nonisolated enum AudioLibraryStore {
         audioFileID: UUID,
         storage: AudioLibraryStorage = .standard
     ) async -> Bool {
-        await persistence.savePartialTranscription(
+        PerformanceTrace.event("Library Save Transcript")
+        return await persistence.savePartialTranscription(
             transcription,
+            audioFileID: audioFileID,
+            storage: storage
+        )
+    }
+
+    /// Caches a measured dead-time profile against its library entry.
+    ///
+    /// Playlist crossfades are sized from this, and measuring it costs a scan
+    /// of both ends of the file, so it is worth keeping. Routed through the
+    /// persistence actor like every other library write.
+    @discardableResult
+    static func saveDeadTimeProfile(
+        _ profile: DeadTimeProfile,
+        audioFileID: UUID,
+        storage: AudioLibraryStorage = .standard
+    ) async -> Bool {
+        PerformanceTrace.event("Library Save Dead Time")
+        return await persistence.saveDeadTimeProfile(
+            profile,
             audioFileID: audioFileID,
             storage: storage
         )
@@ -185,7 +295,8 @@ nonisolated enum AudioLibraryStore {
         audioFileID: UUID,
         storage: AudioLibraryStorage = .standard
     ) async -> Bool {
-        await persistence.saveAnalysis(
+        PerformanceTrace.event("Library Save Analysis")
+        return await persistence.saveAnalysis(
             analysis,
             transcription: transcription,
             trackMetadata: trackMetadata,
@@ -238,7 +349,7 @@ nonisolated enum AudioLibraryStore {
         }
     }
 
-    private static func needsCatalogHydration(_ audioFile: AudioFile) -> Bool {
+    fileprivate static func needsCatalogHydration(_ audioFile: AudioFile) -> Bool {
         guard let entry = KnownAudioCatalog.shared.match(audioFile: audioFile)?.entry else {
             return false
         }
@@ -265,7 +376,6 @@ nonisolated enum AudioLibraryStore {
     ) async -> LibraryRepair {
         let fileManager = FileManager.default
         var repairedExistingFiles = existingFiles
-        var repairedFingerprint = false
         for index in repairedExistingFiles.indices where repairedExistingFiles[index].contentFingerprint == nil {
             guard !Task.isCancelled else { break }
             let storedURL = repairedExistingFiles[index].filename.hasPrefix("/")
@@ -273,7 +383,6 @@ nonisolated enum AudioLibraryStore {
                 : documentsURL.appending(path: repairedExistingFiles[index].filename)
             if let fingerprint = AudioFingerprintService.computeFingerprint(for: storedURL) {
                 repairedExistingFiles[index].contentFingerprint = fingerprint
-                repairedFingerprint = true
             }
         }
 
@@ -317,29 +426,143 @@ nonisolated enum AudioLibraryStore {
         }
         return LibraryRepair(
             existingFiles: repairedExistingFiles,
-            addedFiles: addedFiles,
-            didChange: repairedFingerprint || !addedFiles.isEmpty
+            addedFiles: addedFiles
         )
     }
 
-    private struct LibraryRepair: Sendable {
+    fileprivate struct LibraryRepair: Sendable {
         let existingFiles: [AudioFile]
         let addedFiles: [AudioFile]
-        let didChange: Bool
     }
 }
 
 /// Serializes library writes away from the main actor. Keeping one persistence
 /// actor also prevents two rapid UI edits from writing snapshots concurrently.
 private actor AudioLibraryPersistence {
+    func deleteLibrary(storage: AudioLibraryStorage) throws {
+        let trace = PerformanceTrace.begin("Library Delete Files")
+        defer { PerformanceTrace.end(trace) }
+
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: storage.fileURL.path()) {
+            try fileManager.removeItem(at: storage.fileURL)
+        }
+        storage.legacyDefaults?.removeObject(
+            forKey: AnalysisStateManager.audioFilesUserDefaultsKey
+        )
+    }
+
     @discardableResult
     func save(_ files: [AudioFile], storage: AudioLibraryStorage) -> Bool {
+        let trace = PerformanceTrace.begin("Library Persist")
+        defer { PerformanceTrace.end(trace) }
+
         guard let data = try? JSONEncoder().encode(files) else {
             Log.audio.error("❌ Failed to encode \(files.count) audio file(s)")
             return false
         }
 
         return AudioLibraryStore.write(data, to: storage.fileURL)
+    }
+
+    /// Merges slow filesystem discovery into the latest stored library instead
+    /// of writing the snapshot that discovery started from. This closes the
+    /// remaining stale-snapshot window during a library refresh.
+    func reconcileRepair(
+        _ repair: AudioLibraryStore.LibraryRepair,
+        storage: AudioLibraryStorage
+    ) -> [AudioFile] {
+        var files = decode(storage) ?? []
+        let repairedByID = Dictionary(
+            uniqueKeysWithValues: repair.existingFiles.map { ($0.id, $0) }
+        )
+        var didChange = false
+
+        for index in files.indices where files[index].contentFingerprint == nil {
+            guard let fingerprint = repairedByID[files[index].id]?.contentFingerprint else {
+                continue
+            }
+            files[index].contentFingerprint = fingerprint
+            didChange = true
+        }
+
+        let registeredFilenames = Set(files.map { $0.url.lastPathComponent })
+        let additions = repair.addedFiles.filter { added in
+            files.contains(where: { $0.id == added.id }) == false
+                && registeredFilenames.contains(added.url.lastPathComponent) == false
+        }
+        if additions.isEmpty == false {
+            files.insert(contentsOf: additions, at: 0)
+            didChange = true
+        }
+
+        for index in files.indices where AudioLibraryStore.needsCatalogHydration(files[index]) {
+            guard let reviewed = KnownAudioCatalog.shared.applyingReviewedAnalysis(
+                to: files[index]
+            ) else {
+                continue
+            }
+            files[index] = reviewed
+            didChange = true
+        }
+
+        if didChange {
+            _ = save(files, storage: storage)
+        }
+        return files
+    }
+
+    func add(_ file: AudioFile, storage: AudioLibraryStorage) -> [AudioFile]? {
+        var files = decode(storage) ?? []
+        guard files.contains(where: { $0.id == file.id }) == false else {
+            return files
+        }
+        files.insert(file, at: 0)
+        return save(files, storage: storage) ? files : nil
+    }
+
+    func remove(
+        audioFileIDs: Set<AudioFile.ID>,
+        storage: AudioLibraryStorage
+    ) -> [AudioFile]? {
+        guard var files = decode(storage) else { return nil }
+        files.removeAll { audioFileIDs.contains($0.id) }
+        return save(files, storage: storage) ? files : nil
+    }
+
+    func restore(
+        _ entries: [StagedAudioFile],
+        storage: AudioLibraryStorage
+    ) -> [AudioFile]? {
+        var files = decode(storage) ?? []
+        for entry in entries.sorted(by: { $0.originalIndex < $1.originalIndex }) {
+            guard files.contains(where: { $0.id == entry.file.id }) == false else { continue }
+            files.insert(entry.file, at: min(max(entry.originalIndex, 0), files.count))
+        }
+        return save(files, storage: storage) ? files : nil
+    }
+
+    func mergeDuplicates(
+        remapping: [AudioFile.ID: AudioFile.ID],
+        storage: AudioLibraryStorage
+    ) -> [AudioFile]? {
+        guard var files = decode(storage) else { return nil }
+
+        let redundantIDs = Set(remapping.keys)
+        for keeperID in Set(remapping.values) {
+            guard let keeper = files.first(where: { $0.id == keeperID }) else { continue }
+            let redundant = files.filter {
+                remapping[$0.id] == keeperID
+            }
+            guard redundant.isEmpty == false else { continue }
+
+            let merged = DuplicateAudioGroup(keeper: keeper, redundant: redundant).merged()
+            if let keeperIndex = files.firstIndex(where: { $0.id == keeperID }) {
+                files[keeperIndex] = merged
+            }
+        }
+        files.removeAll { redundantIDs.contains($0.id) }
+        return save(files, storage: storage) ? files : nil
     }
 
     func recordPlayback(audioFileID: UUID, at date: Date, storage: AudioLibraryStorage) -> Bool {
@@ -357,6 +580,20 @@ private actor AudioLibraryPersistence {
         return save(files, storage: storage)
     }
 
+    func setUserTitle(_ title: String?, audioFileID: UUID, storage: AudioLibraryStorage) -> Bool {
+        guard var files = decode(storage),
+              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return false }
+        files[index].userTitle = title
+        return save(files, storage: storage)
+    }
+
+    func setRating(_ rating: Int?, audioFileID: UUID, storage: AudioLibraryStorage) -> Bool {
+        guard var files = decode(storage),
+              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return false }
+        files[index].rating = rating
+        return save(files, storage: storage)
+    }
+
     func savePartialTranscription(
         _ transcription: String,
         audioFileID: UUID,
@@ -366,6 +603,17 @@ private actor AudioLibraryPersistence {
               var files = decode(storage),
               let index = files.firstIndex(where: { $0.id == audioFileID }) else { return false }
         files[index].transcription = transcription
+        return save(files, storage: storage)
+    }
+
+    func saveDeadTimeProfile(
+        _ profile: DeadTimeProfile,
+        audioFileID: UUID,
+        storage: AudioLibraryStorage
+    ) -> Bool {
+        guard var files = decode(storage),
+              let index = files.firstIndex(where: { $0.id == audioFileID }) else { return false }
+        files[index].deadTimeProfile = profile
         return save(files, storage: storage)
     }
 
@@ -395,6 +643,9 @@ private actor AudioLibraryPersistence {
     /// one unreadable entry turn every edit below — favourite, play count,
     /// partial transcript — into a silent no-op.
     private func decode(_ storage: AudioLibraryStorage) -> [AudioFile]? {
+        let trace = PerformanceTrace.begin("Library Mutation Decode")
+        defer { PerformanceTrace.end(trace) }
+
         guard let data = try? Data(contentsOf: storage.fileURL) else {
             return nil
         }

@@ -30,9 +30,9 @@
 
 import Foundation
 
-enum AIGenerationDiagnosis {
+nonisolated enum AIGenerationDiagnosis {
 
-    enum Kind: String, Equatable, Sendable, CaseIterable {
+    nonisolated enum Kind: String, Equatable, Sendable, CaseIterable {
         /// The safety classifier itself could not run; the framework failed
         /// closed and reported it as a guardrail violation.
         case safetyHostUnavailable

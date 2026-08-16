@@ -2,10 +2,9 @@
 //  AudioAnalysisEnricher.swift
 //  Ilumionate
 //
-//  Shared enrichment layer for audio-driven light scoring.
-//  This keeps the foreground AnalysisPipeline and the background import queue
-//  on the same path: phase analysis from the content analyzer is augmented with
-//  raw-audio prosody, hypnotic technique timing, and transcript-derived rhythm.
+//  Shared enrichment layer for the canonical audio-analysis run. Phase analysis
+//  from the content analyzer is augmented with raw-audio prosody, hypnotic
+//  technique timing, and transcript-derived rhythm.
 //
 
 import Foundation
@@ -36,6 +35,9 @@ nonisolated struct AudioAnalysisEnricher: Sendable {
         audioFile: AudioFile,
         transcription: AudioTranscriptionResult
     ) async -> ProsodicProfile? {
+        let trace = PerformanceTrace.begin("Prosody Analysis")
+        defer { PerformanceTrace.end(trace) }
+
         let service = prosodyAnalyzer
         let url = audioFile.url
         let segments = transcription.segments
@@ -65,6 +67,9 @@ nonisolated struct AudioAnalysisEnricher: Sendable {
         audioFile: AudioFile,
         prosody: ProsodicProfile?
     ) -> AnalysisResult {
+        let trace = PerformanceTrace.begin("Analysis Enrichment Merge")
+        defer { PerformanceTrace.end(trace) }
+
         let resolvedProsody = prosody ?? analysis.prosodicProfile
         let voiceCharacteristics: VoiceCharacteristics?
         if let resolvedProsody {
@@ -73,8 +78,9 @@ nonisolated struct AudioAnalysisEnricher: Sendable {
             voiceCharacteristics = analysis.voiceCharacteristics
         }
 
-        let wordTimestamps = HypnosisPhaseAnalyzer()
-            .approximateWordTimestamps(from: transcription.segments)
+        let wordTimestamps = HypnosisPhaseAnalyzer.approximateWordTimestamps(
+            from: transcription.segments
+        )
 
         let detector = TechniqueDetector(config: analyzerConfig.techniqueDetection)
         let duration = resolvedProsody?.totalDuration ?? transcription.duration
@@ -92,8 +98,10 @@ nonisolated struct AudioAnalysisEnricher: Sendable {
 
         let hypnosisMetadata: HypnosisMetadata?
         if let hypnosis = analysis.hypnosisMetadata, !hypnosis.phases.isEmpty {
-            let markedPhases = HypnosisPhaseAnalyzer()
-                .attachLinguisticMarkers(hypnosis.phases, markers: techniqueDetection.markers)
+            let markedPhases = HypnosisPhaseAnalyzer.attachLinguisticMarkers(
+                hypnosis.phases,
+                markers: techniqueDetection.markers
+            )
             let normalizedPhases = PhaseTimelineNormalizer().normalize(
                 markedPhases,
                 duration: audioFile.duration,

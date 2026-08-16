@@ -56,6 +56,6 @@ private struct GeneratedSessionShelfCard: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
         .frame(height: LibraryShelfMetrics.audioCardHeight)
-        .liminalSurface()
+        .liminalSurface(glow: false)
     }
 }

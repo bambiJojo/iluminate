@@ -10,9 +10,11 @@ import Testing
 @MainActor
 struct AppSettingsManagerTests {
     @Test
-    func exportSnapshot_writesStructuredJSON() throws {
+    func exportSnapshot_writesStructuredJSON() async throws {
         let defaults = try makeDefaults()
         let exportDirectory = try makeDirectory()
+        let libraryURL = exportDirectory.appending(path: "library.json")
+        let storage = AudioLibraryStorage(fileURL: libraryURL, legacyDefaults: defaults)
 
         defaults.set("Byron", forKey: AppSettingsManager.Key.profileName)
         defaults.set("Sleep deeper", forKey: AppSettingsManager.Key.profileGoal)
@@ -30,7 +32,7 @@ struct AppSettingsManagerTests {
             AnalysisFixtures.audioFile(filename: "first.m4a"),
             AnalysisFixtures.audioFile(filename: "second.m4a")
         ]
-        defaults.set(try JSONEncoder().encode(files), forKey: AppSettingsManager.Key.audioFiles)
+        #expect(await AudioLibraryStore.save(files, storage: storage))
 
         let history = [
             SessionHistoryEntry(
@@ -56,9 +58,10 @@ struct AppSettingsManagerTests {
             autoAnalyzeOnImport: false
         )
 
-        let exportURL = try AppSettingsManager.exportSnapshot(
+        let exportURL = try await AppSettingsManager.exportSnapshot(
             defaults: defaults,
             exportDirectory: exportDirectory,
+            audioLibraryStorage: storage,
             analysisPreferencesSnapshot: analysisSnapshot
         )
 
@@ -114,11 +117,20 @@ struct AppSettingsManagerTests {
     }
 
     @Test
-    func clearAllData_removesStoredContentAndDocuments() throws {
+    func clearAllData_removesStoredContentAndDocuments() async throws {
         let defaults = try makeDefaults()
         let documentsDirectory = try makeDirectory()
+        let libraryDirectory = try makeDirectory()
+        let libraryURL = libraryDirectory.appending(path: "library.json")
+        let storage = AudioLibraryStorage(fileURL: libraryURL, legacyDefaults: defaults)
         let markerURL = documentsDirectory.appending(path: "marker.txt")
         try Data("marker".utf8).write(to: markerURL, options: .atomic)
+        #expect(
+            await AudioLibraryStore.save(
+                [AnalysisFixtures.audioFile(filename: "first.m4a")],
+                storage: storage
+            )
+        )
 
         defaults.set("Byron", forKey: AppSettingsManager.Key.profileName)
         defaults.set("goal", forKey: AppSettingsManager.Key.profileGoal)
@@ -128,9 +140,10 @@ struct AppSettingsManagerTests {
         defaults.set("client", forKey: AppSettingsManager.Key.soundCloudClientId)
         defaults.set("cached", forKey: "\(AppSettingsManager.Key.streamingTrackPrefix)test")
 
-        try AppSettingsManager.clearAllData(
+        try await AppSettingsManager.clearAllData(
             defaults: defaults,
             documentsDirectory: documentsDirectory,
+            audioLibraryStorage: storage,
             resetAnalysisPreferences: false,
             clearSharedHistory: false
         )
@@ -148,6 +161,7 @@ struct AppSettingsManagerTests {
             includingPropertiesForKeys: nil
         )
         #expect(remainingItems.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: libraryURL.path()) == false)
     }
 
     private func makeDefaults() throws -> UserDefaults {

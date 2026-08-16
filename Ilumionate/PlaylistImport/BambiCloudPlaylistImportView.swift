@@ -1,5 +1,14 @@
 import SwiftUI
 
+enum PlaylistImportContentRoute: Equatable {
+    case linkEntry
+    case review
+
+    static func resolve(hasPlan: Bool) -> Self {
+        return hasPlan ? .review : .linkEntry
+    }
+}
+
 struct BambiCloudPlaylistImportView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -28,31 +37,35 @@ struct BambiCloudPlaylistImportView: View {
 
         NavigationStack {
             Group {
-                if model.availableAudioFiles.isEmpty {
-                    PlaylistImportEmptyLibraryView()
-                } else if let plan = model.plan {
-                    BambiCloudPlaylistReviewView(
-                        plan: plan,
-                        audioFiles: model.availableAudioFiles,
-                        isDownloading: model.isDownloading,
-                        downloadError: { model.downloadErrors[$0] },
-                        onChoose: { selectingRow = $0 },
-                        onDownload: { row in
-                            Task { await model.requestDownload(of: row) }
-                        },
-                        onUseExisting: { row, existingID in
-                            model.select(audioFileID: existingID, forRow: row.id)
-                        },
-                        onDownloadAnyway: { row in
-                            Task { await model.downloadAnyway(row) }
-                        },
-                        onDownloadAll: {
-                            Task { await model.requestDownloadOfAllMissingTracks() }
-                        },
-                        onStartOver: model.startOver
-                    )
-                } else {
+                switch PlaylistImportContentRoute.resolve(
+                    hasPlan: model.plan != nil
+                ) {
+                case .linkEntry:
                     BambiCloudPlaylistLinkEntryView(model: model)
+
+                case .review:
+                    if let plan = model.plan {
+                        BambiCloudPlaylistReviewView(
+                            plan: plan,
+                            audioFiles: model.availableAudioFiles,
+                            isDownloading: model.isDownloading,
+                            downloadError: { model.downloadErrors[$0] },
+                            onChoose: { selectingRow = $0 },
+                            onDownload: { row in
+                                Task { await model.requestDownload(of: row) }
+                            },
+                            onUseExisting: { row, existingID in
+                                model.select(audioFileID: existingID, forRow: row.id)
+                            },
+                            onDownloadAnyway: { row in
+                                Task { await model.downloadAnyway(row) }
+                            },
+                            onDownloadAll: {
+                                Task { await model.requestDownloadOfAllMissingTracks() }
+                            },
+                            onStartOver: model.startOver
+                        )
+                    }
                 }
             }
             .navigationTitle(

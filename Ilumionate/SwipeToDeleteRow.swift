@@ -14,16 +14,17 @@ import SwiftUI
 /// The revealed action is sized to exactly the strip the row vacates, so it
 /// never shows through the row's transparent background.
 ///
-/// The gesture is attached with `.highPriorityGesture`, not
-/// `.simultaneousGesture`: rows are wrapped in a `NavigationLink`, and with the
-/// simultaneous variant the link swallowed the drag and pushed the detail
-/// screen instead. High priority still leaves plain taps working, because the
-/// drag needs 12pt of travel before it engages.
+/// Most rows attach the gesture simultaneously with their enclosing scroll
+/// view. A high-priority `DragGesture` claims vertical drags as soon as it
+/// recognizes, even when its callbacks later ignore them, which makes the
+/// surrounding vertical list appear frozen. Navigation-link rows can opt into
+/// high priority because their link otherwise consumes the horizontal drag.
 struct SwipeToDeleteRow<ID: Hashable>: ViewModifier {
     let id: ID
     /// Which row is open, shared across rows so only one opens at a time.
     @Binding var openRowID: ID?
     var isEnabled: Bool = true
+    var prioritizesSwipeOverNavigation = false
     let onDelete: () -> Void
 
     @State private var dragOffset: CGFloat = 0
@@ -42,13 +43,26 @@ struct SwipeToDeleteRow<ID: Hashable>: ViewModifier {
 
     func body(content: Content) -> some View {
         ZStack(alignment: .trailing) {
-            deleteAction
-            content
-                .offset(x: offset)
-                .highPriorityGesture(dragGesture, isEnabled: isEnabled)
+            // A zero-width clipped action still creates render work. In the
+            // 144-row library it produced roughly two offscreen passes per
+            // dormant row, matching the 299–309-pass frames in PERF-04.
+            if offset < 0 {
+                deleteAction
+            }
+            interactiveContent(content)
         }
         .onChange(of: isEnabled) { _, enabled in
             if !enabled { close() }
+        }
+    }
+
+    @ViewBuilder
+    private func interactiveContent(_ content: Content) -> some View {
+        let row = content.offset(x: offset)
+        if prioritizesSwipeOverNavigation {
+            row.highPriorityGesture(dragGesture, isEnabled: isEnabled)
+        } else {
+            row.simultaneousGesture(dragGesture, isEnabled: isEnabled)
         }
     }
 
@@ -75,13 +89,17 @@ struct SwipeToDeleteRow<ID: Hashable>: ViewModifier {
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 12)
             .onChanged { value in
-                // Ignore drags that are mostly vertical — those belong to the
-                // enclosing ScrollView.
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                dragOffset = value.translation.width
+                switch SwipeDragAxis.classify(value.translation) {
+                case .horizontal:
+                    dragOffset = value.translation.width
+                case .vertical, .undecided:
+                    // Give vertical movement entirely to the enclosing list and
+                    // discard any earlier diagonal movement of the row.
+                    dragOffset = 0
+                }
             }
             .onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else {
+                guard SwipeDragAxis.classify(value.translation) == .horizontal else {
                     dragOffset = 0
                     return
                 }
@@ -107,10 +125,28 @@ extension View {
         id: ID,
         openRowID: Binding<ID?>,
         isEnabled: Bool = true,
+        prioritizesSwipeOverNavigation: Bool = false,
         onDelete: @escaping () -> Void
     ) -> some View {
         modifier(
-            SwipeToDeleteRow(id: id, openRowID: openRowID, isEnabled: isEnabled, onDelete: onDelete)
+            SwipeToDeleteRow(
+                id: id,
+                openRowID: openRowID,
+                isEnabled: isEnabled,
+                prioritizesSwipeOverNavigation: prioritizesSwipeOverNavigation,
+                onDelete: onDelete
+            )
         )
+    }
+}
+
+nonisolated enum SwipeDragAxis: Equatable {
+    case horizontal
+    case vertical
+    case undecided
+
+    static func classify(_ translation: CGSize) -> Self {
+        if translation == .zero { return .undecided }
+        return abs(translation.width) > abs(translation.height) ? .horizontal : .vertical
     }
 }

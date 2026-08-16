@@ -83,11 +83,74 @@ struct AudioImportWorkerTests {
         )
         #expect(stored.contains { $0.lastPathComponent == "Track (1).mp3" } == false)
     }
+
+    @Test("A publisher identity prevents downloading the same remote track twice")
+    func remoteIdentityIsRecognizedBeforeTransfer() async throws {
+        let source = RemoteAudioSource(
+            service: "soundcloud",
+            trackID: "track-42",
+            url: URL(string: "https://api.soundcloud.com/tracks/42/stream")!
+        )
+        let existing = AudioFile(
+            filename: "Existing.mp3",
+            duration: 120,
+            fileSize: 1_024,
+            remoteSource: source
+        )
+        let input = URL.temporaryDirectory.appending(path: "unread-source.mp3")
+        let transfer = TransferThreadProbe()
+
+        let outcome = try await AudioImportWorker.prepareAudioFile(
+            from: input,
+            targetFilename: "Remote Track.mp3",
+            transferMode: .move,
+            durationTimeout: .milliseconds(50),
+            existing: DuplicateAudioIndex([existing]),
+            remoteSource: source,
+            creator: "Remote Artist",
+            transferOperation: { _, _, _ in transfer.record(isMain: Thread.isMainThread) }
+        )
+
+        #expect(outcome == .alreadyInLibrary(existing: existing.id))
+        #expect(transfer.ranOnMainThread == nil)
+    }
+
+    @Test("Remote provenance survives admission to the library")
+    func importedRemoteMetadataIsPreserved() async throws {
+        let documents = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: documents) }
+
+        let input = documents.appending(path: "source.mp3")
+        try Data("remote-audio".utf8).write(to: input)
+        let source = RemoteAudioSource(
+            service: "soundcloud",
+            trackID: "track-7",
+            url: URL(string: "https://api.soundcloud.com/tracks/7/stream")!
+        )
+
+        let outcome = try await AudioImportWorker.prepareAudioFile(
+            from: input,
+            targetFilename: "Remote Track.mp3",
+            transferMode: .copy,
+            durationTimeout: .milliseconds(50),
+            documentsURL: documents,
+            remoteSource: source,
+            creator: "Remote Artist"
+        )
+
+        guard case .imported(let imported) = outcome else {
+            Issue.record("Expected the remote track to be imported")
+            return
+        }
+        #expect(imported.remoteSource == source)
+        #expect(imported.creator == "Remote Artist")
+    }
 }
 
 /// Records which thread the injected transfer ran on. A plain `var` captured by
 /// the `@Sendable` transfer closure will not compile under strict concurrency.
-private final class TransferThreadProbe: @unchecked Sendable {
+private nonisolated final class TransferThreadProbe: @unchecked Sendable {
     private let lock = NSLock()
     private var wasMain: Bool?
 
