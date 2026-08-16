@@ -1,6 +1,6 @@
 # LumeSync (Ilumionate) — Unified Development Plan
 
-> Consolidated from all planning documents. Last updated: 2026-07-31.
+> Consolidated from all planning documents. Last updated: 2026-08-16.
 
 ---
 
@@ -121,8 +121,9 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - 🔄 Session selection flow into player — needs completion
 
 ### Session Generation (SessionGenerationView)
-- ✅ Phase detection visualization, customization controls, generation CTA
-- 🔄 Preview playback functionality — not yet implemented
+- 🔄 The legacy `SessionGenerationView` implementation is not presented by the current
+      navigation graph; decide whether to reconnect or retire it before doing more UI work
+- ✅ Session generation remains live through the analysis queue and generated-session store
 
 ### Settings & Profile
 - ✅ Settings split into 3 files (SwiftLint compliant)
@@ -143,15 +144,17 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 
 ### Phase 1 — Audio Infrastructure ✅
 - ✅ `AudioFile` model (metadata, transcription, analysis result)
-- ✅ `AudioManager` — recording, playback, import (AAC 44.1kHz stereo)
-- ✅ `AudioRecorderView` — waveform visualization, timer, save/discard
+- ✅ `AudioIntake` / `AudioAcquisition` / `AudioImportWorker` — validated Files, URL,
+      browser, and playlist import through one persistence path
+- ✅ `PlaybackRuntime` / `AudioLightSyncPlayer` — shared playback clocks and audio/light sync
 
 ### Phase 2 — AI Analysis ✅
 - ✅ `AudioAnalyzer` — on-device SFSpeechRecognizer with enhanced hypnosis vocabulary
 - ✅ `AIContentAnalyzer` — Foundation Models integration, `@Generable` structured output
 - ✅ Content type detection (hypnosis, meditation, affirmations, guided imagery)
 - ✅ Multi-pass hypnosis analysis: structural pass (phases, induction style, techniques) + therapeutic pass (trance depth curve, receptivity, voice characteristics)
-- ✅ `AnalysisProgressView` — animated multi-stage progress UI
+- ✅ `AnalyzerView` plus `AnalysisStatusBar` / `AnalysisStatusOverlay` — queue, stage,
+      recovery, and progress UI
 
 ### Phase 3 — Session Generation ✅ (backend) / 🔄 (UI integration)
 - ✅ `SessionGenerator` — converts AnalysisResult into `LightSession` with phase-aware light patterns
@@ -185,8 +188,8 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
   `.mp3`, logged as "✅ Successfully downloaded audio", and admitted to the library
   where it failed transcription silently. Root cause of the 26% analysis success
   rate. `AudioDownloadValidation` now gates both import paths on Content-Type and
-  container signature; `AudioManager.swift` and `InAppBrowserView.swift` (which
-  had the same `?: "mp3"` fallback) both fixed
+  container signature; the consolidated `AudioIntake.swift` path now serves Files,
+  URL, in-app browser, and playlist imports
 - ✅ **The silent stall** — `queueForAnalysis(_:priority:)` returned early for an
   already-queued file *before* starting the processor, so a queue that outlived
   its processor was stuck forever and "Analyze Now" was a permanent no-op. This is
@@ -266,8 +269,8 @@ In order of dependency:
 
 1. **Wire `LightScorePlayer` for external time-sync** — add `.external` time source mode so audio clock drives light position
 2. **Integrate `AudioSyncController` into `SessionPlayerView`** — optional `audioFile` param, sync callbacks
-3. **Wire "Generate Session" flow in `AudioLibraryView`** — analyze → generate → navigate to `SessionGenerationView`
-4. **Complete `SessionGenerationView` preview playback** — short preview using `AudioSyncController` + `LightEngine`
+3. **Wire "Generate Session" flow in `AudioLibraryView`** — analyze → generate → present the live generated-session experience
+4. **Resolve the retired `SessionGenerationView`** — reconnect it deliberately or replace/delete it before adding preview work
 5. **Persist `GeneratedSession`** — save to documents, show in session library with badge
 6. **End-to-end smoke test** with real hypnosis/meditation audio
 7. **Session selection flow** in Library → Player

@@ -70,61 +70,181 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
-### ERR-014 — Failed analysis tasks persist and accumulate in the Dynamic Island
+### ERR-016 — Create's start bar renders its text on top of the control tray
 
-- **Date discovered:** 2026-08-14
-- **Status:** completed
-- **Severity:** medium
-- **Area:** BackgroundTasks / continued-processing lifecycle
+- **Date discovered:** 2026-08-16
+- **Status:** identified
+- **Severity:** low
+- **Area:** Create tab / layout
 
 **Symptom**
-After an analysis is interrupted, iOS displays an Ilumionate-owned "Analyzing audio — Task
-failed" item in the Dynamic Island. Repeated interruptions can produce multiple independent
-failed items that remain after the app is quit. A device screenshot on 2026-08-16 captured two
-of these entries simultaneously with the Ilumionate app icon.
+On the Create tab, "Ready to begin", the summary line ("Spiral · Inward") and the
+trailing percentage are drawn over the Strength and Duration tiles of the control tray.
+Two runs of text occupy the same pixels and neither is legible. Reproduced on
+iPhone 17 Pro simulator, iOS 26, Visuals segment, dark appearance.
 
 **Where**
-
-- `Ilumionate/BackgroundAnalysisScheduler.swift` — continued-task submission, completion,
-  expiration, and foreground restoration.
-- `IlumionateTests/BackgroundAnalysisTests.swift` — task-lifecycle regressions.
+`Ilumionate/Create/CreateStartBar.swift:49-61` — the bar's background gradient.
+`Ilumionate/Create/CreateView.swift:79` — where the bar is attached as a bottom
+`safeAreaInset`.
 
 **Reproduction**
-
-1. Start an audio analysis, which submits a `BGContinuedProcessingTaskRequest` titled
-   "Analyzing audio".
-2. Background the app and allow the task to expire while a durable checkpoint remains.
-3. The operation unwinds with incomplete work and completes the system task unsuccessfully.
-4. Foreground restoration submits another uniquely identified continued task; repeating the
-   interruption leaves multiple failed Live Activity entries.
+1. Launch the app, open the Create tab.
+2. Select the Visuals segment (the default).
+3. Observe the region just above the "Begin Visuals" button.
 
 **Root cause**
+The bar's background is a gradient running `.clear` at location 0 → `bgPrimary.opacity(0.94)`
+at 0.24 → opaque at 1, and it is pushed further up by `.padding(.top, -TranceSpacing.content)`.
+`safeAreaInset` reserves scroll space for the bar's *layout* height, so the tray does not
+scroll under the opaque part — but the bar's text sits inside the top quarter, which is
+transparent by construction. Anything behind that band shows through the text.
 
-`BGContinuedProcessingTaskRequest` supplies its title, subtitle, progress, and app identity to
-an iOS-managed Live Activity; it does not require an ActivityKit extension. The scheduler used
-the queue's durable-work result directly as `setTaskCompleted(success:)`. When expiration left
-a resumable checkpoint, that value was `false`, which explicitly asks iOS to present the task
-as failed rather than dismissing it. The expiration and normal-unwind paths could also both run
-completion-side effects. Finally, `resumeWhenForegrounded()` automatically submitted another
-continued task with a new UUID even though foreground restoration was not a new user action.
+The fade itself is deliberate; the mistake is placing text in the faded region rather than
+below it.
 
-**Fix**
+**Proposed fix**
+Move the fade above the content: either give the `HStack` its own opaque backing, or shift
+the gradient stops so full opacity is reached before the first text baseline (make the
+`.clear` → opaque ramp finish by ~0.1 and lengthen the negative top padding to keep the
+same visual softness).
 
-- Added a one-shot task finisher so expiration and normal unwind cannot complete or recover the
-  same background task twice.
-- Continued-processing tasks now finish their system presentation cleanly after the app has
-  either completed the work or safely preserved it for internal recovery. Domain failures
-  remain visible in Ilumionate instead of becoming persistent system failure cards.
-- Deferred `BGProcessingTask` work still reports unsuccessful completion when work remains, so
-  its scheduler retry semantics are unchanged.
-- Foreground restoration now uses deferred processing only and does not create a new continued
-  Live Activity. A new one is submitted only for an explicit analysis or retry action.
-- Added regressions for checkpointed expiration, one-shot completion, deferred failure
-  signaling, and foreground restoration.
+**Risks / blockers**
+`TranceSpacing.tabBarClearance` is applied both inside `CreateStartBar` and on the
+ScrollView content in `CreateView`, so changing the bar's height affects both; verify the
+Flash, Colour and Bilateral segments too, since `summary` and `trailingValue` are longer
+there and may wrap differently.
+
+**Discovered while** auditing toolbar chrome for nested-container styling; unrelated to that
+change, so nothing here was modified.
+
+---
+
+### ERR-015 — Six remaining view files compile into the app but nothing presents them
+
+- **Date discovered:** 2026-08-15
+- **Status:** identified
+- **Severity:** low
+- **Area:** navigation / dead code
+
+**Symptom**
+Six `View` files are compiled into the `Ilumionate` target but have no presenter anywhere in
+the app. They cannot be reached by any tap, swipe, sheet, cover, navigation destination or
+deep link. They are carried in every build, and each is a maintenance surface that looks
+live.
+
+**Where**
+No external reference (only the file's own declaration and `#Preview`):
+
+- `Ilumionate/SessionGenerationView.swift:72` — "Session Designer"
+- `Ilumionate/UISessionView.swift`
+- `Ilumionate/AudioAnalyzerView.swift`
+- `Ilumionate/LibraryFoldersView.swift:154` — "Folders"
+- `Ilumionate/QueueManagementView.swift:42` — "Analysis Queue", superseded by
+  `Ilumionate/AnalyzerView.swift:47`, which every live call site presents instead
+  (`LibraryView.swift:184`, `AudioLibraryView.swift:268`, `ContentView.swift:93`)
+- `Ilumionate/BrowseSessionsView.swift:56`, whose only remaining mentions are two
+  comments in `Ilumionate/SessionCategory.swift:9-10` that describe it as the live "full-page
+  browser". The comments are stale.
+
+**Reproduction**
+For each name, this returns only the declaring file and its own preview:
+
+```bash
+grep -rn "\bSessionGenerationView\b" --include='*.swift' . | grep -v '\.claude/worktrees'
+```
+
+**Root cause**
+Unknown — not yet investigated. The shape is consistent with screens superseded during the
+Home-doors / unified-Library rework (`QueueManagementView` → `AnalyzerView` is explicitly a
+supersession) whose call sites were removed without removing the views.
+
+**Note on target membership**
+The project uses `PBXFileSystemSynchronizedRootGroup`, so absence from `project.pbxproj` is
+*not* evidence a file is excluded — `ContentView.swift` and `HomeView.swift` are absent from
+it too. Every file under `Ilumionate/` is compiled. Do not use a pbxproj grep to decide
+whether one of these is in the build.
+
+**Proposed fix**
+Decide per file whether it is unfinished work or genuinely retired. Delete the retired ones
+and fix the two stale `SessionCategory.swift` comments. For any kept as pending work, add a
+comment saying so, so the next reader does not repeat this investigation.
+
+**Partial cleanup** _(2026-08-16)_
+Removed the unreachable `StreamingBrowserView` and its transitively dead settings screen,
+manager, SoundCloud service, streaming models, artwork tile, analyzer, and importer. No live
+Swift caller referenced that graph. The six views listed above remain open for an explicit
+reconnect-or-retire decision.
+
+**Risks / blockers**
+`AudioAnalyzerView` pulls in analyzer types, so delete only the view rather than assuming its
+dependencies are dead. `SessionGenerationView` references `SessionGenerator`, which is very
+much live — the view is dead, the generator is not.
+
+**Originally discovered while** tracing the full iOS navigation graph for the screen-atlas
+deliverable.
+
+---
+
+### ERR-013 — Failed analyses can never be dismissed and are restored on every launch
+
+- **Date discovered:** 2026-08-14
+- **Status:** identified
+- **Severity:** medium
+- **Area:** analysis pipeline / UI
+
+**Symptom**
+Reported by the user as "when the app runs an analysis and fails, a notification gets stuck
+and I can't clear it out — I have like 6 or 8 just sitting there even after quitting the
+app." Failed analyses accumulate indefinitely with no user-facing way to remove one.
+
+**Where**
+- `Ilumionate/AnalysisStateManager.swift:76` — `failedAnalyses` array.
+- `Ilumionate/AnalysisStateManager.swift:254` — `restoreManualRecoveries()` rebuilds the list
+  from durable checkpoints on every launch, so entries survive app termination.
+- `Ilumionate/AnalysisStateManager.swift:279` — `retryFailedAnalysis` removes an entry, but
+  a failing retry re-adds it via `recordFailure` (`:283`).
+- `Ilumionate/AnalysisStateManager.swift:680` — `handleAnalysisComplete` is the only other
+  removal path, and it requires the analysis to succeed.
+- `Ilumionate/AnalyzerView.swift:202` — the "Recent Failures" card offers only a Retry
+  button, and none at all when `presentation.canRetry` is false (`:366`).
+- `Ilumionate/AnalysisStatusOverlay.swift:108` and `Ilumionate/ContentView.swift:208` — the
+  persistent bottom recovery banner, driven by `failedAnalyses.last`.
+
+**Reproduction**
+1. Import an audio file that cannot be analyzed (a corrupt/silent file yields the
+   `invalidAudio` / `noAudioData` reasons, whose `retryState` is `.unavailable`).
+2. Run analysis and let it fail.
+3. The recovery banner appears above the tab bar; the Analyzer sheet lists the failure.
+4. There is no swipe-to-delete, no clear-all, and for `.unavailable` failures no Retry
+   button — the entry cannot be removed by any UI action.
+5. Force-quit and relaunch: `restoreManualRecoveries()` restores it.
+
+**Root cause**
+No dismissal path was ever implemented. `AnalysisRetryState.unavailable` was designed for
+failures that can never succeed on retry (`invalidAudio`, `noAudioData` — see
+`Ilumionate/FailedAnalysis.swift:64`), yet the only exits from `failedAnalyses` are a
+successful retry or a successful analysis. Those two conditions are unreachable for exactly
+the failures that most need clearing, so a permanently-failing file pins its banner forever
+and the entries stack up.
+
+**Proposed fix**
+Add an explicit dismiss action: a `dismissFailure(_:)` on `AnalysisStateManager` that removes
+the entry from `failedAnalyses` *and* clears the underlying manual-recovery checkpoint from
+`progressStore` (otherwise `restoreManualRecoveries()` resurrects it on next launch). Surface
+it as swipe-to-delete on `AnalysisFailureRow` plus a "Clear All" in the failures card header,
+and a dismiss control on `AnalysisRecoveryStatusOverlay`. Cover with unit tests asserting a
+dismissed failure does not return after a simulated `restoreManualRecoveries()`.
+
+**Risks / blockers**
+Clearing the checkpoint discards saved transcript/analysis progress, so dismissing a
+retryable failure throws away work that a later retry could have resumed from. Dismiss should
+probably clear only the *surfaced failure* for retryable reasons while leaving the checkpoint
+intact, and clear both for `.unavailable` reasons. That distinction needs a decision before
+implementing.
 
 **Resolution**
-Fixed 2026-08-16. The focused `BackgroundAnalysisTests` suite passes all 15 tests on an iOS 26
-simulator.
+Not yet fixed.
 
 ---
 
@@ -178,9 +298,15 @@ re-export once the app's symbols resolve, and read the heaviest main-thread stac
 13.3 s window (75.304 s – 88.614 s on the trace clock). Only then decide what to change.
 
 Two structural candidates worth checking against the symbolicated trace rather than assuming:
-`AudioLibraryStore.load()` decodes the entire library synchronously and has `@MainActor`
-callers (`AudioManager.importAudio`, `AudioManager.downloadAudio`), and WhisperKit
-initialisation coincides with the launch-time hang.
+remaining synchronous `AudioLibraryStore.load()` calls still decode the entire library, and
+WhisperKit initialisation coincides with the launch-time hang.
+
+**Already done** _(2026-08-11)_
+Two concrete main-thread hazards found by inspection were removed while this trace remained
+unsymbolicated. `AudioIntake` now awaits the library's `@concurrent` duplicate-index builder,
+and ERR-012 moved playlist dead-time PCM scanning through a `@concurrent` worker.
+Both have direct off-main-thread coverage. Neither change attributes the original 13.3-second
+window, so this issue remains open until that trace is symbolicated.
 
 **Risks / blockers**
 Needs the dSYM for the exact build that produced the trace. Without symbolication this is not
@@ -343,118 +469,185 @@ transcript, which the suite does not currently have.
 
 ---
 
+## Resolved
+
+### ERR-014 — Failed analysis tasks persist and accumulate in the Dynamic Island
+
+- **Date discovered:** 2026-08-14
+- **Status:** completed
+- **Severity:** medium
+- **Area:** BackgroundTasks / continued-processing lifecycle
+
+**Symptom**
+After an analysis is interrupted, iOS displays an Ilumionate-owned "Analyzing audio — Task
+failed" item in the Dynamic Island. Repeated interruptions can produce multiple independent
+failed items that remain after the app is quit. A device screenshot on 2026-08-16 captured two
+of these entries simultaneously with the Ilumionate app icon.
+
+**Where**
+
+- `Ilumionate/BackgroundAnalysisScheduler.swift` — continued-task submission, completion,
+  expiration, and foreground restoration.
+- `IlumionateTests/BackgroundAnalysisTests.swift` — task-lifecycle regressions.
+
+**Reproduction**
+
+1. Start an audio analysis, which submits a `BGContinuedProcessingTaskRequest` titled
+   "Analyzing audio".
+2. Background the app and allow the task to expire while a durable checkpoint remains.
+3. The operation unwinds with incomplete work and completes the system task unsuccessfully.
+4. Foreground restoration submits another uniquely identified continued task; repeating the
+   interruption leaves multiple failed Live Activity entries.
+
+**Root cause**
+
+`BGContinuedProcessingTaskRequest` supplies its title, subtitle, progress, and app identity to
+an iOS-managed Live Activity; it does not require an ActivityKit extension. The scheduler used
+the queue's durable-work result directly as `setTaskCompleted(success:)`. When expiration left
+a resumable checkpoint, that value was `false`, which explicitly asks iOS to present the task
+as failed rather than dismissing it. The expiration and normal-unwind paths could also both run
+completion-side effects. Finally, `resumeWhenForegrounded()` automatically submitted another
+continued task with a new UUID even though foreground restoration was not a new user action.
+
+**Fix**
+
+- Added a one-shot task finisher so expiration and normal unwind cannot complete or recover the
+  same background task twice.
+- Continued-processing tasks now finish their system presentation cleanly after the app has
+  either completed the work or safely preserved it for internal recovery. Domain failures
+  remain visible in Ilumionate instead of becoming persistent system failure cards.
+- Deferred `BGProcessingTask` work still reports unsuccessful completion when work remains, so
+  its scheduler retry semantics are unchanged.
+- Foreground restoration now uses deferred processing only and does not create a new continued
+  Live Activity. A new one is submitted only for an explicit analysis or retry action.
+- Added regressions for checkpointed expiration, one-shot completion, deferred failure
+  signaling, and foreground restoration.
+
+**Resolution**
+Fixed 2026-08-16. The focused `BackgroundAnalysisTests` suite passes all 15 tests on an iOS 26
+simulator.
+
+---
+
+### ERR-012 — Playlist dead-time pre-analysis runs on the main actor
+
+- **Date discovered:** 2026-08-11
+- **Status:** completed
+- **Severity:** medium
+- **Area:** playlist playback / concurrency
+
+**Symptom**
+Starting a playlist scanned up to 60 seconds from each end of every uncached
+track on the main actor, creating a plausible source of the hangs in ERR-010.
+
+**Where**
+`PlaylistPlayerController.swift` — `preAnalyzeDeadTime()` started a
+`Task(priority: .utility)` from a `@MainActor` type.
+
+**Root cause**
+An unstructured `Task` inherits its enclosing actor; priority does not change
+isolation. With approachable concurrency enabled, changing the synchronous scan
+to plain `nonisolated async` would still inherit the caller's actor as well.
+
+**Resolution** _(2026-08-11)_
+Added `PlaylistDeadTimeWorker.analyze`, a `@concurrent` wrapper around the
+synchronous `AudioEnergyAnalyzer` scan. The playlist loop awaits only that scan;
+its `audioFiles` mutation stays on the main actor, and the result is persisted
+through `AudioLibraryStore.saveDeadTimeProfile`.
+
+`PlaylistDeadTimeWorkerTests.analysisRunsOffTheMainThread` injects the scan
+operation and directly records `Thread.isMainThread == false`; the playlist
+library tests separately cover profile persistence. Both passed on macOS and in
+the full iOS Simulator suite.
+
+---
+
+### ERR-011 — Readers remained bound to the retired `audioFiles` UserDefaults key
+
+- **Date discovered:** 2026-08-11
+- **Status:** completed
+- **Severity:** medium
+- **Area:** settings / data export / reset / playlist playback
+
+**Symptom**
+After the library migrated to `Application Support/AudioLibrary/library.json`,
+three consumers still used the deleted `audioFiles` `UserDefaults` key:
+
+1. Settings export always reported an empty audio library.
+2. "Reset all data" removed the audio files but left `library.json` full of
+   records pointing at those now-missing files.
+3. Playlist playback resolved no items and skipped straight to the final item at
+   0:00 / 0:00.
+
+**Root cause**
+The file-backed migration updated known readers, then deliberately cleared the
+legacy key. These three direct readers were missed and treated the absent key as
+an empty library.
+
+**Resolution** _(2026-08-11)_
+All three paths now go through `AudioLibraryStore`. Export awaits `allFiles`;
+reset calls the new actor-serialized `deleteLibrary(storage:)`, deleting only the
+injected library file and clearing the legacy key; playlist lookup awaits
+`allFiles`, and its dead-time write-back uses `saveDeadTimeProfile`. The legacy
+settings key remains reset-only and is documented as retired.
+
+`AppSettingsManagerTests` verifies export without the legacy key and reset of a
+library outside the injected Documents directory. Four
+`PlaylistPlayerControllerLibraryTests` cover file-backed lookup, migration,
+missing entries, and profile persistence. The focused suite and both full
+platform suites pass.
+
+---
+
 ### ERR-007 — The first analysis prompt always exceeds the context window
 
 - **Date discovered:** 2026-08-11
-- **Status:** identified
+- **Status:** completed
 - **Severity:** high
 - **Area:** analysis pipeline
 
 **Symptom**
-Every long file in a device run failed its first AI attempt the same way:
-
-```
-⚠️ AI attempt 1 failed (contextWindow). Reason: exceededContextWindowSize(... Content contains
-4816 tokens, which exceeds the maximum allowed context size of 4096.)
-↻ Retrying with minimal prompt
-```
-
-Five for five: 4,816, 4,765, 4,829, 4,864 and 4,771 tokens against a 4,096 limit. The retry
-with the compact prompt then succeeded in most cases, so the analysis completed — but every
-file paid a full wasted round trip through the on-device model first. In one
-(`Sucked Stupid.m4a`) the retry hit a content guardrail and the file fell back to keyword
-analysis, so the wasted first attempt was the only chance the model had at the full context.
-
-| Transcript | Prompt tokens |
-|---|---|
-| 1,179 words | 4,829 |
-| 2,272 words | 4,864 |
-| 3,265 words | 4,816 |
-| 3,663 words | 4,765 |
-| **6,387 words** | **4,771** |
-
-The largest transcript produced *fewer* tokens than the smallest. Input varies 5.4×; prompt
-size varies 2%. The prompt does not scale with the transcript at all — it is a fixed-size
-template sitting about 17% over the ceiling, every time, for any file long enough to fill the
-sample.
-
-**Where**
-`Ilumionate/AIAnalysisManager+Prompts.swift:25` — `maxChunkSize: Int = 600`, used by the
-first attempt at `Ilumionate/AIAnalysisManager.swift:65`. The retry at
-`AIAnalysisManager.swift:183` passes `maxChunkSize: 120`, which fits.
-
-**Reproduction**
-Analyse any file whose transcript fills a 600-word chunk and read the log. Every device run
-captured so far shows it.
+Every saturated transcript failed its first Foundation Models request at
+4,765–4,864 tokens against a 4,096-token limit, then usually succeeded after a
+second request with minimal instructions. Each file paid for one deterministic
+failure before useful generation began.
 
 **Root cause**
-Confirmed by measurement on 2026-08-11, and **not what the first two versions of this entry
-said**. Both claimed the transcript sample dominated the prompt; both were wrong, the first
-because it assumed `chunkSize` counted words when it counts **characters**.
+The original arithmetic was wrong twice: `chunkSize` counts characters, not
+words, and the transcript string was not the dominant cost. Foundation Models'
+tokenizer measured the complete saturated requests, including instructions,
+schema, and wrappers, as:
 
-Measured directly by assembling the prompt for a saturated transcript:
+| Request | Input tokens |
+|---|---:|
+| Detailed instructions + 600-character samples | 4,562 |
+| Minimal instructions + 600-character samples | 3,408 |
+| Minimal instructions + 120-character samples | **3,029** |
 
-| Sample size | Assembled prompt |
-|---|---|
-| 600 (the default) | 7,502 characters |
-| 400 | 6,702 |
-| 250 | 6,102 |
-| 150 | 5,702 |
+The `AIAnalysisResponse` schema alone costs 1,533 tokens and the detailed
+instructions cost 1,368. The 7,502-character assembled prompt was only one
+component, so a character-only ladder could not diagnose or reliably prevent
+the overflow.
 
-7,502 characters is roughly 2,100 tokens. The device reported **4,816** for the whole
-request. So about **2,700 tokens — the majority — come from outside this string**: the
-system instructions (`AVESystemPrompt`) and the `AIAnalysisResponse` generable schema, which
-`session.respond(to:generating:)` injects into the same context window.
+**Resolution** _(2026-08-11)_
+Promoted the existing successful retry to the primary transcript request:
+minimal instructions with 120 characters from each sampled transcript position.
+User addenda are still included on the first attempt; if one causes a context
+overflow, the retry drops it. A context overflow without an addendum is no
+longer retried with the identical request.
 
-That explains the plateau in the table above, and it explains why the retry succeeds: the
-retry at `AIAnalysisManager.swift:183` builds a **new session with
-`AVESystemPrompt.minimalInstructions`**. Swapping the instructions is what saves it, not the
-smaller chunk — dropping the sample from 600 to 150 recovers only ~510 tokens, nowhere near
-the ~720 needed.
+`AnalysisPromptBudgetTests` now distinguishes the prompt-string guard from the
+actual context calculation. On supported hosts it constructs a `Transcript`
+with the real `AIAnalysisResponse` response format and asks Foundation Models to
+count the complete request, pinning it below 3,300 input tokens. The measured
+request is 3,029 tokens locally, and the focused and full platform suites pass.
 
-**Trimming the transcript sample therefore cannot fix this.** Even a zero-length sample
-leaves the request over the ceiling.
-
-**Already done** _(2026-08-11, commit pending)_
-Measured the above and added `AnalysisPromptBudgetTests`, which pins the assembled prompt
-string under a 9,000-character guard so the template cannot grow unnoticed. That is a
-regression guard on one component, **not a fix** — the overflow is still there.
-
-A sample-size ladder was implemented and then reverted: it never engaged, because 7,502 was
-already under the budget it was given. Shipping it would have been a fix that fixed nothing
-while implying otherwise.
-
-**Proposed fix**
-The choice is between three, and it is a product decision about classification quality rather
-than a technical one:
-
-1. **Skip the doomed first attempt.** The overflow is deterministic for any non-sparse
-   transcript, so start with the minimal-instruction session and keep the full one only for
-   sparse transcripts, which are small enough to fit. Costs nothing in quality relative to
-   today, because today's successful result *already* comes from the minimal path — it just
-   stops paying for a failed round trip first.
-2. **Trim `AVESystemPrompt`'s full instructions** until the request fits. Preserves a
-   single path, but requires deciding which guidance is worth its tokens.
-3. **Shrink the response schema.** `AIAnalysisResponse` is generable, so every field and
-   description costs context on every request. Worth auditing regardless.
-
-Option 1 is the smallest change and strictly better than the status quo. Options 2 and 3
-would let the model see the full guidance again, which is what the first attempt was for.
-
-Whichever is chosen, measure the real token count rather than estimating from characters —
-the estimate is what made both earlier versions of this entry wrong.
-
-**Risks / blockers**
-Option 1 means the richer instruction set never runs for ordinary files, so any classification
-quality it was buying is lost — though in practice it is already lost, since every observed
-first attempt failed. Establishing whether the full instructions actually classify better
-needs an A/B on real files, which the corpus tooling could do offline.
+The tradeoff is explicit: ordinary transcript classification no longer sees the
+detailed few-shot system prompt. In every captured device run it never did—the
+detailed request failed before generation—so the delivered classification path
+is unchanged while the wasted round-trip is removed.
 
 ---
-
----
-
-## Resolved
 
 ### ERR-003 — Files-picker duplicate check cannot use the duration signals
 
@@ -892,15 +1085,16 @@ The `audioFiles` key is the only plausible multi-megabyte value in this domain �
 `UserDefaults` writer in the app stores scalars or short strings
 (`Ilumionate/AnalysisPreferences.swift:247` onward).
 
-**Already done**
+**State when discovered**
 Nothing fixed. Note that the duplicate-detection work committed on
 `feature/audio-duplicate-detection` **adds** to the blob: a 64-character
 `contentFingerprint` and a `remoteSource` record per file. Marginal against 4 MiB, but it
 moves in the wrong direction.
 
 **Why this matters beyond lost analysis**
-It defeats duplicate detection. `DuplicateAudioIndex` is built from the *persisted* library
-(`Ilumionate/AudioManager.swift:138`, `Ilumionate/PlaylistImport/BambiCloudPlaylistImportViewModel.swift:170`).
+It defeats duplicate detection. At discovery, `DuplicateAudioIndex` was built from the
+*persisted* library in the import and BambiCloud playlist paths. Both now await
+`AudioLibraryStore.duplicateIndex()`.
 When a write is rejected, a downloaded file is absent from the library on next launch, the
 index cannot know about it, the verdict is `.distinct`, and `uniqueDestination`
 (`PlaylistTrackDownloader.swift:139`) writes `Name (1).mp3`. That is very likely a
@@ -957,4 +1151,3 @@ full suite shows only the ERR-001 flaky set.
 
 **Not yet verified on device.** The migration path has only been exercised against synthetic
 `UserDefaults` fixtures; the real 97-file library has not been migrated yet.
-

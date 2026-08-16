@@ -97,7 +97,7 @@ Current App Store Connect validation state:
   - [ ] “light therapy” and “therapy recommendations”
   - [ ] treatment-like session labels such as `Anxiety Dissolve` and `Insomnia`
   - [ ] claims such as “serotonin production,” “anti-anxiety,” “optimal focus,” “healing,” “entrainment,” or named frequency bands causing a particular state
-- [ ] Audit and rewrite user-visible strings in at least `Models/OnboardingData.swift`, `welcome_introduction.json`, `AnalysisProgressView.swift`, `StreamingSettingsView.swift`, `AnalyzerConfig/AnalyzerConfig.swift`, `AnalysisPreferences.swift`, `LightSession+Metadata.swift`, bundled session JSON, and any generated-analysis output.
+- [ ] Audit and rewrite user-visible strings in at least `Models/OnboardingData.swift`, `welcome_introduction.json`, `AnalyzerView.swift`, `AnalysisStatusBar.swift`, `AnalysisStatusOverlay.swift`, `AnalyzerConfig/AnalyzerConfig.swift`, `AnalysisPreferences.swift`, `LightSession+Metadata.swift`, bundled session JSON, and any generated-analysis output.
 - [ ] Ensure internal enum/phase names such as `therapy` or `brainwave` never leak into UI, accessibility labels, notifications, logs shown to users, exported files, generated copy, or App Review screenshots. Rename internal terminology where that is the safest way to prevent leakage.
 - [ ] Describe only observable features: user-selected audio playback, audio-reactive visuals, adjustable light patterns, reading tools, and recreational sessions.
 - [ ] Do not claim that a frequency, binaural beat, visual pattern, hypnosis feature, or session changes brainwaves, sleep, stress, anxiety, focus, mood, health, or mental state.

@@ -99,10 +99,11 @@ Sessions are JSON with time-ordered `LightMoment` control points specifying freq
 
 ### Audio and analysis
 
-- `AudioManager.swift` — recording, playback, file import
+- `AudioIntake.swift`, `AudioAcquisition.swift`, `AudioImportWorker.swift` — validated file and URL import
+- `PlaybackRuntime.swift`, `AudioLightSyncPlayer.swift` — playback clocks and audio/light synchronization
 - `AudioAnalyzer.swift`, `AudioEnergyAnalyzer.swift` — feature extraction
 - `AIContentAnalyzer.swift`, `AIAnalysisManager*.swift` — Apple Foundation Models, on-device, with graceful fallback when unavailable
-- `AnalysisPipeline.swift` + `AnalysisPipelineProtocols.swift` — pipeline orchestration
+- `AnalysisStateManager.swift` + `AnalysisPipelineProtocols.swift` — queueing, orchestration, recovery, and cache state
 - `SessionGenerator.swift` — turns analysis into light sessions
 - `AudioLibraryStore.swift`, `AudioFile.swift` — library state and models
 
