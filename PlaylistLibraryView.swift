@@ -20,6 +20,8 @@ struct PlaylistLibraryView: View {
     @State private var editingPlaylist: Playlist?
     @State private var playingPlaylist: Playlist?
     @State private var importRequest: PlaylistImportRequest?
+    @State private var showingLinkBrowser = false
+    @State private var pendingLink: String?
 
     var body: some View {
         NavigationStack {
@@ -36,7 +38,10 @@ struct PlaylistLibraryView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Menu {
+                    // A bare glyph: the toolbar already supplies the capsule, so
+                    // a filled circle on top of it reads as a control inside a
+                    // control. Matches the Audio manager's toolbar.
+                    Menu("Add", systemImage: "plus") {
                         Button("New Playlist", systemImage: "plus") {
                             TranceHaptics.shared.light()
                             createNewPlaylist()
@@ -45,16 +50,16 @@ struct PlaylistLibraryView: View {
                         Button("Import from Link", systemImage: "link") {
                             showPlaylistImporter()
                         }
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .symbolRenderingMode(.hierarchical)
-                            .font(.system(size: 32))
-                            .foregroundStyle(
-                                LinearGradient(colors: [.roseGold, .roseDeep],
-                                               startPoint: .topLeading, endPoint: .bottomTrailing)
-                            )
+
+                        // Browsing for a playlist used to require making an
+                        // empty playlist first, because the browser was only
+                        // reachable from the editor's toolbar.
+                        Button("Browse for a Playlist", systemImage: "safari") {
+                            TranceHaptics.shared.light()
+                            showingLinkBrowser = true
+                        }
                     }
-                    .accessibilityLabel("Playlist Actions")
+                    .tint(.roseGold)
                 }
             }
             .onAppear {
@@ -81,6 +86,12 @@ struct PlaylistLibraryView: View {
                     onImport: savePlaylist
                 )
             }
+            .platformFullScreenCover(
+                isPresented: $showingLinkBrowser,
+                onDismiss: startPendingImport
+            ) {
+                PlaylistLinkBrowserView { pendingLink = $0 }
+            }
             .platformFullScreenCover(item: $playingPlaylist) { playlist in
                 UnifiedPlayerView(mode: .playlist(playlist: playlist), engine: engine)
             }
@@ -91,6 +102,17 @@ struct PlaylistLibraryView: View {
 
     private func createNewPlaylist() {
         editingPlaylist = Playlist(name: "")
+    }
+
+    /// Opens the importer on the link the browser landed on, skipping link
+    /// entry. Deferred to dismissal: a sheet presented from inside a cover that
+    /// is still leaving never appears.
+    private func startPendingImport() {
+        guard let link = pendingLink else { return }
+        pendingLink = nil
+        let files = AudioLibraryStore.load()
+        availableAudioFiles = files
+        importRequest = PlaylistImportRequest(audioFiles: files, initialLink: link)
     }
 
     private func showPlaylistImporter() {

@@ -218,8 +218,10 @@ struct AudioLibraryView: View {
                                 showingQueueManagement = true
                             } label: {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "list.bullet.circle.fill")
-                                        .symbolRenderingMode(.hierarchical)
+                                    // Bare glyph: the toolbar supplies the
+                                    // container, and the two buttons beside this
+                                    // one are already bare.
+                                    Image(systemName: "list.bullet")
                                     if analysisAttentionCount > 0 {
                                         Text("\(analysisAttentionCount)")
                                             .font(.caption2)
@@ -231,6 +233,11 @@ struct AudioLibraryView: View {
                                 }
                                 .foregroundStyle(.roseGold)
                             }
+                            .accessibilityLabel(
+                                analysisAttentionCount > 0
+                                    ? "Analysis queue, \(analysisAttentionCount) needing attention"
+                                    : "Analysis queue"
+                            )
                         }
 
                         // Needs at least two files before a duplicate is even
