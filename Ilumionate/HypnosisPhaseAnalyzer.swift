@@ -276,12 +276,17 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         let orderedSegments = preventSuggestionRegressionAfterConditioning(
             terminalRepairedSegments
         )
+        let stabilizedSegments = stabilizeAdaptedPhaseRuns(
+            orderedSegments,
+            baselineSegments: phaseSegments,
+            duration: transcription.duration
+        )
         let repairedAnalysis = transcriptAnalyzer.analyze(
             transcription: transcription,
-            phases: orderedSegments
+            phases: stabilizedSegments
         )
         return enrichSegmentsWithTranscriptConfidence(
-            orderedSegments,
+            stabilizedSegments,
             transcriptAnalysis: repairedAnalysis
         )
     }
@@ -1240,12 +1245,17 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         let activeTailOrderedSegments = preventSuggestionRegressionAfterConditioning(
             terminalRepairedSegments
         )
+        let stabilizedSegments = stabilizeAdaptedPhaseRuns(
+            activeTailOrderedSegments,
+            baselineSegments: refinedSegments,
+            duration: transcription.duration
+        )
         let analysis = transcriptAnalyzer.analyze(
             transcription: transcription,
-            phases: activeTailOrderedSegments
+            phases: stabilizedSegments
         )
         let enrichedSegments = enrichSegmentsWithTranscriptConfidence(
-            activeTailOrderedSegments,
+            stabilizedSegments,
             transcriptAnalysis: analysis
         )
 
@@ -1437,6 +1447,116 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
 
         merged.append(current)
         return merged
+    }
+
+    /// Cue refinement runs after the second-resolution classifier has already
+    /// enforced its minimum phase duration. Re-apply that invariant here so a
+    /// handful of phrase-level cues cannot make playback switch modes every few
+    /// seconds. The pre-refinement timeline acts as hysteresis when either
+    /// neighbour agrees with it.
+    private func stabilizeAdaptedPhaseRuns(
+        _ phaseSegments: [PhaseSegment],
+        baselineSegments: [PhaseSegment],
+        duration: TimeInterval
+    ) -> [PhaseSegment] {
+        guard duration > 0 else { return [] }
+
+        var stabilized = normalizeAdjacentBoundaries(
+            phaseSegments,
+            duration: duration
+        )
+        let minimumDuration = Double(
+            max(
+                config.minimumPhaseDurationSeconds,
+                Int(duration * config.collapseThresholdFraction)
+            )
+        )
+
+        while stabilized.count > 1 {
+            let shortIndices = stabilized.indices.filter {
+                stabilized[$0].endTime - stabilized[$0].startTime < minimumDuration
+            }
+            guard !shortIndices.isEmpty else { break }
+
+            let shortIndex = shortIndices.first(where: { index in
+                index > stabilized.startIndex
+                    && index < stabilized.index(before: stabilized.endIndex)
+                    && stabilized[stabilized.index(before: index)].phase.labelingPhase
+                        == stabilized[stabilized.index(after: index)].phase.labelingPhase
+            }) ?? shortIndices.first(where: { index in
+                guard
+                    index > stabilized.startIndex,
+                    index < stabilized.index(before: stabilized.endIndex),
+                    let baselinePhase = baselinePhase(
+                        at: (stabilized[index].startTime + stabilized[index].endTime) / 2,
+                        in: baselineSegments
+                    )
+                else {
+                    return false
+                }
+                let previousPhase = stabilized[stabilized.index(before: index)].phase.labelingPhase
+                let nextPhase = stabilized[stabilized.index(after: index)].phase.labelingPhase
+                return baselinePhase == previousPhase || baselinePhase == nextPhase
+            }) ?? shortIndices.first(where: { index in
+                index > stabilized.startIndex
+                    && index < stabilized.index(before: stabilized.endIndex)
+            }) ?? shortIndices[0]
+
+            let replacementPhase = stableNeighbourPhase(
+                for: shortIndex,
+                in: stabilized,
+                baselineSegments: baselineSegments
+            )
+            stabilized[shortIndex] = copySegment(
+                stabilized[shortIndex],
+                phase: replacementPhase
+            )
+            stabilized = mergeAdjacentPhaseSegments(stabilized)
+        }
+
+        return normalizeAdjacentBoundaries(stabilized, duration: duration)
+    }
+
+    private func stableNeighbourPhase(
+        for index: Int,
+        in phaseSegments: [PhaseSegment],
+        baselineSegments: [PhaseSegment]
+    ) -> HypnosisMetadata.Phase {
+        guard index > phaseSegments.startIndex else {
+            return phaseSegments[phaseSegments.index(after: index)].phase
+        }
+        guard index < phaseSegments.index(before: phaseSegments.endIndex) else {
+            return phaseSegments[phaseSegments.index(before: index)].phase
+        }
+
+        let previousPhase = phaseSegments[phaseSegments.index(before: index)].phase
+        let nextPhase = phaseSegments[phaseSegments.index(after: index)].phase
+        guard previousPhase.labelingPhase != nextPhase.labelingPhase else {
+            return previousPhase
+        }
+
+        let midpoint = (phaseSegments[index].startTime + phaseSegments[index].endTime) / 2
+        if let baselinePhase = baselinePhase(at: midpoint, in: baselineSegments) {
+            if baselinePhase == previousPhase.labelingPhase {
+                return previousPhase
+            }
+            if baselinePhase == nextPhase.labelingPhase {
+                return nextPhase
+            }
+        }
+
+        // Offline hysteresis: an isolated candidate must persist for the minimum
+        // duration before it can replace the preceding stable phase.
+        return previousPhase
+    }
+
+    private func baselinePhase(
+        at time: TimeInterval,
+        in phaseSegments: [PhaseSegment]
+    ) -> HypnosisMetadata.Phase? {
+        phaseSegments.first { segment in
+            time >= segment.startTime && time < segment.endTime
+        }?.phase.labelingPhase
     }
 
     private func normalizeAdjacentBoundaries(
