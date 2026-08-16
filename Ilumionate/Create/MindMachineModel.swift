@@ -24,9 +24,6 @@ final class MindMachineModel: Sendable {
     // Color temperature options
     let temperatureOptions = [2700, 3000, 4000, 5000, 6500]
 
-    // MARK: - Session Browser
-    var sessionCategory: SessionCategory = .all
-
     // MARK: - Binaural Beats Settings
     var binauralEnabled: Bool = false
     var binauralCarrierFrequency: Double = 200.0   // Hz — left ear carrier

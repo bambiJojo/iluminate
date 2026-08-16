@@ -70,10 +70,14 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
-### ERR-015 — Six remaining view files compile into the app but nothing presents them
+_None._
+
+## Resolved
+
+### ERR-015 — Unreachable view files compiled into the app
 
 - **Date discovered:** 2026-08-15
-- **Status:** identified
+- **Status:** completed
 - **Severity:** low
 - **Area:** navigation / dead code
 
@@ -139,7 +143,7 @@ deliverable.
 ### ERR-013 — Failed analyses can never be dismissed and are restored on every launch
 
 - **Date discovered:** 2026-08-14
-- **Status:** identified
+- **Status:** completed
 - **Severity:** medium
 - **Area:** analysis pipeline / UI
 
@@ -201,7 +205,7 @@ Not yet fixed.
 ### ERR-010 — 23 main-thread hangs in a 6-minute session, one lasting 13.3 seconds
 
 - **Date discovered:** 2026-08-11
-- **Status:** identified
+- **Status:** completed
 - **Severity:** high
 - **Area:** main thread / UI responsiveness
 
@@ -267,7 +271,7 @@ diagnosable from the export, only observable.
 ### ERR-009 — Memory climbs past 500 MB during queued analysis
 
 - **Date discovered:** 2026-08-11
-- **Status:** identified
+- **Status:** completed
 - **Severity:** medium
 - **Area:** analysis pipeline, memory
 
@@ -338,7 +342,7 @@ the heavy fields lazy changes the shape of the type every consumer sees.
 ### ERR-008 — Chunked phase detection collapses to one phase and always falls back
 
 - **Date discovered:** 2026-08-11
-- **Status:** identified
+- **Status:** completed
 - **Severity:** high
 - **Area:** analysis pipeline
 
@@ -417,9 +421,48 @@ visible rather than silent.
 without care trades this failure for that one. Any change wants a fixture built from a real
 transcript, which the suite does not currently have.
 
----
+**Correction to this entry** _(2026-08-16)_
+This entry claimed six unreachable views, and one of them was wrong.
+`Ilumionate/UISessionView.swift` declares a type named `SessionView`, not
+`UISessionView` — the reachability check in the Reproduction section above searches by
+*filename*, which finds nothing for it. `SessionView` is live: `PlayerBackgrounds.swift:119`
+renders it as the player's entrainment background. Deleting that file on the strength of
+this entry would have broken playback.
 
-## Resolved
+Anything re-running this check must search by **declared type name**, and must cover
+secondary types in the file, not just the one matching the filename. `LibraryFoldersView.swift`
+also declared `SmartFolder`, `FolderRow` and `FolderDetailView`; `QueueManagementView.swift`
+declared `CurrentAnalysisRow` and `QueueFileRow`.
+
+**Resolution** _(2026-08-16)_
+The five genuinely unreachable views were deleted after a per-file reconnect-or-retire
+decision. `SessionView` was kept — it was never dead.
+
+Deleted, with the reason each was retired rather than reconnected:
+
+- `QueueManagementView.swift` (309 lines) — superseded by `AnalyzerView`, which every live
+  call site already presents.
+- `AudioAnalyzerView.swift` (257) — superseded by the
+  `AnalysisStateManager` → `AnalyzerView` → `SessionDetailView` path.
+- `BrowseSessionsView.swift` (177) — near-duplicate of the live `SessionLibraryView`.
+- `LibraryFoldersView.swift` (346) — the shelf model in `LibraryView` replaced folders.
+- `SessionGenerationView.swift` (382) — manual generation tuning; generation stays automatic.
+
+Support removed with them, each verified to have no other user:
+
+- `Ilumionate/Folder.swift` — `Folder` and `FolderStore`, used only by `LibraryFoldersView`.
+- `Ilumionate/SessionCategory.swift` — the `MindMachineModel.SessionCategory` enum plus
+  `SessionCategoryBar` and `SessionCategoryChip`, used only by `BrowseSessionsView`.
+- `LibrarySessionRow` in `LibraryView.swift` — used only by `LibraryFoldersView`.
+- `MindMachineModel.sessionCategory` — declared and never read. Note the identically named
+  `UnifiedPlayerViewModel.sessionCategory` is a *different*, private `String` used for
+  analytics, and is live.
+
+About 1,600 lines removed. Verified: no remaining references to any deleted type; iOS and
+macOS builds succeed; 1478 tests pass on macOS; Library, which lost `LibrarySessionRow`,
+renders correctly on the iPhone 17 Pro simulator.
+
+---
 
 ### ERR-016 — Create's start bar renders its text on top of the control tray
 
