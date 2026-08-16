@@ -70,8 +70,87 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
-> **ERR-013** is also open despite appearing under "Resolved" below. It was mis-filed; see the
-> Correction note in that entry. Left in place rather than moved so existing links still resolve.
+### ERR-013 — Failed analyses can never be dismissed and are restored on every launch
+
+- **Date discovered:** 2026-08-14
+- **Status:** identified
+- **Severity:** medium
+- **Area:** analysis pipeline / UI
+
+**Symptom**
+Reported by the user as "when the app runs an analysis and fails, a notification gets stuck
+and I can't clear it out — I have like 6 or 8 just sitting there even after quitting the
+app." Failed analyses accumulate indefinitely with no user-facing way to remove one.
+
+**Where**
+- `Ilumionate/AnalysisStateManager.swift:76` — `failedAnalyses` array.
+- `Ilumionate/AnalysisStateManager.swift:254` — `restoreManualRecoveries()` rebuilds the list
+  from durable checkpoints on every launch, so entries survive app termination.
+- `Ilumionate/AnalysisStateManager.swift:279` — `retryFailedAnalysis` removes an entry, but
+  a failing retry re-adds it via `recordFailure` (`:283`).
+- `Ilumionate/AnalysisStateManager.swift:680` — `handleAnalysisComplete` is the only other
+  removal path, and it requires the analysis to succeed.
+- `Ilumionate/AnalyzerView.swift:202` — the "Recent Failures" card offers only a Retry
+  button, and none at all when `presentation.canRetry` is false (`:366`).
+- `Ilumionate/AnalysisStatusOverlay.swift:108` and `Ilumionate/ContentView.swift:208` — the
+  persistent bottom recovery banner, driven by `failedAnalyses.last`.
+
+**Reproduction**
+1. Import an audio file that cannot be analyzed (a corrupt/silent file yields the
+   `invalidAudio` / `noAudioData` reasons, whose `retryState` is `.unavailable`).
+2. Run analysis and let it fail.
+3. The recovery banner appears above the tab bar; the Analyzer sheet lists the failure.
+4. There is no swipe-to-delete, no clear-all, and for `.unavailable` failures no Retry
+   button — the entry cannot be removed by any UI action.
+5. Force-quit and relaunch: `restoreManualRecoveries()` restores it.
+
+**Root cause**
+No dismissal path was ever implemented. `AnalysisRetryState.unavailable` was designed for
+failures that can never succeed on retry (`invalidAudio`, `noAudioData` — see
+`Ilumionate/FailedAnalysis.swift:64`), yet the only exits from `failedAnalyses` are a
+successful retry or a successful analysis. Those two conditions are unreachable for exactly
+the failures that most need clearing, so a permanently-failing file pins its banner forever
+and the entries stack up.
+
+**Proposed fix**
+Add an explicit dismiss action: a `dismissFailure(_:)` on `AnalysisStateManager` that removes
+the entry from `failedAnalyses` *and* clears the underlying manual-recovery checkpoint from
+`progressStore` (otherwise `restoreManualRecoveries()` resurrects it on next launch). Surface
+it as swipe-to-delete on `AnalysisFailureRow` plus a "Clear All" in the failures card header,
+and a dismiss control on `AnalysisRecoveryStatusOverlay`. Cover with unit tests asserting a
+dismissed failure does not return after a simulated `restoreManualRecoveries()`.
+
+**Risks / blockers**
+Clearing the checkpoint discards saved transcript/analysis progress, so dismissing a
+retryable failure throws away work that a later retry could have resumed from. Dismiss should
+probably clear only the *surfaced failure* for retryable reasons while leaving the checkpoint
+intact, and clear both for `.unavailable` reasons. That distinction needs a decision before
+implementing.
+
+**Correction** _(2026-08-16)_
+Two errors in this entry, both found while designing the fix.
+
+1. It was filed under "Resolved" with `Status: completed` while its own resolution line read
+   "Not yet fixed". No `dismissFailure` exists anywhere in the code. Status corrected to
+   `identified` and the entry moved to "Open issues", where it belongs. The Markdown anchor is
+   generated from the heading text, so the move does not break existing links to it.
+2. Reproduction step 5 is wrong for the failure it describes. `invalidAudio` / `noAudioData`
+   yield `retryState == .unavailable`, and that path calls `progressStore.clear(for:)` at
+   `AnalysisStateManager.swift:1305` *before* the failure is recorded.
+   `restoreManualRecoveries()` rebuilds only from `manualRecoveryCheckpoints()`, which filters
+   on `manualRecovery != nil`, so an `.unavailable` failure is **not** restored after relaunch.
+   The entries that survive a relaunch are the `.manual` ones, which keep their checkpoint.
+   The reported "6 or 8 sitting there after quitting" are therefore retryable failures, not
+   unrecoverable ones — which changes the fix: dismissal must preserve the checkpoint so a
+   later retry still resumes from the saved transcript.
+
+**Resolution**
+Not yet fixed. The dismissal semantics this entry deferred are settled in
+`docs/superpowers/specs/2026-08-16-analysis-task-center-design.md`: `dismiss` persists
+`dismissedAt` inside `AnalysisManualRecovery` and leaves the checkpoint intact, while a
+separate explicit `remove` clears both.
+
+---
 
 ### ERR-017 — Session Complete prints raw Swift source to the user
 
@@ -184,87 +263,6 @@ much live — the view is dead, the generator is not.
 
 **Originally discovered while** tracing the full iOS navigation graph for the screen-atlas
 deliverable.
-
----
-
-### ERR-013 — Failed analyses can never be dismissed and are restored on every launch
-
-- **Date discovered:** 2026-08-14
-- **Status:** identified
-- **Severity:** medium
-- **Area:** analysis pipeline / UI
-
-**Symptom**
-Reported by the user as "when the app runs an analysis and fails, a notification gets stuck
-and I can't clear it out — I have like 6 or 8 just sitting there even after quitting the
-app." Failed analyses accumulate indefinitely with no user-facing way to remove one.
-
-**Where**
-- `Ilumionate/AnalysisStateManager.swift:76` — `failedAnalyses` array.
-- `Ilumionate/AnalysisStateManager.swift:254` — `restoreManualRecoveries()` rebuilds the list
-  from durable checkpoints on every launch, so entries survive app termination.
-- `Ilumionate/AnalysisStateManager.swift:279` — `retryFailedAnalysis` removes an entry, but
-  a failing retry re-adds it via `recordFailure` (`:283`).
-- `Ilumionate/AnalysisStateManager.swift:680` — `handleAnalysisComplete` is the only other
-  removal path, and it requires the analysis to succeed.
-- `Ilumionate/AnalyzerView.swift:202` — the "Recent Failures" card offers only a Retry
-  button, and none at all when `presentation.canRetry` is false (`:366`).
-- `Ilumionate/AnalysisStatusOverlay.swift:108` and `Ilumionate/ContentView.swift:208` — the
-  persistent bottom recovery banner, driven by `failedAnalyses.last`.
-
-**Reproduction**
-1. Import an audio file that cannot be analyzed (a corrupt/silent file yields the
-   `invalidAudio` / `noAudioData` reasons, whose `retryState` is `.unavailable`).
-2. Run analysis and let it fail.
-3. The recovery banner appears above the tab bar; the Analyzer sheet lists the failure.
-4. There is no swipe-to-delete, no clear-all, and for `.unavailable` failures no Retry
-   button — the entry cannot be removed by any UI action.
-5. Force-quit and relaunch: `restoreManualRecoveries()` restores it.
-
-**Root cause**
-No dismissal path was ever implemented. `AnalysisRetryState.unavailable` was designed for
-failures that can never succeed on retry (`invalidAudio`, `noAudioData` — see
-`Ilumionate/FailedAnalysis.swift:64`), yet the only exits from `failedAnalyses` are a
-successful retry or a successful analysis. Those two conditions are unreachable for exactly
-the failures that most need clearing, so a permanently-failing file pins its banner forever
-and the entries stack up.
-
-**Proposed fix**
-Add an explicit dismiss action: a `dismissFailure(_:)` on `AnalysisStateManager` that removes
-the entry from `failedAnalyses` *and* clears the underlying manual-recovery checkpoint from
-`progressStore` (otherwise `restoreManualRecoveries()` resurrects it on next launch). Surface
-it as swipe-to-delete on `AnalysisFailureRow` plus a "Clear All" in the failures card header,
-and a dismiss control on `AnalysisRecoveryStatusOverlay`. Cover with unit tests asserting a
-dismissed failure does not return after a simulated `restoreManualRecoveries()`.
-
-**Risks / blockers**
-Clearing the checkpoint discards saved transcript/analysis progress, so dismissing a
-retryable failure throws away work that a later retry could have resumed from. Dismiss should
-probably clear only the *surfaced failure* for retryable reasons while leaving the checkpoint
-intact, and clear both for `.unavailable` reasons. That distinction needs a decision before
-implementing.
-
-**Correction** _(2026-08-16)_
-Two errors in this entry, both found while designing the fix.
-
-1. It was filed under "Resolved" with `Status: completed` while its own resolution line read
-   "Not yet fixed". No `dismissFailure` exists anywhere in the code. Status corrected to
-   `identified`; the entry is still open and is tracked under "Open issues" above.
-2. Reproduction step 5 is wrong for the failure it describes. `invalidAudio` / `noAudioData`
-   yield `retryState == .unavailable`, and that path calls `progressStore.clear(for:)` at
-   `AnalysisStateManager.swift:1305` *before* the failure is recorded.
-   `restoreManualRecoveries()` rebuilds only from `manualRecoveryCheckpoints()`, which filters
-   on `manualRecovery != nil`, so an `.unavailable` failure is **not** restored after relaunch.
-   The entries that survive a relaunch are the `.manual` ones, which keep their checkpoint.
-   The reported "6 or 8 sitting there after quitting" are therefore retryable failures, not
-   unrecoverable ones — which changes the fix: dismissal must preserve the checkpoint so a
-   later retry still resumes from the saved transcript.
-
-**Resolution**
-Not yet fixed. The dismissal semantics this entry deferred are settled in
-`docs/superpowers/specs/2026-08-16-analysis-task-center-design.md`: `dismiss` persists
-`dismissedAt` inside `AnalysisManualRecovery` and leaves the checkpoint intact, while a
-separate explicit `remove` clears both.
 
 ---
 

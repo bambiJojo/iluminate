@@ -55,13 +55,21 @@ li::marker { color:var(--accent); }
 }
 </style></head><body>
 <div class="wrap">
-<nav><div class="navtitle">Contents</div><a href="#problem">Problem</a><a href="#goal">Goal</a><a href="#scope">Scope</a><a href="#the-model">The model</a><a href="#surfaces">Surfaces</a><a href="#dismissal-and-persistence">Dismissal and persistence</a><a href="#stall-watchdog">Stall watchdog</a><a href="#model-download">Model download</a><a href="#testing">Testing</a><a href="#risks">Risks</a></nav>
+<nav><div class="navtitle">Contents</div><a href="#problem">Problem</a><a href="#goal">Goal</a><a href="#scope">Scope</a><a href="#the-model">The model</a><a href="#snapshot-ownership-and-refresh">Snapshot ownership and refresh</a><a href="#surfaces">Surfaces</a><a href="#dismissal-and-removal">Dismissal and removal</a><a href="#stall-watchdog">Stall watchdog</a><a href="#model-download">Model download</a><a href="#build-phases">Build phases</a><a href="#testing">Testing</a><a href="#risks">Risks</a></nav>
 <main><h1>Analysis Task Center — Design</h1>
-<p><strong>Date:</strong> 2026-08-16 <strong>Status:</strong> Awaiting approval <strong>Surface:</strong> New <code>AnalysisCenterView</code> (sheet) + <code>AnalysisStatusPill</code> (bottom chrome), replacing <code>AnalyzerView</code>'s live-status role, <code>AnalysisStatusOverlay</code>, <code>AnalysisRecoveryStatusOverlay</code>, and <code>LibraryAnalysisStatusSection</code></p>
+<p><strong>Date:</strong> 2026-08-16 <strong>Status:</strong> Awaiting approval (revision 2) <strong>Surface:</strong> New <code>AnalysisCenterView</code> (sheet) + <code>AnalysisStatusPill</code> (bottom chrome), replacing <code>AnalyzerView</code>'s live-status role, <code>AnalysisStatusOverlay</code>, <code>AnalysisRecoveryStatusOverlay</code>, and <code>LibraryAnalysisStatusSection</code></p>
 <h2 id="problem">Problem</h2>
-<p>Analysis state is rendered by six surfaces that each sample five sources independently, with different truncations. They disagree by construction.</p>
-<div class='tablewrap'><table><thead><tr><th>Surface</th><th>What it samples</th><th>File</th></tr></thead><tbody><tr><td>Bottom chrome</td><td><code>currentAnalysis</code> <strong>or</strong> <code>failedAnalyses.last</code></td><td><code>ContentView.swift:203</code></td></tr><tr><td>Analysis Queue sheet</td><td>all sources, three sections</td><td><code>AnalyzerView.swift</code></td></tr><tr><td>Library shelf</td><td>active + <code>queue.prefix(2)</code> + <code>failed.suffix(2)</code> + <code>partial.prefix(2)</code></td><td><code>LibraryAnalysisStatusSection.swift</code></td></tr><tr><td>Session Detail</td><td>one file's slice</td><td><code>SessionDetailView.swift:447</code></td></tr><tr><td>System task card</td><td>iOS-owned, from <code>BGContinuedProcessingTaskRequest</code></td><td><code>BackgroundAnalysisScheduler.swift</code></td></tr><tr><td><code>AnalysisStatusBar</code></td><td>— <strong>dead code</strong>, zero references outside its own <code>#Preview</code></td><td><code>AnalysisStatusBar.swift</code></td></tr></tbody></table></div>
-<p>The sources are <code>currentAnalysis</code>, <code>analysisQueue</code>, <code>failedAnalyses</code>, <code>AnalysisProgressStore</code> checkpoints (partials), and <code>GeneratedSessionStore</code> (ready sessions).</p>
+<p>Analysis state is rendered by several surfaces that each read the underlying sources directly, with different truncations. They disagree by construction.</p>
+<div class='tablewrap'><table><thead><tr><th>Surface</th><th>What it reads</th><th>File</th></tr></thead><tbody><tr><td>Bottom chrome</td><td><code>currentAnalysis</code> <strong>or</strong> <code>failedAnalyses.last</code></td><td><code>ContentView.swift:203</code></td></tr><tr><td>Analysis Queue sheet</td><td>active, queue, failures, ready sessions</td><td><code>AnalyzerView.swift</code></td></tr><tr><td>Library shelf</td><td>active + <code>queue.prefix(2)</code> + <code>failed.suffix(2)</code> + <code>partial.prefix(2)</code></td><td><code>LibraryAnalysisStatusSection.swift</code></td></tr><tr><td>Session Detail</td><td>one file's slice of active/queue/failure state</td><td><code>SessionDetailView.swift:447</code></td></tr><tr><td>System task card</td><td>iOS-owned, from <code>BGContinuedProcessingTaskRequest</code> — title, subtitle, progress only</td><td><code>BackgroundAnalysisScheduler.swift</code></td></tr><tr><td><code>AnalysisStatusBar</code></td><td>nothing — <strong>dead code</strong>, zero references outside its own <code>#Preview</code></td><td><code>AnalysisStatusBar.swift</code></td></tr></tbody></table></div>
+<p>The four live in-app surfaces read from six inputs:</p>
+<ol>
+<li><code>AnalysisStateManager.currentAnalysis</code></li>
+<li><code>AnalysisStateManager.analysisQueue</code></li>
+<li><code>AnalysisStateManager.failedAnalyses</code></li>
+<li><code>AnalysisProgressStore</code> checkpoints (partials and manual recoveries)</li>
+<li><code>GeneratedSessionStore</code> (ready sessions)</li>
+<li>The audio-library inventory (<code>AudioLibraryStore</code>) — required because <code>GeneratedSessionStore</code> cannot enumerate; every one of its accessors takes an <code>AudioFile</code></li>
+</ol>
 <p>Three user-visible consequences:</p>
 <ol>
 <li><strong>Failures are invisible while anything is running.</strong> The bottom chrome renders active work <em>or</em> the last failure, never both.</li>
@@ -90,47 +98,132 @@ li::marker { color:var(--accent); }
 <li>Pill, Task Center, Library, and Session Detail only filter the shared list — none independently reconstruct state.</li>
 </ol>
 <h2 id="scope">Scope</h2>
-<p><strong>In:</strong> the canonical model and projection; the pill; the center; dismissal/removal persistence; the stall watchdog; model-download progress as a first-class state.</p>
+<p><strong>In:</strong> the canonical model and projection; snapshot ownership and refresh; the pill; the center; dismissal/removal persistence; the stall watchdog; model-download progress as a first-class state.</p>
 <p><strong>Out:</strong> Library Intelligence, deferred to its own task (<code>task_34b6360c</code>) — it is library-wide statistics, not task state, and only shares a screen with the queue today.</p>
-<h3 id="build-order">Build order</h3>
-<p>The model and projection land first and are independently testable. The watchdog and the model-download callback are <strong>additional producers feeding that model</strong>, not architectural foundations, and are wired in afterwards. <code>.preparing</code> ships in the enum from day one with nothing producing it, so wiring the callback later is additive rather than a model change.</p>
 <h2 id="the-model">The model</h2>
-<pre><code class="lang-swift">nonisolated enum AnalysisTaskState: Equatable, Sendable {
-    case queued(position: Int)
+<p>All types are immutable value snapshots. The projection never vends live references, so a published <code>[AnalysisTask]</code> is safe to diff, compare, and hold across actor boundaries.</p>
+<pre><code class="lang-swift">nonisolated struct AnalysisTask: Identifiable, Equatable, Sendable {
+    var id: UUID { audioFile.id }
+
+    let audioFile: AudioFile
+    let state: AnalysisTaskState
+    /// Present whenever a failure has been recorded for this file, including
+    /// when `state` has moved on to `.queued` for an automatic retry.
+    let lastFailure: AnalysisFailureSnapshot?
+    /// The most useful partial result saved on disk, independent of `state`.
+    let recovery: AnalysisRecoveryStage
+    /// Present whenever a generated session exists, including during re-analysis.
+    let ready: AnalysisReadySnapshot?
+}
+
+nonisolated enum AnalysisTaskState: Equatable, Sendable {
+    case queued(position: Int)          // one-based
     case preparing(ModelDownloadProgress)
-    case running(stage: AnalysisStage, progress: Double)
-    case partial(recovery: AnalysisRecoveryStage)
-    case failed(FailedAnalysis, dismissedAt: Date?)
-    case ready(SyncPlayerItem)
+    case running(stage: AnalysisStage, progress: Double, startedAt: Date)
+    case partial
+    case failed
+    case ready
+}
+
+nonisolated struct ModelDownloadProgress: Equatable, Sendable {
+    let completedUnitCount: Int64
+    let totalUnitCount: Int64
+    let fractionCompleted: Double
+}
+
+nonisolated struct AnalysisFailureSnapshot: Equatable, Sendable {
+    let reason: AnalyticsAnalysisFailureReason
+    let failedStage: AnalyticsAnalysisStage
+    let failedAt: Date
+    let recoveryStage: AnalysisRecoveryStage
+    let retryState: AnalysisRetryState
+    let dismissedAt: Date?
+
+    var presentation: AnalysisFailurePresentation {
+        AnalysisFailurePresentation(
+            reason: reason,
+            failedStage: failedStage,
+            recoveryStage: recoveryStage,
+            retryState: retryState
+        )
+    }
+
+    /// Tier-1 eligibility. Automatic retries are deliberately excluded.
+    var isActionRequired: Bool {
+        dismissedAt == nil &amp;&amp; (retryState == .manual || retryState == .unavailable)
+    }
+}
+
+nonisolated struct AnalysisReadySnapshot: Equatable, Sendable {
+    /// `LightSession.id` — decoded from the stored JSON, stable across loads.
+    let sessionID: UUID
+    let readyAt: Date
 }</code></pre>
-<p><code>AnalysisTaskProjection.tasks(...)</code> is a <strong>pure <code>nonisolated</code> function</strong> over plain values returning <code>[AnalysisTask]</code>.</p>
-<p>It is not a property on <code>AnalysisStateManager</code>: that file is already 1,406 lines against CLAUDE.md's 800-line cap, and a property there would only be testable by standing up a <code>@MainActor</code> singleton. As a free function the ordering and collapse rules get unit tests with no actor, no async, and no I/O — which is what makes criterion 10 enforceable rather than aspirational.</p>
-<p>A thin <code>@MainActor @Observable AnalysisCenterModel</code> reads <code>AnalysisStateManager</code> and publishes the snapshot.</p>
+<h3 id="why-not-the-obvious-types">Why not the obvious types</h3>
+<ul>
+<li><strong><code>SyncPlayerItem</code> must not appear in the model.</strong> It is <code>Identifiable</code> only — not <code>Equatable</code>, not <code>Sendable</code> — and its <code>let id = UUID()</code> (<code>SyncPlayerItem.swift:10</code>) generates a fresh value per instance, so two projections of identical state would compare unequal. <code>AnalysisReadySnapshot</code> carries <code>LightSession.id</code> instead, which is a decoded <code>UUID</code> (<code>LightSession.swift:15</code>) and therefore stable. <strong>The player item is resolved when Play is tapped</strong>, not held in the snapshot.</li>
+<li><strong><code>FailedAnalysis</code> must not appear in the model.</strong> It is <code>Identifiable, Sendable</code> but not <code>Equatable</code> (<code>FailedAnalysis.swift:96</code>), which would block <code>AnalysisTask</code>'s synthesised conformance. <code>AnalysisFailureSnapshot</code> mirrors the fields the UI needs and keeps <code>AnalysisFailurePresentation</code> reachable as a computed property.</li>
+<li><strong><code>AudioFile</code> is safe to hold</strong>: <code>Identifiable, Codable, Sendable</code> (<code>AudioFile.swift:32</code>) with an explicit <code>Equatable</code> conformance (<code>:145</code>) and <code>Hashable</code> (<code>:172</code>).</li>
+<li><strong><code>dismissedAt</code> is not pipeline state.</strong> It lives on the failure snapshot, mirroring where it is persisted, so <code>state</code> stays a description of what the pipeline is doing.</li>
+<li><strong>Foundation <code>Progress</code> never crosses an actor.</strong> It is a non-<code>Sendable</code> reference type; the download callback converts it to <code>ModelDownloadProgress</code> at the call site.</li>
+</ul>
+<h3 id="projection">Projection</h3>
+<p><code>AnalysisTaskProjection.tasks(from:)</code> is a <strong>pure <code>nonisolated</code> function</strong> taking one plain-value input and returning <code>[AnalysisTask]</code>:</p>
+<pre><code class="lang-swift">nonisolated struct AnalysisTaskProjectionInput: Equatable, Sendable {
+    let libraryFiles: [AudioFile]
+    let activeAnalysis: ActiveAnalysisSnapshot?      // file id, stage, progress, startedAt
+    let modelDownload: ModelDownloadProgress?
+    let queue: [UUID]                                // audio file ids, in queue order
+    let failures: [UUID: AnalysisFailureSnapshot]
+    let recoveries: [UUID: AnalysisRecoveryStage]    // from checkpoints
+    let ready: [UUID: AnalysisReadySnapshot]
+}</code></pre>
+<p>It is not a property on <code>AnalysisStateManager</code>: that file is 1,406 lines, well past the 200–400-line norm and the 800-line ceiling in the global coding-style rules, and putting the projection there makes it harder to reach in isolation. (<code>AnalysisStateManager</code> <em>does</em> have an injectable initialiser at <code>:105</code> accepting <code>transcriber</code>, <code>analyzer</code>, <code>progressStore</code>, <code>preferences</code>, and <code>cacheURL</code>, so it is testable without the singleton — the argument here is about file size and separation, not testability.) As a free function over plain values, the ordering and collapse rules get unit tests with no actor, no async, and no I/O — which is what makes criterion 10 enforceable rather than aspirational.</p>
 <h3 id="per-file-collapse-precedence">Per-file collapse precedence</h3>
-<p>One task per <code>audioFile.id</code>. A file may appear in several sources simultaneously; highest match wins.</p>
-<div class='tablewrap'><table><thead><tr><th>Precedence</th><th>State</th><th>Condition</th></tr></thead><tbody><tr><td>1</td><td><code>.preparing</code> / <code>.running</code></td><td>file is <code>currentAnalysis</code></td></tr><tr><td>2</td><td><code>.queued(position:)</code></td><td>present in <code>analysisQueue</code>, <strong>including auto-retry re-queues</strong></td></tr><tr><td>3</td><td><code>.failed</code></td><td>in <code>failedAnalyses</code>, not queued, not active</td></tr><tr><td>4</td><td><code>.partial</code></td><td>durable checkpoint exists, nothing scheduled</td></tr><tr><td>5</td><td><code>.ready</code></td><td>generated session exists, no live work</td></tr></tbody></table></div>
-<p>Precedence 2 above 3 is the load-bearing rule. A failure with <code>retryState == .automatic</code> is re-appended to the queue at <code>AnalysisStateManager.swift:1330</code>, so the file is <em>simultaneously</em> failed and queued. Collapsing it to <code>.queued</code> is what satisfies criterion 7.</p>
+<p>One task per <code>audioFile.id</code>. A file may appear in several inputs simultaneously; the first matching rule wins.</p>
+<div class='tablewrap'><table><thead><tr><th>#</th><th>Condition</th><th>Result</th></tr></thead><tbody><tr><td>1</td><td>active analysis for this file <strong>and</strong> its stage is non-terminal <strong>and</strong> a model download is in flight</td><td><code>.preparing(progress)</code></td></tr><tr><td>2</td><td>active analysis for this file <strong>and</strong> its stage is non-terminal</td><td><code>.running(stage:progress:startedAt:)</code></td></tr><tr><td>3</td><td>present in <code>queue</code></td><td><code>.queued(position:)</code>, one-based</td></tr><tr><td>4</td><td>a failure snapshot exists</td><td><code>.failed</code></td></tr><tr><td>5</td><td>a recovery stage other than <code>.none</code> exists</td><td><code>.partial</code></td></tr><tr><td>6</td><td>a ready snapshot exists</td><td><code>.ready</code></td></tr><tr><td>—</td><td>otherwise</td><td>no task emitted</td></tr></tbody></table></div>
+<p><strong>Terminal active analysis does not win.</strong> <code>currentAnalysis</code> is left in place with <code>stage == .failed</code> during failure handling (<code>AnalysisStateManager.swift:1325</code>) while the file is simultaneously re-appended to the queue (<code>:1330</code>) and added to <code>failedAnalyses</code>. Under a naive "any active analysis wins" rule the task would collapse to <code>.running(stage: .failed)</code> and defeat criterion 7 entirely. Non-terminal means the stage is one of <code>.starting</code>, <code>.transcribing</code>, <code>.analyzing</code>, <code>.generatingSession</code>; <code>.failed</code> and <code>.complete</code> both fall through — <code>.failed</code> to rule 3 or 4, <code>.complete</code> to rule 6.</p>
+<p><strong>Rule 3 above rule 4 is load-bearing.</strong> A failure with <code>retryState == .automatic</code> is re-queued, so the file is both failed and queued; collapsing to <code>.queued</code> is what satisfies criterion 7. The failure is not lost — it is carried as <code>lastFailure</code>.</p>
+<p><strong><code>.preparing</code> versus <code>.running</code>.</strong> The model download is a property of the analyzer, not of a file, but it always blocks exactly one active analysis. <code>.preparing</code> is selected only while an active non-terminal analysis coincides with an in-flight download; the download's own progress is shown instead of the analysis progress, which is pinned near zero during bootstrap. When the download completes the same task transitions to <code>.running</code> with no change of identity.</p>
+<p><strong>Speculative transcription stays <code>.queued</code>.</strong> The prefetch (<code>startPrefetchingNextTranscription</code>) transcribes the next queued file opportunistically and may be discarded if the queue is reordered. Surfacing it as a live state would show progress for a file that may never be promoted, and would make the queue appear to process two files at once. It therefore remains <code>.queued</code> to the user. The watchdog still covers it internally — see <a href="#coverage-of-speculative-transcription">Coverage of speculative transcription</a>.</p>
 <h3 id="attributes-not-states">Attributes, not states</h3>
-<p>The task carries <code>lastFailure</code>, <code>recovery: AnalysisRecoveryStage</code>, and <code>readyItem</code> alongside its one <code>state</code>. State answers <em>what is happening now</em>; attributes answer <em>what has been salvaged</em>. This satisfies criterion 8: a <code>.failed</code> task still renders "Transcript saved", and a <code>.queued</code> auto-retry still knows what it resumes from.</p>
+<p><code>lastFailure</code>, <code>recovery</code>, and <code>ready</code> are populated independently of <code>state</code>. State answers <em>what is happening now</em>; attributes answer <em>what has been salvaged</em>. This satisfies criterion 8: a <code>.failed</code> task still renders "Transcript saved", a <code>.queued</code> auto-retry still knows what it resumes from, and a file being re-analysed still knows it has a playable session from last time.</p>
 <h3 id="cross-file-sort">Cross-file sort</h3>
+<p>Tiers, then a deterministic order within each tier, then a stable tie-breaker on <code>audioFile.id</code>:</p>
+<div class='tablewrap'><table><thead><tr><th>Tier</th><th>Contents</th><th>Within-tier order</th></tr></thead><tbody><tr><td>1</td><td><code>lastFailure?.isActionRequired == true</code></td><td><code>failedAt</code> descending</td></tr><tr><td>2</td><td><code>.preparing</code>, <code>.running</code></td><td><code>startedAt</code> descending</td></tr><tr><td>3</td><td><code>.queued</code></td><td>queue position ascending</td></tr><tr><td>4</td><td><code>.partial</code></td><td>checkpoint <code>lastUpdated</code> descending</td></tr><tr><td>5</td><td><code>.failed</code> with <code>dismissedAt != nil</code></td><td><code>failedAt</code> descending</td></tr><tr><td>6</td><td><code>.ready</code></td><td><code>readyAt</code> descending</td></tr></tbody></table></div>
+<p>Only tier 1 outranks active work, and automatic retries cannot reach tier 1 because <code>isActionRequired</code> excludes <code>.automatic</code> <em>and</em> they collapsed to <code>.queued</code>. Criteria 6 and 7 both fall out of the structure with no special cases.</p>
+<h3 id="ready-semantics">Ready semantics</h3>
+<ul>
+<li><strong><code>readyAt</code></strong> is the modification date of the generated-session file, obtained from <code>GeneratedSessionStore.sessionURL(forAudioFileID:)</code> (<code>:51</code>). It survives relaunch and adds no new persistence format. For a bundled gold session, which has no generated file, fall back to the audio file's import date.</li>
+<li><strong>Activity policy:</strong> activity-oriented views show the <strong>three most recent</strong> ready tasks, preserving today's <code>AnalysisReadySessionsCard</code> behaviour (<code>.prefix(3)</code>). There is no TTL. The Task Center's full list shows all of them. Ageing out is a <strong>view filter</strong>, never a model deletion, satisfying criterion 9.</li>
+<li><strong>Deleted or corrupt:</strong> if the audio file is gone from the library inventory, no task is emitted at all — the library is the spine of the projection. If the session file is missing or fails to decode, <code>ready</code> is <code>nil</code> and the task falls through to a lower rule; a task never advertises a session that cannot be loaded.</li>
+</ul>
+<h2 id="snapshot-ownership-and-refresh">Snapshot ownership and refresh</h2>
+<p>The projection is pure, so something must own its input and decide when to recompute it.</p>
+<p><strong>Ownership.</strong> A single <code>AnalysisCenterModel</code> (<code>@MainActor @Observable</code>) is created at the app root and injected into all four surfaces through the environment. There is exactly one instance; no surface constructs its own.</p>
+<p><strong>Two refresh paths</strong>, because the inputs have very different frequencies:</p>
+<ul>
+<li><strong>Structural refresh</strong> rebuilds the whole <code>AnalysisTaskProjectionInput</code> from disk and stores. Triggered by: audio-library change, checkpoint write, analysis completion or failure, session save or delete, audio-file delete, <code>restoreManualRecoveries()</code>, dismissal, and removal. <code>AnalysisProgressStore</code> is <code>private</code> on the manager, so the manager gains a <code>nonisolated func recoverySnapshot() async -&gt; ([UUID: AnalysisRecoveryStage], [UUID: AnalysisFailureSnapshot])</code> rather than the model reaching into the actor.</li>
+<li><strong>Progress refresh</strong> updates only <code>activeAnalysis</code> and <code>modelDownload</code> in the existing input and re-runs the projection. It <strong>never touches disk</strong>. This is the high-frequency path — WhisperKit reports roughly every 28 seconds of audio, the download callback more often — and keeping it off disk is what stops progress ticks from causing library reads.</li>
+</ul>
+<p><strong>Startup ordering</strong> is fixed and observable:</p>
 <ol>
-<li>Action-required failures — undismissed, <code>retryState</code> of <code>.manual</code> or <code>.unavailable</code></li>
-<li><code>.preparing</code> / <code>.running</code></li>
-<li><code>.queued</code>, by queue position</li>
-<li><code>.partial</code></li>
-<li>Dismissed failures</li>
-<li><code>.ready</code>, most recent first</li>
+<li>Load the audio-library inventory.</li>
+<li>Restore manual recoveries and read checkpoints.</li>
+<li>Enumerate ready sessions for the loaded inventory.</li>
+<li>Publish the first snapshot.</li>
 </ol>
-<p>Only tier 1 outranks active work, and auto-retries cannot reach tier 1 because they collapsed to <code>.queued</code>. Criteria 6 and 7 both fall out of the structure with no special cases.</p>
-<p><code>.ready</code> items remain in the canonical list permanently. Ageing out is a <strong>view filter</strong>, not a model deletion, satisfying criterion 9.</p>
+<p>The published snapshot is <code>nil</code> (distinct from empty) until step 4, so surfaces can distinguish "still loading" from "nothing to show" and neither the pill nor the Library row flashes an empty state on launch.</p>
+<p><strong>Invalidation.</strong> Deleting an audio file or its generated session triggers a structural refresh; the projection then omits the task or clears <code>ready</code> respectively. Because tasks are keyed on <code>audioFile.id</code>, a re-imported file with a new identifier is a new task and inherits nothing.</p>
 <h2 id="surfaces">Surfaces</h2>
 <p>All four filter the shared snapshot.</p>
-<div class='tablewrap'><table><thead><tr><th>Surface</th><th>Slice</th></tr></thead><tbody><tr><td>Pill</td><td><code>preparing</code>/<code>running</code>/<code>queued</code> + undismissed action-required failures</td></tr><tr><td>Task Center</td><td>Everything, grouped by sort tier</td></tr><tr><td>Library</td><td>One entry row summarising counts</td></tr><tr><td>Session Detail</td><td><code>tasks.first { $0.id == audioFile.id }</code></td></tr></tbody></table></div>
+<div class='tablewrap'><table><thead><tr><th>Surface</th><th>Slice</th></tr></thead><tbody><tr><td>Pill</td><td><code>preparing</code>/<code>running</code>/<code>queued</code> + tasks where <code>lastFailure?.isActionRequired == true</code></td></tr><tr><td>Task Center</td><td>Everything, grouped by sort tier</td></tr><tr><td>Library</td><td>One entry row summarising counts</td></tr><tr><td>Session Detail</td><td><code>tasks.first { $0.id == audioFile.id }</code></td></tr></tbody></table></div>
 <p><strong>Deleted:</strong> <code>AnalysisStatusBar.swift</code> (dead), <code>LibraryAnalysisStatusSection.swift</code> (duplicate), <code>AnalysisRecoveryStatusOverlay</code> (folded into the pill).</p>
+<p><strong><code>AnalyzerView</code>'s fate.</strong> Its Live Status and Ready Sessions sections are replaced by the Task Center. Its third section, <code>AnalyzerLibraryIntelligenceSection</code>, is out of scope and has no other entry point once the queue's callers move. It is therefore <strong>left in place inside <code>AnalyzerView</code>, and <code>AnalyzerView</code> remains reachable from a single entry — the Task Center's overflow — until <code>task_34b6360c</code> relocates it to Library.</strong> This avoids orphaning a working feature to satisfy a boundary, and the follow-up task deletes both together.</p>
 <h3 id="pill-composition">Pill composition</h3>
 <p>The pill shows <strong>active progress as the headline plus a persistent attention chip</strong> for action-required failures — both visible simultaneously.</p>
 <p>This is a deliberate divergence from the tier order. Applied literally to the pill, tier 1 would give a failure the headline and hide live progress; because a <code>.manual</code> failure can sit indefinitely, the pill would stop showing progress for as long as it exists. That reintroduces the defect being removed. The two states answer different questions: progress is transient and self-resolving, a failure is a standing decision. The sort order still governs the Task Center, which leads with the failure when opened.</p>
-<h2 id="dismissal-and-persistence">Dismissal and persistence</h2>
+<h2 id="dismissal-and-removal">Dismissal and removal</h2>
 <p><code>restoreManualRecoveries()</code> (<code>AnalysisStateManager.swift:254</code>) rebuilds <code>failedAnalyses</code> from durable checkpoints on every launch, so dismissal held only in memory is resurrected on relaunch.</p>
 <h3 id="storage">Storage</h3>
 <p><code>dismissedAt</code> lives on the <strong>failure occurrence</strong>, not the checkpoint root:</p>
@@ -147,11 +240,20 @@ li::marker { color:var(--accent); }
 </ul>
 <p><code>Optional</code> with a default decodes cleanly from existing on-disk checkpoints.</p>
 <h3 id="operations">Operations</h3>
+<p>Both are <strong>occurrence-guarded</strong>: the caller passes the <code>failedAt</code> it is acting on, so a confirmation raised for one failure cannot act on a newer failure for the same file.</p>
+<pre><code class="lang-swift">func dismiss(fileID: UUID, expectingFailedAt: Date) async -&gt; Bool
+func remove(fileID: UUID, expectingFailedAt: Date) async -&gt; Bool</code></pre>
 <ul>
-<li><strong><code>dismiss(fileID:expecting failedAt:)</code></strong> — writes <code>dismissedAt</code>, <strong>leaves the checkpoint intact</strong>. The task stays in the canonical list at sort tier 5, leaves the pill, and retry still resumes from the saved transcript. The <code>failedAt</code> guard prevents a delayed action from an old row dismissing a newer failure for the same file.</li>
-<li><strong><code>remove(fileID:)</code></strong> — clears the dismissal record <em>and</em> the checkpoint, <em>and</em> the in-memory projected task. Clearing only <code>progressStore</code> leaves the row visible until relaunch.</li>
+<li><strong><code>dismiss</code></strong> writes <code>dismissedAt</code> and <strong>leaves the checkpoint intact</strong>. The task stays in the canonical list at tier 5, leaves the pill, and retry still resumes from the saved transcript.</li>
+<li><strong><code>remove</code></strong> clears the manual recovery <em>and</em> the checkpoint, <strong>and removes the entry from <code>failedAnalyses</code></strong> — the authoritative in-memory source. Mutating only the projected row is insufficient: the next structural refresh would recreate it.</li>
 </ul>
-<p>Both report success. The published snapshot updates only after the atomic write lands; a failed write restores the prior in-memory value.</p>
+<p><strong>Return value:</strong></p>
+<ul>
+<li><code>true</code> — the requested postcondition holds: for <code>dismiss</code>, the occurrence is recorded dismissed and durably written; for <code>remove</code>, the occurrence and its checkpoint are gone and <code>failedAnalyses</code> no longer contains it.</li>
+<li><code>false</code> — the occurrence is stale (a different <code>failedAt</code> is on record), no matching entry exists, or persistence failed.</li>
+</ul>
+<p><strong>Removal is destructive and requires confirmation.</strong> The confirmation must say that it deletes <em>saved analysis progress</em> — the transcript or analysis a retry would have resumed from — and that it does <strong>not</strong> delete the audio file.</p>
+<p><strong>Ordering:</strong> the durable write happens first; the published snapshot updates only after it succeeds. A failed write leaves both durable state and the in-memory value untouched, so the UI never shows a dismissal that disk does not agree with.</p>
 <h3 id="write-failure-handling">Write-failure handling</h3>
 <p><code>persist()</code> currently swallows both encoding and disk-write errors (<code>AnalysisProgressStore.swift:236-242</code>):</p>
 <pre><code class="lang-swift">guard let data = try? JSONEncoder().encode(stringKeyed) else { return }
@@ -159,11 +261,12 @@ try? data.write(to: storeURL, options: .atomic)</code></pre>
 <p>If the UI marks something dismissed and the write silently fails, ERR-013 returns on relaunch. This is the same defect class as ERR-005, where the audio library dropped writes while announcing success; that fix made every mutator return <code>Bool</code> with <code>@discardableResult</code> on the save. Follow that shape rather than inventing a convention.</p>
 <h3 id="the-unavailable-exception">The <code>.unavailable</code> exception</h3>
 <p><code>.unavailable</code> failures clear their checkpoint at <code>AnalysisStateManager.swift:1305</code> <em>before</em> entering <code>failedAnalyses</code>, and <code>restoreManualRecoveries()</code> rebuilds only from <code>manualRecoveryCheckpoints()</code> (filtered on <code>manualRecovery != nil</code>). Therefore:</p>
-<div class='tablewrap'><table><thead><tr><th>Failure kind</th><th>Dismissal behaviour</th></tr></thead><tbody><tr><td><code>.manual</code></td><td>persisted in the recovery; checkpoint survives; task restores as dismissed</td></tr><tr><td><code>.unavailable</code></td><td>no checkpoint to annotate; dismissal removes the in-memory failure and it stays gone after relaunch</td></tr></tbody></table></div>
+<div class='tablewrap'><table><thead><tr><th>Failure kind</th><th>Dismissal behaviour</th></tr></thead><tbody><tr><td><code>.manual</code></td><td>persisted in the recovery; checkpoint survives; task restores as dismissed at tier 5</td></tr><tr><td><code>.unavailable</code></td><td>no checkpoint exists to annotate; <code>dismiss</code> succeeds immediately with <strong>no disk write</strong>, removes the entry from <code>failedAnalyses</code>, and the task disappears entirely rather than joining tier 5. It does not return after relaunch because nothing durable ever referenced it.</td></tr></tbody></table></div>
 <p>Persisting <code>.unavailable</code> failure history would require a separate durable failure-history store. Out of scope.</p>
-<blockquote><strong>ERRORS.md correction applied 2026-08-16.</strong> ERR-013 was filed under "Resolved" with <code>Status: completed</code> while its own resolution line read "Not yet fixed"; no <code>dismissFailure</code> exists in the code. Its reproduction step 5 also claimed <code>.unavailable</code> failures are restored after relaunch, which the code contradicts. Both corrected.</blockquote>
+<blockquote><strong>ERRORS.md correction applied 2026-08-16.</strong> ERR-013 was filed under "Resolved" with <code>Status: completed</code> while its own resolution line read "Not yet fixed"; no <code>dismissFailure</code> exists in the code. Its reproduction step 5 also claimed <code>.unavailable</code> failures are restored after relaunch, which the code contradicts. Both corrected, and the entry moved to Open issues.</blockquote>
 <h2 id="stall-watchdog">Stall watchdog</h2>
 <p>No timeout exists in the pipeline today; the only <code>Task.sleep</code> in <code>AnalysisStateManager</code> is a 250ms poll at <code>:1109</code>.</p>
+<p><strong>This section is decided policy with conditional implementation.</strong> The mechanism depends on questions the spike in Phase 2a must answer first.</p>
 <h3 id="why-inactivity-not-total-elapsed">Why inactivity, not total elapsed</h3>
 <p>A total-elapsed limit would kill healthy work on long-form content — precisely what this app is for. The watchdog times out on <strong>absence of a heartbeat</strong>.</p>
 <pre><code class="lang-swift">static let noProgressTimeout: Duration = .minutes(5)</code></pre>
@@ -180,8 +283,8 @@ try? data.write(to: storeURL, options: .atomic)</code></pre>
 <h3 id="coverage-of-speculative-transcription">Coverage of speculative transcription</h3>
 <p>The watchdog must cover the prefetch path. <code>awaitPrefetchedTranscriptionForNextFile()</code> awaits <code>prefetch.task.value</code> unbounded before promoting the next file (<code>AnalysisStateManager.swift:855</code>). A watchdog observing only <code>currentAnalysis.progress</code> would miss that hang entirely.</p>
 <p>The hazard exists on both branches: the reordering branch calls <code>prefetch.task.cancel()</code> and <code>audioAnalyzer.cancelTranscription()</code> (<code>:851-852</code>) but still falls through to the same unbounded await, and <code>Task&lt;Void, Never&gt;</code> cannot throw, so an uncooperative child wedges the queue either way.</p>
-<h3 id="exactly-once-terminal-result">Exactly-once terminal result</h3>
-<p>Completion, cancellation, and timeout need a single winner. <code>TaskGroup.cancelAll()</code> is insufficient — a structured group can still wait forever on an uncooperative child. Use an <strong>attempt/generation identity</strong> so a late operation cannot emit completion after the watchdog has already emitted failure.</p>
+<h3 id="exactly-once-terminalisation">Exactly-once terminalisation</h3>
+<p>Attempt identity suppresses stale results; it does <strong>not</strong> unblock an uncooperative await, and the distinction matters here. <code>AudioAnalyzer.cancelTranscription()</code> (<code>:266</code>) itself awaits the task it is cancelling — <code>_ = try? await task?.value</code> (<code>:270</code>) — so cancellation can hang for the same reason the work can. A hung operation also never reaches the existing <code>catch</code>, so the watchdog needs an <strong>independently callable terminalisation path</strong> that records the failure without waiting for the runaway child, plus an attempt/generation identity so a late completion cannot overwrite the recorded failure. <code>TaskGroup.cancelAll()</code> is insufficient — a structured group still waits for its children.</p>
 <h3 id="retry-posture">Retry posture</h3>
 <p><code>.stalled</code> flows through the existing automatic-retry budget (<code>reason.supportsAutomaticRetry &amp;&amp; failedAttemptNumber &lt; 2</code>, <code>:1288</code>), giving one automatic retry before falling to <code>.manual</code> with the checkpoint preserved.</p>
 <p><strong>One exception.</strong> Cancellation is cooperative; if WhisperKit or Foundation Models ignores it, launching a retry immediately would create two operations competing for the same model. Therefore:</p>
@@ -190,23 +293,49 @@ try? data.write(to: storeURL, options: .atomic)</code></pre>
 <li>invalidate the old attempt so late callbacks and results are ignored;</li>
 <li>preserve the checkpoint;</li>
 <li><strong>do not launch the automatic retry until teardown completes</strong>;</li>
-<li>if teardown cannot be confirmed, leave it recoverable as <code>.manual</code>.</li>
+<li>if teardown cannot be confirmed within a bounded grace period, leave it recoverable as <code>.manual</code>.</li>
 </ul>
 <h3 id="stalled-reason"><code>.stalled</code> reason</h3>
 <p>Add <code>case stalled</code> to <code>AnalyticsAnalysisFailureReason</code> — a <code>String</code>-raw <code>Codable</code> enum (<code>AnalyticsEvent.swift:162</code>), so existing checkpoints still decode. Map a typed <code>AnalysisStalledError</code> in <code>AnalyticsAnalysisFailureReason.init(error:stage:)</code> <strong>before</strong> the stage-based fallback, or a stall will be misattributed to whatever stage it died in.</p>
 <p>The exhaustive switches in <code>AnalysisFailurePresentation</code> will require dedicated user-facing copy at compile time rather than silently falling through to <code>.unknown</code>.</p>
 <h2 id="model-download">Model download</h2>
-<p><code>.preparing</code> is driven by <code>WhisperKit.download</code>'s <code>progressCallback: ((Progress) -&gt; Void)?</code> (<code>WhisperKit.swift:241</code> in the pinned checkout). <code>AudioAnalyzer.swift:454</code> currently passes nothing — the 100-second silence is a callback the app declines to wire up, not a missing capability.</p>
-<p><strong>Failure handling is unchanged.</strong> A download failure uses the existing <code>.modelInitialization</code> presentation and retry behaviour. Note that <code>WhisperModelBootstrap.actionableFailureMessage</code> is stored only in <code>FailedAnalysis.technicalMessage</code>, which the UI deliberately does not render ("Retained for local logs and debugging; UI uses <code>presentation</code>", <code>FailedAnalysis.swift:104</code>). Surfacing that message is <strong>not</strong> part of this work.</p>
+<p><code>.preparing</code> is driven by <code>WhisperKit.download</code>'s <code>progressCallback: ((Progress) -&gt; Void)?</code> (<code>WhisperKit.swift:241</code> in the pinned checkout). <code>AudioAnalyzer.swift:454</code> currently passes nothing — the 100-second silence is a callback the app declines to wire up, not a missing capability. The callback converts <code>Progress</code> to <code>ModelDownloadProgress</code> before it crosses any actor boundary.</p>
+<p><strong>Failure handling is unchanged.</strong> A download failure uses the existing <code>.modelInitialization</code> presentation and retry behaviour. <code>WhisperModelBootstrap.actionableFailureMessage</code> is stored only in <code>FailedAnalysis.technicalMessage</code>, which the UI deliberately does not render ("Retained for local logs and debugging; UI uses <code>presentation</code>", <code>FailedAnalysis.swift:104</code>). Surfacing that message is <strong>not</strong> part of this work.</p>
+<h2 id="build-phases">Build phases</h2>
+<p><strong>Phase 1 — the canonical model.</strong> Exact model and snapshot types; projection and selectors; shared publication owner and refresh mechanics; dismissal and removal persistence; the four surfaces; then deletion of the legacy views. Independently shippable and independently testable.</p>
+<p><strong>Phase 2a — teardown/cancellation spike.</strong> A time-boxed investigation, not a feature. Exit criteria:</p>
+<ul>
+<li>Can WhisperKit and Foundation Models confirm teardown after cancellation?</li>
+<li>What bounded grace period defines "teardown not confirmed"?</li>
+<li>Can the queue resolve the attempt without awaiting the runaway child?</li>
+<li>How is shared model ownership quarantined from a replacement attempt?</li>
+<li>Does a speculative prefetch stall consume retry budget, fall back to normal processing, or pause the queue?</li>
+<li>What happens to the remaining queue when teardown never confirms?</li>
+</ul>
+<p><strong>Phase 2b — watchdog and <code>.stalled</code>.</strong> Conditional on 2a's answers. If teardown cannot be confirmed, the watchdog still records the failure and preserves the checkpoint, but automatic retry is disabled and every stall settles at <code>.manual</code>.</p>
+<p><strong>Phase 2c — model-download callback and <code>.preparing</code>.</strong> Independent of the watchdog result and of 2a; can land any time after Phase 1.</p>
 <h2 id="testing">Testing</h2>
 <p>Swift Testing (<code>import Testing</code>), macOS and iOS Simulator. Run via <code>Scripts/run-tests.sh</code> so a filter matching nothing fails rather than reporting success (ERR-002).</p>
 <p><strong>Projection</strong> — pure, no actor, no async:</p>
 <ul>
-<li>per-file collapse precedence</li>
-<li>cross-file sort</li>
+<li>per-file collapse precedence, rule by rule</li>
+<li>terminal <code>currentAnalysis</code> (<code>.failed</code>) collapses to <code>.queued</code>, not <code>.running</code></li>
+<li>terminal <code>currentAnalysis</code> (<code>.complete</code>) collapses to <code>.ready</code></li>
 <li>auto-retry collapses to <code>.queued</code> and sorts below active work</li>
-<li>recovery attributes survive a <code>.failed</code> collapse</li>
-<li><code>.ready</code> persists in the list while filtered out of activity views</li>
+<li><code>lastFailure</code>, <code>recovery</code>, and <code>ready</code> survive a <code>.queued</code> or <code>.failed</code> collapse</li>
+<li>queue positions are one-based and follow queue order</li>
+<li><code>.preparing</code> is selected only while an active non-terminal analysis coincides with a download</li>
+<li>within-tier ordering and the <code>audioFile.id</code> tie-breaker are deterministic</li>
+<li>identical inputs produce equal snapshots (guards the <code>SyncPlayerItem</code> identity trap)</li>
+<li>a file absent from the library inventory emits no task</li>
+<li>a ready snapshot whose session file is missing or undecodable leaves <code>ready == nil</code></li>
+</ul>
+<p><strong>Ownership and refresh:</strong></p>
+<ul>
+<li>progress refresh performs no disk reads</li>
+<li>first publication happens only after library, recoveries, and ready enumeration complete</li>
+<li>the snapshot is <code>nil</code> rather than empty before first publication</li>
+<li>session delete and audio delete invalidate correctly</li>
 </ul>
 <p><strong>Persistence:</strong></p>
 <ul>
@@ -214,9 +343,9 @@ try? data.write(to: storeURL, options: .atomic)</code></pre>
 <li>restored task retains <code>dismissedAt</code> and is excluded from pill candidates</li>
 <li>retry after dismissal reuses the transcript and clears the old dismissal</li>
 <li>a new failure occurrence for the same file starts undismissed</li>
-<li><code>remove</code> deletes a manual checkpoint and leaves nothing restorable</li>
-<li>a stale dismissal cannot dismiss a newer failure occurrence</li>
-<li>dismissing <code>.unavailable</code> succeeds without requiring a checkpoint</li>
+<li><code>remove</code> deletes a manual checkpoint, clears <code>failedAnalyses</code>, and leaves nothing restorable</li>
+<li>a stale <code>failedAt</code> cannot dismiss or remove a newer occurrence</li>
+<li>dismissing <code>.unavailable</code> succeeds without a disk write and leaves no tier-5 entry</li>
 <li>persistence failure leaves both durable state and the published snapshot unchanged</li>
 </ul>
 <p><strong>Pill candidates:</strong></p>
@@ -224,7 +353,7 @@ try? data.write(to: storeURL, options: .atomic)</code></pre>
 <li>dismissed failures excluded</li>
 <li>active progress and an action-required failure render simultaneously</li>
 </ul>
-<p><strong>Watchdog:</strong></p>
+<p><strong>Watchdog</strong> (Phase 2b):</p>
 <ul>
 <li>no-progress heartbeat trips at the threshold</li>
 <li>slow-but-advancing progress does not trip</li>
@@ -238,8 +367,9 @@ try? data.write(to: storeURL, options: .atomic)</code></pre>
 <h2 id="risks">Risks</h2>
 <ul>
 <li><strong>Watchdog false positives.</strong> Five minutes is a policy guess. If real devices show heartbeat gaps approaching it — a very long content-analysis chunk on a cold model — healthy work will be killed and retried. The threshold is a named constant so it can move without a redesign.</li>
-<li><strong>Uncooperative teardown.</strong> The retry guard depends on observing teardown. If neither WhisperKit nor Foundation Models exposes a reliable completion signal after cancellation, tasks will settle at <code>.manual</code> more often than intended. That is the safe direction, but it means some stalls need a manual tap that the design intends to handle automatically.</li>
-<li><strong><code>AnalysisStateManager</code> size.</strong> This work adds a watchdog and generation identity to a file already 1,406 lines over a 800-line cap. The projection is extracted deliberately; the watchdog should be too, or the file gets worse.</li>
+<li><strong>Uncooperative teardown.</strong> The retry guard depends on observing teardown, and <code>cancelTranscription()</code> already awaits the task it cancels. If neither WhisperKit nor Foundation Models exposes a reliable post-cancellation signal, Phase 2b ships with automatic retry disabled and every stall settling at <code>.manual</code>. That is the safe direction, but it reduces what the watchdog buys.</li>
+<li><strong><code>AnalysisStateManager</code> size.</strong> The file is 1,406 lines. This work adds recovery-snapshot accessors, and Phase 2b adds a watchdog and generation identity. The projection is extracted deliberately; the watchdog should be extracted too, or the file gets worse.</li>
 <li><strong>Ordering divergence between pill and center</strong> is intentional but is the kind of thing a future reader will "fix". The rationale is recorded above.</li>
+<li><strong><code>AnalyzerView</code> lingers through Phase 1</strong> carrying Library Intelligence behind one entry point. If <code>task_34b6360c</code> is not picked up, that is a half-migrated screen left in the app.</li>
 </ul></main>
 </div></body></html>
