@@ -46,20 +46,30 @@ struct CreateStartBar: View {
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.list)
         .padding(.bottom, TranceSpacing.tabBarClearance)
-        .background {
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: Color.bgPrimary.opacity(0.94), location: 0.24),
-                    .init(color: Color.bgPrimary, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .padding(.top, -TranceSpacing.content)
+        .background(alignment: .top) {
+            // The fade is a fixed strip above the bar, not a fraction of the
+            // whole backing. As a fraction it scaled with `tabBarClearance`, so
+            // full opacity landed below the first text baseline and the control
+            // tray showed through the words.
+            VStack(spacing: 0) {
+                LinearGradient(
+                    colors: [.clear, Color.bgPrimary],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: Self.backingFadeHeight)
+
+                Color.bgPrimary
+            }
+            .padding(.top, -Self.backingFadeHeight)
             .ignoresSafeArea(edges: .bottom)
         }
     }
+
+    /// Height of the fade above the bar. Independent of the bar's own height so
+    /// the ramp always finishes before the content starts, whatever the
+    /// mini-player does to `tabBarClearance`.
+    private static let backingFadeHeight: CGFloat = 40
 
     // MARK: - Copy
 

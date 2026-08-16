@@ -70,56 +70,6 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
-### ERR-016 — Create's start bar renders its text on top of the control tray
-
-- **Date discovered:** 2026-08-16
-- **Status:** identified
-- **Severity:** low
-- **Area:** Create tab / layout
-
-**Symptom**
-On the Create tab, "Ready to begin", the summary line ("Spiral · Inward") and the
-trailing percentage are drawn over the Strength and Duration tiles of the control tray.
-Two runs of text occupy the same pixels and neither is legible. Reproduced on
-iPhone 17 Pro simulator, iOS 26, Visuals segment, dark appearance.
-
-**Where**
-`Ilumionate/Create/CreateStartBar.swift:49-61` — the bar's background gradient.
-`Ilumionate/Create/CreateView.swift:79` — where the bar is attached as a bottom
-`safeAreaInset`.
-
-**Reproduction**
-1. Launch the app, open the Create tab.
-2. Select the Visuals segment (the default).
-3. Observe the region just above the "Begin Visuals" button.
-
-**Root cause**
-The bar's background is a gradient running `.clear` at location 0 → `bgPrimary.opacity(0.94)`
-at 0.24 → opaque at 1, and it is pushed further up by `.padding(.top, -TranceSpacing.content)`.
-`safeAreaInset` reserves scroll space for the bar's *layout* height, so the tray does not
-scroll under the opaque part — but the bar's text sits inside the top quarter, which is
-transparent by construction. Anything behind that band shows through the text.
-
-The fade itself is deliberate; the mistake is placing text in the faded region rather than
-below it.
-
-**Proposed fix**
-Move the fade above the content: either give the `HStack` its own opaque backing, or shift
-the gradient stops so full opacity is reached before the first text baseline (make the
-`.clear` → opaque ramp finish by ~0.1 and lengthen the negative top padding to keep the
-same visual softness).
-
-**Risks / blockers**
-`TranceSpacing.tabBarClearance` is applied both inside `CreateStartBar` and on the
-ScrollView content in `CreateView`, so changing the bar's height affects both; verify the
-Flash, Colour and Bilateral segments too, since `summary` and `trailingValue` are longer
-there and may wrap differently.
-
-**Discovered while** auditing toolbar chrome for nested-container styling; unrelated to that
-change, so nothing here was modified.
-
----
-
 ### ERR-015 — Six remaining view files compile into the app but nothing presents them
 
 - **Date discovered:** 2026-08-15
@@ -470,6 +420,73 @@ transcript, which the suite does not currently have.
 ---
 
 ## Resolved
+
+### ERR-016 — Create's start bar renders its text on top of the control tray
+
+- **Date discovered:** 2026-08-16
+- **Status:** completed
+- **Severity:** low
+- **Area:** Create tab / layout
+
+**Symptom**
+On the Create tab, "Ready to begin", the summary line ("Spiral · Inward") and the
+trailing percentage are drawn over the Strength and Duration tiles of the control tray.
+Two runs of text occupy the same pixels and neither is legible. Reproduced on
+iPhone 17 Pro simulator, iOS 26, Visuals segment, dark appearance.
+
+**Where**
+`Ilumionate/Create/CreateStartBar.swift:49-61` — the bar's background gradient.
+`Ilumionate/Create/CreateView.swift:79` — where the bar is attached as a bottom
+`safeAreaInset`.
+
+**Reproduction**
+1. Launch the app, open the Create tab.
+2. Select the Visuals segment (the default).
+3. Observe the region just above the "Begin Visuals" button.
+
+**Root cause**
+The bar's background is a gradient running `.clear` at location 0 → `bgPrimary.opacity(0.94)`
+at 0.24 → opaque at 1, and it is pushed further up by `.padding(.top, -TranceSpacing.content)`.
+`safeAreaInset` reserves scroll space for the bar's *layout* height, so the tray does not
+scroll under the opaque part — but the bar's text sits inside the top quarter, which is
+transparent by construction. Anything behind that band shows through the text.
+
+The fade itself is deliberate; the mistake is placing text in the faded region rather than
+below it.
+
+**Proposed fix**
+Move the fade above the content: either give the `HStack` its own opaque backing, or shift
+the gradient stops so full opacity is reached before the first text baseline (make the
+`.clear` → opaque ramp finish by ~0.1 and lengthen the negative top padding to keep the
+same visual softness).
+
+**Risks / blockers**
+`TranceSpacing.tabBarClearance` is applied both inside `CreateStartBar` and on the
+ScrollView content in `CreateView`, so changing the bar's height affects both; verify the
+Flash, Colour and Bilateral segments too, since `summary` and `trailingValue` are longer
+there and may wrap differently.
+
+**Discovered while** auditing toolbar chrome for nested-container styling; unrelated to that
+change, so nothing here was modified.
+
+**Resolution** _(2026-08-16)_
+`CreateStartBar`'s backing is now a fixed-height fade strip stacked above an opaque
+`Color.bgPrimary`, rather than one gradient spanning the whole background with proportional
+stops. The fade lives entirely in the region above the bar, so it always finishes before the
+first text baseline no matter how tall the bar gets.
+
+The proportional stops were the root cause: `location: 0.24` is 24% of a background whose
+height includes `tabBarClearance` (100pt minimum, more with the mini-player showing). That
+put full opacity roughly 60pt down while the first baseline sits about 32pt down, so the
+text was inside the transparent ramp by construction — and it got worse whenever the
+mini-player grew the clearance.
+
+Verified on iPhone 17 Pro simulator, iOS 26, dark appearance: text legible on the Visuals
+and Flash segments, which between them cover both branches of `summary`/`trailingValue`
+(Colour and Bilateral share the Flash branch). Scrolled the tray to confirm all six tiles
+and the Audio row still clear the bar, so `safeAreaInset` reservation is unaffected.
+
+---
 
 ### ERR-014 — Failed analysis tasks persist and accumulate in the Dynamic Island
 
