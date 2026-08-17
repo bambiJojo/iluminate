@@ -46,6 +46,11 @@ nonisolated enum AIGenerationDiagnosis {
         /// pressure, or another passing condition. Nothing to do with this
         /// recording, and it will work later untouched.
         case systemBusy
+        /// Too many requests too quickly, which a queue of files does by
+        /// construction. Like `.systemBusy` it is nothing to do with the
+        /// recording, but unlike it, an immediate retry actively hurts:
+        /// the second request lands inside the same limit.
+        case rateLimited
         case other
 
         /// Only a context overflow is plausibly fixed by the shorter prompt.
@@ -54,6 +59,9 @@ nonisolated enum AIGenerationDiagnosis {
             switch self {
             case .contextWindow, .other: return true
             case .safetyHostUnavailable, .guardrail, .assetsUnavailable, .systemBusy: return false
+            // Retrying into an active rate limit cannot succeed and adds to
+            // the request count that caused it.
+            case .rateLimited: return false
             }
         }
 
@@ -65,7 +73,7 @@ nonisolated enum AIGenerationDiagnosis {
         /// both attempts now and succeeds unprompted in ten minutes.
         var isTransient: Bool {
             switch self {
-            case .systemBusy: return true
+            case .systemBusy, .rateLimited: return true
             case .safetyHostUnavailable, .guardrail, .contextWindow, .assetsUnavailable, .other:
                 return false
             }
@@ -84,6 +92,8 @@ nonisolated enum AIGenerationDiagnosis {
                 return "The on-device AI model isn't ready yet, so keyword analysis was used."
             case .systemBusy:
                 return "The device was busy, so keyword analysis was used. Analysing again later should give a fuller result."
+            case .rateLimited:
+                return "On-device AI was asked for too much at once, so keyword analysis was used. Analysing again later should give a fuller result."
             case .other:
                 return "On-device AI didn't complete, so keyword analysis was used."
             }
@@ -100,6 +110,12 @@ nonisolated enum AIGenerationDiagnosis {
         // Gating the check on `guardrailViolation` missed the second form
         // entirely, classifying it `.other`, which is retryable, and spending a
         // second full round-trip on a failure that could not resolve.
+        // Checked ahead of both, because the wrapped form arrives inside a
+        // failed safety-classifier query and carries "Failed model manager
+        // query" and "SensitiveContentAnalysisML" too. Matched later it reads
+        // as a broken safety host: neither retryable nor transient, which
+        // strands a file that would analyse fine in a minute.
+        if mentionsRateLimit(text) { return .rateLimited }
         if mentionsBusySystem(text) { return .systemBusy }
         if mentionsSafetyHostFailure(text) { return .safetyHostUnavailable }
 
@@ -139,6 +155,16 @@ nonisolated enum AIGenerationDiagnosis {
     /// bracketed state name ("StandardGameMode" on the device that surfaced
     /// this) are matched too, since the numeric code is not documented and may
     /// not be the only one used.
+    /// Both observed forms: the bare `rateLimited` case thrown by
+    /// `LanguageModelSession.respond`, and the wrapped `GenerativeError`
+    /// surfaced through the safety classifier. The numeric code is matched too
+    /// in case the wording changes, and the wording in case the code does.
+    private static func mentionsRateLimit(_ text: String) -> Bool {
+        text.contains("rateLimited")
+            || text.localizedCaseInsensitiveContains("rate limited")
+            || text.contains("Code=1010000")
+    }
+
     private static func mentionsBusySystem(_ text: String) -> Bool {
         text.contains("ModelManagerError Code=1013")
             || text.contains("Not executed due to current system state")

@@ -241,7 +241,15 @@ actor AIAnalysisManager {
     }
 
     private func logCompletedAnalysis(_ result: AnalysisResult) {
-        Log.analysis.info("✅ AI Analysis completed")
+        // This fires for both paths. Announcing "AI Analysis completed" two
+        // lines under "🔑 Keyword fallback" credits the model for work it was
+        // refused the chance to do — the same dishonesty the badge fix in
+        // ERR-006 removed from the UI.
+        if result.usedKeywordFallback {
+            Log.analysis.info("✅ Analysis completed (keyword fallback — AI did not run)")
+        } else {
+            Log.analysis.info("✅ AI Analysis completed")
+        }
         Log.analysis.info("📊 Content type: \(result.contentType.rawValue), Mood: \(result.mood.rawValue)")
         Log.analysis.info("🔬 Frequency range: \(result.suggestedFrequencyRange)")
         Log.analysis.info("🎯 Key moments: \(result.keyMoments.count)")

@@ -113,7 +113,9 @@ struct AIGenerationDiagnosisTests {
     func transiencePolicyIsExplicit() {
         let transient = AIGenerationDiagnosis.Kind.allCases.filter(\.isTransient)
 
-        #expect(Set(transient) == [.systemBusy])
+        // Both are the system declining for now rather than failing at the
+        // work, so the same recording succeeds later untouched.
+        #expect(Set(transient) == [.systemBusy, .rateLimited])
     }
 
     @Test("An unrecognised error stays retryable rather than being written off")
@@ -188,5 +190,78 @@ struct AIGenerationDiagnosisTests {
 
         #expect(result.usedKeywordFallback)
         #expect(result.keywordFallbackReason == nil)
+    }
+}
+
+// MARK: - Rate limiting
+
+/// Device text captured verbatim on 2026-08-17 while the analysis queue worked
+/// through twelve resumed files in the background.
+extension AIGenerationDiagnosisTests {
+
+    private struct RateLimitStub: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    /// The bare form, as thrown by `LanguageModelSession.respond`.
+    private static let rateLimitFailure = RateLimitStub(description: """
+    rateLimited(FoundationModels.LanguageModelSession.GenerationError.Context(\
+    debugDescription: "Request has been rate limited. Please try again later.\\n\\n\
+    If you are using streaming responses in a background request, consider using \
+    non-streaming requests in background activities to reduce the likelihood of \
+    rate limiting.", underlyingErrors: [], errorDescriptionOverride: nil))
+    """)
+
+    /// The wrapped form, where the rate limit surfaces through the safety
+    /// classifier's model-manager query.
+    private static let rateLimitedSafetyQuery = RateLimitStub(description: """
+    Error Domain=com.apple.SensitiveContentAnalysisML Code=15 "Failed model manager \
+    query for model com.apple.fm.language.instruct_300m.safety: Rate limited. Wait a \
+    little bit and then try again." UserInfo={NSUnderlyingError=0x11d244f00 \
+    {Error Domain=com.apple.GenerativeFunctionsFoundation.GenerativeError \
+    Code=1010000 "Rate limited. Wait a little bit and then try again."}}
+    """)
+
+    @Test("Rate limiting is identified rather than filed as unknown")
+    func rateLimitIsIdentified() {
+        let kind = AIGenerationDiagnosis.classify(Self.rateLimitFailure)
+
+        #expect(kind == .rateLimited)
+        // Retrying immediately sends a second request into an active rate
+        // limit: it cannot succeed and makes the limit worse.
+        #expect(kind.isRetryable == false)
+        // But the same file will analyse fine once the limit clears.
+        #expect(kind.isTransient)
+    }
+
+    /// The wrapped form also matches `Failed model manager query` and
+    /// `SensitiveContentAnalysisML`, so without an earlier rate-limit check it
+    /// reads as a broken safety host — not retryable *and* not transient, which
+    /// strands the file.
+    @Test("A rate-limited safety query is not mistaken for a broken safety host")
+    func rateLimitedSafetyQueryIsNotASafetyHostFailure() {
+        let kind = AIGenerationDiagnosis.classify(Self.rateLimitedSafetyQuery)
+
+        #expect(kind == .rateLimited)
+        #expect(kind != .safetyHostUnavailable)
+        #expect(kind.isTransient)
+    }
+
+    /// Regression guard: adding the rate-limit check ahead of the others must
+    /// not steal the Game Mode case.
+    @Test("Game Mode still classifies as a busy system after the rate-limit check")
+    func gameModeStillClassifiesAsSystemBusy() {
+        #expect(AIGenerationDiagnosis.classify(Self.gameModeFailure) == .systemBusy)
+    }
+
+    @Test("A safety-host failure with no rate limit still reads as a host failure")
+    func plainSafetyHostFailureIsUnaffected() {
+        let error = RateLimitStub(description: """
+        Error Domain=com.apple.SensitiveContentAnalysisML Code=15 "Failed model \
+        manager query for model com.apple.fm.language.instruct_300m.safety: \
+        hostFailed"
+        """)
+
+        #expect(AIGenerationDiagnosis.classify(error) == .safetyHostUnavailable)
     }
 }
