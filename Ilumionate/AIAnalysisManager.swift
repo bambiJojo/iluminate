@@ -205,15 +205,31 @@ actor AIAnalysisManager {
             ).content
         }
         currentTask = task
+        // Captured before awaiting the result: by the time a long request
+        // returns the app may have changed state, and the question is what the
+        // state was when the model was *asked*.
+        let activationState = await MainActor.run { PlatformApplication.activationState }
         do {
             let response = try await task.value
             currentTask = nil
+            await AIAttemptLog.shared.record(AIAttemptRecord(
+                filename: audioFile.filename,
+                activationState: activationState,
+                diagnosis: nil,
+                at: Date()
+            ))
             return .generated(response)
         } catch is CancellationError {
             currentTask = nil
             throw CancellationError()
         } catch {
             let diagnosis = AIGenerationDiagnosis.classify(error)
+            await AIAttemptLog.shared.record(AIAttemptRecord(
+                filename: audioFile.filename,
+                activationState: activationState,
+                diagnosis: diagnosis,
+                at: Date()
+            ))
             Log.analysis.info("❌ AI generation gave up (\(diagnosis.rawValue)) — using keyword fallback. Reason: \(String(describing: error))")
             if diagnosis.isTransient {
                 Log.analysis.info("↺ Transient — analysing this file again later should succeed")
