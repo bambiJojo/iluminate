@@ -220,6 +220,14 @@ nonisolated struct AnalysisResult: Codable, Sendable {
     var techniqueDetection: TechniqueDetectionResult?
     var transcriptAnalysis: TranscriptAnalysis?
     let discoveredMetadata: AudioTrackMetadata?
+    /// Which failure produced this result by keyword classification, or `nil`
+    /// when the model produced it.
+    ///
+    /// `aiSummary` already carries a human sentence, but nothing could ask
+    /// "was this transient?" without matching English — and that distinction
+    /// decides whether the file is worth analysing again. Optional so the
+    /// results stored before this field decode unchanged.
+    let aiFallbackKind: AIGenerationDiagnosis.Kind?
 
     nonisolated init(mood: Mood, energyLevel: Double, suggestedFrequencyRange: ClosedRange<Double>,
          suggestedIntensity: Double, suggestedColorTemperature: Double? = nil,
@@ -233,7 +241,8 @@ nonisolated struct AnalysisResult: Codable, Sendable {
          prosodicProfile: ProsodicProfile? = nil,
          techniqueDetection: TechniqueDetectionResult? = nil,
          transcriptAnalysis: TranscriptAnalysis? = nil,
-         discoveredMetadata: AudioTrackMetadata? = nil) {
+         discoveredMetadata: AudioTrackMetadata? = nil,
+         aiFallbackKind: AIGenerationDiagnosis.Kind? = nil) {
         self.mood = mood
         self.energyLevel = energyLevel
         self.suggestedFrequencyRange = suggestedFrequencyRange
@@ -252,6 +261,7 @@ nonisolated struct AnalysisResult: Codable, Sendable {
         self.techniqueDetection = techniqueDetection
         self.transcriptAnalysis = transcriptAnalysis
         self.discoveredMetadata = discoveredMetadata
+        self.aiFallbackKind = aiFallbackKind
     }
 }
 

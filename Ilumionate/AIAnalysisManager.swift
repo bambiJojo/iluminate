@@ -758,7 +758,10 @@ private extension AIAnalysisManager {
             recommendedPreset: presetName,
             contentType: contentType,
             hypnosisMetadata: hypnosisMetadata,
-            discoveredMetadata: verifiedMetadata
+            discoveredMetadata: verifiedMetadata,
+            // Recorded so a later pass can ask whether this is worth
+            // re-analysing without matching the prose in `aiSummary`.
+            aiFallbackKind: diagnosis
         )
 
         let expertAnalysis = ExpertAnalysisBuilder().build(
@@ -784,7 +787,10 @@ private extension AIAnalysisManager {
             prosodicProfile: result.prosodicProfile,
             techniqueDetection: result.techniqueDetection,
             transcriptAnalysis: result.transcriptAnalysis,
-            discoveredMetadata: result.discoveredMetadata
+            discoveredMetadata: result.discoveredMetadata,
+            // Field-by-field rebuild: anything omitted here is silently lost,
+            // and losing this one turns a retryable file into a settled one.
+            aiFallbackKind: result.aiFallbackKind
         )
     }
 
