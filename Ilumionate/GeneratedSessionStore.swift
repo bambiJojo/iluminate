@@ -10,7 +10,10 @@ import os
 final class GeneratedSessionStore {
     static let shared = GeneratedSessionStore()
 
-    private let directoryURL: URL
+    /// `nonisolated` so the Analysis Task Center can build session URLs and
+    /// decode scores off the main actor. It is an immutable `Sendable` value;
+    /// everything that mutates state (the gold-match cache) stays isolated.
+    private nonisolated let directoryURL: URL
     private let onSessionSaved: () -> Void
     private let goldSessionProvider: (AudioFile) -> LightSession?
 
@@ -48,7 +51,7 @@ final class GeneratedSessionStore {
         self.goldSessionProvider = goldSessionProvider
     }
 
-    func sessionURL(forAudioFileID id: UUID) -> URL {
+    nonisolated func sessionURL(forAudioFileID id: UUID) -> URL {
         directoryURL.appending(path: "\(id.uuidString).json")
     }
 

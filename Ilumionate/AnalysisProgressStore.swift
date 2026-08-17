@@ -111,6 +111,13 @@ actor AnalysisProgressStore {
         checkpoints.values.filter { $0.manualRecovery == nil }
     }
 
+    /// Every checkpoint, pending and manual-recovery alike. `allPending()` and
+    /// `manualRecoveryCheckpoints()` each filter one way; the task projection
+    /// needs both.
+    func allCheckpoints() -> [AnalysisCheckpoint] {
+        Array(checkpoints.values)
+    }
+
     func manualRecoveryCheckpoints() -> [AnalysisCheckpoint] {
         checkpoints.values
             .filter { $0.manualRecovery != nil }
