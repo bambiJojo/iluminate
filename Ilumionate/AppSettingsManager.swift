@@ -18,9 +18,15 @@ enum AppSettingsManager {
         static let autoLockEnabled = "autoLockEnabled"
         static let userFrequencyMultiplier = "userFrequencyMultiplier"
         static let countdownDuration = "countdownDuration"
+        static let steadyLightEnabled = "steadyLightEnabled"
+        static let flashTint = "flashTint"
+        static let focusSpotsEnabled = "focusSpotsEnabled"
+        static let focusSpots = "focusSpots"
         static let mindMachineEnabled = "mindMachineEnabled"
         static let listeningHistoryEnabled = "listeningHistoryEnabled"
         static let nsfwSourcesEnabled = "nsfwSourcesEnabled"
+        /// Retired library key. Kept only so reset can clear pre-migration data;
+        /// current library reads and writes go through `AudioLibraryStore`.
         static let audioFiles = "audioFiles"
         static let sessionHistory = "sessionHistory_v1"
         static let lastSessionId = "lastSessionId"
@@ -112,8 +118,10 @@ enum AppSettingsManager {
         defaults: UserDefaults = .standard,
         fileManager: FileManager = .default,
         exportDirectory: URL = FileManager.default.temporaryDirectory,
+        audioLibraryStorage: AudioLibraryStorage = .standard,
         analysisPreferencesSnapshot: AnalysisPreferences.Snapshot? = nil
-    ) throws -> URL {
+    ) async throws -> URL {
+        let audioFiles = await AudioLibraryStore.allFiles(storage: audioLibraryStorage)
         let snapshot = ExportSnapshot(
             exportedAt: Date(),
             profile: ExportProfile(
@@ -135,7 +143,7 @@ enum AppSettingsManager {
             ),
             analysisPreferences: analysisPreferencesSnapshot ?? AnalysisPreferences.shared.snapshot,
             sessionHistory: sessionHistory(defaults: defaults),
-            audioLibrary: audioLibrary(defaults: defaults),
+            audioLibrary: audioLibrary(files: audioFiles),
             streaming: ExportStreaming(
                 soundCloudConfigured: !(defaults.string(forKey: Key.soundCloudClientId) ?? "").isEmpty
                     && !(defaults.string(forKey: Key.soundCloudSecret) ?? "").isEmpty,
@@ -165,6 +173,10 @@ enum AppSettingsManager {
         defaults.set(true, forKey: Key.autoLockEnabled)
         defaults.set(1.0, forKey: Key.userFrequencyMultiplier)
         defaults.set(3, forKey: Key.countdownDuration)
+        defaults.set(false, forKey: Key.steadyLightEnabled)
+        defaults.removeObject(forKey: Key.flashTint)
+        defaults.set(false, forKey: Key.focusSpotsEnabled)
+        defaults.removeObject(forKey: Key.focusSpots)
         defaults.set(true, forKey: Key.mindMachineEnabled)
         defaults.set(false, forKey: Key.listeningHistoryEnabled)
         defaults.set(false, forKey: Key.nsfwSourcesEnabled)
@@ -195,9 +207,10 @@ enum AppSettingsManager {
         defaults: UserDefaults = .standard,
         fileManager: FileManager = .default,
         documentsDirectory: URL = URL.documentsDirectory,
+        audioLibraryStorage: AudioLibraryStorage = .standard,
         resetAnalysisPreferences: Bool = true,
         clearSharedHistory: Bool = true
-    ) throws {
+    ) async throws {
         if clearSharedHistory {
             SessionHistoryManager.shared.clearHistory()
         } else {
@@ -219,6 +232,8 @@ enum AppSettingsManager {
             Key.soundCloudAccessToken
         ]
         keysToRemove.forEach(defaults.removeObject(forKey:))
+
+        try await AudioLibraryStore.deleteLibrary(storage: audioLibraryStorage)
 
         removeKeys(withPrefix: Key.streamingTrackPrefix, defaults: defaults)
         resetPreferences(
@@ -247,14 +262,7 @@ enum AppSettingsManager {
         return entries
     }
 
-    private static func audioLibrary(defaults: UserDefaults) -> ExportAudioLibrary {
-        guard
-            let data = defaults.data(forKey: Key.audioFiles),
-            let files = try? JSONDecoder().decode([AudioFile].self, from: data)
-        else {
-            return ExportAudioLibrary(fileCount: 0, fileNames: [])
-        }
-
+    private static func audioLibrary(files: [AudioFile]) -> ExportAudioLibrary {
         return ExportAudioLibrary(
             fileCount: files.count,
             fileNames: files.map(\.filename).sorted()

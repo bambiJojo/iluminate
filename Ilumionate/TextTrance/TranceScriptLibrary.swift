@@ -77,9 +77,26 @@ enum TranceScriptLibrary {
             }
     }
 
+    /// Decoded main-bundle scripts, kept because the resources cannot change.
+    ///
+    /// Reading and parsing all ten happened on every call, and
+    /// `HomeView.loadReadingContinuation()` calls this on each appear, on the
+    /// main actor.
+    private static var cachedMainBundleScripts: [TranceScript]?
+
     /// Discover bundled scripts shipped in the app bundle. Non-script JSON
     /// (e.g. light-session files) simply fails decoding and is excluded.
+    ///
+    /// An injected bundle (tests) bypasses the cache so fixtures stay independent.
     static func bundled(in bundle: Bundle = .main) -> [TranceScript] {
+        guard bundle == .main else { return decodeBundled(in: bundle) }
+        if let cachedMainBundleScripts { return cachedMainBundleScripts }
+        let scripts = decodeBundled(in: bundle)
+        cachedMainBundleScripts = scripts
+        return scripts
+    }
+
+    private static func decodeBundled(in bundle: Bundle) -> [TranceScript] {
         let scripts = bundledJSONScripts(in: bundle, subdirectory: bundledScriptsSubdirectory)
         if scripts.isEmpty == false { return scripts }
 

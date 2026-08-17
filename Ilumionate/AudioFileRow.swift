@@ -8,7 +8,6 @@ import SwiftUI
 
 struct AudioFileRow: View {
     let file: AudioFile
-    let audioManager: AudioManager
     let analysisManager: AnalysisStateManager
     let isSelectionMode: Bool
     let isSelected: Bool
@@ -176,10 +175,19 @@ struct AudioFileRow: View {
     // MARK: - Secondary Actions (context menu)
 
     /// All per-file actions live here. Long-press (or tap-and-hold) reveals them.
-    /// A context menu works inside the LazyVStack list, unlike `.swipeActions`
-    /// which only functions inside a `List`.
+    /// Delete leads because it is the action people hunt for; it is also on a
+    /// left swipe (see `SwipeToDeleteRow`), which this menu backs up on pointer
+    /// platforms where swiping is awkward.
     @ViewBuilder
     private var rowMenu: some View {
+        Button(role: .destructive) {
+            onDelete()
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+
+        Divider()
+
         Button {
             onPlay()
         } label: {
@@ -225,14 +233,6 @@ struct AudioFileRow: View {
             onRename()
         } label: {
             Label("Rename", systemImage: "pencil")
-        }
-
-        Divider()
-
-        Button(role: .destructive) {
-            onDelete()
-        } label: {
-            Label("Delete", systemImage: "trash")
         }
     }
 

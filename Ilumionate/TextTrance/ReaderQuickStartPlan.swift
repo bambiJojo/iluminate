@@ -42,7 +42,7 @@ struct ReaderQuickStartPlan: Identifiable {
                 binauralEnabled: false,
                 beatFrequency: 10,
                 postHandoffDuration: 600,
-                subliminalEnabled: true,
+                subliminalEnabled: false,   // see TextTranceSetupView for rationale
                 subliminalSpeed: .medium,
                 attentionGateEnabled: false,
                 speedTraining: savedPreset.speedTraining,
@@ -52,6 +52,15 @@ struct ReaderQuickStartPlan: Identifiable {
     }
 
     func makeSession(progressStore: ReaderProgressStore) -> TextTranceSession {
+        // This path skips Setup entirely, so the mode has to be applied here too
+        // or a one-tap start ignores it.
+        let mode = ReaderPresetStore.shared
+            .preset(forScriptId: script.id)
+            .resolvedMode(for: script)
+        let settings = self.settings.normalized(
+            for: mode,
+            supportedArcs: script.supportedArcs
+        )
         let useLight = settings.arc == .handoff && settings.lightEnabled
         return TextTranceSession(
             script: script,

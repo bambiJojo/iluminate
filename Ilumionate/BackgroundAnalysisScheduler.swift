@@ -10,6 +10,62 @@
 import Foundation
 import os
 
+enum BackgroundAnalysisSystemTaskKind {
+    case deferredProcessing
+    case continuedProcessing
+}
+
+enum BackgroundAnalysisSchedulingSource {
+    case explicitUserAction
+    case foregroundRestoration
+
+    var presentsContinuedProcessingUI: Bool {
+        switch self {
+        case .explicitUserAction: true
+        case .foregroundRestoration: false
+        }
+    }
+}
+
+/// Serializes completion across the normal and expiration paths. BackgroundTasks
+/// only expects a task to be completed once, but expiration races the operation's
+/// normal unwind.
+@MainActor
+final class BackgroundAnalysisTaskFinisher {
+    private let kind: BackgroundAnalysisSystemTaskKind
+    private let completeSystemTask: (Bool) -> Void
+    private(set) var isFinished = false
+
+    init(
+        kind: BackgroundAnalysisSystemTaskKind,
+        completeSystemTask: @escaping (Bool) -> Void
+    ) {
+        self.kind = kind
+        self.completeSystemTask = completeSystemTask
+    }
+
+    @discardableResult
+    func finish(workSucceeded: Bool) -> Bool {
+        guard isFinished == false else { return false }
+        isFinished = true
+        completeSystemTask(systemSuccess(workSucceeded: workSucceeded))
+        return true
+    }
+
+    private func systemSuccess(workSucceeded: Bool) -> Bool {
+        switch kind {
+        case .deferredProcessing:
+            // BGProcessingTask can use failure to inform future scheduling.
+            return workSucceeded
+        case .continuedProcessing:
+            // A continued task is a one-shot system presentation; false asks
+            // iOS to preserve a visible failure, not to retry the analysis.
+            // Durable checkpoints and deferred processing own recovery instead.
+            return true
+        }
+    }
+}
+
 #if os(iOS)
 import BackgroundTasks
 import UIKit
@@ -55,10 +111,14 @@ final class BackgroundAnalysisScheduler {
 
     /// Schedule both the immediate iOS 26 continuation and a deferred recovery
     /// request. The continued request is only legal while the app is foregrounded.
-    func schedule(for audioFiles: [AudioFile]) {
+    func schedule(
+        for audioFiles: [AudioFile],
+        source: BackgroundAnalysisSchedulingSource = .explicitUserAction
+    ) {
         scheduleDeferredProcessing()
 
         #if !targetEnvironment(macCatalyst)
+        guard source.presentsContinuedProcessingUI else { return }
         guard UIApplication.shared.applicationState == .active else { return }
         guard !hasActiveContinuedRequest else { return }
 
@@ -139,13 +199,16 @@ final class BackgroundAnalysisScheduler {
                 await analysisFinished()
                 return
             }
-            schedule(for: pending.map(\.audioFile))
+            schedule(
+                for: pending.map(\.audioFile),
+                source: .foregroundRestoration
+            )
             _ = await AnalysisStateManager.shared.resumeInterruptedAnalyses(priority: .utility)
         }
     }
 
     private func handle(_ task: BGProcessingTask) {
-        runAnalysis(for: task)
+        runAnalysis(for: task, kind: .deferredProcessing)
     }
 
     #if !targetEnvironment(macCatalyst)
@@ -154,6 +217,7 @@ final class BackgroundAnalysisScheduler {
         continuedRequestIdentifier = task.identifier
         runAnalysis(
             for: task,
+            kind: .continuedProcessing,
             progress: task.progress,
             updateTitle: task.updateTitle
         )
@@ -215,9 +279,13 @@ final class BackgroundAnalysisScheduler {
 
     private func runAnalysis(
         for systemTask: BGTask,
+        kind: BackgroundAnalysisSystemTaskKind,
         progress: Progress? = nil,
         updateTitle: ((String, String) -> Void)? = nil
     ) {
+        let finisher = BackgroundAnalysisTaskFinisher(kind: kind) { success in
+            systemTask.setTaskCompleted(success: success)
+        }
         let operation = Task { @MainActor [weak self] in
             let initialPendingCount = max(
                 await AnalysisProgressStore.shared.allPending().count,
@@ -256,7 +324,7 @@ final class BackgroundAnalysisScheduler {
             if let progress, succeeded {
                 progress.completedUnitCount = progress.totalUnitCount
             }
-            systemTask.setTaskCompleted(success: succeeded)
+            guard finisher.finish(workSucceeded: succeeded) else { return }
 
             if succeeded {
                 await self?.analysisFinished()
@@ -271,6 +339,7 @@ final class BackgroundAnalysisScheduler {
         systemTask.expirationHandler = { [weak self] in
             operation.cancel()
             Task { @MainActor in
+                guard finisher.finish(workSucceeded: false) else { return }
                 AnalysisStateManager.shared.expireBackgroundProcessing()
                 self?.continuedRequestIdentifier = nil
                 self?.hasActiveContinuedRequest = false
@@ -297,8 +366,12 @@ final class BackgroundAnalysisScheduler {
 
     func register() {}
 
-    func schedule(for audioFiles: [AudioFile]) {
+    func schedule(
+        for audioFiles: [AudioFile],
+        source: BackgroundAnalysisSchedulingSource = .explicitUserAction
+    ) {
         _ = audioFiles
+        _ = source
     }
 
     func scheduleDeferredProcessing() {}

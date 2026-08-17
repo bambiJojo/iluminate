@@ -10,9 +10,29 @@ import os
 final class GeneratedSessionStore {
     static let shared = GeneratedSessionStore()
 
-    private let directoryURL: URL
+    /// `nonisolated` so the Analysis Task Center can build session URLs and
+    /// decode scores off the main actor. It is an immutable `Sendable` value;
+    /// everything that mutates state (the gold-match cache) stays isolated.
+    private nonisolated let directoryURL: URL
     private let onSessionSaved: () -> Void
     private let goldSessionProvider: (AudioFile) -> LightSession?
+
+    /// Whether each file matched the bundled catalog, remembered per file.
+    ///
+    /// The default provider runs `KnownAudioCatalog`'s fuzzy match, which folds
+    /// and tokenises strings for every alias of all 54 entries on each call.
+    /// `exists(for:)` reaches it for every file that has no score on disk — the
+    /// common case — and Library asks once per file plus once per visible row,
+    /// on every appear.
+    ///
+    /// Never needs invalidating: a gold match is derived from the file's own
+    /// identity against a bundled catalog that cannot change at runtime, and
+    /// `exists(for:)` consults the disk before it consults this, so a score
+    /// saved later is still seen.
+    /// `nil` inner value means "matched nothing"; an absent key means "not yet
+    /// asked". Caching the score itself rather than a flag means `load(for:)`
+    /// benefits too — it was still running the match on every call.
+    private var goldMatchCache: [UUID: LightSession?] = [:]
 
     init(
         directoryURL: URL = URL.documentsDirectory.appending(
@@ -31,7 +51,7 @@ final class GeneratedSessionStore {
         self.goldSessionProvider = goldSessionProvider
     }
 
-    func sessionURL(forAudioFileID id: UUID) -> URL {
+    nonisolated func sessionURL(forAudioFileID id: UUID) -> URL {
         directoryURL.appending(path: "\(id.uuidString).json")
     }
 
@@ -40,7 +60,7 @@ final class GeneratedSessionStore {
     }
 
     func save(_ session: LightSession, for audioFile: AudioFile) throws {
-        guard goldSessionProvider(audioFile) == nil else {
+        guard hasGoldSession(audioFile) == false else {
             Log.analysis.info("🏅 Preserved bundled gold light score for \(audioFile.filename)")
             return
         }
@@ -58,7 +78,7 @@ final class GeneratedSessionStore {
     }
 
     func load(for audioFile: AudioFile) -> LightSession? {
-        if let goldSession = goldSessionProvider(audioFile) {
+        if let goldSession = goldSession(for: audioFile) {
             return goldSession
         }
 
@@ -71,8 +91,68 @@ final class GeneratedSessionStore {
         return decodeSession(at: url)
     }
 
+    /// Whether a generated score exists, without paying to decode it.
+    ///
+    /// This used to be `load(for:) != nil`, which read the file, JSON-decoded it,
+    /// and on a miss attempted a legacy migration and decoded again — then
+    /// consulted the 830 KB known-audio catalog. Callers hit it once per row
+    /// (`AudioFileRow`) and once per file (`readyCount`), so a library of any
+    /// size spent that on the main actor on every appear.
+    ///
+    /// The cheap checks come first and answer for anything already on disk. Only
+    /// a file with no score anywhere falls through to the catalog.
+    ///
+    /// Trade-off: a present-but-corrupt score now reports `true` here while
+    /// `load(for:)` still returns nil. Badging a row optimistically is the
+    /// better failure than stalling the list.
     func exists(for audioFile: AudioFile) -> Bool {
-        load(for: audioFile) != nil
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: sessionURL(forAudioFileID: audioFile.id).path) {
+            return true
+        }
+        if legacySessionURLs(for: audioFile).contains(where: {
+            fileManager.fileExists(atPath: $0.path)
+        }) {
+            return true
+        }
+        return hasGoldSession(audioFile)
+    }
+
+    /// Disk only — deliberately no catalog fallback.
+    ///
+    /// The "Your Sessions" shelf is about scores generated from the listener's
+    /// own audio, so a bundled gold score does not belong in it. Keeping the
+    /// catalog out also keeps a fuzzy match per file off the main actor during
+    /// Library's derivation, which is what made a 75-file library slow to open.
+    func hasGeneratedScoreOnDisk(for audioFile: AudioFile) -> Bool {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: sessionURL(forAudioFileID: audioFile.id).path) {
+            return true
+        }
+        return legacySessionURLs(for: audioFile).contains {
+            fileManager.fileExists(atPath: $0.path)
+        }
+    }
+
+    /// The bundled catalog score for a file, if one matches.
+    ///
+    /// Exposed for the Analysis Task Center, whose ready enumeration runs the
+    /// disk half off the main actor and cannot reach `load(for:)`. This half is
+    /// an in-memory catalog match backed by `goldMatchCache`, so calling it per
+    /// library file costs nothing after the first pass.
+    func goldSessionIfAny(for audioFile: AudioFile) -> LightSession? {
+        goldSession(for: audioFile)
+    }
+
+    private func goldSession(for audioFile: AudioFile) -> LightSession? {
+        if let cached = goldMatchCache[audioFile.id] { return cached }
+        let matched = goldSessionProvider(audioFile)
+        goldMatchCache[audioFile.id] = matched
+        return matched
+    }
+
+    private func hasGoldSession(_ audioFile: AudioFile) -> Bool {
+        goldSession(for: audioFile) != nil
     }
 
     func delete(for audioFile: AudioFile) {

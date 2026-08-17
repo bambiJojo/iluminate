@@ -14,6 +14,10 @@ struct LibraryCreatorsView: View {
     let audioFiles: [AudioFile]
     @Bindable var engine: LightEngine
 
+    /// Passed straight through to each creator's browse screen — this view owns
+    /// no state, it only groups.
+    var onDelete: ((AudioFile) -> Void)?
+
     /// All unique creator names, sorted. Files with no creator → "Unknown"
     private var creators: [(name: String, files: [AudioFile])] {
         let grouped = Dictionary(grouping: audioFiles) { file -> String in
@@ -43,7 +47,8 @@ struct LibraryCreatorsView: View {
                                 LibraryBrowseView(
                                     title: group.name,
                                     audioFiles: group.files,
-                                    engine: engine
+                                    engine: engine,
+                                    onDelete: onDelete
                                 )
                             } label: {
                                 CreatorRow(name: group.name, count: group.files.count)

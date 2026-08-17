@@ -53,6 +53,14 @@ struct UnifiedPlayerView: View {
             // Layer 1: Background visual surface
             backgroundLayer
 
+            // Layer 1.5: Optional focus spots — holes in the light for the
+            // eye to rest on. Draws only over a lit field.
+            FocusSpotOverlay(
+                mode: viewModel.mode,
+                mindMachineEnabled: viewModel.mindMachineEnabled,
+                lightSyncEnabled: viewModel.lightSyncEnabled
+            )
+
             // Layer 2: Session lock overlay
             SessionLockView {
                 viewModel.stopAll()
@@ -78,12 +86,23 @@ struct UnifiedPlayerView: View {
                 .transition(.opacity)
             }
 
-            // Layer 5: Countdown overlay
+            // Layer 5: Session opening — the threshold arc, or the numeric
+            // countdown when VoiceOver needs something to announce.
             if viewModel.countdownValue != nil || viewModel.countdownMessage != nil {
-                PlayerCountdownOverlay(
-                    count: viewModel.countdownValue,
-                    message: viewModel.countdownMessage
-                )
+                Group {
+                    if let threshold = viewModel.thresholdController, !viewModel.usesNumericCountdown {
+                        ThresholdView(
+                            controller: threshold,
+                            message: viewModel.countdownMessage,
+                            onSkip: viewModel.skipCountdown
+                        )
+                    } else {
+                        PlayerCountdownOverlay(
+                            count: viewModel.countdownValue,
+                            message: viewModel.countdownMessage
+                        )
+                    }
+                }
                 .transition(.opacity)
                 .zIndex(10)
             }
@@ -154,6 +173,12 @@ struct UnifiedPlayerView: View {
         .onChange(of: showingOverflow) { _, open in
             controlsVisibility.isDrawerOpen = open || viewModel.showingTrackList
         }
+        .onChange(of: viewModel.playbackState, initial: true) { _, state in
+            // Anything other than playing keeps the controls up: a paused or
+            // not-yet-started session should never leave the user looking at a
+            // still screen with nothing to touch.
+            controlsVisibility.isPaused = state != .playing
+        }
         .platformStatusBarHidden(!viewModel.showingControls)
         .gesture(
             DragGesture(minimumDistance: 20)
@@ -222,6 +247,15 @@ struct UnifiedPlayerView: View {
                 isPaused: viewModel.playbackState == .paused
             )
 
+        case .visualField:
+            // Reads the view model's live copy, not the mode's snapshot, so the
+            // in-session Strength and Speed tiles take effect immediately.
+            VisualFieldStage(
+                settings: viewModel.visualFieldSettings,
+                fade: viewModel.visualFieldFade,
+                isPaused: viewModel.playbackState != .playing
+            )
+
         case .audioLight:
             EntrainmentBackground(
                 engine: viewModel.engine,
@@ -246,9 +280,7 @@ struct UnifiedPlayerView: View {
         VStack {
             VStack(spacing: TranceSpacing.micro) {
                 if viewModel.mode.hasFrequencyDisplay || viewModel.mode.hasAudioScrubber {
-                    Text(viewModel.formatTime(viewModel.currentTime))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
+                    PlayerElapsedTime(viewModel: viewModel)
                 }
             }
             .padding(.top, TranceSpacing.statusBar)
@@ -398,31 +430,14 @@ struct UnifiedPlayerView: View {
             .opacity(isScrubbing ? 0 : 1)
 
             if isHeroMode {
-                scrubLine
+                PlayerScrubLine(
+                    viewModel: viewModel,
+                    isScrubbing: $isScrubbing,
+                    onInteraction: controlsVisibility.registerInteraction
+                )
             }
         }
         .padding(.bottom, TranceSpacing.statusBar)
-    }
-
-    private var scrubLine: some View {
-        ScrubWhisperLine(
-            fraction: viewModel.progress,
-            prominent: true,
-            onScrub: { _ in
-                if !isScrubbing { isScrubbing = true }
-                controlsVisibility.registerInteraction()
-            },
-            onScrubEnd: { fraction in
-                viewModel.seekByProgress(fraction)
-                isScrubbing = false
-            }
-        ) { fraction in
-            Text(viewModel.formatTime(fraction * viewModel.duration)
-                 + " / " + viewModel.formatTime(viewModel.duration))
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(viewModel.labelColor)
-        }
-        .padding(.horizontal, TranceSpacing.screen)
     }
 
     private func finishSession() {

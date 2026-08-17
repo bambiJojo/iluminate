@@ -15,6 +15,8 @@ struct LibraryFileResultRow: View {
     let onOpenInfo: () -> Void
     var onAddToPlaylist: (() -> Void)?
     var onAnalyze: (() -> Void)?
+    /// Supplied only where the owner of `audioFiles` can act on a delete.
+    var onDelete: (() -> Void)?
 
     var body: some View {
         HStack(spacing: TranceSpacing.inner) {
@@ -73,6 +75,13 @@ struct LibraryFileResultRow: View {
         }
         .padding(.vertical, TranceSpacing.inner)
         .contextMenu {
+            // Delete leads — it is the action people hunt for, and it is also
+            // on a left swipe (see `SwipeToDeleteRow`) which this backs up on
+            // pointer platforms where swiping is awkward.
+            if let onDelete {
+                Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+                Divider()
+            }
             Button("Play", systemImage: "play.fill", action: onPlay)
             Button("Session Info", systemImage: "info.circle", action: onOpenInfo)
             if let onAddToPlaylist {

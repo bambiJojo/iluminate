@@ -12,9 +12,16 @@ struct BambiCloudPlaylistMatchRow: View {
     let downloadError: String?
     let onChoose: () -> Void
     let onDownload: () -> Void
+    /// The library file this row may duplicate, when there is one.
+    let possibleDuplicate: AudioFile?
+    let onUseExisting: () -> Void
+    let onDownloadAnyway: () -> Void
 
+    /// Suppressed while the duplicate choice is showing — that row offers its
+    /// own download action, and two would be one too many.
     private var canDownload: Bool {
-        selectedAudioFile == nil && row.track.audioURL != nil
+        if case .possibleDuplicate = row.status { return false }
+        return selectedAudioFile == nil && row.track.audioURL != nil
     }
 
     var body: some View {
@@ -76,6 +83,26 @@ struct BambiCloudPlaylistMatchRow: View {
                 }
             }
 
+            if case .possibleDuplicate = row.status, let possibleDuplicate {
+                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                    Text("Already in your library as “\(possibleDuplicate.displayName)”")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(.textLight)
+
+                    HStack(spacing: TranceSpacing.inner) {
+                        Button("Use Existing", systemImage: "checkmark.circle", action: onUseExisting)
+                            .buttonStyle(.borderedProminent)
+                            .tint(.roseGold)
+
+                        Button("Keep Both", systemImage: "arrow.down.circle", action: onDownloadAnyway)
+                            .buttonStyle(.bordered)
+                            .tint(.textLight)
+                    }
+                    .font(TranceTypography.body)
+                    .frame(minHeight: 44)
+                }
+            }
+
             if let downloadError {
                 Label(downloadError, systemImage: "exclamationmark.triangle.fill")
                     .font(TranceTypography.caption)
@@ -94,6 +121,7 @@ struct BambiCloudPlaylistMatchRow: View {
         case .missing: "Not matched"
         case .manual: "Selected manually"
         case .downloaded: "Downloaded from the publisher"
+        case .possibleDuplicate: "You may already have this"
         }
     }
 
@@ -105,6 +133,7 @@ struct BambiCloudPlaylistMatchRow: View {
         case .missing: "exclamationmark.circle.fill"
         case .manual: "hand.tap.fill"
         case .downloaded: "arrow.down.circle.fill"
+        case .possibleDuplicate: "doc.on.doc.fill"
         }
     }
 
@@ -112,7 +141,7 @@ struct BambiCloudPlaylistMatchRow: View {
         switch row.status {
         case .exact, .manual, .downloaded: .green
         case .probable: .roseGold
-        case .needsReview: .orange
+        case .needsReview, .possibleDuplicate: .orange
         case .missing: .textLight
         }
     }

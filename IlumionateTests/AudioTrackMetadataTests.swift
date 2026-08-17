@@ -172,7 +172,7 @@ struct AudioTrackMetadataTests {
         #expect(merged.confidence == 0.82)
     }
 
-    @Test @MainActor func cacheSurvivesDeleteAndReimportWithDifferentFilename() throws {
+    @Test @MainActor func cacheSurvivesDeleteAndReimportWithDifferentFilename() async throws {
         let cacheURL = URL.temporaryDirectory
             .appending(path: "AnalysisCache-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: cacheURL) }
@@ -213,13 +213,15 @@ struct AudioTrackMetadataTests {
             analyzer: MockContentAnalyzer(),
             cacheURL: cacheURL
         )
-        writer.cache(completion, for: original)
+        await writer.cache(completion, for: original)
 
         let reader = AnalysisStateManager(
             transcriber: MockAudioTranscriber(),
             analyzer: MockContentAnalyzer(),
-            cacheURL: cacheURL
+            cacheURL: cacheURL,
+            eagerlyLoadsCache: false
         )
+        await reader.prepareCachedResults()
         let reimported = AudioFile(
             filename: "renamed-copy.m4a",
             duration: 300,

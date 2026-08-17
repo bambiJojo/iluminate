@@ -6,6 +6,16 @@
 import AVFoundation
 import Foundation
 
+/// What a download resolved to.
+///
+/// A download that turns out to duplicate audio the library already holds is a
+/// success, not a failure — the playlist row it was fetched for gets the copy
+/// that already carries the user's analysis, rating and play count.
+nonisolated enum PlaylistTrackDownloadOutcome: Sendable, Equatable {
+    case saved(AudioFile)
+    case alreadyInLibrary(existing: AudioFile.ID)
+}
+
 /// Fetches a missing playlist track from the publisher's own CDN.
 ///
 /// Only the URL the playlist service itself published is ever requested, and
@@ -61,10 +71,17 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
         return response.expectedContentLength > 0 ? response.expectedContentLength : nil
     }
 
+    /// Fetches a track, unless the library already holds it.
+    ///
+    /// The duplicate check sits between the transfer and the move into
+    /// `Documents`. It used to sit nowhere at all: `uniqueDestination` ran
+    /// first, so a file the user already had was written a second time as
+    /// "Name (1).mp3" before anything had a chance to object.
     func download(
         _ track: BambiCloudPlaylist.Track,
-        allowingLargeFile: Bool = false
-    ) async throws -> AudioFile {
+        allowingLargeFile: Bool = false,
+        existing: DuplicateAudioIndex = DuplicateAudioIndex([])
+    ) async throws -> PlaylistTrackDownloadOutcome {
         let source = try validatedSource(for: track)
 
         let temporaryURL: URL
@@ -79,34 +96,67 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
 
         if let httpResponse = response as? HTTPURLResponse,
            !(200..<300).contains(httpResponse.statusCode) {
+            try? FileManager.default.removeItem(at: temporaryURL)
             throw PlaylistTrackDownloadError.networkUnavailable
         }
         if !allowingLargeFile,
            response.expectedContentLength > Self.confirmationThresholdBytes {
+            try? FileManager.default.removeItem(at: temporaryURL)
             throw PlaylistTrackDownloadError.confirmationRequired(
                 byteCount: response.expectedContentLength
             )
+        }
+
+        // Read from the temp file, before the move. The ceiling used to be
+        // re-checked against a file already sitting in Documents, which then
+        // had to be deleted again.
+        let byteCount = Int64(
+            (try? temporaryURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        )
+        if !allowingLargeFile, byteCount > Self.confirmationThresholdBytes {
+            try? FileManager.default.removeItem(at: temporaryURL)
+            throw PlaylistTrackDownloadError.confirmationRequired(byteCount: byteCount)
+        }
+
+        let fingerprint = AudioFingerprintService.computeFingerprint(for: temporaryURL)
+        let remoteSource = RemoteAudioSource(
+            service: RemoteAudioSource.bambiCloudService,
+            trackID: track.id.uuidString,
+            url: source
+        )
+
+        let verdict = existing.verdict(
+            for: DuplicateAudioCandidate(
+                remoteSource: remoteSource,
+                contentFingerprint: fingerprint,
+                fileSize: byteCount,
+                duration: track.duration,
+                title: track.name
+            )
+        )
+        // Only a conclusive verdict discards bytes already paid for. A merely
+        // likely one is the user's call, and reaches them as a review row.
+        if case .identical(let existingID) = verdict {
+            try? FileManager.default.removeItem(at: temporaryURL)
+            return .alreadyInLibrary(existing: existingID)
         }
 
         let destination = uniqueDestination(for: track, source: source)
         do {
             try FileManager.default.moveItem(at: temporaryURL, to: destination)
         } catch {
+            try? FileManager.default.removeItem(at: temporaryURL)
             throw PlaylistTrackDownloadError.couldNotSave
         }
 
-        let byteCount = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        if !allowingLargeFile, Int64(byteCount) > Self.confirmationThresholdBytes {
-            try? FileManager.default.removeItem(at: destination)
-            throw PlaylistTrackDownloadError.confirmationRequired(
-                byteCount: Int64(byteCount)
+        return .saved(
+            AudioFile(
+                filename: destination.lastPathComponent,
+                duration: await measuredDuration(of: destination, fallback: track.duration),
+                fileSize: byteCount,
+                contentFingerprint: fingerprint,
+                remoteSource: remoteSource
             )
-        }
-
-        return AudioFile(
-            filename: destination.lastPathComponent,
-            duration: await measuredDuration(of: destination, fallback: track.duration),
-            fileSize: Int64(byteCount)
         )
     }
 

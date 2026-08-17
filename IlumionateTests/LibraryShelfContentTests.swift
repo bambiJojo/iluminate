@@ -184,6 +184,120 @@ struct LibraryShelfContentTests {
         #expect(recommendations.contains(where: { $0.id == recent.id }) == false)
     }
 
+    // MARK: - Generated Sessions
+
+    private func makeSession(name: String) -> LightSession {
+        LightSession(
+            session_name: name,
+            duration_sec: 120,
+            light_score: [
+                LightMoment(time: 0, frequency: 8, intensity: 0.35, waveform: .sine)
+            ]
+        )
+    }
+
+    @Test
+    func generatedSessions_excludesFilesWithoutASession() {
+        let files = [makeFile(filename: "no-session.m4a")]
+
+        let items = LibraryShelfContent.generatedSessions(
+            from: files,
+            hasSession: { _ in false },
+            sessionLookup: { _ in nil }
+        )
+
+        #expect(items.isEmpty)
+    }
+
+    @Test
+    func generatedSessions_includesFilesPairedWithTheRightSession() {
+        let file = makeFile(filename: "generated.m4a")
+        let other = makeFile(filename: "no-session.m4a")
+        let session = makeSession(name: "Generated Score")
+
+        let items = LibraryShelfContent.generatedSessions(
+            from: [file, other],
+            hasSession: { $0.id == file.id },
+            sessionLookup: { $0.id == file.id ? session : nil }
+        )
+
+        #expect(items.count == 1)
+        #expect(items.first?.audioFile.id == file.id)
+        #expect(items.first?.session.displayName == "Generated Score")
+    }
+
+    @Test
+    func generatedSessions_ordersMostRecentFirst() {
+        let now = Date()
+        let older = makeFile(filename: "older.m4a", createdDate: now.addingTimeInterval(-100))
+        let newer = makeFile(filename: "newer.m4a", createdDate: now)
+        let sessions: [UUID: LightSession] = [
+            older.id: makeSession(name: "Older Score"),
+            newer.id: makeSession(name: "Newer Score")
+        ]
+
+        let items = LibraryShelfContent.generatedSessions(
+            from: [older, newer],
+            hasSession: { sessions[$0.id] != nil },
+            sessionLookup: { sessions[$0.id] }
+        )
+
+        #expect(items.map(\.audioFile.filename) == ["newer.m4a", "older.m4a"])
+    }
+
+    @Test
+    func generatedSessions_emptyInputReturnsEmpty() {
+        let items = LibraryShelfContent.generatedSessions(
+            from: [],
+            hasSession: { _ in true },
+            sessionLookup: { _ in nil }
+        )
+
+        #expect(items.isEmpty)
+    }
+
+    @Test
+    func generatedSessions_onlyDecodesFilesThatPassTheCheapCheck() {
+        // The decode is a disk read plus a JSON parse. Running it for every file
+        // in the library was what made the Library tab slow to open.
+        let withSession = makeFile(filename: "has-session.m4a")
+        let without = (0..<50).map { makeFile(filename: "none-\($0).m4a") }
+        let session = makeSession(name: "Only One")
+        var lookups = 0
+
+        let items = LibraryShelfContent.generatedSessions(
+            from: [withSession] + without,
+            hasSession: { $0.id == withSession.id },
+            sessionLookup: { file in
+                lookups += 1
+                return file.id == withSession.id ? session : nil
+            }
+        )
+
+        #expect(items.count == 1)
+        #expect(lookups == 1)
+    }
+
+    @Test
+    func generatedSessions_capsTheShelfAndStopsDecodingAtTheCap() {
+        let files = (0..<25).map {
+            makeFile(filename: "f\($0).m4a", createdDate: Date().addingTimeInterval(Double(-$0)))
+        }
+        var lookups = 0
+
+        let items = LibraryShelfContent.generatedSessions(
+            from: files,
+            hasSession: { _ in true },
+            sessionLookup: { _ in
+                lookups += 1
+                return makeSession(name: "Score")
+            }
+        )
+
+        #expect(items.count == LibraryShelfContent.shelfCap)
+        #expect(lookups == LibraryShelfContent.shelfCap)
+    }
+
     // MARK: - Sorted Files
 
     @Test

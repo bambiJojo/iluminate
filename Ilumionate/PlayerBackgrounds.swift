@@ -42,13 +42,31 @@ struct FlashGridBackground: View {
     let colorTemperature: Int
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("steadyLightEnabled") private var steadyLightEnabled = false
+    /// Read as raw data so a change to the stored tint re-renders the field.
+    @AppStorage("flashTint") private var flashTintData: Data?
+
+    private var flashTint: FlashTint {
+        guard
+            let flashTintData,
+            let decoded = try? JSONDecoder().decode(FlashTint.self, from: flashTintData)
+        else {
+            return .default
+        }
+        return decoded
+    }
 
     var body: some View {
-        let baseColor = Color.fromKelvin(colorTemperature)
-        // Reduce Motion: render a steady "on" field instead of the strobing
-        // left/right opacities so motion-sensitive users never see a flash.
-        let leftOpacity = reduceMotion ? controller.intensity : controller.leftOpacity
-        let rightOpacity = reduceMotion ? controller.intensity : controller.rightOpacity
+        let baseColor = flashTint.color(colorTemperature: colorTemperature)
+        // Steady light: render a steady "on" field instead of the strobing
+        // left/right opacities, so the flash never strobes. Driven by the
+        // in-app toggle or system Reduce Motion.
+        let holdsSteady = SteadyLightPreference.prefersSteadyLight(
+            userPrefersSteadyLight: steadyLightEnabled,
+            systemReduceMotion: reduceMotion
+        )
+        let leftOpacity = holdsSteady ? controller.intensity : controller.leftOpacity
+        let rightOpacity = holdsSteady ? controller.intensity : controller.rightOpacity
         HStack(spacing: 0) {
             Rectangle()
                 .fill(baseColor)

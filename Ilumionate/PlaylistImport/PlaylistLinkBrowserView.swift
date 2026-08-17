@@ -308,7 +308,12 @@ private struct PlaylistBrowserWebView: PlaylistBrowserRepresentable {
 
         /// KVO can land inside a layout pass driven by a view update, so the
         /// binding writes are deferred to their own main-actor turn.
-        private static func scheduleUpdate(
+        /// `nonisolated` because KVO delivers on whatever thread changed the
+        /// property, and this is the hop point — the body immediately enters the
+        /// main actor. Leaving it main-actor-isolated made every observation
+        /// closure an isolation violation for a function whose whole job is to
+        /// cross that boundary safely.
+        private nonisolated static func scheduleUpdate(
             of webView: WKWebView,
             on coordinator: Coordinator
         ) {

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Threshold — Design</title>
+<style>
+:root {
+  --bg:#0e0b12; --panel:#161119; --line:#2b2333; --text:#ece6f2;
+  --muted:#9a8fa6; --accent:#e9b7ba; --accent2:#be96ff; --code:#120e17;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg:#faf7fb; --panel:#fff; --line:#e6dfe9; --text:#1d1721;
+    --muted:#6b6274; --accent:#a35c63; --accent2:#6b3fa0; --code:#f3eff5; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+.wrap { display:grid; grid-template-columns:250px minmax(0,1fr); gap:44px;
+  max-width:1180px; margin:0 auto; padding:56px 28px 120px; }
+nav { position:sticky; top:36px; align-self:start; font-size:13px; }
+nav .navtitle { text-transform:uppercase; letter-spacing:.12em; font-size:10px;
+  color:var(--muted); margin-bottom:12px; }
+nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 0;
+  border-left:2px solid transparent; padding-left:12px; }
+nav a:hover { color:var(--accent); border-left-color:var(--accent); }
+main { min-width:0; }
+h1 { font-size:clamp(30px,4vw,44px); line-height:1.12; letter-spacing:-.025em;
+  margin:0 0 28px; }
+h2 { font-size:26px; letter-spacing:-.015em; margin:56px 0 16px;
+  padding-bottom:10px; border-bottom:1px solid var(--line); }
+h3 { font-size:18px; margin:34px 0 10px; color:var(--accent); }
+h4 { font-size:15px; margin:24px 0 8px; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.07em; }
+p { margin:0 0 15px; }
+ul,ol { margin:0 0 16px; padding-left:22px; }
+li { margin-bottom:7px; }
+hr { border:0; border-top:1px solid var(--line); margin:44px 0; }
+blockquote { margin:0 0 20px; padding:14px 20px; background:var(--panel);
+  border-left:3px solid var(--accent2); border-radius:0 10px 10px 0;
+  font-size:17px; color:var(--text); }
+blockquote p:last-child { margin-bottom:0; }
+code { font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:var(--code); padding:2px 6px; border-radius:5px; }
+pre.code { background:var(--code); border:1px solid var(--line);
+  border-radius:12px; padding:16px 18px; overflow-x:auto; margin:0 0 18px; }
+pre.code code { background:none; padding:0; font-size:13px; }
+.tablewrap { overflow-x:auto; margin:0 0 20px;
+  border:1px solid var(--line); border-radius:12px; }
+table { border-collapse:collapse; width:100%; font-size:14.5px; }
+th { text-align:left; padding:11px 15px; background:var(--panel);
+  font-weight:650; border-bottom:1px solid var(--line);
+  font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--muted); white-space:nowrap; }
+td { padding:11px 15px; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+tr:last-child td { border-bottom:0; }
+strong { color:var(--accent2); font-weight:640; }
+@media (max-width:900px) {
+  .wrap { grid-template-columns:1fr; gap:0; padding:32px 20px 80px; }
+  nav { position:static; margin-bottom:36px; }
+}
+</style></head><body>
+<div class="wrap">
+<nav><div class="navtitle">Contents</div><a href="#revision-note">Revision note</a><a href="#problem">Problem</a><a href="#what-we-are-building">What we are building</a><a href="#why-the-copy-stays">Why the copy stays</a><a href="#the-core-risk-and-the-answer-to-it">The core risk, and the answer to it</a><a href="#choreography">Choreography</a><a href="#architecture">Architecture</a><a href="#failure-behaviour">Failure behaviour</a><a href="#testing">Testing</a><a href="#definition-of-done">Definition of done</a><a href="#out-of-scope">Out of scope</a></nav>
+<main><h1 id="threshold-design">Threshold — Design</h1>
+<p><strong>Date:</strong> 2026-08-07 <strong>Status:</strong> Revised 2026-08-07 after Apple HIG review. Approved, ready for planning <strong>Branch:</strong> <code>feature/reader-hypnotic-visuals</code></p>
+<h2 id="revision-note">Revision note</h2>
+<p>This spec originally placed a 2.6-second animated arc on <strong>cold app launch</strong>. That was wrong, and Apple says so directly:</p>
+<blockquote><p>&quot;The launch screen isn&#x27;t an opportunity for artistic expression. It&#x27;s solely intended to enhance the perception of your app as quick to launch and immediately ready for use.&quot;</p></blockquote>
+<p>Apple&#x27;s guidance is to make the launch screen a text-free, brand-free skeleton nearly identical to the first screen, so launch feels instant. An animated arc at launch does the opposite — it delays readiness on purpose. The tempting dodge is that Apple means the OS-drawn <code>UILaunchScreen</code> while ours was an in-app view on a different layer, but that is a technicality: to the user, something animated blocks the UI for 2.6 seconds after they tap the icon. Apple&#x27;s reasoning is about the felt experience, not the implementation layer.</p>
+<p>The ritual was not wrong — its <strong>location</strong> was. It now lives at session entry, where the user has deliberately chosen to focus, and where the app already pauses.</p>
+<h2 id="problem">Problem</h2>
+<p>Two problems, related but distinct.</p>
+<p><strong>Launch has no defined first frame.</strong> <code>Info.plist</code> declared <code>UILaunchScreen</code> as an empty dict, so iOS drew a bare white (or black) frame before <code>ContentView</code> appeared. A flash of white before a void-dark app is the single most jarring thing a launch can do.</p>
+<p><strong>Session entry pulls the nervous system the wrong way.</strong> <code>PlayerCountdownOverlay</code> shows a 120pt bold numeral counting 3→2→1 over a dimmed background, with a haptic tap on every second. Counting <em>down</em> is the grammar of a rocket launch or a race start — it builds anticipation and tension. It is close to the opposite of what the five seconds before a light therapy session should be doing. The app spends 3, 7 or 10 seconds (user&#x27;s choice, <code>UnifiedPlayerViewModel.swift:108</code>) actively winding the user up immediately before asking them to settle.</p>
+<h2 id="what-we-are-building">What we are building</h2>
+<p><strong>A launch screen that gets out of the way</strong>, per Apple: the OS-drawn frame is a solid adaptive colour matching the app&#x27;s own background, so there is no flash and no seam. No image, no wordmark, no animation. This is already implemented.</p>
+<p><strong>A threshold at session entry</strong>: the same wordless arc — void, a breathing <code>LumeOrb</code>, a vignette that closes and releases — replacing the numeric countdown, scaled to whichever countdown duration the user already chose. It adds no delay anywhere; it repurposes time the app was already spending.</p>
+<h3 id="decisions-taken-during-design">Decisions taken during design</h3>
+<div class="tablewrap"><table><thead><tr><th>Question</th><th>Decision</th></tr></thead><tbody><tr><td>Where does the ritual live?</td><td>Session entry, not app launch</td></tr><tr><td>What does app launch get?</td><td>A colour-matched <code>UILaunchScreen</code>, nothing more</td></tr><tr><td>What happens to the numeric countdown?</td><td>Replaced by the arc. No numerals</td></tr><tr><td>What happens to the intro copy?</td><td><strong>Kept.</strong> It is instructional, not decorative</td></tr><tr><td>How long is the arc?</td><td>Whatever the user&#x27;s countdown setting says — 3, 7 or 10s</td></tr><tr><td>Does it add delay?</td><td>No. It occupies time already being spent</td></tr><tr><td>Can it be skipped?</td><td>Yes, tap anywhere, as the countdown could not</td></tr><tr><td>Platforms</td><td>iOS and macOS both — session entry exists on both</td></tr></tbody></table></div>
+<h2 id="why-the-copy-stays">Why the copy stays</h2>
+<p><code>PlayerMode.countdownIntroMessage</code> and <code>countdownHoldMessage</code> are not decoration:</p>
+<ul><li><code>.visualField</code> → &quot;Soften your gaze in…&quot;</li><li>everything else → &quot;Close your eyes and relax in…&quot;, held on &quot;Close your eyes&quot;</li></ul>
+<p>Whether the user&#x27;s eyes are closed materially changes what a photoentrainment session does. Stripping those instructions to achieve a pure-atmosphere aesthetic would be a functional regression in a therapy app. The arc is wordless; the screen is not.</p>
+<p><strong>The copy needs rewording.</strong> &quot;Close your eyes and relax in…&quot; grammatically dangles into a numeral that will no longer exist. Without the count it becomes &quot;Close your eyes and relax&quot; and &quot;Soften your gaze&quot;, with the held line unchanged.</p>
+<h2 id="the-core-risk-and-the-answer-to-it">The core risk, and the answer to it</h2>
+<p>Pure atmosphere risks reading as a loading spinner — the opposite of the intent. The distinction is structural, not decorative:</p>
+<blockquote><p>A spinner <strong>loops</strong>. A threshold <strong>progresses</strong>.</p></blockquote>
+<p>The motion must have a legible beginning, middle and end. This is why the arc has exactly one growth beat and one flat plateau, and why it must never wait on anything.</p>
+<h2 id="choreography">Choreography</h2>
+<p>Four beats. At the default 3-second countdown the arc runs at its natural proportions; at 7 or 10 seconds the <strong>Settle</strong> beat absorbs the extra time while the other three keep their absolute durations. Stretching Bloom would make the growth imperceptibly slow; stretching Settle just means a longer held stillness, which is exactly what more time should buy.</p>
+<div class="tablewrap"><table><thead><tr><th>Beat</th><th>Share of a 3s arc</th><th>What happens</th></tr></thead><tbody><tr><td>Arrival</td><td>0 – 0.5s</td><td>Vignette closes in from the edges. Orb is a dim point at 0.6 scale</td></tr><tr><td>Bloom</td><td>0.5 – 1.6s</td><td>Orb scales 0.6 → 1.0 on a slow ease-out. Conic ring spins up. Aurora fades in. One inhale</td></tr><tr><td>Settle</td><td>1.6 – 2.6s <strong>(absorbs all extra duration)</strong></td><td>Choreographed scale holds flat at 1.0. Only <code>LumeOrb</code>&#x27;s own breath moves</td></tr><tr><td>Opening</td><td>final 0.4s</td><td>Vignette releases outward. Orb scales 1.0 → 1.15 while fading to zero</td></tr></tbody></table></div>
+<p>Three properties are load-bearing:</p>
+<p><strong>Bloom is the only growth beat.</strong> A spinner never grows. One unrepeated expansion is the clearest signal that this has a beginning.</p>
+<p><strong>Settle is flat on purpose.</strong> The eye reads a plateau as an ending rather than a wait. The orb is not frozen — <code>LumeOrb</code> runs its own breath off the absolute clock and we neither can nor should phase-lock it, since it is shared with every surface that draws an orb. Settle is <em>stillness with a pulse</em>. A completely motionless screen looks hung.</p>
+<p><strong>Opening inverts Arrival.</strong> The orb scaling <em>up</em> as it fades reads as the field opening, not the orb leaving.</p>
+<h3 id="the-aurora-never-fades-out">The aurora never fades out</h3>
+<p><code>auroraOpacity</code> runs 0 through Arrival, ramps 0 → 1 across Bloom, then stays at 1 through Settle <em>and</em> Opening. Fading it during Opening would darken the field and force the player&#x27;s own background to fade back in — a visible seam.</p>
+<h3 id="skip">Skip</h3>
+<p>A tap captures the current frame and interpolates to the resting frame over 0.35s, so a skip eases out rather than snapping. This is new behaviour: the numeric countdown could not be skipped, and a user who has already settled should not have to wait out ten seconds.</p>
+<p>Skipping starts the session immediately. It does not shorten the session.</p>
+<h3 id="reduce-motion">Reduce Motion</h3>
+<p>Same four-beat structure expressed only in opacity: fade in, hold, fade out. Orb scale pinned at 1.0, no spin, no vignette travel. The <strong>hold</strong> absorbs the user&#x27;s chosen duration, so a Reduce Motion user still gets the full countdown they configured — the motion changes, the timing contract does not.</p>
+<h2 id="architecture">Architecture</h2>
+<p>Already built and committed (Tasks 1–5 of the original plan, all reusable):</p>
+<div class="tablewrap"><table><thead><tr><th>File</th><th>Responsibility</th><th>Status</th></tr></thead><tbody><tr><td><code>Ilumionate/Threshold/ThresholdChoreography.swift</code></td><td>Pure elapsed-time → <code>Frame</code> mapping</td><td>Built; <strong>needs duration scaling</strong></td></tr><tr><td><code>Ilumionate/Threshold/ThresholdController.swift</code></td><td>Phase machine, skip</td><td>Built; <strong>suppression rules need rework</strong></td></tr><tr><td><code>Ilumionate/Threshold/ThresholdVignette.swift</code></td><td>Edge-closing radial mask</td><td>Built, unchanged</td></tr><tr><td><code>Ilumionate/Threshold/ThresholdView.swift</code></td><td>Composes the arc</td><td>Built; <strong>needs a message slot</strong></td></tr><tr><td><code>Ilumionate/Assets.xcassets/LaunchBackground.colorset</code></td><td>Adaptive launch colour</td><td>Done</td></tr><tr><td><code>Ilumionate/Info.plist</code></td><td><code>UIColorName</code> in <code>UILaunchScreen</code></td><td>Done</td></tr></tbody></table></div>
+<h3 id="remaining-work">Remaining work</h3>
+<p><strong>Duration scaling.</strong> <code>ThresholdChoreography</code> currently hardcodes a 2.6s arc. It gains a <code>duration: TimeInterval</code> so Settle can absorb the difference. Beat boundaries become derived rather than constant.</p>
+<p><strong>Suppression rules change.</strong> The original rules were launch-specific and no longer apply:</p>
+<ul><li><em>First launch</em> — irrelevant at session entry. Removed.</li><li><em>VoiceOver</em> — <strong>inverted.</strong> At launch we skipped the threshold entirely. At session entry the countdown carries information a screen reader user needs, so under VoiceOver we keep the <strong>numeric</strong> countdown rather than the wordless arc. The arc announces nothing; the numerals announce progress.</li><li><em>Non-iOS</em> — removed. Session entry exists on macOS and deserves the same treatment.</li></ul>
+<p><strong>Message slot.</strong> <code>ThresholdView</code> takes an optional message and renders it beneath the orb using the player&#x27;s existing typography, so the instructional copy survives.</p>
+<p><strong>Player integration.</strong> <code>UnifiedPlayerView</code> swaps <code>PlayerCountdownOverlay</code> for the threshold when VoiceOver is off. <code>UnifiedPlayerViewModel</code>&#x27;s countdown task drops the per-second numeral updates and per-second haptics, keeping the intro message, the held message, the completion haptic and the call to <code>beginPlayback()</code>.</p>
+<h3 id="what-is-explicitly-not-happening">What is explicitly NOT happening</h3>
+<p>No threshold on cold app launch. No overlay in <code>ContentView</code>. The dead <code>isLoading</code> state in <code>ContentView</code> is now out of scope — it was only in scope because we were editing that file.</p>
+<h2 id="failure-behaviour">Failure behaviour</h2>
+<ul><li><strong>Skip during the exit interpolation</strong> — ignored; <code>skip()</code> is a no-op unless running.</li><li><strong>Session cancelled mid-arc</strong> — the existing <code>countdownTask</code> cancellation path already handles this and is unchanged.</li><li><strong>Arc outlasts its budget</strong> — impossible; the arc is derived from the budget.</li></ul>
+<h2 id="testing">Testing</h2>
+<p><code>ThresholdChoreography</code> remains a pure function, so its tests stay value assertions. Existing tests are updated for the duration parameter and new ones added:</p>
+<div class="tablewrap"><table><thead><tr><th>Test</th><th>Assertion</th></tr></thead><tbody><tr><td>Default duration matches the old arc</td><td>A 2.6s choreography produces the previously-pinned frames</td></tr><tr><td>Settle absorbs extra duration</td><td>At 10s, Arrival/Bloom/Opening keep their absolute lengths and Settle holds the remainder</td></tr><tr><td>Bloom timing is duration-independent</td><td>Bloom still ends 1.6s in, at every supported duration</td></tr><tr><td>Opening always occupies the final 0.4s</td><td>At 3, 7 and 10s</td></tr><tr><td>Scale still peaks at 1.0 entering Settle</td><td>At every supported duration</td></tr><tr><td>Aurora still holds at 1 through the end</td><td>At every supported duration</td></tr><tr><td>Reduced motion absorbs duration in the hold</td><td>Orb scale stays 1.0; total matches the requested duration</td></tr></tbody></table></div>
+<p>Player integration is covered by the existing <code>UnifiedPlayerViewModel</code> tests plus one new assertion that the countdown task still calls <code>beginPlayback()</code> after the full budget.</p>
+<p>No UI tests — a timed animation is a flake generator.</p>
+<h2 id="definition-of-done">Definition of done</h2>
+<ul><li>Cold launch shows no white flash in either appearance, and no animation.</li><li>Starting a session plays the arc for exactly the user&#x27;s configured duration.</li><li>The instructional copy still appears, reworded so it does not dangle.</li><li>A tap during the arc starts the session within 0.35s.</li><li>Reduce Motion produces the opacity-only variant at the same total duration.</li><li>VoiceOver still gets the numeric countdown with its per-second announcements.</li><li>The 3/7/10s setting still works and still means what it says.</li><li>macOS and Mac Catalyst build and behave identically.</li><li>Threshold test suites pass on both destinations; no regression elsewhere.</li></ul>
+<h2 id="out-of-scope">Out of scope</h2>
+<ul><li>Any threshold on app launch.</li><li>Changes to <code>OnboardingView</code>.</li><li>The <code>iphone-performance-gaming-tier</code> entry in <code>UIRequiredDeviceCapabilities</code> (<code>Info.plist:71</code>), which restricts App Store availability to a narrow set of devices. Noticed while reading the plist; worth resolving before submission, unrelated to this.</li></ul></main>
+</div>
+</body></html>

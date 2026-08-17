@@ -145,9 +145,10 @@ final class FlashController: Sendable {
         let dt = link.targetTimestamp - link.timestamp
         sessionDuration += max(0, dt)
 
-        // Reduce Motion: hold a steady mid-brightness "on" state instead of
-        // pulsing, so the flash never strobes for motion-sensitive users.
-        if PlatformAccessibility.isReduceMotionEnabled {
+        // Steady light: hold a steady mid-brightness "on" state instead of
+        // pulsing, so the flash never strobes. Driven by the in-app toggle or
+        // system Reduce Motion.
+        if SteadyLightPreference.prefersSteadyLight() {
             leftOpacity = intensity
             rightOpacity = intensity
             return

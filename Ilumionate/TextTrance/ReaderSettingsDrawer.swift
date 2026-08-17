@@ -1,7 +1,10 @@
 //  ReaderSettingsDrawer.swift
 //  Ilumionate
 //
-//  Mid-session live-settings sheet: binaural, subliminal, and (handoff) light.
+//  Mid-session live-settings sheet. Which groups appear, and whether they are
+//  main or advanced, comes from ReaderSettingsCatalog — the same source the
+//  setup view reads, so the two surfaces cannot disagree.
+//
 //  Changes apply immediately via the session's live setters.
 
 import SwiftUI
@@ -9,7 +12,12 @@ import SwiftUI
 struct ReaderSettingsDrawer: View {
     @Bindable var session: TextTranceSession
     let attentionStatus: ReaderAttentionMonitorStatus
+    /// Passed in live rather than re-read from the store: the Trance tile in the
+    /// control tray can change it while the reader is open, and the drawer must
+    /// offer the groups for the mode the user is actually in.
+    let mode: ReaderMode
     @Environment(\.dismiss) private var dismiss
+    @State private var showingAdvanced = false
 
     private var binauralBinding: Binding<Bool> {
         Binding(get: { session.binauralActive },
@@ -40,35 +48,29 @@ struct ReaderSettingsDrawer: View {
                 set: { session.setDisplayPreferences($0) })
     }
 
+    /// Groups the drawer can actually offer mid-session. Arc and pacing preset
+    /// are start-of-session choices — changing them here would invalidate the
+    /// schedule the reader is already partway through.
+    private func drawerGroups(tier: ReaderSettingsTier) -> [ReaderSettingsGroup] {
+        ReaderSettingsGroup.groups(in: mode, tier: tier)
+            .filter { $0 != .arc && $0 != .pacingPreset }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                ReaderSpeedTrainingFormSection(settings: speedTrainingBinding)
-                ReaderDisplayFormSection(preferences: displayPreferencesBinding)
-                Section("Attention") {
-                    Toggle("Require attention", isOn: attentionBinding)
-                    if session.attentionGateEnabled {
-                        Label(attentionStatusText, systemImage: attentionStatusImage)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                    }
+                ForEach(drawerGroups(tier: .main)) { group in
+                    Section(group.title) { rows(for: group) }
                 }
-                Section("Binaural beats") {
-                    Toggle("Enabled", isOn: binauralBinding)
-                }
-                Section("Subliminal flashing") {
-                    Toggle("Flash suggestion words", isOn: subliminalBinding)
-                    if session.subliminalEnabled {
-                        Picker("Flash speed", selection: subliminalSpeedBinding) {
-                            ForEach(TextPacingSettings.SubliminalSpeed.allCases) {
-                                Text($0.displayName).tag($0)
+
+                let advanced = drawerGroups(tier: .advanced)
+                if !advanced.isEmpty {
+                    Section {
+                        DisclosureGroup("Advanced", isExpanded: $showingAdvanced) {
+                            ForEach(advanced) { group in
+                                rows(for: group)
                             }
                         }
-                    }
-                }
-                if session.settings.arc == .handoff {
-                    Section("After handoff") {
-                        Toggle("Light pulse", isOn: lightBinding)
                     }
                 }
             }
@@ -86,6 +88,46 @@ struct ReaderSettingsDrawer: View {
         .presentationDetents([.medium, .large])
     }
 
+    @ViewBuilder
+    private func rows(for group: ReaderSettingsGroup) -> some View {
+        switch group {
+        case .readingComfort:
+            ReadingComfortRows(preferences: displayPreferencesBinding)
+        case .speedTarget:
+            SpeedTargetRow(settings: speedTrainingBinding)
+        case .visual:
+            ReaderVisualControls(preferences: displayPreferencesBinding, style: .formSection)
+        case .attention:
+            Toggle("Require attention", isOn: attentionBinding)
+            if session.attentionGateEnabled {
+                Label(attentionStatusText, systemImage: attentionStatusImage)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+        case .binaural:
+            Toggle("Binaural beats", isOn: binauralBinding)
+        case .speedDetail:
+            ReaderSpeedDetailRows(settings: speedTrainingBinding)
+        case .displayDetail:
+            ReaderDisplayDetailRows(preferences: displayPreferencesBinding)
+        case .subliminal:
+            Toggle("Flash suggestion words", isOn: subliminalBinding)
+            if session.subliminalEnabled {
+                Picker("Flash speed", selection: subliminalSpeedBinding) {
+                    ForEach(TextPacingSettings.SubliminalSpeed.allCases) {
+                        Text($0.displayName).tag($0)
+                    }
+                }
+            }
+        case .lightHandoff:
+            if session.settings.arc == .handoff {
+                Toggle("Light pulse", isOn: lightBinding)
+            }
+        case .arc, .pacingPreset:
+            EmptyView()   // filtered out by drawerGroups
+        }
+    }
+
     private var attentionStatusText: String {
         if session.isAttentionPaused { return "Waiting for attention" }
         if let text = attentionStatus.displayText { return text }
@@ -97,7 +139,13 @@ struct ReaderSettingsDrawer: View {
     }
 }
 
-private struct ReaderSpeedTrainingFormSection: View {
+// MARK: - Row groups
+//
+// Content-only (no Section wrapper) so the drawer can place them either in
+// their own Section at main tier or inside the Advanced disclosure.
+
+/// Words per minute as a number — plain reading mode's headline control.
+private struct SpeedTargetRow: View {
     @Binding var settings: ReaderSpeedTrainingSettings
 
     private var targetBinding: Binding<Double> {
@@ -110,6 +158,42 @@ private struct ReaderSpeedTrainingFormSection: View {
             }
         )
     }
+
+    var body: some View {
+        LabeledContent("Target", value: "\(settings.clampedTargetWPM) wpm")
+        Slider(
+            value: targetBinding,
+            in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
+            step: 5
+        )
+    }
+}
+
+/// The three display controls people actually reach for.
+private struct ReadingComfortRows: View {
+    @Binding var preferences: ReaderDisplayPreferences
+
+    private var fontScaleBinding: Binding<Double> {
+        Binding(
+            get: { preferences.clampedFontScale },
+            set: { preferences.fontScale = $0 }
+        )
+    }
+
+    var body: some View {
+        Picker("Reader mode", selection: $preferences.colorMode) {
+            ForEach(ReaderColorMode.allCases) { Text($0.displayName).tag($0) }
+        }
+        Picker("Font", selection: $preferences.font) {
+            ForEach(ReaderFont.allCases) { Text($0.displayName).tag($0) }
+        }
+        LabeledContent("Size", value: "\(Int((preferences.clampedFontScale * 100).rounded()))%")
+        Slider(value: fontScaleBinding, in: ReaderDisplayPreferences.fontScaleRange)
+    }
+}
+
+private struct ReaderSpeedDetailRows: View {
+    @Binding var settings: ReaderSpeedTrainingSettings
 
     private var warmUpBinding: Binding<Double> {
         Binding(
@@ -133,69 +217,34 @@ private struct ReaderSpeedTrainingFormSection: View {
     }
 
     var body: some View {
-        Section("Speed training") {
-            Picker("Mode", selection: $settings.mode) {
-                ForEach(ReaderSpeedMode.allCases) {
-                    Text($0.displayName).tag($0)
-                }
-            }
+        Picker("Speed mode", selection: $settings.mode) {
+            ForEach(ReaderSpeedMode.allCases) { Text($0.displayName).tag($0) }
+        }
 
-            LabeledContent("Target", value: "\(settings.clampedTargetWPM) wpm")
-            Slider(
-                value: targetBinding,
-                in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
-                step: 5
-            )
+        if settings.mode == .warmUp {
+            LabeledContent("Warm-up", value: "\(settings.clampedWarmUpWPM) wpm")
+            Slider(value: warmUpBinding, in: ReaderSpeedTrainingSettings.setupTargetWPMRange, step: 5)
+        }
 
-            if settings.mode == .warmUp {
-                LabeledContent("Warm-up", value: "\(settings.clampedWarmUpWPM) wpm")
-                Slider(
-                    value: warmUpBinding,
-                    in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
-                    step: 5
-                )
-            }
+        if settings.mode == .ramp {
+            LabeledContent("Ramp start", value: "\(settings.clampedRampStartWPM) wpm")
+            Slider(value: rampStartBinding, in: ReaderSpeedTrainingSettings.setupTargetWPMRange, step: 5)
+        }
 
-            if settings.mode == .ramp {
-                LabeledContent("Ramp start", value: "\(settings.clampedRampStartWPM) wpm")
-                Slider(
-                    value: rampStartBinding,
-                    in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
-                    step: 5
-                )
-            }
+        Picker("Words per flash", selection: chunkBinding) {
+            Text("1 word").tag(1)
+            Text("2 words").tag(2)
+            Text("3 words").tag(3)
+        }
 
-            Picker("Words per flash", selection: chunkBinding) {
-                Text("1 word").tag(1)
-                Text("2 words").tag(2)
-                Text("3 words").tag(3)
-            }
-
-            Picker("Punctuation pauses", selection: $settings.punctuationPause) {
-                ForEach(ReaderPunctuationPause.allCases) {
-                    Text($0.displayName).tag($0)
-                }
-            }
+        Picker("Punctuation pauses", selection: $settings.punctuationPause) {
+            ForEach(ReaderPunctuationPause.allCases) { Text($0.displayName).tag($0) }
         }
     }
 }
 
-private struct ReaderDisplayFormSection: View {
+private struct ReaderDisplayDetailRows: View {
     @Binding var preferences: ReaderDisplayPreferences
-
-    private var fontScaleBinding: Binding<Double> {
-        Binding(
-            get: { preferences.clampedFontScale },
-            set: { preferences.fontScale = $0 }
-        )
-    }
-
-    private var lineSpacingBinding: Binding<Double> {
-        Binding(
-            get: { preferences.clampedLineSpacing },
-            set: { preferences.lineSpacing = $0 }
-        )
-    }
 
     private var brightnessBinding: Binding<Double> {
         Binding(
@@ -205,42 +254,18 @@ private struct ReaderDisplayFormSection: View {
     }
 
     var body: some View {
-        Section("Reader display") {
-            Picker("Reader mode", selection: $preferences.colorMode) {
-                ForEach(ReaderColorMode.allCases) {
-                    Text($0.displayName).tag($0)
-                }
-            }
-
-            Picker("Theme", selection: $preferences.theme) {
-                ForEach(ReaderTheme.allCases) {
-                    Text($0.displayName).tag($0)
-                }
-            }
-
-            Picker("Font", selection: $preferences.font) {
-                ForEach(ReaderFont.allCases) {
-                    Text($0.displayName).tag($0)
-                }
-            }
-
-            LabeledContent("Size", value: "\(Int((preferences.clampedFontScale * 100).rounded()))%")
-            Slider(value: fontScaleBinding, in: ReaderDisplayPreferences.fontScaleRange)
-
-            LabeledContent("Line spacing", value: String(format: "%.1fx", preferences.clampedLineSpacing))
-            Slider(value: lineSpacingBinding, in: ReaderDisplayPreferences.lineSpacingRange)
-
-            Picker("Highlight color", selection: $preferences.orpColor) {
-                ForEach(ReaderORPColor.allCases) {
-                    Text($0.displayName).tag($0)
-                }
-            }
-
-            LabeledContent("Background", value: "\(Int((preferences.clampedBackgroundBrightness * 100).rounded()))%")
-            Slider(value: brightnessBinding, in: ReaderDisplayPreferences.backgroundBrightnessRange)
-
-            Toggle("Hide controls by default", isOn: $preferences.hideControls)
-            Toggle("Dyslexia-friendly rendering", isOn: $preferences.dyslexiaFriendly)
+        Picker("Theme", selection: $preferences.theme) {
+            ForEach(ReaderTheme.allCases) { Text($0.displayName).tag($0) }
         }
+
+        Picker("Highlight color", selection: $preferences.orpColor) {
+            ForEach(ReaderORPColor.allCases) { Text($0.displayName).tag($0) }
+        }
+
+        LabeledContent("Background", value: "\(Int((preferences.clampedBackgroundBrightness * 100).rounded()))%")
+        Slider(value: brightnessBinding, in: ReaderDisplayPreferences.backgroundBrightnessRange)
+
+        Toggle("Hide controls by default", isOn: $preferences.hideControls)
+        Toggle("Dyslexia-friendly rendering", isOn: $preferences.dyslexiaFriendly)
     }
 }

@@ -44,7 +44,7 @@ struct LiminalGlassModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let shape = glassShape.shape
-        return content
+        let surface = content
             .background {
                 shape
                     .fill(.ultraThinMaterial)
@@ -54,8 +54,14 @@ struct LiminalGlassModifier: ViewModifier {
             .overlay {
                 shape.stroke(Color.glassBorder, lineWidth: 1)
             }
-            .shadow(color: glow ? Color.roseDeep.opacity(0.15) : .clear,
-                    radius: 16, x: 0, y: 0)
+
+        // A `.shadow` with a clear colour still costs its offscreen pass, so the
+        // glow-less variants have to skip the modifier rather than clear it.
+        if glow {
+            surface.shadow(color: Color.roseDeep.opacity(0.15), radius: 16, x: 0, y: 0)
+        } else {
+            surface
+        }
     }
 }
 

@@ -55,13 +55,13 @@ struct AudioLibraryView: View {
 
     @Bindable var engine: LightEngine
     @State var audioFiles: [AudioFile] = []
-    @State var showingImporter = false
+    /// Files, URL and the in-app browser all live here now — Library offers the
+    /// same three, so the flow is owned once rather than per screen.
+    @State var acquisition = AudioAcquisition()
     @State var selectedFile: AudioFile?
     @State var selectedFiles = Set<AudioFile.ID>()
     @State var showingAnalysis = false
-    @State var audioManager = AudioManager.shared
     @State var analysisManager = AnalysisStateManager.shared
-    @State var showingExpandedProgress = false
     @State var playerFile: AudioFile?
     @State var isSelectionMode = false
     @State var showingQueueManagement = false
@@ -75,20 +75,25 @@ struct AudioLibraryView: View {
     @State var showingRenameAlert = false
     @State var newFilename = ""
     @State var fileToRename: AudioFile?
-    @State var showingURLDownloader = false
-    @State var audioURLInput = ""
-    @State var isDownloadingURL = false
-    @State var downloadError: String?
-    @State var showingDownloadError = false
-    @State var showingBrowser = false
     @State var showingAddSheet = false
+    @State var showingDuplicateReview = false
     @State var showingFilters = false
     // TODO: Replace with actual playlist model
-    @State var showingDeleteSelectedAlert = false
+    @State var pendingDeletion = PendingAudioDeletion.shared
+    /// Which row currently has its swipe action revealed. Only one at a time.
+    @State var openSwipeRowID: AudioFile.ID?
     @Environment(\.dismiss) private var dismiss
 
     private var analysisAttentionCount: Int {
         analysisManager.analysisQueue.count + analysisManager.failedAnalyses.count
+    }
+
+    private var undoBannerMessage: String {
+        let staged = pendingDeletion.staged
+        guard staged.count == 1, let only = staged.first else {
+            return "\(staged.count) files deleted"
+        }
+        return "Deleted “\(only.file.displayName)”"
     }
 
     var body: some View {
@@ -120,8 +125,7 @@ struct AudioLibraryView: View {
                                 Spacer()
 
                                 Button {
-                                    TranceHaptics.shared.medium()
-                                    showingDeleteSelectedAlert = true
+                                    deleteSelectedFiles()
                                 } label: {
                                     Image(systemName: "trash.circle.fill")
                                         .symbolRenderingMode(.hierarchical)
@@ -157,6 +161,21 @@ struct AudioLibraryView: View {
                     }
                 }
 
+                // Above both emptyState and audioLibraryContent on purpose:
+                // deleting the last file flips the screen to the empty state,
+                // and Undo has to stay reachable from there.
+                if !pendingDeletion.staged.isEmpty {
+                    VStack {
+                        Spacer()
+                        UndoDeleteBanner(
+                            message: undoBannerMessage,
+                            onUndo: { undoDelete() },
+                            onDismiss: { pendingDeletion.commit() }
+                        )
+                        .padding(.bottom, TranceSpacing.tabBarClearance)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .navigationTitle("Audio")
             .navigationDestination(for: AudioFile.self) { file in
@@ -165,12 +184,20 @@ struct AudioLibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if !audioFiles.isEmpty {
-                        Button(isSelectionMode ? "Done" : "Select") {
-                            TranceHaptics.shared.light()
-                            if isSelectionMode {
-                                selectedFiles.removeAll()
+                        HStack(spacing: TranceSpacing.list) {
+                            Button(isSelectionMode ? "Done" : "Select") {
+                                TranceHaptics.shared.light()
+                                if isSelectionMode {
+                                    selectedFiles.removeAll()
+                                }
+                                isSelectionMode.toggle()
                             }
-                            isSelectionMode.toggle()
+
+                            if isSelectionMode {
+                                Button(allVisibleSelected ? "Deselect All" : "Select All") {
+                                    toggleSelectAll()
+                                }
+                            }
                         }
                         .font(TranceTypography.body)
                         .foregroundStyle(.roseGold)
@@ -185,8 +212,10 @@ struct AudioLibraryView: View {
                                 showingQueueManagement = true
                             } label: {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "list.bullet.circle.fill")
-                                        .symbolRenderingMode(.hierarchical)
+                                    // Bare glyph: the toolbar supplies the
+                                    // container, and the two buttons beside this
+                                    // one are already bare.
+                                    Image(systemName: "list.bullet")
                                     if analysisAttentionCount > 0 {
                                         Text("\(analysisAttentionCount)")
                                             .font(.caption2)
@@ -198,6 +227,22 @@ struct AudioLibraryView: View {
                                 }
                                 .foregroundStyle(.roseGold)
                             }
+                            .accessibilityLabel(
+                                analysisAttentionCount > 0
+                                    ? "Analysis queue, \(analysisAttentionCount) needing attention"
+                                    : "Analysis queue"
+                            )
+                        }
+
+                        // Needs at least two files before a duplicate is even
+                        // possible.
+                        if audioFiles.count > 1 {
+                            Button("Find Duplicates", systemImage: "doc.on.doc") {
+                                TranceHaptics.shared.light()
+                                showingDuplicateReview = true
+                            }
+                            .labelStyle(.iconOnly)
+                            .tint(.roseGold)
                         }
 
                         // Add button — triggers action sheet.
@@ -213,35 +258,19 @@ struct AudioLibraryView: View {
                     }
                 }
             }
-            .fileImporter(
-                isPresented: $showingImporter,
-                allowedContentTypes: [.audio],
-                allowsMultipleSelection: true
-            ) { result in
-                handleImport(result)
-            }
-            .sheet(isPresented: $showingExpandedProgress) {
-                if let file = analysisManager.currentAnalysis?.audioFile {
-                    AnalysisProgressView(audioFile: file) { analyzedFile, result in
-                        handleAnalysisComplete(analyzedFile: analyzedFile, result: result)
-                    }
-                }
-            }
+            .audioAcquisition(acquisition)
             .sheet(isPresented: $showingQueueManagement) {
                 NavigationStack {
-                    AnalyzerView(engine: engine)
+                    AnalysisCenterView(engine: engine)
                 }
             }
             .sheet(isPresented: $showingFilters) {
                 filtersSheet
             }
-            .alert("Delete \(selectedFiles.count) Files?", isPresented: $showingDeleteSelectedAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Delete", role: .destructive) {
-                    deleteSelectedFiles()
+            .sheet(isPresented: $showingDuplicateReview) {
+                DuplicateAudioReviewView(audioFiles: audioFiles) { resolution in
+                    Task { await mergeDuplicates(resolution) }
                 }
-            } message: {
-                Text("Are you sure you want to delete these audio files? This action cannot be undone.")
             }
             .alert("Rename File", isPresented: $showingRenameAlert) {
                 TextField("New name", text: $newFilename)
@@ -259,59 +288,34 @@ struct AudioLibraryView: View {
             } message: {
                 Text("Enter a new name for this audio file.")
             }
-            .alert("Download Audio URL", isPresented: $showingURLDownloader) {
-                TextField("https://...", text: $audioURLInput)
-                Button("Cancel", role: .cancel) {
-                    audioURLInput = ""
-                    isDownloadingURL = false
-                }
-                Button("Download") {
-                    handleURLDownload()
-                }
-                .disabled(audioURLInput.isEmpty || isDownloadingURL)
-            } message: {
-                if isDownloadingURL {
-                    Text("Downloading... Please wait.")
-                } else {
-                    Text("Enter a stable URL pointing directly to an MP3, M4A, or WAV file.")
-                }
-            }
-            .alert("Download Failed", isPresented: $showingDownloadError) {
-                Button("OK", role: .cancel) { downloadError = nil }
-            } message: {
-                if let err = downloadError { Text(err) }
-            }
-            .onChange(of: downloadError) { _, newValue in
-                showingDownloadError = newValue != nil
-            }
             .task {
+                acquisition.onImported = { _ in
+                    Task { await loadAudioFiles() }
+                }
                 await loadAudioFiles()
                 UsageAnalytics.shared.screen(.audioLibrary)
             }
-            .confirmationDialog("Add to Sessions", isPresented: $showingAddSheet, titleVisibility: .visible) {
-                Button("Import from Files") {
-                    TranceHaptics.shared.light()
-                    showingImporter = true
-                }
-                Button("Import from URL") {
-                    TranceHaptics.shared.light()
-                    showingURLDownloader = true
-                }
-                Button("Browse the Web") {
-                    TranceHaptics.shared.light()
-                    showingBrowser = true
-                }
-                Button("Cancel", role: .cancel) {}
+            .animation(.snappy(duration: 0.25), value: pendingDeletion.staged.count)
+            .task(id: pendingDeletion.staged.map(\.id)) {
+                guard !pendingDeletion.staged.isEmpty else { return }
+                // Re-runs whenever the batch changes, cancelling the previous
+                // wait — so a second delete restarts the window rather than
+                // inheriting the remains of the first.
+                try? await Task.sleep(for: PendingAudioDeletion.undoWindow)
+                guard !Task.isCancelled else { return }
+                pendingDeletion.commit()
             }
-            .sheet(isPresented: $showingBrowser) {
-                InAppBrowserView { file in
-                    Task {
-                        await addAudioFile(file)
-                        if AnalysisPreferences.shared.autoAnalyzeOnImport {
-                            await analysisManager.queueForAnalysis([file])
-                        }
-                    }
-                }
+            .onDisappear {
+                // Leaving the library finalizes the delete. Attached to the
+                // NavigationStack, so pushing a detail screen keeps Undo alive
+                // and only leaving the tab commits.
+                pendingDeletion.commit()
+            }
+            .confirmationDialog("Add to Sessions", isPresented: $showingAddSheet, titleVisibility: .visible) {
+                Button("Import from Files") { acquisition.importFromFiles() }
+                Button("Import from URL") { acquisition.importFromURL() }
+                Button("Browse the Web") { acquisition.browseTheWeb() }
+                Button("Cancel", role: .cancel) {}
             }
             .onChange(of: isSelectionMode) { _, newValue in
                 if !newValue {

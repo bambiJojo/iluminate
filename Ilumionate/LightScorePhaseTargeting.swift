@@ -42,10 +42,15 @@ enum LightScorePhaseTargeting {
             contourShift = 0
         }
 
-        return clamp(
+        let phaseTarget = clamp(
             anchor - depthShift + contourShift,
-            lower: max(config.minFrequency, range.lowerBound),
-            upper: min(config.maxFrequency, range.upperBound)
+            lower: range.lowerBound,
+            upper: range.upperBound
+        )
+        return clamp(
+            phaseTarget,
+            lower: config.minFrequency,
+            upper: config.maxFrequency
         )
     }
 

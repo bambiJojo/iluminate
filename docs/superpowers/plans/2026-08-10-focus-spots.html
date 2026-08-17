@@ -1,0 +1,1345 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Focus Spots — Implementation Plan</title>
+<style>
+:root {
+  --bg:#0e0b12; --panel:#161119; --line:#2b2333; --text:#ece6f2;
+  --muted:#9a8fa6; --accent:#e9b7ba; --accent2:#be96ff; --code:#120e17;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg:#faf7fb; --panel:#fff; --line:#e6dfe9; --text:#1d1721;
+    --muted:#6b6274; --accent:#a35c63; --accent2:#6b3fa0; --code:#f3eff5; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+.wrap { display:grid; grid-template-columns:250px minmax(0,1fr); gap:44px;
+  max-width:1180px; margin:0 auto; padding:56px 28px 120px; }
+nav { position:sticky; top:36px; align-self:start; font-size:13px; }
+nav .navtitle { text-transform:uppercase; letter-spacing:.12em; font-size:10px;
+  color:var(--muted); margin-bottom:12px; }
+nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 0;
+  border-left:2px solid transparent; padding-left:12px; }
+nav a:hover { color:var(--accent); border-left-color:var(--accent); }
+main { min-width:0; }
+h1 { font-size:clamp(30px,4vw,44px); line-height:1.12; letter-spacing:-.025em;
+  margin:0 0 28px; }
+h2 { font-size:26px; letter-spacing:-.015em; margin:56px 0 16px;
+  padding-bottom:10px; border-bottom:1px solid var(--line); }
+h3 { font-size:18px; margin:34px 0 10px; color:var(--accent); }
+h4 { font-size:15px; margin:24px 0 8px; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.07em; }
+p { margin:0 0 15px; }
+ul,ol { margin:0 0 16px; padding-left:22px; }
+li { margin-bottom:7px; }
+hr { border:0; border-top:1px solid var(--line); margin:44px 0; }
+blockquote { margin:0 0 20px; padding:14px 20px; background:var(--panel);
+  border-left:3px solid var(--accent2); border-radius:0 10px 10px 0;
+  font-size:17px; color:var(--text); }
+blockquote p:last-child { margin-bottom:0; }
+code { font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:var(--code); padding:2px 6px; border-radius:5px; }
+pre.code { background:var(--code); border:1px solid var(--line);
+  border-radius:12px; padding:16px 18px; overflow-x:auto; margin:0 0 18px; }
+pre.code code { background:none; padding:0; font-size:13px; }
+.tablewrap { overflow-x:auto; margin:0 0 20px;
+  border:1px solid var(--line); border-radius:12px; }
+table { border-collapse:collapse; width:100%; font-size:14.5px; }
+th { text-align:left; padding:11px 15px; background:var(--panel);
+  font-weight:650; border-bottom:1px solid var(--line);
+  font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--muted); white-space:nowrap; }
+td { padding:11px 15px; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+tr:last-child td { border-bottom:0; }
+strong { color:var(--accent2); font-weight:640; }
+@media (max-width:900px) {
+  .wrap { grid-template-columns:1fr; gap:0; padding:32px 20px 80px; }
+  nav { position:static; margin-bottom:36px; }
+}
+</style></head><body>
+
+<style>
+ul.tasks { list-style:none; padding-left:2px; }
+li.task { display:flex; gap:9px; align-items:flex-start; margin-bottom:9px; }
+li.task .box { color:var(--accent2); font-size:15px; line-height:1.6; }
+h2 { scroll-margin-top:24px; }
+</style>
+<div class="wrap">
+<nav><div class="navtitle">Contents</div><a href="#file-structure">File Structure</a><a href="#commands-you-will-use">Commands you will use</a><a href="#task-1-geometry-model-and-persistence">Task 1: Geometry model and persistence</a><a href="#task-2-geometry-resolver">Task 2: Geometry resolver</a><a href="#task-3-visibility-rule">Task 3: Visibility rule</a><a href="#task-4-render-the-spots-in-the-player">Task 4: Render the spots in the player</a><a href="#task-5-calibration-screen">Task 5: Calibration screen</a><a href="#task-6-settings-wiring">Task 6: Settings wiring</a><a href="#task-7-full-verification">Task 7: Full verification</a></nav>
+<main>
+<h1 id="focus-spots-implementation-plan">Focus Spots Implementation Plan</h1>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>Goal:</strong> Add an optional pair of opaque black focus spots rendered over the player&#x27;s light fields, with position, diameter and horizontal spacing dialled in through a calibration screen reached from Session Defaults.</p>
+<p><strong>Architecture:</strong> A render-time display preference only — nothing enters <code>LightSession</code>, the session JSON schema, or <code>SessionGenerator</code>. Geometry persists as a JSON blob in <code>UserDefaults</code> (<code>focusSpots</code>) beside a plain Bool (<code>focusSpotsEnabled</code>), exactly mirroring how <code>FlashTint</code>/<code>FlashTintPreference</code> and <code>steadyLightEnabled</code> already work. Pure, view-free types hold the geometry and the visibility rule so both are unit-testable; a single overlay layer in <code>UnifiedPlayerView</code>&#x27;s ZStack renders them for every qualifying mode.</p>
+<p><strong>Tech Stack:</strong> Swift 6.2, SwiftUI, <code>@AppStorage</code>/<code>UserDefaults</code>, Swift Testing. iOS 26 / macOS 26. No new dependencies.</p>
+<p><strong>Spec:</strong> [<code>docs/superpowers/specs/2026-08-10-focus-spots-design.md</code>](../specs/2026-08-10-focus-spots-design.md)</p>
+<hr>
+<h2 id="file-structure">File Structure</h2>
+<p>**New — <code>Ilumionate/FocusSpots/</code>**</p>
+<div class="tablewrap"><table><thead><tr><th>File</th><th>Responsibility</th></tr></thead><tbody>
+<tr><td><code>FocusSpotSettings.swift</code></td><td>Geometry model, ranges, clamping, detent snapping, <code>FocusSpotPreference</code> persistence</td></tr>
+<tr><td><code>FocusSpotLayout.swift</code></td><td>Pure size → two centre points resolver</td></tr>
+<tr><td><code>FocusSpotVisibility.swift</code></td><td>Pure &quot;should spots render?&quot; rule + <code>PlayerMode.supportsFocusSpots</code></td></tr>
+<tr><td><code>FocusSpotField.swift</code></td><td>Draws two black circles for a given <code>FocusSpotSettings</code></td></tr>
+<tr><td><code>FocusSpotOverlay.swift</code></td><td>Reads stored preference + applies the gate, delegates drawing to <code>FocusSpotField</code></td></tr>
+<tr><td><code>FocusSpotCalibrationView.swift</code></td><td>Full-screen calibration surface</td></tr>
+</tbody></table></div>
+<blockquote><p>The spec listed one <code>FocusSpotOverlay.swift</code>. It is split into <code>FocusSpotField</code> (draws arbitrary settings — needed by the calibration preview) and <code>FocusSpotOverlay</code> (reads storage and gates), keeping one primary type per file as <code>CLAUDE.md</code> requires.</p></blockquote>
+<p>**New — <code>IlumionateTests/</code>:** <code>FocusSpotSettingsTests.swift</code>, <code>FocusSpotLayoutTests.swift</code>, <code>FocusSpotVisibilityTests.swift</code></p>
+<blockquote><p>The spec listed a fourth suite, <code>FocusSpotDetentTests</code>. Detent snapping is a static method on <code>FocusSpotSettings</code>, so its tests live in <code>FocusSpotSettingsTests</code> under a <code>// MARK: - Detent snapping</code> heading rather than in a suite of their own.</p></blockquote>
+<p><strong>Modified</strong></p>
+<div class="tablewrap"><table><thead><tr><th>File</th><th>Change</th></tr></thead><tbody>
+<tr><td><code>Ilumionate/AppSettingsManager.swift</code></td><td>Two keys + both in <code>resetPreferences</code></td></tr>
+<tr><td><code>Ilumionate/UnifiedPlayerView.swift</code></td><td>One overlay layer above <code>backgroundLayer</code></td></tr>
+<tr><td><code>Ilumionate/ProfileSettingsView.swift</code></td><td>Storage, calibration state, full-screen cover</td></tr>
+<tr><td><code>Ilumionate/ProfileSettingsView+Sections.swift</code></td><td>Toggle + Calibrate row in Session Defaults</td></tr>
+</tbody></table></div>
+<p><code>Ilumionate/</code> and <code>IlumionateTests/</code> are <code>PBXFileSystemSynchronizedRootGroup</code>s — new files join their targets automatically. **Do not edit <code>project.pbxproj</code>.**</p>
+<h2 id="commands-you-will-use">Commands you will use</h2>
+<p>Build (macOS):</p>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; build</code></pre>
+<p>Build (iOS Simulator):</p>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; build</code></pre>
+<p>Run one test suite (fastest loop — macOS):</p>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests/FocusSpotSettingsTests</code></pre>
+<hr>
+<h2 id="task-1-geometry-model-and-persistence">Task 1: Geometry model and persistence</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/FocusSpots/FocusSpotSettings.swift</code></li>
+<li>Modify: <code>Ilumionate/AppSettingsManager.swift</code> (keys near line 22, reset near line 171)</li>
+<li>Test: <code>IlumionateTests/FocusSpotSettingsTests.swift</code></li>
+</ul>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/FocusSpotSettingsTests.swift</code>:</p>
+<pre class="code"><code>//
+//  FocusSpotSettingsTests.swift
+//  IlumionateTests
+//
+//  Focus spot geometry is a stored display preference. A corrupt or
+//  hand-edited value must degrade to something renderable rather than
+//  producing spots the size of the screen or off the edge of it.
+//
+
+import Foundation
+import Testing
+
+@testable import Ilumionate
+
+@Suite(&quot;Focus spot settings&quot;)
+struct FocusSpotSettingsTests {
+
+    // MARK: - Defaults and clamping
+
+    @Test(&quot;Defaults sit in the upper third&quot;)
+    func defaultsToUpperThird() {
+        #expect(FocusSpotSettings.default.verticalPosition == 1.0 / 3.0)
+        #expect(FocusSpotSettings.default.horizontalSpacing == 180)
+        #expect(FocusSpotSettings.default.diameter == 48)
+    }
+
+    @Test(&quot;Out-of-range values clamp into their ranges&quot;)
+    func outOfRangeValuesClamp() {
+        let wild = FocusSpotSettings(
+            verticalPosition: 5,
+            horizontalSpacing: -100,
+            diameter: 9_000
+        ).clamped
+
+        #expect(wild.verticalPosition == FocusSpotSettings.verticalPositionRange.upperBound)
+        #expect(wild.horizontalSpacing == FocusSpotSettings.horizontalSpacingRange.lowerBound)
+        #expect(wild.diameter == FocusSpotSettings.diameterRange.upperBound)
+    }
+
+    @Test(&quot;Non-finite values fall back to the defaults&quot;)
+    func nonFiniteValuesFallBack() {
+        let broken = FocusSpotSettings(
+            verticalPosition: .nan,
+            horizontalSpacing: .infinity,
+            diameter: .nan
+        ).clamped
+
+        #expect(broken.verticalPosition == FocusSpotSettings.default.verticalPosition)
+        #expect(broken.diameter == FocusSpotSettings.default.diameter)
+        #expect(broken.horizontalSpacing == FocusSpotSettings.horizontalSpacingRange.upperBound)
+    }
+
+    // MARK: - Detent snapping
+
+    @Test(&quot;A value within tolerance snaps to its detent&quot;)
+    func nearValuesSnap() {
+        #expect(FocusSpotSettings.snappingVerticalPosition(0.34) == 1.0 / 3.0)
+        #expect(FocusSpotSettings.snappingVerticalPosition(0.505) == 0.5)
+        #expect(FocusSpotSettings.snappingVerticalPosition(0.655) == 2.0 / 3.0)
+    }
+
+    @Test(&quot;A value outside tolerance is left alone&quot;)
+    func farValuesDoNotSnap() {
+        #expect(FocusSpotSettings.snappingVerticalPosition(0.42) == 0.42)
+        #expect(FocusSpotSettings.snappingVerticalPosition(0.6) == 0.6)
+    }
+
+    @Test(&quot;Snapping is idempotent on an exact detent&quot;)
+    func snappingIsIdempotent() {
+        for detent in FocusSpotSettings.verticalDetents {
+            #expect(FocusSpotSettings.snappingVerticalPosition(detent) == detent)
+        }
+    }
+
+    @Test(&quot;Snapping clamps before it snaps&quot;)
+    func snappingClamps() {
+        #expect(
+            FocusSpotSettings.snappingVerticalPosition(-3)
+                == FocusSpotSettings.verticalPositionRange.lowerBound
+        )
+    }
+
+    // MARK: - Persistence
+
+    @Test(&quot;Unset preference returns the defaults&quot;)
+    func unsetReturnsDefaults() throws {
+        let defaults = try makeDefaults()
+
+        #expect(FocusSpotPreference.current(defaults: defaults) == .default)
+        #expect(FocusSpotPreference.isEnabled(defaults: defaults) == false)
+    }
+
+    @Test(&quot;Geometry round-trips through UserDefaults&quot;)
+    func geometryRoundTrips() throws {
+        let defaults = try makeDefaults()
+        let settings = FocusSpotSettings(
+            verticalPosition: 0.5,
+            horizontalSpacing: 220,
+            diameter: 64
+        )
+
+        FocusSpotPreference.set(settings, defaults: defaults)
+
+        #expect(FocusSpotPreference.current(defaults: defaults) == settings)
+    }
+
+    @Test(&quot;Enablement round-trips through UserDefaults&quot;)
+    func enablementRoundTrips() throws {
+        let defaults = try makeDefaults()
+
+        FocusSpotPreference.setEnabled(true, defaults: defaults)
+        #expect(FocusSpotPreference.isEnabled(defaults: defaults))
+
+        FocusSpotPreference.setEnabled(false, defaults: defaults)
+        #expect(FocusSpotPreference.isEnabled(defaults: defaults) == false)
+    }
+
+    @Test(&quot;Corrupt stored data falls back instead of crashing&quot;)
+    func corruptDataFallsBack() throws {
+        let defaults = try makeDefaults()
+        defaults.set(Data(&quot;not json&quot;.utf8), forKey: AppSettingsManager.Key.focusSpots)
+
+        #expect(FocusSpotPreference.current(defaults: defaults) == .default)
+    }
+
+    @Test(&quot;Stored out-of-range geometry is clamped on read&quot;)
+    func storedValuesAreClampedOnRead() throws {
+        let defaults = try makeDefaults()
+        let json = #&quot;{&quot;verticalPosition&quot;:42,&quot;horizontalSpacing&quot;:5,&quot;diameter&quot;:900}&quot;#
+        defaults.set(Data(json.utf8), forKey: AppSettingsManager.Key.focusSpots)
+
+        let read = FocusSpotPreference.current(defaults: defaults)
+
+        #expect(read.verticalPosition == FocusSpotSettings.verticalPositionRange.upperBound)
+        #expect(read.horizontalSpacing == FocusSpotSettings.horizontalSpacingRange.lowerBound)
+        #expect(read.diameter == FocusSpotSettings.diameterRange.upperBound)
+    }
+
+    @Test(&quot;Preference reset turns the feature off and drops the geometry&quot;)
+    @MainActor
+    func resetClearsBothKeys() throws {
+        let defaults = try makeDefaults()
+        FocusSpotPreference.setEnabled(true, defaults: defaults)
+        FocusSpotPreference.set(
+            FocusSpotSettings(verticalPosition: 0.5, horizontalSpacing: 300, diameter: 100),
+            defaults: defaults
+        )
+
+        AppSettingsManager.resetPreferences(
+            defaults: defaults,
+            resetAnalysisPreferences: false
+        )
+
+        #expect(FocusSpotPreference.isEnabled(defaults: defaults) == false)
+        #expect(FocusSpotPreference.current(defaults: defaults) == .default)
+    }
+
+    // MARK: - Helpers
+
+    private func makeDefaults() throws -&gt; UserDefaults {
+        let name = &quot;FocusSpotSettingsTests.\(UUID().uuidString)&quot;
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+}</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests/FocusSpotSettingsTests</code></pre>
+<p>Expected: <strong>BUILD FAILED</strong> — <code>cannot find &#x27;FocusSpotSettings&#x27; in scope</code>.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 3: Create the model and persistence</strong></li>
+</ul>
+<p>Create <code>Ilumionate/FocusSpots/FocusSpotSettings.swift</code>:</p>
+<pre class="code"><code>//
+//  FocusSpotSettings.swift
+//  Ilumionate
+//
+//  Geometry for the optional pair of black focus spots drawn over the light
+//  field — holes punched in the light for the eye to rest on.
+//
+//  Like `FlashTint`, this is a render-time display preference only. Nothing
+//  here reaches `LightSession`, the session JSON schema, or `SessionGenerator`,
+//  which is the whole point of keeping it in user preferences rather than in
+//  the score.
+//
+//  Diameter and spacing are POINTS, not fractions of the screen: they are
+//  aimed at a physical thing — your eyes — and should not rescale when the
+//  window does. Vertical position is a FRACTION, because &quot;upper third&quot; is
+//  inherently proportional and should hold across portrait, landscape, and a
+//  resized Mac window.
+//
+
+import Foundation
+
+struct FocusSpotSettings: Codable, Equatable, Sendable {
+    /// Fraction of field height where the spot centres sit. 0 = top, 1 = bottom.
+    var verticalPosition: Double
+    /// Points between the two spot centres.
+    var horizontalSpacing: Double
+    /// Diameter of each spot, in points.
+    var diameter: Double
+
+    // MARK: - Ranges
+
+    static let verticalPositionRange: ClosedRange&lt;Double&gt; = 0.1...0.9
+    static let horizontalSpacingRange: ClosedRange&lt;Double&gt; = 40...400
+    static let diameterRange: ClosedRange&lt;Double&gt; = 16...120
+
+    /// The three vertical anchors the calibration slider snaps to: upper
+    /// third, centre, lower third.
+    static let verticalDetents: [Double] = [1.0 / 3.0, 0.5, 2.0 / 3.0]
+
+    /// How close the slider must come to a detent before it snaps.
+    static let detentTolerance: Double = 0.02
+
+    static let `default` = FocusSpotSettings(
+        verticalPosition: 1.0 / 3.0,
+        horizontalSpacing: 180,
+        diameter: 48
+    )
+
+    // MARK: - Clamping
+
+    /// Every field forced into range, applied on read and on write so a
+    /// hand-edited or partially-written value can never produce an
+    /// unrenderable field.
+    var clamped: FocusSpotSettings {
+        FocusSpotSettings(
+            verticalPosition: Self.clamp(
+                verticalPosition,
+                to: Self.verticalPositionRange,
+                fallback: Self.default.verticalPosition
+            ),
+            horizontalSpacing: Self.clamp(
+                horizontalSpacing,
+                to: Self.horizontalSpacingRange,
+                fallback: Self.default.horizontalSpacing
+            ),
+            diameter: Self.clamp(
+                diameter,
+                to: Self.diameterRange,
+                fallback: Self.default.diameter
+            )
+        )
+    }
+
+    /// Snaps a vertical position onto the nearest detent when it is within
+    /// tolerance, so upper third / centre / lower third stay one flick away
+    /// while everything between them is still reachable.
+    static func snappingVerticalPosition(_ value: Double) -&gt; Double {
+        let bounded = clamp(
+            value,
+            to: verticalPositionRange,
+            fallback: Self.default.verticalPosition
+        )
+        guard
+            let nearest = verticalDetents.min(by: {
+                abs($0 - bounded) &lt; abs($1 - bounded)
+            })
+        else {
+            return bounded
+        }
+        return abs(nearest - bounded) &lt;= detentTolerance ? nearest : bounded
+    }
+
+    /// `.nan` and `.infinity` survive `min`/`max` in ways that produce an
+    /// unrenderable field, so they are rejected before clamping.
+    private static func clamp(
+        _ value: Double,
+        to range: ClosedRange&lt;Double&gt;,
+        fallback: Double
+    ) -&gt; Double {
+        guard !value.isNaN else { return fallback }
+        return min(max(value, range.lowerBound), range.upperBound)
+    }
+}
+
+// MARK: - Persistence
+
+/// Reads and writes the stored preference.
+///
+/// Falls back to `.default` for an unset key, an undecodable value, and an
+/// out-of-range one — a bad write can never leave the field unrenderable.
+enum FocusSpotPreference {
+
+    static func isEnabled(defaults: UserDefaults = .standard) -&gt; Bool {
+        defaults.bool(forKey: AppSettingsManager.Key.focusSpotsEnabled)
+    }
+
+    static func setEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: AppSettingsManager.Key.focusSpotsEnabled)
+    }
+
+    static func current(defaults: UserDefaults = .standard) -&gt; FocusSpotSettings {
+        guard
+            let data = defaults.data(forKey: AppSettingsManager.Key.focusSpots),
+            let decoded = try? JSONDecoder().decode(FocusSpotSettings.self, from: data)
+        else {
+            return .default
+        }
+        return decoded.clamped
+    }
+
+    static func set(_ settings: FocusSpotSettings, defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(settings.clamped) else { return }
+        defaults.set(data, forKey: AppSettingsManager.Key.focusSpots)
+    }
+}</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> **Step 4: Add the keys to <code>AppSettingsManager</code>**</li>
+</ul>
+<p>In <code>Ilumionate/AppSettingsManager.swift</code>, add after the <code>flashTint</code> key (line 22):</p>
+<pre class="code"><code>        static let focusSpotsEnabled = &quot;focusSpotsEnabled&quot;
+        static let focusSpots = &quot;focusSpots&quot;</code></pre>
+<p>And in <code>resetPreferences</code>, immediately after <code>defaults.removeObject(forKey: Key.flashTint)</code> (line 171):</p>
+<pre class="code"><code>        defaults.set(false, forKey: Key.focusSpotsEnabled)
+        defaults.removeObject(forKey: Key.focusSpots)</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 5: Run the tests to verify they pass</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests/FocusSpotSettingsTests</code></pre>
+<p>Expected: <strong>TEST SUCCEEDED</strong>, 13 tests passing.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre class="code"><code>git add Ilumionate/FocusSpots/FocusSpotSettings.swift Ilumionate/AppSettingsManager.swift IlumionateTests/FocusSpotSettingsTests.swift
+git commit -m &quot;feat(focus-spots): add geometry model and stored preference&quot;</code></pre>
+<hr>
+<h2 id="task-2-geometry-resolver">Task 2: Geometry resolver</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/FocusSpots/FocusSpotLayout.swift</code></li>
+<li>Test: <code>IlumionateTests/FocusSpotLayoutTests.swift</code></li>
+</ul>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/FocusSpotLayoutTests.swift</code>:</p>
+<pre class="code"><code>//
+//  FocusSpotLayoutTests.swift
+//  IlumionateTests
+//
+//  The resolver is the only thing standing between a stored preference and
+//  spots drawn off the edge of a narrow Mac window, so its clamping is
+//  tested harder than its happy path.
+//
+
+import CoreGraphics
+import Foundation
+import Testing
+
+@testable import Ilumionate
+
+@Suite(&quot;Focus spot layout&quot;)
+struct FocusSpotLayoutTests {
+
+    private let field = CGSize(width: 400, height: 900)
+
+    private func settings(
+        vertical: Double = 1.0 / 3.0,
+        spacing: Double = 180,
+        diameter: Double = 48
+    ) -&gt; FocusSpotSettings {
+        FocusSpotSettings(
+            verticalPosition: vertical,
+            horizontalSpacing: spacing,
+            diameter: diameter
+        )
+    }
+
+    // MARK: - Anchors
+
+    @Test(&quot;Each detent lands at its share of the height&quot;, arguments: [
+        (1.0 / 3.0, 300.0),
+        (0.5, 450.0),
+        (2.0 / 3.0, 600.0)
+    ])
+    func detentsMapToExpectedHeight(vertical: Double, expectedY: Double) throws {
+        let resolved = try #require(
+            FocusSpotLayout.resolve(settings(vertical: vertical), in: field)
+        )
+
+        #expect(abs(resolved.left.y - expectedY) &lt; 0.001)
+        #expect(resolved.left.y == resolved.right.y)
+    }
+
+    // MARK: - Symmetry
+
+    @Test(&quot;Centres are symmetric about the midline and ordered left then right&quot;)
+    func centresAreSymmetric() throws {
+        let resolved = try #require(FocusSpotLayout.resolve(settings(), in: field))
+
+        #expect(resolved.left.x &lt; resolved.right.x)
+        #expect(abs((resolved.left.x + resolved.right.x) - field.width) &lt; 0.001)
+        #expect(abs((resolved.right.x - resolved.left.x) - 180) &lt; 0.001)
+    }
+
+    // MARK: - Clamping
+
+    @Test(&quot;A field narrower than the spacing keeps both spots fully inside&quot;)
+    func narrowFieldClampsSpacing() throws {
+        let narrow = CGSize(width: 300, height: 600)
+        let resolved = try #require(
+            FocusSpotLayout.resolve(settings(spacing: 400), in: narrow)
+        )
+
+        #expect(resolved.left.x - resolved.diameter / 2 &gt;= 0)
+        #expect(resolved.right.x + resolved.diameter / 2 &lt;= narrow.width)
+    }
+
+    @Test(&quot;A diameter wider than half the field shrinks so two spots fit&quot;)
+    func oversizedDiameterShrinks() throws {
+        let narrow = CGSize(width: 200, height: 600)
+        let resolved = try #require(
+            FocusSpotLayout.resolve(settings(diameter: 120), in: narrow)
+        )
+
+        #expect(resolved.diameter == 100)
+    }
+
+    @Test(&quot;Extreme vertical positions keep the whole circle on screen&quot;, arguments: [0.1, 0.9])
+    func extremeVerticalPositionsStayOnScreen(vertical: Double) throws {
+        let short = CGSize(width: 400, height: 120)
+        let resolved = try #require(
+            FocusSpotLayout.resolve(settings(vertical: vertical), in: short)
+        )
+
+        #expect(resolved.left.y - resolved.diameter / 2 &gt;= 0)
+        #expect(resolved.left.y + resolved.diameter / 2 &lt;= short.height)
+    }
+
+    @Test(&quot;A degenerate size resolves to nothing&quot;, arguments: [
+        CGSize(width: 0, height: 0),
+        CGSize(width: 400, height: 0),
+        CGSize(width: 0, height: 900)
+    ])
+    func degenerateSizeReturnsNil(size: CGSize) {
+        #expect(FocusSpotLayout.resolve(settings(), in: size) == nil)
+    }
+}</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests/FocusSpotLayoutTests</code></pre>
+<p>Expected: <strong>BUILD FAILED</strong> — <code>cannot find &#x27;FocusSpotLayout&#x27; in scope</code>.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 3: Write the resolver</strong></li>
+</ul>
+<p>Create <code>Ilumionate/FocusSpots/FocusSpotLayout.swift</code>:</p>
+<pre class="code"><code>//
+//  FocusSpotLayout.swift
+//  Ilumionate
+//
+//  Turns a stored `FocusSpotSettings` and a field size into two centre
+//  points. Pure and view-free so every clamping rule is unit-testable.
+//
+//  In bilateral flash mode the field is an HStack of two halves; symmetric
+//  centres put exactly one spot in each half for any spacing above zero, so
+//  bilateral needs no special case here.
+//
+
+import CoreGraphics
+
+nonisolated enum FocusSpotLayout {
+
+    struct Resolved: Equatable, Sendable {
+        let diameter: CGFloat
+        let left: CGPoint
+        let right: CGPoint
+    }
+
+    /// Resolves the pair against a field, or `nil` when the field has no area
+    /// to draw in (a view measured before its first layout pass).
+    static func resolve(_ settings: FocusSpotSettings, in size: CGSize) -&gt; Resolved? {
+        guard size.width &gt; 0, size.height &gt; 0 else { return nil }
+
+        let requested = settings.clamped
+
+        // Two spots must fit side by side, and one must fit vertically.
+        let diameter = min(CGFloat(requested.diameter), size.width / 2, size.height)
+        // The outer edges stay inside the field: a Mac window narrowed to
+        // 300pt must not push a spot off-screen.
+        let spacing = min(CGFloat(requested.horizontalSpacing), size.width - diameter)
+        let y = min(
+            max(CGFloat(requested.verticalPosition) * size.height, diameter / 2),
+            size.height - diameter / 2
+        )
+        let midX = size.width / 2
+
+        return Resolved(
+            diameter: diameter,
+            left: CGPoint(x: midX - spacing / 2, y: y),
+            right: CGPoint(x: midX + spacing / 2, y: y)
+        )
+    }
+}</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 4: Run the tests to verify they pass</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests/FocusSpotLayoutTests</code></pre>
+<p>Expected: <strong>TEST SUCCEEDED</strong>, 11 tests passing (the parameterised cases count individually).</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre class="code"><code>git add Ilumionate/FocusSpots/FocusSpotLayout.swift IlumionateTests/FocusSpotLayoutTests.swift
+git commit -m &quot;feat(focus-spots): resolve spot geometry against the field size&quot;</code></pre>
+<hr>
+<h2 id="task-3-visibility-rule">Task 3: Visibility rule</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/FocusSpots/FocusSpotVisibility.swift</code></li>
+<li>Test: <code>IlumionateTests/FocusSpotVisibilityTests.swift</code></li>
+</ul>
+<p>Spots only make sense over a <strong>lit</strong> field. With the mind machine off, <code>EntrainmentBackground</code> renders flat <code>Color.bgPrimary</code> (<code>PlayerBackgrounds.swift:113</code>) and black circles on it would read as a rendering bug.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/FocusSpotVisibilityTests.swift</code>:</p>
+<pre class="code"><code>//
+//  FocusSpotVisibilityTests.swift
+//  IlumionateTests
+//
+//  Focus spots must never appear over an unlit backdrop — black circles on
+//  flat bgPrimary read as a rendering bug, not a feature.
+//
+
+import Foundation
+import Testing
+
+@testable import Ilumionate
+
+@Suite(&quot;Focus spot visibility&quot;)
+@MainActor
+struct FocusSpotVisibilityTests {
+
+    private func makeSession() -&gt; LightSession {
+        LightSession(
+            session_name: &quot;Visibility Test&quot;,
+            duration_sec: 300,
+            light_score: [
+                LightMoment(time: 0, frequency: 10, intensity: 0.5, waveform: .sine)
+            ]
+        )
+    }
+
+    private func makeAudioFile() -&gt; AudioFile {
+        AudioFile(
+            id: UUID(),
+            filename: &quot;track.m4a&quot;,
+            duration: 300,
+            fileSize: 2048,
+            createdDate: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+    }
+
+    private var flashMode: PlayerMode {
+        .flashMode(
+            frequency: 10,
+            intensity: 0.75,
+            colorTemperature: 3000,
+            pattern: .sine,
+            binauralEnabled: false,
+            binauralCarrier: 200,
+            binauralVolume: 0.5
+        )
+    }
+
+    private var visualField: PlayerMode {
+        .visualField(settings: .standard, audioFile: nil, binaural: nil)
+    }
+
+    private func isVisible(
+        _ mode: PlayerMode,
+        isEnabled: Bool = true,
+        mindMachineEnabled: Bool = true,
+        lightSyncEnabled: Bool = true
+    ) -&gt; Bool {
+        FocusSpotVisibility.isVisible(
+            mode: mode,
+            isEnabled: isEnabled,
+            mindMachineEnabled: mindMachineEnabled,
+            lightSyncEnabled: lightSyncEnabled
+        )
+    }
+
+    // MARK: - Capability flag
+
+    @Test(&quot;Every mode but the visual field supports focus spots&quot;)
+    func capabilityFlag() {
+        #expect(flashMode.supportsFocusSpots)
+        #expect(PlayerMode.colorPulse(frequency: 10, intensity: 0.5).supportsFocusSpots)
+        #expect(PlayerMode.session(session: makeSession(), audioFile: nil).supportsFocusSpots)
+        #expect(PlayerMode.audioLight(audioFile: makeAudioFile()).supportsFocusSpots)
+        #expect(PlayerMode.playlist(playlist: Playlist(name: &quot;Evening&quot;)).supportsFocusSpots)
+        #expect(visualField.supportsFocusSpots == false)
+    }
+
+    // MARK: - The gate
+
+    @Test(&quot;Disabled means never visible&quot;)
+    func disabledIsNeverVisible() {
+        #expect(isVisible(flashMode, isEnabled: false) == false)
+        #expect(
+            isVisible(
+                PlayerMode.colorPulse(frequency: 10, intensity: 0.5),
+                isEnabled: false
+            ) == false
+        )
+    }
+
+    @Test(&quot;The raw entrainment fields always show spots when enabled&quot;)
+    func rawFieldsAlwaysShow() {
+        // Neither mode is gated by the mind machine or light sync toggles.
+        #expect(isVisible(flashMode, mindMachineEnabled: false, lightSyncEnabled: false))
+        #expect(
+            isVisible(
+                PlayerMode.colorPulse(frequency: 10, intensity: 0.5),
+                mindMachineEnabled: false,
+                lightSyncEnabled: false
+            )
+        )
+    }
+
+    @Test(&quot;Session and playlist follow the mind machine toggle&quot;)
+    func sessionFollowsMindMachine() {
+        let session = PlayerMode.session(session: makeSession(), audioFile: makeAudioFile())
+        let playlist = PlayerMode.playlist(playlist: Playlist(name: &quot;Evening&quot;))
+
+        #expect(isVisible(session, mindMachineEnabled: true))
+        #expect(isVisible(session, mindMachineEnabled: false) == false)
+        #expect(isVisible(playlist, mindMachineEnabled: true))
+        #expect(isVisible(playlist, mindMachineEnabled: false) == false)
+    }
+
+    @Test(&quot;Audio mode follows its own light sync toggle&quot;)
+    func audioFollowsLightSync() {
+        let audio = PlayerMode.audioLight(audioFile: makeAudioFile())
+
+        #expect(isVisible(audio, mindMachineEnabled: false, lightSyncEnabled: true))
+        #expect(isVisible(audio, mindMachineEnabled: true, lightSyncEnabled: false) == false)
+    }
+
+    @Test(&quot;The visual field never shows spots, even when everything is on&quot;)
+    func visualFieldNeverShows() {
+        #expect(isVisible(visualField) == false)
+    }
+}</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests/FocusSpotVisibilityTests</code></pre>
+<p>Expected: <strong>BUILD FAILED</strong> — <code>cannot find &#x27;FocusSpotVisibility&#x27; in scope</code>.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 3: Write the rule</strong></li>
+</ul>
+<p>Create <code>Ilumionate/FocusSpots/FocusSpotVisibility.swift</code>:</p>
+<pre class="code"><code>//
+//  FocusSpotVisibility.swift
+//  Ilumionate
+//
+//  Whether the focus spots should be drawn for a given player mode.
+//
+//  Spots are holes in a lit field. With the lights off the backdrop is flat
+//  `bgPrimary`, and two black circles on it read as a rendering bug — so the
+//  gate follows the same &quot;are the lights on?&quot; question the control tray asks
+//  (`PlayerControlTray.lightsAreOn`).
+//
+
+import Foundation
+
+extension PlayerMode {
+    /// Whether this mode renders a light field the spots can sit on.
+    ///
+    /// The visual field opts out: it is a composed shader scene rather than a
+    /// driven light field, and two black holes would fight its composition.
+    var supportsFocusSpots: Bool {
+        switch self {
+        case .visualField:
+            return false
+        case .session, .flashMode, .colorPulse, .audioLight, .playlist:
+            return true
+        }
+    }
+}
+
+nonisolated enum FocusSpotVisibility {
+
+    static func isVisible(
+        mode: PlayerMode,
+        isEnabled: Bool,
+        mindMachineEnabled: Bool,
+        lightSyncEnabled: Bool
+    ) -&gt; Bool {
+        guard isEnabled, mode.supportsFocusSpots else { return false }
+
+        switch mode {
+        case .flashMode, .colorPulse: return true
+        case .audioLight:             return lightSyncEnabled
+        case .session, .playlist:     return mindMachineEnabled
+        case .visualField:            return false
+        }
+    }
+}</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 4: Run the tests to verify they pass</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests/FocusSpotVisibilityTests</code></pre>
+<p>Expected: <strong>TEST SUCCEEDED</strong>, 6 tests passing.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre class="code"><code>git add Ilumionate/FocusSpots/FocusSpotVisibility.swift IlumionateTests/FocusSpotVisibilityTests.swift
+git commit -m &quot;feat(focus-spots): gate spots on a lit field&quot;</code></pre>
+<hr>
+<h2 id="task-4-render-the-spots-in-the-player">Task 4: Render the spots in the player</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/FocusSpots/FocusSpotField.swift</code></li>
+<li>Create: <code>Ilumionate/FocusSpots/FocusSpotOverlay.swift</code></li>
+<li>Modify: <code>Ilumionate/UnifiedPlayerView.swift:52-55</code></li>
+</ul>
+<p>No unit test here — this is view composition over already-tested pure types, and the project reaches for UI tests only when a unit test cannot cover the behaviour. Verification is the build plus the manual smoke test in Task 7.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 1: Create the field view</strong></li>
+</ul>
+<p>Create <code>Ilumionate/FocusSpots/FocusSpotField.swift</code>:</p>
+<pre class="code"><code>//
+//  FocusSpotField.swift
+//  Ilumionate
+//
+//  Draws the two focus spots for a given geometry.
+//
+//  Takes its settings as a parameter rather than reading storage, so the
+//  calibration screen can render a working copy that has not been saved yet.
+//
+
+import SwiftUI
+
+struct FocusSpotField: View {
+    let settings: FocusSpotSettings
+
+    @State private var size: CGSize = .zero
+
+    var body: some View {
+        ZStack {
+            Color.clear
+
+            if let resolved = FocusSpotLayout.resolve(settings, in: size) {
+                spot(diameter: resolved.diameter, at: resolved.left)
+                spot(diameter: resolved.diameter, at: resolved.right)
+            }
+        }
+        // `onGeometryChange` rather than a GeometryReader: the reader would
+        // impose its own layout on a view that must simply fill its parent.
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+    }
+
+    /// Genuinely opaque: the spot is a hole punched in the light, not a
+    /// dimming. SwiftUI antialiases the edge; no feather is applied.
+    private func spot(diameter: CGFloat, at centre: CGPoint) -&gt; some View {
+        Circle()
+            .fill(.black)
+            .frame(width: diameter, height: diameter)
+            .position(centre)
+    }
+}
+
+#Preview {
+    ZStack {
+        Color.orange
+        FocusSpotField(settings: .default)
+    }
+    .ignoresSafeArea()
+}</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 2: Create the overlay</strong></li>
+</ul>
+<p>Create <code>Ilumionate/FocusSpots/FocusSpotOverlay.swift</code>:</p>
+<pre class="code"><code>//
+//  FocusSpotOverlay.swift
+//  Ilumionate
+//
+//  The player&#x27;s focus spot layer: reads the stored preference, applies the
+//  lit-field gate, and hands the geometry to `FocusSpotField`.
+//
+
+import SwiftUI
+
+struct FocusSpotOverlay: View {
+    let mode: PlayerMode
+    let mindMachineEnabled: Bool
+    let lightSyncEnabled: Bool
+
+    @AppStorage(&quot;focusSpotsEnabled&quot;) private var isEnabled = false
+    /// Read as raw data so a change to the stored geometry re-renders a live
+    /// session — the same trick `FlashGridBackground` uses for the tint.
+    @AppStorage(&quot;focusSpots&quot;) private var settingsData: Data?
+
+    private var settings: FocusSpotSettings {
+        guard
+            let settingsData,
+            let decoded = try? JSONDecoder().decode(FocusSpotSettings.self, from: settingsData)
+        else {
+            return .default
+        }
+        return decoded.clamped
+    }
+
+    var body: some View {
+        if FocusSpotVisibility.isVisible(
+            mode: mode,
+            isEnabled: isEnabled,
+            mindMachineEnabled: mindMachineEnabled,
+            lightSyncEnabled: lightSyncEnabled
+        ) {
+            FocusSpotField(settings: settings)
+                .ignoresSafeArea()
+                // Must never intercept the pull-to-reveal drag on the
+                // minimal overlay above it.
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+}</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 3: Add the layer to the player</strong></li>
+</ul>
+<p>In <code>Ilumionate/UnifiedPlayerView.swift</code>, inside the top-level <code>ZStack</code>, insert between <code>backgroundLayer</code> (line 54) and <code>SessionLockView</code> (line 57):</p>
+<pre class="code"><code>            // Layer 1: Background visual surface
+            backgroundLayer
+
+            // Layer 1.5: Optional focus spots — holes in the light for the
+            // eye to rest on. Draws only over a lit field.
+            FocusSpotOverlay(
+                mode: viewModel.mode,
+                mindMachineEnabled: viewModel.mindMachineEnabled,
+                lightSyncEnabled: viewModel.lightSyncEnabled
+            )
+
+            // Layer 2: Session lock overlay
+            SessionLockView {</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 4: Build both platforms</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; build</code></pre>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; build</code></pre>
+<p>Expected: <strong>BUILD SUCCEEDED</strong> for both.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre class="code"><code>git add Ilumionate/FocusSpots/FocusSpotField.swift Ilumionate/FocusSpots/FocusSpotOverlay.swift Ilumionate/UnifiedPlayerView.swift
+git commit -m &quot;feat(focus-spots): render focus spots over the player light field&quot;</code></pre>
+<hr>
+<h2 id="task-5-calibration-screen">Task 5: Calibration screen</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/FocusSpots/FocusSpotCalibrationView.swift</code></li>
+</ul>
+<p>The preview field is <strong>steady</strong>, never strobing: a settings screen should not flash, and a strobing preview would drag the photosensitivity warning into Settings.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 1: Create the calibration view</strong></li>
+</ul>
+<p>Create <code>Ilumionate/FocusSpots/FocusSpotCalibrationView.swift</code>:</p>
+<pre class="code"><code>//
+//  FocusSpotCalibrationView.swift
+//  Ilumionate
+//
+//  Dial the focus spots in against a real field, at true size.
+//
+//  Spacing that matches your own eyes cannot be chosen from a number in a
+//  settings list, so the sliders live here, on top of what they control.
+//
+//  The field is STEADY, never strobing. A settings screen should not flash,
+//  and a strobing preview would drag the photosensitivity warning into
+//  Settings.
+//
+
+import SwiftUI
+
+struct FocusSpotCalibrationView: View {
+    let initialSettings: FocusSpotSettings
+    let onSave: (FocusSpotSettings) -&gt; Void
+    let onCancel: () -&gt; Void
+
+    @State private var working: FocusSpotSettings
+
+    /// Well below full: tuning the spots should not be a face full of light.
+    private static let fieldOpacity: Double = 0.6
+    /// Mid-scale blackbody, matching the swatch shown in Session Defaults.
+    private static let previewColorTemperature = 3000
+
+    init(
+        initialSettings: FocusSpotSettings,
+        onSave: @escaping (FocusSpotSettings) -&gt; Void,
+        onCancel: @escaping () -&gt; Void
+    ) {
+        self.initialSettings = initialSettings
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _working = State(initialValue: initialSettings)
+    }
+
+    private var fieldColor: Color {
+        FlashTintPreference.current().color(
+            colorTemperature: Self.previewColorTemperature
+        )
+    }
+
+    /// The tray gets out of the way of the spots rather than covering them.
+    private var trayIsAtTop: Bool { working.verticalPosition &gt; 0.5 }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            fieldColor.opacity(Self.fieldOpacity).ignoresSafeArea()
+
+            FocusSpotField(settings: working)
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+
+            controlTray
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity,
+                    alignment: trayIsAtTop ? .top : .bottom
+                )
+                .animation(LiminalMotion.fade, value: trayIsAtTop)
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    // MARK: - Tray
+
+    private var controlTray: some View {
+        VStack(spacing: TranceSpacing.list) {
+            header
+
+            sliderRow(
+                title: &quot;Vertical Position&quot;,
+                value: verticalPositionBinding,
+                range: FocusSpotSettings.verticalPositionRange,
+                step: 0.01,
+                display: verticalPositionLabel(working.verticalPosition)
+            )
+
+            sliderRow(
+                title: &quot;Horizontal Spacing&quot;,
+                value: $working.horizontalSpacing,
+                range: FocusSpotSettings.horizontalSpacingRange,
+                step: 4,
+                display: pointsLabel(working.horizontalSpacing)
+            )
+
+            sliderRow(
+                title: &quot;Diameter&quot;,
+                value: $working.diameter,
+                range: FocusSpotSettings.diameterRange,
+                step: 2,
+                display: pointsLabel(working.diameter)
+            )
+        }
+        .padding(TranceSpacing.card)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: TranceRadius.glassCard))
+        .padding(TranceSpacing.screen)
+    }
+
+    private var header: some View {
+        HStack {
+            Button(&quot;Cancel&quot;) { onCancel() }
+                .foregroundStyle(Color.textSecondary)
+
+            Spacer()
+
+            Text(&quot;Focus Spots&quot;)
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(Color.textPrimary)
+
+            Spacer()
+
+            Button(&quot;Save&quot;) {
+                TranceHaptics.shared.light()
+                onSave(working)
+            }
+            .foregroundStyle(Color.roseGold)
+            .bold()
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Bindings
+
+    /// Snaps onto upper third / centre / lower third, with a tick as it
+    /// arrives so the anchor is findable without looking.
+    private var verticalPositionBinding: Binding&lt;Double&gt; {
+        Binding(
+            get: { working.verticalPosition },
+            set: { newValue in
+                let snapped = FocusSpotSettings.snappingVerticalPosition(newValue)
+                let wasOnDetent = FocusSpotSettings.verticalDetents
+                    .contains(working.verticalPosition)
+                let isOnDetent = FocusSpotSettings.verticalDetents.contains(snapped)
+                if isOnDetent, !wasOnDetent {
+                    TranceHaptics.shared.selection()
+                }
+                working.verticalPosition = snapped
+            }
+        )
+    }
+
+    // MARK: - Rows
+
+    private func sliderRow(
+        title: String,
+        value: Binding&lt;Double&gt;,
+        range: ClosedRange&lt;Double&gt;,
+        step: Double,
+        display: String
+    ) -&gt; some View {
+        VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+            HStack {
+                Text(title)
+                    .font(TranceTypography.body)
+                    .foregroundStyle(Color.textPrimary)
+                Spacer()
+                Text(display)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+
+            CustomSlider(
+                value: value,
+                range: range,
+                trackColor: .glassBorder,
+                thumbColor: .roseGold,
+                activeColor: .roseGold
+            )
+            .frame(height: 24)
+        }
+        // CustomSlider is drag-driven and invisible to VoiceOver on its own,
+        // so the row carries the label, the value, and the adjustment.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(display)
+        .accessibilityAdjustableAction { direction in
+            let delta = direction == .increment ? step : -step
+            let updated = value.wrappedValue + delta
+            value.wrappedValue = min(max(updated, range.lowerBound), range.upperBound)
+        }
+    }
+
+    // MARK: - Labels
+
+    private func verticalPositionLabel(_ value: Double) -&gt; String {
+        if value == FocusSpotSettings.verticalDetents[0] { return &quot;Upper Third&quot; }
+        if value == FocusSpotSettings.verticalDetents[1] { return &quot;Centre&quot; }
+        if value == FocusSpotSettings.verticalDetents[2] { return &quot;Lower Third&quot; }
+        return (value * 100).formatted(.number.precision(.fractionLength(0))) + &quot;% down&quot;
+    }
+
+    private func pointsLabel(_ value: Double) -&gt; String {
+        value.formatted(.number.precision(.fractionLength(0))) + &quot; pt&quot;
+    }
+}
+
+#Preview {
+    FocusSpotCalibrationView(
+        initialSettings: .default,
+        onSave: { _ in },
+        onCancel: {}
+    )
+}</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 2: Build both platforms</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; build</code></pre>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; build</code></pre>
+<p>Expected: <strong>BUILD SUCCEEDED</strong> for both.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 3: Commit</strong></li>
+</ul>
+<pre class="code"><code>git add Ilumionate/FocusSpots/FocusSpotCalibrationView.swift
+git commit -m &quot;feat(focus-spots): add the calibration screen&quot;</code></pre>
+<hr>
+<h2 id="task-6-settings-wiring">Task 6: Settings wiring</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>Ilumionate/ProfileSettingsView.swift:33-38</code> and <code>:106-112</code></li>
+<li>Modify: <code>Ilumionate/ProfileSettingsView+Sections.swift:151-217</code></li>
+</ul>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> **Step 1: Add the state to <code>ProfileSettingsView</code>**</li>
+</ul>
+<p>In <code>Ilumionate/ProfileSettingsView.swift</code>, in the <code>// Session Defaults</code> block (after line 38, below <code>showingFlashTintSheet</code>):</p>
+<pre class="code"><code>    @AppStorage(&quot;focusSpotsEnabled&quot;) var focusSpotsEnabled = false
+    @State var showingFocusSpotCalibration = false
+    /// True when calibration was opened by switching the toggle on, so
+    /// cancelling has to switch it back off — backing out of the automatic
+    /// screen must not leave the feature on with untuned defaults.
+    @State var focusSpotCalibrationOpenedByToggle = false</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 2: Present the calibration screen</strong></li>
+</ul>
+<p>In the same file, after the <code>.sheet(isPresented: $showingFlashTintSheet)</code> block (line 106-108), add:</p>
+<pre class="code"><code>            .platformFullScreenCover(isPresented: $showingFocusSpotCalibration) {
+                FocusSpotCalibrationView(
+                    initialSettings: FocusSpotPreference.current(),
+                    onSave: { settings in
+                        FocusSpotPreference.set(settings)
+                        showingFocusSpotCalibration = false
+                    },
+                    onCancel: {
+                        if focusSpotCalibrationOpenedByToggle {
+                            focusSpotsEnabled = false
+                        }
+                        showingFocusSpotCalibration = false
+                    }
+                )
+            }
+            .onChange(of: focusSpotsEnabled) { _, enabled in
+                // Cancelling sets this false, which re-enters here; the guard
+                // stops that from re-presenting the screen.
+                guard enabled else { return }
+                focusSpotCalibrationOpenedByToggle = true
+                showingFocusSpotCalibration = true
+            }</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 3: Add the rows to Session Defaults</strong></li>
+</ul>
+<p>In <code>Ilumionate/ProfileSettingsView+Sections.swift</code>, in <code>sessionDefaultsSection</code>, insert between the Flash Colour <code>Button</code> (ends line 189 with <code>.buttonStyle(.plain)</code>) and <code>settingsSlider(title: &quot;Frequency Scale&quot;...)</code> (line 190):</p>
+<pre class="code"><code>                settingsToggle(
+                    title: &quot;Focus Spots&quot;,
+                    description: &quot;Two dark spots to rest your eyes on, over the light field.&quot;,
+                    binding: $focusSpotsEnabled,
+                    icon: &quot;circle.circle&quot;,
+                    color: .bwTheta
+                )
+                if focusSpotsEnabled {
+                    Button {
+                        TranceHaptics.shared.light()
+                        focusSpotCalibrationOpenedByToggle = false
+                        showingFocusSpotCalibration = true
+                    } label: {
+                        HStack(spacing: TranceSpacing.list) {
+                            Image(systemName: &quot;slider.horizontal.below.rectangle&quot;)
+                                .font(.system(size: 16))
+                                .foregroundStyle(Color.bwTheta)
+                                .frame(width: 24)
+                            Text(&quot;Calibrate…&quot;)
+                                .font(TranceTypography.body)
+                                .foregroundStyle(Color.textPrimary)
+                            Spacer()
+                            Image(systemName: &quot;chevron.right&quot;)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                        // Without this the Spacer is not hit-testable and most
+                        // of the row reads dead.
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 4: Build both platforms</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; build</code></pre>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; build</code></pre>
+<p>Expected: <strong>BUILD SUCCEEDED</strong> for both.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre class="code"><code>git add Ilumionate/ProfileSettingsView.swift Ilumionate/ProfileSettingsView+Sections.swift
+git commit -m &quot;feat(focus-spots): add the toggle and calibrate row to Session Defaults&quot;</code></pre>
+<hr>
+<h2 id="task-7-full-verification">Task 7: Full verification</h2>
+<p><strong>Files:</strong> none — verification only.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 1: Run the whole shared suite on macOS</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; test -only-testing:IlumionateTests</code></pre>
+<p>Expected: <strong>TEST SUCCEEDED</strong>, no new failures against the pre-change baseline.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 2: Run the whole shared suite on iOS Simulator</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; test -only-testing:IlumionateTests</code></pre>
+<p>Expected: <strong>TEST SUCCEEDED</strong>.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 3: Keep Mac Catalyst compiling</strong></li>
+</ul>
+<pre class="code"><code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,variant=Mac Catalyst,arch=arm64&#x27; build</code></pre>
+<p>Expected: <strong>BUILD SUCCEEDED</strong>.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 4: Manual smoke test on the iPhone 17 Pro simulator</strong></li>
+</ul>
+<p>Run the app and walk this list, which covers the behaviours no unit test reaches:</p>
+<ol>
+<li>Settings → Session Defaults: <strong>Focus Spots</strong> is off, and no Calibrate row is shown.</li>
+<li>Switch it on → the calibration screen appears immediately over a steady lit field with two black spots in the upper third.</li>
+<li>Drag <strong>Vertical Position</strong> slowly through the middle — it snaps at upper third, centre, and lower third, and the label changes to match. The control tray jumps to the top of the screen once the spots pass the midline.</li>
+<li>Drag <strong>Diameter</strong> to its maximum and <strong>Horizontal Spacing</strong> to its maximum — both spots stay fully on screen.</li>
+<li><strong>Cancel</strong> → the screen closes and the Focus Spots toggle is back <strong>off</strong>.</li>
+<li>Switch it on again, adjust, <strong>Save</strong> → the screen closes, the toggle stays on, and a <strong>Calibrate…</strong> row is now shown.</li>
+<li>Start a Mind Machine session → the spots render over the flashing field, and swiping up still reveals the controls (the overlay must not swallow the gesture).</li>
+<li>Turn bilateral mode on → one spot sits in each half.</li>
+<li>Open a session with audio and turn the mind machine <strong>off</strong> → the spots disappear with the light field; turn it back on → they return.</li>
+<li>Open a Visual Field session → <strong>no spots</strong>.</li>
+<li>Re-open Settings, tap <strong>Calibrate…</strong>, then <strong>Cancel</strong> → the toggle stays <strong>on</strong> (cancel only reverts the toggle when calibration was opened by it).</li>
+</ol>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 5: Verify on macOS</strong></li>
+</ul>
+<p>Run the macOS app, enable Focus Spots, and resize the window narrow (under ~400pt wide) during a Mind Machine session. Both spots must stay fully inside the window.</p>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> **Step 6: Update <code>plan.md</code>**</li>
+</ul>
+<p>Add to the <strong>Mind Machine (MindMachineView)</strong> section of <code>plan.md</code>:</p>
+<pre class="code"><code>- ✅ Focus Spots — optional black fixation spots over the light field, with a
+      calibration screen for vertical position, spacing, and diameter</code></pre>
+<ul class="tasks">
+<li class="task"><span class="box">☐</span> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre class="code"><code>git add plan.md
+git commit -m &quot;docs: mark focus spots complete in plan.md&quot;</code></pre>
+</main></div>
+</body></html>

@@ -9,6 +9,18 @@ import Testing
 
 @MainActor
 struct BambiCloudPlaylistImportTests {
+    @Test func emptyLibraryCanStartPlaylistImport() {
+        let route = PlaylistImportContentRoute.resolve(hasPlan: false)
+
+        #expect(route == .linkEntry)
+    }
+
+    @Test func emptyLibraryCanReviewLoadedPlaylist() {
+        let route = PlaylistImportContentRoute.resolve(hasPlan: true)
+
+        #expect(route == .review)
+    }
+
     @Test func sharedPlaylistLinkProducesPublicAPIRequest() throws {
         let link = try BambiCloudPlaylistLink(
             "https://bambicloud.com/playlist/69b12112-e603-428a-aeb5-9f204481da13"
@@ -227,5 +239,214 @@ struct BambiCloudPlaylistImportTests {
             from: data,
             expectedID: playlistID
         )
+    }
+
+    // The user's actual complaint: a second playlist sharing tracks with the
+    // first re-downloaded every one of them. Provenance makes that free.
+    @Test func aPreviouslyDownloadedTrackIsNotRequestedAgain() async throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let trackID = try #require(UUID(uuidString: "c311778b-d79b-4f3a-8729-3474cda134b4"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"Second",
+             "files":[{"uuid":"\(trackID.uuidString.lowercased())","name":"Shared Track",
+             "duration":600000,"audioURL":"https://cdn.bambicloud.com/shared.mp3","trackNum":1}]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        var owned = AudioFile(
+            filename: "Something The Matcher Will Never Guess.mp3",
+            duration: 600,
+            fileSize: 5_000_000
+        )
+        owned.remoteSource = RemoteAudioSource(
+            service: RemoteAudioSource.bambiCloudService,
+            trackID: trackID.uuidString,
+            url: try #require(URL(string: "https://cdn.bambicloud.com/shared.mp3"))
+        )
+
+        let model = BambiCloudPlaylistImportViewModel(
+            availableAudioFiles: [owned],
+            downloader: PlaylistTrackDownloader(
+                documentsURL: URL.temporaryDirectory
+            ) { _ in
+                Issue.record("A track already in the library was downloaded again")
+                throw PlaylistTrackDownloadError.networkUnavailable
+            },
+            isAutoAnalyseEnabled: { false }
+        )
+        model.adoptPlanForTesting(
+            BambiCloudPlaylistImporter().makePlan(
+                for: playlist,
+                availableAudioFiles: [owned]
+            )
+        )
+
+        let row = try #require(model.plan?.rows.first)
+        await model.downloadRow(row)
+
+        #expect(model.plan?.rows.first?.selectedAudioFileID == owned.id)
+        #expect(model.plan?.rows.first?.status == .exact)
+        #expect(model.downloadErrors.isEmpty)
+    }
+
+    // With the old normalizer both local files reduced to "bambi sleep", so
+    // row 01 claimed one, row 02 found it taken, and row 02 was downloaded.
+    @Test func aNumberedSeriesMatchesRowForRow() throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"Series","files":[
+             {"uuid":"\(UUID().uuidString)","name":"01 Bambi Sleep","duration":600000,"trackNum":1},
+             {"uuid":"\(UUID().uuidString)","name":"02 Bambi Sleep","duration":600000,"trackNum":2}
+            ]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        let first = AudioFile(filename: "01 Bambi Sleep.mp3", duration: 600, fileSize: 1)
+        let second = AudioFile(filename: "02 Bambi Sleep.mp3", duration: 600, fileSize: 2)
+
+        let plan = BambiCloudPlaylistImporter().makePlan(
+            for: playlist,
+            availableAudioFiles: [first, second]
+        )
+
+        #expect(plan.rows[0].selectedAudioFileID == first.id)
+        #expect(plan.rows[1].selectedAudioFileID == second.id)
+        #expect(plan.downloadableRows.isEmpty)
+    }
+
+    @Test func theSourceFilenameMatchesWhenTheTitleDoesNot() throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
+             {"uuid":"\(UUID().uuidString)","name":"Bambi Sleep — Uniform Acceptance",
+              "duration":600000,
+              "audioURL":"https://cdn.bambicloud.com/bs-uniform-acceptance.mp3","trackNum":1}
+            ]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        let local = AudioFile(
+            filename: "bs-uniform-acceptance.mp3",
+            duration: 600,
+            fileSize: 1
+        )
+
+        let plan = BambiCloudPlaylistImporter().makePlan(
+            for: playlist,
+            availableAudioFiles: [local]
+        )
+
+        #expect(plan.rows[0].selectedAudioFileID == local.id)
+    }
+
+    @Test func aLikelyDuplicateIsOfferedRatherThanDownloaded() async throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
+             {"uuid":"\(UUID().uuidString)","name":"Renamed Beyond Recognition","duration":600000,
+              "audioURL":"https://cdn.bambicloud.com/x.mp3","trackNum":1}
+            ]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        // Same byte size and duration — strong, but not conclusive.
+        let owned = AudioFile(
+            filename: "Original Name.mp3",
+            duration: 600,
+            fileSize: 5_000_000
+        )
+
+        let model = BambiCloudPlaylistImportViewModel(
+            availableAudioFiles: [owned],
+            downloader: PlaylistTrackDownloader(
+                documentsURL: URL.temporaryDirectory,
+                probe: { _ in
+                    (Data(), URLResponse(
+                        url: URL(string: "https://cdn.bambicloud.com/x.mp3")!,
+                        mimeType: nil,
+                        expectedContentLength: 5_000_000,
+                        textEncodingName: nil
+                    ))
+                }
+            ) { _ in
+                Issue.record("A likely duplicate was downloaded without asking")
+                throw PlaylistTrackDownloadError.networkUnavailable
+            },
+            isAutoAnalyseEnabled: { false }
+        )
+        model.adoptPlanForTesting(
+            BambiCloudPlaylistImporter().makePlan(
+                for: playlist,
+                availableAudioFiles: [owned]
+            )
+        )
+
+        let row = try #require(model.plan?.rows.first)
+        await model.requestDownload(of: row)
+
+        #expect(model.plan?.rows.first?.status == .possibleDuplicate(existing: owned.id))
+        #expect(model.plan?.rows.first?.selectedAudioFileID == nil)
+    }
+
+    @Test func useExistingResolvesAPossibleDuplicate() throws {
+        let owned = AudioFile(filename: "Original Name.mp3", duration: 600, fileSize: 5_000_000)
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
+             {"uuid":"\(UUID().uuidString)","name":"Renamed Beyond Recognition","duration":600000,
+              "audioURL":"https://cdn.bambicloud.com/x.mp3","trackNum":1}]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        var plan = BambiCloudPlaylistImporter().makePlan(
+            for: playlist,
+            availableAudioFiles: [owned]
+        )
+        let rowID = try #require(plan.rows.first?.id)
+
+        plan.markPossibleDuplicate(existing: owned.id, forRow: rowID)
+        #expect(plan.rows[0].status == .possibleDuplicate(existing: owned.id))
+
+        plan.select(audioFileID: owned.id, forRow: rowID)
+        #expect(plan.rows[0].selectedAudioFileID == owned.id)
+        #expect(plan.downloadableRows.isEmpty)
+    }
+
+    // BambiCloud numbers its tracks from zero, so a user's 1-based "01 …"
+    // filename prefix is a different namespace from `trackNum`. Comparing the
+    // two made every file conflict with the track it belonged to, rejecting a
+    // whole numbered library at once.
+    @Test func aZeroBasedPublisherNumberIsNotComparedToAFilenamePrefix() throws {
+        let playlistID = try #require(UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13"))
+        let data = Data(
+            """
+            {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
+             {"uuid":"\(UUID().uuidString)","name":"Rapid Induction","duration":162000,"trackNum":0},
+             {"uuid":"\(UUID().uuidString)","name":"Bubble Induction","duration":300000,"trackNum":1}
+            ]}]}
+            """.utf8
+        )
+        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+
+        let first = AudioFile(filename: "01 Rapid Induction.mp3", duration: 162, fileSize: 1)
+        let second = AudioFile(filename: "02 Bubble Induction.mp3", duration: 300, fileSize: 2)
+
+        let plan = BambiCloudPlaylistImporter().makePlan(
+            for: playlist,
+            availableAudioFiles: [first, second]
+        )
+
+        #expect(plan.rows[0].selectedAudioFileID == first.id)
+        #expect(plan.rows[1].selectedAudioFileID == second.id)
     }
 }

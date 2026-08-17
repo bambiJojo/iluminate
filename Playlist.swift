@@ -174,17 +174,63 @@ struct PlaylistWholeSessionAnalysis: Codable, Sendable {
 struct PlaylistStore {
     private static let key = "playlists"
 
+    /// Decoded playlists, held so repeat reads are free.
+    ///
+    /// `LibraryView` is rebuilt every time the Library tab is entered, and it
+    /// reads playlists during that rebuild. Decoding from `UserDefaults` each
+    /// time meant the shelf could not be populated at first render, so it
+    /// appeared a beat after the rest of the page.
+    ///
+    /// The cache lives inside the store rather than beside it because playlists
+    /// are written from three different screens; anything external would have to
+    /// be invalidated at each call site, and would eventually be missed.
+    private static var cache: [Playlist]?
+
     static func load() -> [Playlist] {
+        if let cache { return cache }
         guard let data = UserDefaults.standard.data(forKey: key),
               let playlists = try? JSONDecoder().decode([Playlist].self, from: data) else {
+            cache = []
             return []
         }
+        cache = playlists
         return playlists
     }
 
     static func save(_ playlists: [Playlist]) {
+        cache = playlists
         if let data = try? JSONEncoder().encode(playlists) {
             UserDefaults.standard.set(data, forKey: key)
         }
+    }
+
+    /// Repoints every stored playlist at surviving library entries.
+    ///
+    /// Called after a duplicate merge retires an `AudioFile.ID`. Writing through
+    /// `save` rather than the defaults key keeps the in-memory cache correct —
+    /// `LibraryView` reads that cache during its rebuild and would otherwise
+    /// show the retired identifiers until the next launch.
+    static func rebindAll(
+        to audioFiles: [AudioFile],
+        remapping: [UUID: UUID]
+    ) {
+        guard !remapping.isEmpty else { return }
+
+        let rebound = load().map { playlist in
+            var updated = playlist
+            updated.items = PlaylistTrackBinding.rebinding(
+                playlist.items,
+                to: audioFiles,
+                remapping: remapping
+            )
+            return updated
+        }
+        save(rebound)
+    }
+
+    /// Drops the cache so the next `load()` re-reads from disk. For tests and
+    /// for anything that writes the defaults key without going through `save`.
+    static func invalidateCache() {
+        cache = nil
     }
 }

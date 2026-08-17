@@ -21,6 +21,13 @@ struct PlayerControlTile: View {
     var state: State = .normal
     /// 0...1 fill for value tiles. Nil for toggles.
     var value: Double? = nil
+    /// A visible readout under the label.
+    ///
+    /// Nil in the player, where you are configuring with your eyes closed and
+    /// the gauge fill is the readout. Set on the Create tab, where you are
+    /// looking straight at the tile while choosing — a tile that says "Effect"
+    /// but not "Spiral" makes you tap it to find out what it already is.
+    var displayValue: String? = nil
     var accessibilityValueText: String? = nil
     var onTap: (() -> Void)? = nil
     var onDragChanged: ((CGFloat) -> Void)? = nil
@@ -56,13 +63,20 @@ struct PlayerControlTile: View {
                 .allowsHitTesting(false)
             }
 
-            VStack(spacing: 8) {
+            VStack(spacing: displayValue == nil ? 8 : 4) {
                 Image(systemName: systemImage)
                     .font(.title3)
                 Text(label)
                     .font(TranceTypography.caption)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+                if let displayValue {
+                    Text(displayValue)
+                        .font(TranceTypography.caption)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .foregroundStyle(Color.roseGold)
+                }
             }
             .foregroundStyle(foreground)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -22,10 +22,11 @@ struct ContentView: View {
     @State private var selectedTab: TranceTab = .home
     @State private var engine = LightEngine()
     @State private var sessions: [LightSession] = []
-    @State private var audioFiles: [AudioFile] = []
+    /// Observe the shared library snapshot directly. Keeping a second array in
+    /// ContentView left the launch-time decode alive after Library refreshed
+    /// the cache, retaining an entire duplicate set of transcript statistics.
+    @State private var audioLibraryCache = AudioLibraryCache.shared
     @State private var selectedSession: LightSession?
-    @State private var showingAudioLibrary = false
-    @State private var showingSessionPlayer = false
     @State private var showingOnboarding = false
     @State private var showingAnalyticsConsentPrompt = false
     @State private var showingResumedPlayer = false
@@ -33,8 +34,13 @@ struct ContentView: View {
     @State private var showingAnalysisQueue = false
     @State private var readerSharedImportTrigger = 0
     @State private var readerQuickStartTrigger = 0
+    @State private var createKindRequestToken = 0
+    @State private var createRequestedKind: CreateSessionKind?
     @State private var nowPlaying = NowPlayingState.shared
     @State private var analysisManager = AnalysisStateManager.shared
+    /// Single owner of the analysis task snapshot. Every analysis surface
+    /// filters this one list; none rebuilds state of its own.
+    @State private var analysisCenter = AnalysisCenterModel.live()
 
     // Synced to engine on appear and on change
     @AppStorage("userFrequencyMultiplier") private var userFrequencyMultiplierPref = 1.0
@@ -46,8 +52,14 @@ struct ContentView: View {
 
     var body: some View {
         mainLayout
+        .environment(analysisCenter)
         .task {
+            await analysisManager.prepareCachedResults()
             await analysisManager.restoreManualRecoveries()
+            // Bootstrap ordering: recoveries and checkpoints are restored above,
+            // so the first published snapshot already reflects them rather than
+            // arriving empty and then correcting itself.
+            analysisCenter.invalidateStructure()
             loadSessions()
             await loadAudioFiles()
             checkForFirstLaunch()
@@ -68,14 +80,32 @@ struct ContentView: View {
                 BackgroundAnalysisScheduler.shared.resumeWhenForegrounded()
             }
         }
+        // Structural invalidation is driven by observing the state itself rather
+        // than by calls placed in each mutating method. A new mutation site
+        // cannot forget to notify, because there is nothing to remember.
+        // Queue identity is mapped rather than counted so a reorder — which
+        // changes every projected position — still invalidates.
+        .onChange(of: analysisManager.analysisQueue.map(\.id)) { _, _ in
+            analysisCenter.invalidateStructure()
+        }
+        .onChange(of: analysisManager.failedAnalyses.map(\.id)) { _, _ in
+            analysisCenter.invalidateStructure()
+        }
+        .onChange(of: analysisManager.completedAnalyses.count) { _, _ in
+            analysisCenter.invalidateStructure()
+        }
+        .onChange(of: analysisManager.partialResultsRevision) { _, _ in
+            analysisCenter.invalidateStructure()
+        }
+        // The high-frequency path: progress only, never a disk read.
+        .onChange(of: analysisManager.currentAnalysis?.snapshot) { _, snapshot in
+            analysisCenter.updateProgress(active: snapshot, download: nil)
+        }
         .onOpenURL { url in
             handleDeepLink(url)
         }
         .platformFullScreenCover(item: $selectedSession) { session in
             UnifiedPlayerView(mode: .session(session: session, audioFile: nil), engine: engine)
-        }
-        .sheet(isPresented: $showingAudioLibrary) {
-            AudioLibraryView(engine: engine)
         }
         .platformFullScreenCover(isPresented: $showingResumedPlayer) {
             if let resumedViewModel = nowPlaying.viewModel {
@@ -89,7 +119,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingAnalysisQueue) {
             NavigationStack {
-                AnalyzerView(engine: engine)
+                AnalysisCenterView(engine: engine)
             }
         }
         .alert("Help Improve LumeSync", isPresented: $showingAnalyticsConsentPrompt) {
@@ -156,40 +186,41 @@ struct ContentView: View {
             if selectedTab == .home {
                 NavigationStack {
                     HomeView(
-                        showingAudioLibrary: $showingAudioLibrary,
-                        showingSessionPlayer: $showingSessionPlayer,
                         selectedSession: $selectedSession,
                         sessions: sessions,
-                        audioFiles: audioFiles,
+                        audioFiles: audioLibraryCache.files,
                         engine: engine,
                         onRefresh: loadSessions,
-                        onOpenReader: { selectedTab = .read }
+                        onOpenLibrary: { selectedTab = .library },
+                        onOpenReader: { selectedTab = .read },
+                        onOpenCreate: openCreate,
+                        onOpenNowPlaying: { showingResumedPlayer = true },
+                        onContinueReading: openReaderQuickStart
                     )
                 }
-                .transition(.opacity)
             } else if selectedTab == .library {
-                LibraryView(
-                    engine: engine,
-                    onContinueReading: {
-                        selectedTab = .read
-                        readerQuickStartTrigger += 1
-                    }
-                )
-                .transition(.opacity)
+                LibraryView(engine: engine, builtInSessions: sessions)
             } else if selectedTab == .read {
                 TextTranceRootView(
                     sharedImportTrigger: readerSharedImportTrigger,
                     quickStartTrigger: readerQuickStartTrigger
                 )
-                .transition(.opacity)
             } else if selectedTab == .create {
                 NavigationStack {
-                    MindMachineView(engine: engine, sessions: sessions)
+                    CreateView(
+                        engine: engine,
+                        kindRequestToken: createKindRequestToken,
+                        requestedKind: createRequestedKind
+                    )
                 }
-                .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: selectedTab)
+    }
+
+    /// Home carries its own "Current" section, so the floating bar there would
+    /// put the same track on screen twice. Every other tab keeps it.
+    private var showsMiniPlayer: Bool {
+        nowPlaying.isActive && selectedTab != .home
     }
 
     private func bottomChrome(showsTabBar: Bool) -> some View {
@@ -198,16 +229,15 @@ struct ContentView: View {
                 // Measured so screens can reserve space for it — its height
                 // grows with the stage/estimate/reassurance text.
                 Group {
-                    if let analysis = analysisManager.currentAnalysis {
-                        AnalysisStatusOverlay(
-                            analysis: analysis,
-                            queueCount: analysisManager.analysisQueue.count
+                    // One pill, showing active work and outstanding failures at
+                    // the same time. The two overlays this replaces shared a
+                    // slot, so a failure was invisible while anything ran.
+                    if analysisCenter.activeTask != nil || analysisCenter.attentionCount > 0 {
+                        AnalysisStatusPill(
+                            activeTask: analysisCenter.activeTask,
+                            queuedCount: analysisCenter.queuedCount,
+                            attentionCount: analysisCenter.attentionCount
                         ) {
-                            showingAnalysisQueue = true
-                        }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    } else if let failure = analysisManager.failedAnalyses.last {
-                        AnalysisRecoveryStatusOverlay(failure: failure) {
                             showingAnalysisQueue = true
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -219,7 +249,7 @@ struct ContentView: View {
                     BottomChromeMetrics.shared.analysisOverlayHeight = height
                 }
 
-                if nowPlaying.isActive {
+                if showsMiniPlayer {
                     MiniPlayerBar(nowPlaying: nowPlaying) {
                         showingResumedPlayer = true
                     }
@@ -230,7 +260,7 @@ struct ContentView: View {
                     TranceTabBar(selected: $selectedTab)
                 }
             }
-            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: nowPlaying.isActive)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showsMiniPlayer)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.currentAnalysis)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: analysisManager.failedAnalyses.count)
         }
@@ -254,8 +284,10 @@ struct ContentView: View {
         isLoading = false
     }
 
+    /// Publishes through the shared cache so Library can paint its shelves
+    /// immediately on first entry instead of waiting for its own load.
     private func loadAudioFiles() async {
-        audioFiles = await AudioLibraryStore.loadRepairingStoredFiles()
+        await audioLibraryCache.refresh()
     }
 
     private func checkForFirstLaunch() {
@@ -290,6 +322,22 @@ struct ContentView: View {
         case .read:    .read
         case .create:  .create
         }
+    }
+
+    /// Sends the user to Create with a segment preselected. The token is bumped
+    /// so tapping the same home door twice re-applies the kind instead of being
+    /// swallowed as a no-op.
+    private func openCreate(_ kind: CreateSessionKind) {
+        createRequestedKind = kind
+        createKindRequestToken += 1
+        selectedTab = .create
+    }
+
+    /// Sends the user to the reader and re-arms its quick-start card. The
+    /// trigger is bumped so asking twice in a row is not swallowed as a no-op.
+    private func openReaderQuickStart() {
+        selectedTab = .read
+        readerQuickStartTrigger += 1
     }
 
     private func handleDeepLink(_ url: URL) {

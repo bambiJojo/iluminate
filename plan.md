@@ -1,6 +1,6 @@
 # LumeSync (Ilumionate) — Unified Development Plan
 
-> Consolidated from all planning documents. Last updated: 2026-07-31.
+> Consolidated from all planning documents. Last updated: 2026-08-16.
 
 ---
 
@@ -74,10 +74,16 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 ## SCREENS
 
 ### Home Dashboard
-- ✅ Greeting section (dynamic time-based messages)
-- ✅ Category icon grid (Sleep, Focus, Energy, Relax, Trance)
-- ✅ Continue Session card, Quick Start section, Library scroll
-- ✅ Staggered entrance animations
+- ✅ Launcher layout: greeting, four equal door quadrants (Listen/Read/Visuals/Pulse), Current, Continue
+- ✅ Settings reachable from a pinned toolbar gear (iOS); macOS uses the sidebar `SettingsLink`
+- ✅ Doors deep-link to Create with the segment preselected, preserving the flash safety warning
+- ✅ Listen opens the Library tab; Continue moved here from Library (listening + reading)
+- ✅ Current shows active playback; `MiniPlayerBar` suppressed on home so it isn't doubled
+- ✅ Continue reads `PlaybackProgressStore` — verified end-to-end in the simulator
+- ✅ Staggered entrance animations, reduce-motion aware
+- ✅ Quadrants reflow to one column at accessibility text sizes
+- ❌ Tab bar still maps to Home/Library/Read/Create rather than the four product surfaces
+      (home compensates via deep links; see the design doc's decision 6)
 
 ### Audio Player (SessionPlayerView)
 - ✅ MandalaVisualizer centerpiece, phase indicator, audio scrubber
@@ -91,27 +97,41 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ✅ Visual mode selector: Flash / Color Pulse / Bilateral
 - ✅ Safety warning before entering flash mode
 - ✅ Screen brightness set to 1.0 during flash, restored on stop
+- ✅ Focus Spots — optional black fixation spots over the light field, with a
+      calibration screen for vertical position, spacing, and diameter
 
 ### Audio Library (AudioLibraryView)
 - ✅ Glass card layout, deterministic waveform thumbnails
 - ✅ Import from Files, URL, in-app browser (shown in toolbar + empty state)
 - ✅ Analysis status indicators, batch delete + analyze-all
+- 🔄 Duplicate detection on import — content fingerprint and publisher provenance
+      checked at all three import doors before any bytes are written, so a repeat
+      BambiCloud playlist costs nothing and no `Name (1).mp3` is created. "Find
+      Duplicates" in the toolbar merges existing duplicates, folding in play
+      counts and ratings and repointing playlists. Automated coverage complete on
+      macOS and iOS; **awaiting on-device verification against real playlists**.
+      Design: `docs/superpowers/specs/2026-08-10-audio-duplicate-detection-design.md`
 - 🔄 "Analyze & Generate Session" per-file flow — backend ready, UI wiring pending
 
 ### Session Library (LibraryView)
 - ✅ Session cards with metadata, filtering/search, gradient thumbnails
+- ✅ "Your Sessions" shelf for user-generated scores (added when home's launcher
+      rewrite dropped its own copy)
+- ✅ Continue section removed — it now lives on Home
 - 🔄 Session selection flow into player — needs completion
 
 ### Session Generation (SessionGenerationView)
-- ✅ Phase detection visualization, customization controls, generation CTA
-- 🔄 Preview playback functionality — not yet implemented
+- 🔄 The legacy `SessionGenerationView` implementation is not presented by the current
+      navigation graph; decide whether to reconnect or retire it before doing more UI work
+- ✅ Session generation remains live through the analysis queue and generated-session store
 
 ### Settings & Profile
 - ✅ Settings split into 3 files (SwiftLint compliant)
 - ✅ Session Notifications toggle, Export Session Data
 - ✅ Intensity, duration, bilateral, frequency scale, listening history toggles
-- ✅ Profile with weekly activity chart, session history
-- 🔄 Accessibility options (reduce motion, Dynamic Type toggles) — partial
+- ✅ Profile with weekly activity chart, session history — in `ProfileSettingsView`,
+      reached from the home toolbar gear ("Profile & Settings")
+- 🔄 Accessibility options — Steady Light toggle ✅ (Session Defaults); Dynamic Type toggles still open
 - ❌ Achievements / milestones section
 
 ### Onboarding
@@ -124,15 +144,32 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 
 ### Phase 1 — Audio Infrastructure ✅
 - ✅ `AudioFile` model (metadata, transcription, analysis result)
-- ✅ `AudioManager` — recording, playback, import (AAC 44.1kHz stereo)
-- ✅ `AudioRecorderView` — waveform visualization, timer, save/discard
+- ✅ `AudioIntake` / `AudioAcquisition` / `AudioImportWorker` — validated Files, URL,
+      browser, and playlist import through one persistence path
+- ✅ `PlaybackRuntime` / `AudioLightSyncPlayer` — shared playback clocks and audio/light sync
 
 ### Phase 2 — AI Analysis ✅
 - ✅ `AudioAnalyzer` — on-device SFSpeechRecognizer with enhanced hypnosis vocabulary
 - ✅ `AIContentAnalyzer` — Foundation Models integration, `@Generable` structured output
 - ✅ Content type detection (hypnosis, meditation, affirmations, guided imagery)
 - ✅ Multi-pass hypnosis analysis: structural pass (phases, induction style, techniques) + therapeutic pass (trance depth curve, receptivity, voice characteristics)
-- ✅ `AnalysisProgressView` — animated multi-stage progress UI
+- ✅ **Analysis Task Center (Phase 1)** — one canonical `AnalysisTask` per audio file,
+      produced by a pure `AnalysisTaskProjection` and published by a single
+      `AnalysisCenterModel`. The pill, the center sheet, Library's entry row, and Session
+      Detail all filter that one snapshot; none rebuilds state of its own. Replaced
+      `AnalysisStatusOverlay`, `AnalysisRecoveryStatusOverlay`, `LibraryAnalysisStatusSection`,
+      and the dead `AnalysisStatusBar`, all deleted. The pill now shows active progress and
+      outstanding failures at the same time — the two overlays it replaced shared one slot,
+      so a failure was invisible while anything was running. Failure dismissal is durable
+      (ERR-013) and preserves the checkpoint so a retry still resumes from the saved
+      transcript. `AnalyzerView` survives carrying only Library Intelligence, reachable from
+      the center's toolbar until that moves to Library.
+      Design: `docs/superpowers/specs/2026-08-16-analysis-task-center-design.md`
+      Plan: `docs/superpowers/plans/2026-08-16-analysis-task-center-phase-1.md`
+- ❌ Analysis Task Center Phase 2 — 2a teardown/cancellation spike, 2b stall watchdog and
+      `.stalled`, 2c WhisperKit model-download progress (`.preparing` ships unused in Phase 1).
+      **Stalls remain unobservable until 2b lands:** no timeout exists in the pipeline, so a
+      hung analysis still shows a frozen percentage and emits no terminal event
 
 ### Phase 3 — Session Generation ✅ (backend) / 🔄 (UI integration)
 - ✅ `SessionGenerator` — converts AnalysisResult into `LightSession` with phase-aware light patterns
@@ -153,10 +190,66 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ❌ Loading states with pulse animations
 - ❌ Success/error feedback states
 - ❌ Dynamic Type support
-- ❌ Reduce motion alternatives
+- ✅ Reduce motion alternatives for the light path — in-app Steady Light toggle, unioned with system Reduce Motion across engine, flash controller, and flash view (from TestFlight feedback, Apr 10)
 - ❌ Custom app icon (rose-gold mandala design)
 - ❌ Contextual help system
 - ❌ Sound effects for key interactions
+
+---
+
+## FROM TELEMETRY (see TELEMETRY_FINDINGS.md)
+
+- ✅ URL import accepted non-audio payloads — a link returning HTML was saved as
+  `.mp3`, logged as "✅ Successfully downloaded audio", and admitted to the library
+  where it failed transcription silently. Root cause of the 26% analysis success
+  rate. `AudioDownloadValidation` now gates both import paths on Content-Type and
+  container signature; the consolidated `AudioIntake.swift` path now serves Files,
+  URL, in-app browser, and playlist imports
+- ✅ **The silent stall** — `queueForAnalysis(_:priority:)` returned early for an
+  already-queued file *before* starting the processor, so a queue that outlived
+  its processor was stuck forever and "Analyze Now" was a permanent no-op. This is
+  what produced 0.7.3's 13 starts / 1 completion / 0 errors. Fixed by re-arming
+  `startAutomaticProcessing` on that path; verified end to end (93 segments,
+  hypnosis, 98% alignment, session generated)
+- ✅ "Analyze Now" now shows queue/stage progress instead of appearing to do
+  nothing (`SessionDetailView.analyzeNowSection`)
+- ❌ Analysis stalls still emit no terminal telemetry — worth adding
+  `Audio.Analysis.Failed` on the give-up path so this class of bug is visible
+- ✅ Session telemetry now records which player rendered (`mode` on
+  `session.started`/`.ended` via `PlayerMode.analyticsName`) — the one real gap;
+  `endReason`/`startType`/end-event coverage turned out to be correct since 0.7.2
+  and only looked broken because 0.6.1 traffic dominates the 30-day window
+- ✅ Diagnosed why AI analysis never runs — Foundation Models fails *closed* when
+  it cannot query its own safety classifier, reporting
+  `guardrailViolation("May contain sensitive or unsafe content")` whose underlying
+  error is `Failed model manager query … InferenceError::hostFailed`. The content
+  is never evaluated. `AIGenerationDiagnosis` now classifies this, the futile
+  retry is skipped, `ai.generationFallback` telemetry is emitted, and the badge
+  reads "Keyword Analysis" instead of falsely claiming "AI Analyzed"
+  - ⚠️ Observed in the **simulator** only — not proof the AI path fails on device.
+    The new telemetry is what will answer that
+- ❌ Whisper transcription degenerates on soft speech (observed output loops:
+  "mother mother mother"); `openai_whisper-base` may be too small for this content
+- ❌ First analysis downloads the WhisperKit model (~100s) with no progress shown
+- ❌ First analysis silently downloads a ~100s CoreML model with no progress shown
+
+## FROM TESTFLIGHT FEEDBACK
+
+Both reports came from real testers; screenshots and analysis in session notes.
+
+- ✅ In-app Steady Light toggle (Apr 10 report) — see Polish & Accessibility above
+- ✅ Playlist picker dead end (Mar 11 report) — un-analyzed files were listed but
+  disabled, reading as "my imports didn't save". Rows now start analysis on tap,
+  show "Analyzing…", and become selectable in place. `PlaylistPickerRowState`
+- ✅ Selectable flash colour (Apr 10 report) — `FlashTint` overrides the rendered
+  colour at render time only. Sessions keep their Kelvin `color_temperature`, so
+  the JSON schema, `SessionGenerator`, and the AI models are untouched. Picker in
+  Session Defaults; "Match Session" is the default. `FlashTint`, `FlashTintSheet`
+  - Note: `Color.fromKelvin` is a blackbody curve (2000K–6500K) with no teal,
+    violet, or rose on it, which is why exposing Kelvin alone could not have
+    answered this request
+  - Decision: no colour-specific seizure rules; the frequency cap in
+    `LightSafety` and the photosensitivity warning remain the only guards
 
 ---
 
@@ -191,8 +284,8 @@ In order of dependency:
 
 1. **Wire `LightScorePlayer` for external time-sync** — add `.external` time source mode so audio clock drives light position
 2. **Integrate `AudioSyncController` into `SessionPlayerView`** — optional `audioFile` param, sync callbacks
-3. **Wire "Generate Session" flow in `AudioLibraryView`** — analyze → generate → navigate to `SessionGenerationView`
-4. **Complete `SessionGenerationView` preview playback** — short preview using `AudioSyncController` + `LightEngine`
+3. **Wire "Generate Session" flow in `AudioLibraryView`** — analyze → generate → present the live generated-session experience
+4. **Resolve the retired `SessionGenerationView`** — reconnect it deliberately or replace/delete it before adding preview work
 5. **Persist `GeneratedSession`** — save to documents, show in session library with badge
 6. **End-to-end smoke test** with real hypnosis/meditation audio
 7. **Session selection flow** in Library → Player

@@ -21,6 +21,12 @@ typealias AudioFileTransferOperation = @Sendable (
     _ mode: AudioFileTransferMode
 ) throws -> Void
 
+/// What an import resolved to.
+nonisolated enum AudioImportOutcome: Sendable, Equatable {
+    case imported(AudioFile)
+    case alreadyInLibrary(existing: AudioFile.ID)
+}
+
 nonisolated enum AudioImportWorker {
     @concurrent
     static func prepareAudioFile(
@@ -28,9 +34,55 @@ nonisolated enum AudioImportWorker {
         targetFilename: String,
         transferMode: AudioFileTransferMode,
         durationTimeout: Duration,
+        documentsURL: URL = .documentsDirectory,
+        existing: DuplicateAudioIndex = DuplicateAudioIndex([]),
+        remoteSource: RemoteAudioSource? = nil,
+        creator: String? = nil,
         transferOperation: AudioFileTransferOperation? = nil
-    ) async throws -> AudioFile {
-        let destinationURL = uniqueDestinationURL(for: targetFilename)
+    ) async throws -> AudioImportOutcome {
+        let trace = PerformanceTrace.begin("Audio File Preparation")
+        defer { PerformanceTrace.end(trace) }
+
+        // Publisher identity is the cheapest and strongest signal available.
+        // Resolve it before hashing or touching the source URL so a repeat
+        // remote import does not download or inspect bytes it already owns.
+        if let remoteSource,
+           case .identical(let existingID) = existing.verdict(
+               for: DuplicateAudioCandidate(
+                   remoteSource: remoteSource,
+                   title: targetFilename
+               )
+           ) {
+            Log.audio.info("↩️ Remote track already in the library: \(targetFilename, privacy: .public)")
+            return .alreadyInLibrary(existing: existingID)
+        }
+
+        // Hashed at the source, before anything is written. Copying first and
+        // checking after is how `Track (1).mp3` used to come into existence.
+        let sourceFingerprint = AudioFingerprintService.computeFingerprint(for: sourceURL)
+        let sourceSize = Int64(
+            (try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        )
+        let verdict = existing.verdict(
+            for: DuplicateAudioCandidate(
+                remoteSource: remoteSource,
+                contentFingerprint: sourceFingerprint,
+                fileSize: sourceSize,
+                // The source's duration is not known here — loading it means an
+                // AVURLAsset, which this path defers until after the transfer.
+                // Nil skips the duration-corroborated signals rather than
+                // passing a zero that silently disables them while reading as
+                // though four checks ran.
+                duration: nil,
+                title: targetFilename
+            )
+        )
+        if case .identical(let existingID) = verdict {
+            Log.audio.info("↩️ Already in the library, not copied: \(targetFilename, privacy: .public)")
+            return .alreadyInLibrary(existing: existingID)
+        }
+
+        let destinationURL = uniqueDestinationURL(for: targetFilename, in: documentsURL)
 
         do {
             if let transferOperation {
@@ -54,23 +106,29 @@ nonisolated enum AudioImportWorker {
                 timeout: durationTimeout
             )
             async let metadata = AudioMetadataExtractor.metadata(from: destinationURL)
-            async let fingerprint = fingerprint(for: destinationURL)
 
-            return await AudioFile(
+            var audioFile = await AudioFile(
                 filename: destinationURL.lastPathComponent,
                 duration: duration,
                 fileSize: fileSize,
                 trackMetadata: metadata,
-                contentFingerprint: fingerprint
+                contentFingerprint: sourceFingerprint
+                    ?? AudioFingerprintService.computeFingerprint(for: destinationURL),
+                remoteSource: remoteSource
             )
+            audioFile.creator = creator
+            return .imported(audioFile)
         } catch {
             try? FileManager.default.removeItem(at: destinationURL)
             throw error
         }
     }
 
-    private static func uniqueDestinationURL(for filename: String) -> URL {
-        let originalURL = URL.documentsDirectory.appending(path: filename)
+    /// Still needed: a genuinely different recording can share a filename with
+    /// one already stored. What changed is that a *duplicate* no longer reaches
+    /// this function — it is resolved before anything is written.
+    private static func uniqueDestinationURL(for filename: String, in documentsURL: URL) -> URL {
+        let originalURL = documentsURL.appending(path: filename)
         var candidate = originalURL
         var counter = 1
 
@@ -113,10 +171,5 @@ nonisolated enum AudioImportWorker {
             group.cancelAll()
             return result ?? 0
         }
-    }
-
-    @concurrent
-    private static func fingerprint(for url: URL) async -> String? {
-        AudioFingerprintService.computeFingerprint(for: url)
     }
 }

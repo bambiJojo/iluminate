@@ -25,11 +25,17 @@ enum LibraryDestination: Hashable {
 struct LibraryView: View {
 
     @Bindable var engine: LightEngine
-    let onContinueReading: () -> Void
+    /// Decoded once by `ContentView` and handed down. Library used to re-run
+    /// `LightScoreReader` for all twelve bundled sessions in its own `.task`,
+    /// which meant a synchronous JSON decode on the main actor every single
+    /// time the Library tab was tapped.
+    let builtInSessions: [LightSession]
 
     @State private var audioFiles: [AudioFile] = []
-    @State private var playlists: [Playlist] = []
-    @State private var builtInSessions: [LightSession] = []
+    /// Seeded at construction, not in `.task`. `.task` runs after the first
+    /// paint, so loading there left the playlist shelf empty for a frame.
+    /// `PlaylistStore.load()` is cached, so this is free on re-entry.
+    @State private var playlists: [Playlist] = PlaylistStore.load()
     // Cached derived collections — recomputed only when audioFiles change
     @State private var cachedRecentFiles: [AudioFile] = []
     @State private var cachedFavoriteFiles: [AudioFile] = []
@@ -37,13 +43,15 @@ struct LibraryView: View {
     @State private var cachedAnalyzedFiles: [AudioFile] = []
     @State private var cachedAllFiles: [AudioFile] = []
     @State private var cachedRecommendedFiles: [AudioFile] = []
+    @State private var cachedGeneratedSessions: [GeneratedSessionItem] = []
     @State private var cachedFilterChips: [LibraryFilterChip] = []
     @State private var searchText = ""
     @State private var quickFilter: LibraryQuickFilter = .all
-    @State private var readingContinuation: LibraryReadingContinuation?
-    @State private var playbackProgressStore = PlaybackProgressStore.shared
     @State private var savedSessionStore = SavedSessionStore.shared
     @State private var analysisManager = AnalysisStateManager.shared
+    /// Injected by the app root. Library filters the shared snapshot rather than
+    /// rebuilding analysis state of its own.
+    @Environment(AnalysisCenterModel.self) private var analysisCenter
     @State private var navPath = NavigationPath()
     @State private var showingPlaylists = false
     @State private var showingSessionsManager = false
@@ -53,8 +61,56 @@ struct LibraryView: View {
     @State private var playingSession: LightSession?
     @State private var fileForPlaylist: AudioFile?
     @State private var editingPlaylist: Playlist?
+    @State private var pendingDeletion = PendingAudioDeletion.shared
+    /// Library adds audio itself now rather than sending the user through the
+    /// Audio manager first, so it hosts the three import sources.
+    @State private var acquisition = AudioAcquisition()
+    @State private var playlistImportRequest: PlaylistImportRequest?
+    @State private var showingPlaylistLinkBrowser = false
+    @State private var pendingPlaylistLink: String?
 
     var body: some View {
+        // The banner sits outside the NavigationStack so it stays visible over
+        // pushed screens — Audio Files, Favorites, a creator's sessions — all
+        // of which can now delete.
+        ZStack {
+            libraryStack
+
+            if !pendingDeletion.staged.isEmpty {
+                VStack {
+                    Spacer()
+                    UndoDeleteBanner(
+                        message: undoBannerMessage,
+                        onUndo: { undoDelete() },
+                        onDismiss: { pendingDeletion.commit() }
+                    )
+                    .padding(.bottom, TranceSpacing.tabBarClearance)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: pendingDeletion.staged.count)
+        .task(id: pendingDeletion.staged.map(\.id)) {
+            guard !pendingDeletion.staged.isEmpty else { return }
+            try? await Task.sleep(for: PendingAudioDeletion.undoWindow)
+            guard !Task.isCancelled else { return }
+            pendingDeletion.commit()
+        }
+        .onDisappear {
+            // Leaving the Library tab finalizes the delete.
+            pendingDeletion.commit()
+        }
+    }
+
+    private var undoBannerMessage: String {
+        let staged = pendingDeletion.staged
+        guard staged.count == 1, let only = staged.first else {
+            return "\(staged.count) files deleted"
+        }
+        return "Deleted “\(only.file.displayName)”"
+    }
+
+    private var libraryStack: some View {
         NavigationStack(path: $navPath) {
             ZStack(alignment: .bottom) {
                 AuroraBackground()
@@ -62,8 +118,13 @@ struct LibraryView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: TranceSpacing.cardMargin) {
                         LibraryHubHeader {
-                            TranceHaptics.shared.light()
-                            showingSessionsManager = true
+                            LibraryAddMenu(
+                                acquisition: acquisition,
+                                onNewPlaylist: { editingPlaylist = Playlist(name: "") },
+                                onImportPlaylistLink: { playlistImportRequest = PlaylistImportRequest(audioFiles: audioFiles) },
+                                onBrowseForPlaylist: { showingPlaylistLinkBrowser = true },
+                                onManageAudio: { showingSessionsManager = true }
+                            )
                         }
                         .padding(.horizontal, TranceSpacing.screen)
 
@@ -96,23 +157,30 @@ struct LibraryView: View {
                         title: "Favorites",
                         audioFiles: audioFiles,
                         engine: engine,
-                        initialFilter: .favorites
+                        initialFilter: .favorites,
+                        onDelete: { deleteFile($0) }
                     )
                 case .builtInSessions:
                     SessionLibraryView(engine: engine)
                 case .artists:
-                    LibraryCreatorsView(audioFiles: audioFiles, engine: engine)
+                    LibraryCreatorsView(
+                        audioFiles: audioFiles,
+                        engine: engine,
+                        onDelete: { deleteFile($0) }
+                    )
                 case .artist(let name):
                     LibraryBrowseView(
                         title: name,
                         audioFiles: audioFiles.filter { $0.creatorDisplayName == name },
-                        engine: engine
+                        engine: engine,
+                        onDelete: { deleteFile($0) }
                     )
                 case .allFiles:
                     LibraryBrowseView(
                         title: "Audio Files",
                         audioFiles: audioFiles,
-                        engine: engine
+                        engine: engine,
+                        onDelete: { deleteFile($0) }
                     )
                 }
             }
@@ -127,11 +195,12 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $showingAnalysisQueue) {
                 NavigationStack {
-                    AnalyzerView(engine: engine)
+                    AnalysisCenterView(engine: engine)
                 }
             }
             .platformFullScreenCover(item: $playerFile, onDismiss: {
-                Task { await loadAudioFiles() }
+                // Playback updates last-played metadata in persistent storage.
+                Task { await loadAudioFiles(forceRefresh: true) }
             }) { file in
                 UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
             }
@@ -153,16 +222,33 @@ struct LibraryView: View {
                     onSave: { saved in upsertPlaylist(saved) }
                 )
             }
+            .audioAcquisition(acquisition)
+            .sheet(item: $playlistImportRequest) { request in
+                BambiCloudPlaylistImportView(
+                    audioFiles: request.audioFiles,
+                    initialLink: request.initialLink,
+                    onImport: { imported in upsertPlaylist(imported) }
+                )
+            }
+            .platformFullScreenCover(
+                isPresented: $showingPlaylistLinkBrowser,
+                onDismiss: startPendingPlaylistImport
+            ) {
+                PlaylistLinkBrowserView { pendingPlaylistLink = $0 }
+            }
             .task {
-                await loadAudioFiles()
+                // Refreshing here rather than inside the model keeps the
+                // acquisition flow ignorant of who is hosting it.
+                acquisition.onImported = { _ in
+                    Task { await loadAudioFiles(forceRefresh: true) }
+                }
                 loadPlaylists()
-                loadBuiltInSessions()
                 recomputeDerivedCollections()
-                loadReadingContinuation()
+                await loadAudioFiles()
             }
             .onChange(of: audioFiles) { _, _ in recomputeDerivedCollections() }
             .onChange(of: analysisManager.partialResultsRevision) {
-                Task { await loadAudioFiles() }
+                Task { await loadAudioFiles(forceRefresh: true) }
             }
         }
     }
@@ -171,19 +257,14 @@ struct LibraryView: View {
 
     /// The default shelf stack. "Analyzed" is deliberately absent — it duplicated
     /// All Files card-for-card, and every card now carries its own analyzed seal.
+    /// "Continue" is absent too: it lives on home, next to the Current section,
+    /// so resuming does not require a tab hop first.
     @ViewBuilder
     private var browseShelves: some View {
-        LibraryContinuationSection(
-            listening: listeningContinuations,
-            reading: readingContinuation,
-            onContinueListening: continueListening,
-            onContinueReading: onContinueReading
-        )
-        .padding(.horizontal, TranceSpacing.screen)
-
-        LibraryAnalysisStatusSection(
-            manager: analysisManager,
-            partialFiles: partialAnalysisFiles,
+        LibraryAnalysisEntryRow(
+            activeTask: analysisCenter.activeTask,
+            queuedCount: analysisCenter.queuedCount,
+            attentionCount: analysisCenter.attentionCount,
             onOpen: openAnalysisQueue
         )
         .padding(.horizontal, TranceSpacing.screen)
@@ -222,7 +303,8 @@ struct LibraryView: View {
             playlists: shelfPlaylists,
             onPlay: { playPlaylist($0) },
             onCreate: { editingPlaylist = Playlist(name: "") },
-            onOpenLibrary: { showingPlaylists = true }
+            onOpenLibrary: { showingPlaylists = true },
+            onOpenInfo: { openPlaylistInfo($0) }
         )
 
         if !artists.isEmpty {
@@ -241,6 +323,12 @@ struct LibraryView: View {
             }
             .padding(.horizontal, TranceSpacing.screen)
             LibraryAudioShelf(files: allFilesShelf, onPlay: playWithLights, onOpenInfo: openFileInfo)
+        }
+
+        if !generatedSessions.isEmpty {
+            LibraryShelfSectionHeader(title: "Your Sessions")
+                .padding(.horizontal, TranceSpacing.screen)
+            LibraryGeneratedSessionShelf(items: generatedSessions, onPlay: playWithLights)
         }
 
         if !shelfSessions.isEmpty {
@@ -266,17 +354,29 @@ struct LibraryView: View {
     /// flat, dense answer rather than ten carousels to swipe through.
     @ViewBuilder
     private var searchResultsSection: some View {
-        if searchResults.isEmpty && playlistResults.isEmpty {
+        // Filtering and sorting are linearithmic in the library size. Capture
+        // each result once for this update instead of recomputing it for the
+        // empty check, count, `ForEach`, and every row's separator.
+        let matchedFiles = searchResults
+        let matchedPlaylists = playlistResults
+        let lastFileID = matchedFiles.last?.id
+        let lastPlaylistID = matchedPlaylists.last?.id
+
+        if matchedFiles.isEmpty && matchedPlaylists.isEmpty {
             LibraryNoResultsView(query: searchText, onClear: clearNarrowing)
         } else {
-            if playlistResults.isEmpty == false {
+            if matchedPlaylists.isEmpty == false {
                 LibraryShelfSectionHeader(title: "Playlists")
                     .padding(.horizontal, TranceSpacing.screen)
 
                 LazyVStack(spacing: 0) {
-                    ForEach(playlistResults) { playlist in
-                        LibraryPlaylistResultRow(playlist: playlist) { playPlaylist(playlist) }
-                        if playlist.id != playlistResults.last?.id {
+                    ForEach(matchedPlaylists) { playlist in
+                        LibraryPlaylistResultRow(
+                            playlist: playlist,
+                            onPlay: { playPlaylist(playlist) },
+                            onOpenInfo: { openPlaylistInfo(playlist) }
+                        )
+                        if playlist.id != lastPlaylistID {
                             LibraryRowSeparator()
                         }
                     }
@@ -287,26 +387,30 @@ struct LibraryView: View {
                 .padding(.horizontal, TranceSpacing.screen)
             }
 
-            if searchResults.isEmpty == false {
+            if matchedFiles.isEmpty == false {
                 HStack {
                     Text("Sessions")
                         .font(TranceTypography.sectionTitle)
                         .fontWeight(.bold)
                         .foregroundStyle(Color.textPrimary)
                     Spacer()
-                    LibraryResultSummary(shown: searchResults.count, total: audioFiles.count)
+                    LibraryResultSummary(shown: matchedFiles.count, total: audioFiles.count)
                 }
                 .padding(.horizontal, TranceSpacing.screen)
 
                 LazyVStack(spacing: 0) {
-                    ForEach(searchResults) { file in
+                    ForEach(matchedFiles) { file in
                         LibraryFileResultRow(
                             file: file,
                             onPlay: { playWithLights(file) },
                             onOpenInfo: { openFileInfo(file) },
-                            onAddToPlaylist: { fileForPlaylist = file }
+                            onAddToPlaylist: { fileForPlaylist = file },
+                            onDelete: { deleteFile(file) }
                         )
-                        if file.id != searchResults.last?.id {
+                        // The row's context menu still exposes Delete. Omitting
+                        // the custom drag recognizer here keeps vertical list
+                        // scrolling under a single gesture owner.
+                        if file.id != lastFileID {
                             LibraryRowSeparator()
                         }
                     }
@@ -349,20 +453,13 @@ struct LibraryView: View {
     private var analyzedFiles: [AudioFile] { cachedAnalyzedFiles }
     private var allFilesShelf: [AudioFile] { cachedAllFiles }
     private var recommendedFiles: [AudioFile] { cachedRecommendedFiles }
+    private var generatedSessions: [GeneratedSessionItem] { cachedGeneratedSessions }
     private var shelfPlaylists: [Playlist] { LibraryShelfContent.shelfPlaylists(from: playlists) }
     private var shelfSessions: [LightSession] {
         Array(builtInSessions.prefix(LibraryShelfContent.shelfCap))
     }
     private var savedSessions: [LightSession] {
         builtInSessions.filter { savedSessionStore.contains($0.id.uuidString) }
-    }
-    private var listeningContinuations: [PlaybackProgressSnapshot] {
-        playbackProgressStore.snapshots.filter { snapshot in
-            switch snapshot.kind {
-            case .audio: audioFiles.contains { $0.id.uuidString == snapshot.contentID }
-            case .session: builtInSessions.contains { $0.id.uuidString == snapshot.contentID }
-            }
-        }
     }
     private var partialAnalysisFiles: [AudioFile] {
         audioFiles.filter { $0.hasTranscription && $0.isAnalyzed == false }
@@ -374,6 +471,11 @@ struct LibraryView: View {
         cachedAnalyzedFiles = LibraryShelfContent.analyzed(from: audioFiles)
         cachedAllFiles = LibraryShelfContent.allFiles(from: audioFiles)
         cachedRecommendedFiles = LibraryShelfContent.recommendedNext(from: audioFiles)
+        cachedGeneratedSessions = LibraryShelfContent.generatedSessions(
+            from: audioFiles,
+            hasSession: { GeneratedSessionStore.shared.hasGeneratedScoreOnDisk(for: $0) },
+            sessionLookup: { GeneratedSessionStore.shared.load(for: $0) }
+        )
         cachedFilterChips = LibraryBrowseFilter.chips(for: audioFiles)
         if cachedFilterChips.contains(where: { $0.filter == quickFilter }) == false {
             quickFilter = .all
@@ -389,24 +491,76 @@ struct LibraryView: View {
         PlaylistStore.save(playlists)
     }
 
-    private func loadAudioFiles() async {
-        audioFiles = await AudioLibraryStore.loadRepairingStoredFiles()
+    /// Paints the last known library immediately. ContentView primes this cache
+    /// at launch, so a normal Library entry must not decode the same multi-MB
+    /// analysis payload again. Callers that follow a persistent mutation opt
+    /// into a refresh explicitly.
+    private func loadAudioFiles(forceRefresh: Bool = false) async {
+        let cache = AudioLibraryCache.shared
+        if cache.hasLoaded, forceRefresh == false {
+            audioFiles = cache.files
+            recomputeDerivedCollections()
+            return
+        }
+
+        await cache.refresh()
+        audioFiles = cache.files
+    }
+
+    // MARK: - Delete
+
+    /// Removes the row and stages the file for undo. Nothing is destroyed until
+    /// `PendingAudioDeletion.commit()` runs.
+    private func deleteFile(_ file: AudioFile) {
+        guard let index = audioFiles.firstIndex(where: { $0.id == file.id }) else { return }
+
+        let staged = pendingDeletion.stage([
+            StagedAudioFile(file: file, originalURL: file.url, originalIndex: index)
+        ])
+
+        // The move failed, so the file is still in Documents. Keep the row —
+        // dropping it would let the next library scan re-register it.
+        guard !staged.isEmpty else { return }
+
+        audioFiles.remove(at: index)
+        Task {
+            if let persisted = await AudioLibraryStore.remove(audioFileIDs: [file.id]) {
+                AudioLibraryCache.shared.store(persisted)
+                audioFiles = persisted
+            }
+        }
+        TranceHaptics.shared.medium()
+    }
+
+    private func undoDelete() {
+        let recovered = pendingDeletion.restore()
+        for entry in recovered {
+            audioFiles.insert(entry.file, at: min(entry.originalIndex, audioFiles.count))
+        }
+        Task {
+            if let persisted = await AudioLibraryStore.restore(recovered) {
+                AudioLibraryCache.shared.store(persisted)
+                audioFiles = persisted
+            }
+        }
+        TranceHaptics.shared.light()
+        Log.audio.info("↩️ Restored \(recovered.count) deleted file(s)")
     }
 
     private func loadPlaylists() {
         playlists = PlaylistStore.load()
     }
 
-    private func loadBuiltInSessions() {
-        var sessions: [LightSession] = []
-        for name in LightScoreReader.discoverBundledSessions() {
-            do {
-                sessions.append(try LightScoreReader.loadSession(named: name))
-            } catch {
-                Log.ui.info("Library: failed to load bundled session '\(name)': \(error)")
-            }
-        }
-        builtInSessions = sessions
+    /// Opens the importer on the link the browser landed on. Deferred to the
+    /// browser's dismissal because presenting a sheet from inside a full screen
+    /// cover that is still on its way out drops the presentation.
+    private func startPendingPlaylistImport() {
+        guard let link = pendingPlaylistLink else { return }
+        pendingPlaylistLink = nil
+        playlistImportRequest = PlaylistImportRequest(
+            audioFiles: audioFiles,
+            initialLink: link
+        )
     }
 
     private func playPlaylist(_ playlist: Playlist) {
@@ -429,15 +583,11 @@ struct LibraryView: View {
         navPath.append(file)
     }
 
-    private func continueListening(_ snapshot: PlaybackProgressSnapshot) {
-        switch snapshot.kind {
-        case .audio:
-            guard let file = audioFiles.first(where: { $0.id.uuidString == snapshot.contentID }) else { return }
-            playWithLights(file)
-        case .session:
-            guard let session = builtInSessions.first(where: { $0.id.uuidString == snapshot.contentID }) else { return }
-            playSession(session)
-        }
+    /// Opens the playlist's detail screen (tracks, transitions, artwork) —
+    /// the playlist counterpart to `openFileInfo`.
+    private func openPlaylistInfo(_ playlist: Playlist) {
+        TranceHaptics.shared.light()
+        editingPlaylist = playlist
     }
 
     private func openAnalysisQueue() {
@@ -447,32 +597,8 @@ struct LibraryView: View {
 
     private func analyze(_ file: AudioFile) {
         Task {
-            analysisManager.evictCachedResult(for: file)
+            await analysisManager.evictCachedResult(for: file)
             await analysisManager.queueForAnalysis(file)
-        }
-    }
-
-    private func loadReadingContinuation() {
-        guard let state = ReaderProgressStore.shared.recentStates.first else {
-            readingContinuation = nil
-            return
-        }
-        let imported = ImportedTranceScriptStore.shared.importedScripts
-        let scripts = imported + TranceScriptLibrary.bundled().filter { candidate in
-            imported.contains { $0.id == candidate.id } == false
-        }
-        if let script = scripts.first(where: { $0.id == state.scriptId }) {
-            readingContinuation = LibraryReadingContinuation(
-                title: script.title,
-                wordIndex: state.wordIndex
-            )
-            return
-        }
-        if let document = ReadingDocumentStore.shared.documents.first(where: { $0.scriptID == state.scriptId }) {
-            readingContinuation = LibraryReadingContinuation(
-                title: document.title,
-                wordIndex: state.wordIndex
-            )
         }
     }
 
@@ -489,64 +615,4 @@ struct LibraryView: View {
     private var bottomSpacer: some View {
         Color.clear.frame(height: TranceSpacing.tabBarClearance + TranceSpacing.content)
     }
-}
-
-// MARK: - LibrarySessionRow
-
-struct LibrarySessionRow: View {
-    let file: AudioFile
-    let onPlay: () -> Void
-    var onAddToPlaylist: (() -> Void)?
-
-    var body: some View {
-        Button(action: {
-            Log.ui.info("🎯 LibrarySessionRow: button tapped for \(file.displayName)")
-            onPlay()
-        }) {
-            HStack(spacing: TranceSpacing.list) {
-                // Content type icon badge
-                SessionGlowDot(contentType: file.analysisResult?.contentType, size: 40)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(file.displayName)
-                        .font(TranceTypography.body)
-                        .foregroundStyle(.textPrimary)
-                        .lineLimit(1)
-
-                    HStack(spacing: 6) {
-                        if let creator = file.creatorDisplayName {
-                            Text(creator)
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(.roseGold)
-                        }
-                        Text(file.durationFormatted)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(.textLight)
-                    }
-                }
-
-                Spacer()
-
-                if file.favorite {
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(hex: "E85D75"))
-                }
-
-                if let onAddToPlaylist {
-                    Button {
-                        onAddToPlaylist()
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.roseGold)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.vertical, TranceSpacing.card)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-
 }

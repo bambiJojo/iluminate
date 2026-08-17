@@ -17,8 +17,9 @@ import FoundationModels
 /// improve classification accuracy and session quality downstream.
 nonisolated enum AVESystemPrompt {
 
-    /// Compact fallback used when the full prompt would exceed the context window.
-    /// Covers only the fields the structured-output schema requires.
+    /// Compact instructions for transcript classification.
+    /// Covers the decisions the structured-output schema requires while leaving
+    /// enough context for the generated response itself.
     static let minimalInstructions = """
     You classify audio content for a light therapy system.
     Also create a concise, specific library title and 1–6 short themes. Only name a creator when supported by the filename, embedded context, or transcript; otherwise return an empty creator.

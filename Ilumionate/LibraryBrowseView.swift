@@ -19,6 +19,10 @@ struct LibraryBrowseView: View {
     /// Pre-applied narrowing for scoped entry points (e.g. Favorites).
     var initialFilter: LibraryQuickFilter = .all
 
+    /// Handed down by whoever owns `audioFiles` — this screen only displays a
+    /// scoped copy, so it cannot remove a file itself.
+    var onDelete: ((AudioFile) -> Void)?
+
     @State private var searchText = ""
     @State private var quickFilter: LibraryQuickFilter = .all
     @State private var sortOption: LibrarySortOption = .newest
@@ -41,19 +45,24 @@ struct LibraryBrowseView: View {
     }
 
     var body: some View {
+        // Compute the filtered and sorted snapshot once per view update. The
+        // previous computed property was read by the empty check, controls,
+        // `ForEach`, and once per separator.
+        let visibleResults = results
+
         ZStack {
             AuroraBackground()
 
             VStack(spacing: 0) {
-                controls
+                controls(resultCount: visibleResults.count)
 
-                if results.isEmpty {
+                if visibleResults.isEmpty {
                     ScrollView {
                         LibraryNoResultsView(query: searchText, onClear: clearNarrowing)
                             .padding(.top, TranceSpacing.statusBar)
                     }
                 } else {
-                    resultsList
+                    resultsList(visibleResults)
                 }
             }
         }
@@ -80,7 +89,7 @@ struct LibraryBrowseView: View {
 
     // MARK: - Controls
 
-    private var controls: some View {
+    private func controls(resultCount: Int) -> some View {
         VStack(spacing: TranceSpacing.inner) {
             LibrarySearchField(text: $searchText)
                 .padding(.horizontal, TranceSpacing.screen)
@@ -90,7 +99,7 @@ struct LibraryBrowseView: View {
             }
 
             HStack {
-                LibraryResultSummary(shown: results.count, total: audioFiles.count)
+                LibraryResultSummary(shown: resultCount, total: audioFiles.count)
                 Spacer()
                 LibrarySortMenu(selection: $sortOption)
             }
@@ -102,19 +111,24 @@ struct LibraryBrowseView: View {
 
     // MARK: - Results
 
-    private var resultsList: some View {
-        ScrollView {
+    private func resultsList(_ visibleResults: [AudioFile]) -> some View {
+        let lastFileID = visibleResults.last?.id
+
+        return ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(results) { file in
+                ForEach(visibleResults) { file in
                     LibraryFileResultRow(
                         file: file,
                         onPlay: { play(file) },
                         onOpenInfo: { navigatingFile = file },
                         onAddToPlaylist: { fileForPlaylist = file },
-                        onAnalyze: { analyze(file) }
+                        onAnalyze: { analyze(file) },
+                        onDelete: onDelete.map { delete in { delete(file) } }
                     )
-
-                    if file.id != results.last?.id {
+                    // Delete remains in the context menu. A second drag
+                    // recognizer on every row made the parent ScrollView's
+                    // vertical gesture unreliable in large filtered lists.
+                    if file.id != lastFileID {
                         LibraryRowSeparator()
                     }
                 }
@@ -143,7 +157,7 @@ struct LibraryBrowseView: View {
 
     private func analyze(_ file: AudioFile) {
         Task {
-            AnalysisStateManager.shared.evictCachedResult(for: file)
+            await AnalysisStateManager.shared.evictCachedResult(for: file)
             await AnalysisStateManager.shared.queueForAnalysis(file)
         }
     }

@@ -7,6 +7,12 @@
 
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+#else
+import AppKit
+#endif
+
 extension Color {
     /// Initialize a Color from a hex string (e.g. "#FF0000" or "FF0000")
     init(hex: String) {
@@ -73,5 +79,24 @@ extension Color {
         }
 
         return Color(red: red / 255.0, green: green / 255.0, blue: blue / 255.0)
+    }
+
+    /// `RRGGBB` for persistence — the inverse of `init(hex:)`.
+    ///
+    /// Nil when the colour cannot be resolved to concrete sRGB components, which
+    /// a dynamic or catalog colour cannot be. Callers must have a fallback
+    /// rather than treating nil as black.
+    var hexString: String? {
+        #if canImport(UIKit)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a) else { return nil }
+        #else
+        guard let converted = NSColor(self).usingColorSpace(.sRGB) else { return nil }
+        let r = converted.redComponent, g = converted.greenComponent, b = converted.blueComponent
+        #endif
+        func byte(_ value: CGFloat) -> Int {
+            Int((min(max(value, 0), 1) * 255).rounded())
+        }
+        return String(format: "%02X%02X%02X", byte(r), byte(g), byte(b))
     }
 }

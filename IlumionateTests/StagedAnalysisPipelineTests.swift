@@ -43,10 +43,10 @@ struct StagedAnalysisPipelineTests {
             await manager.queueForAnalysis([firstFile, secondFile])
         }
 
-        let analysisStarted = await waitUntil {
-            await probe.hasActiveAnalysis
-        }
-        #expect(analysisStarted, "The first file should reach content analysis.")
+        // Waits on the signal rather than a deadline: this takes as long as
+        // the machine needs, and hangs visibly if the pipeline never gets there
+        // instead of failing an arbitrary timeout under load.
+        await probe.waitForActiveAnalysis()
 
         try? await Task.sleep(for: .milliseconds(100))
         let observedOverlap = await probe.didObserveAnalysisAndTranscriptionOverlap
@@ -97,22 +97,6 @@ struct StagedAnalysisPipelineTests {
         #expect(checkpoint == nil)
     }
 
-    // Generous deadline: a cold first run needs several seconds to reach the
-    // overlap, while a warm run gets there in ~0.1s. Polling returns as soon
-    // as the condition holds, so the extra headroom costs nothing when fast.
-    private func waitUntil(
-        timeout: Duration = .seconds(15),
-        condition: () async -> Bool
-    ) async -> Bool {
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: timeout)
-
-        while clock.now < deadline {
-            if await condition() { return true }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return await condition()
-    }
 }
 
 @MainActor
@@ -168,6 +152,7 @@ private actor StagedAnalysisProbe {
     private var observedOverlap = false
     private var firstAnalysisReleased = false
     private var releaseContinuations: [CheckedContinuation<Void, Never>] = []
+    private var startContinuations: [CheckedContinuation<Void, Never>] = []
 
     var didObserveAnalysisAndTranscriptionOverlap: Bool {
         observedOverlap
@@ -185,6 +170,23 @@ private actor StagedAnalysisProbe {
 
     func analysisStarted() {
         activeAnalysisCount += 1
+        let waiting = startContinuations
+        startContinuations.removeAll()
+        waiting.forEach { $0.resume() }
+    }
+
+    /// Suspends until content analysis actually begins.
+    ///
+    /// Replaces a poll against a 15-second deadline. `AnalysisStateManager` is
+    /// `@MainActor`, so under the full suite — where dozens of `@MainActor`
+    /// suites queue on one actor — the pipeline could not reach this state
+    /// inside the deadline and the test failed on a starved machine rather than
+    /// on anything about the pipeline.
+    func waitForActiveAnalysis() async {
+        guard activeAnalysisCount == 0 else { return }
+        await withCheckedContinuation { continuation in
+            startContinuations.append(continuation)
+        }
     }
 
     func analysisFinished() {

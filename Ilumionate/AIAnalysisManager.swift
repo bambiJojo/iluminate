@@ -53,9 +53,13 @@ actor AIAnalysisManager {
         await onProgress(ProgressInfo(progress: 0.05, message: "Setting up AI session..."))
 
         let addendum = await MainActor.run { AnalysisPreferences.shared.aiSystemAddendum }
+        // The detailed instructions plus the structured response schema consume
+        // the context window before generation begins (4,562 input tokens in a
+        // saturated local measurement). The compact pair below is the request
+        // that already proved successful as the old retry (3,029 tokens).
         let finalInstructions = addendum.isEmpty
-            ? AVESystemPrompt.instructions
-            : AVESystemPrompt.instructions + "\n\n" + addendum
+            ? AVESystemPrompt.minimalInstructions
+            : AVESystemPrompt.minimalInstructions + "\n\n" + addendum
 
         let lmSession = LanguageModelSession(instructions: finalInstructions)
         session = lmSession
@@ -90,7 +94,9 @@ actor AIAnalysisManager {
         // dominates, so classification finishes essentially for free.
         async let aiResponseAsync = fetchAIResponse(
             session: lmSession, prompt: prompt,
-            transcription: transcription, audioFile: audioFile
+            transcription: transcription,
+            audioFile: audioFile,
+            hasCustomInstructions: addendum.isEmpty == false
         )
 
         let detectedPhases: [PhaseSegment]? = try await runPhaseAnalysis(
@@ -101,11 +107,13 @@ actor AIAnalysisManager {
 
         await onProgress(ProgressInfo(progress: 0.80, message: "Classifying content..."))
 
-        guard let aiResponse = try await aiResponseAsync else {
+        let aiOutcome = try await aiResponseAsync
+        guard case .generated(let aiResponse) = aiOutcome else {
             return makeKeywordFallbackResult(
                 audioFile: audioFile,
                 detectedPhases: detectedPhases,
-                verifiedMetadata: bundledMetadata
+                verifiedMetadata: bundledMetadata,
+                diagnosis: aiOutcome.diagnosis
             )
         }
 
@@ -128,15 +136,35 @@ actor AIAnalysisManager {
         return result
     }
 
-    /// Runs the AI classification with one automatic retry on any error.
-    /// Sets `currentTask` so cancellation remains supported. Returns `nil`
-    /// when both attempts fail, signalling the caller to use keyword fallback.
+    /// What the on-device model produced, or why it did not.
+    ///
+    /// The reason used to be logged and dropped, so the keyword fallback that
+    /// followed could say only *that* it had run, never *why* — which matters
+    /// most when the cause is a passing one worth trying again.
+    enum AIResponseOutcome {
+        case generated(AIAnalysisResponse)
+        case unavailable(AIGenerationDiagnosis.Kind)
+
+        var diagnosis: AIGenerationDiagnosis.Kind? {
+            switch self {
+            case .generated: nil
+            case .unavailable(let kind): kind
+            }
+        }
+    }
+
+    /// Runs the AI classification with one automatic retry when a fresh compact
+    /// session can plausibly help. A context overflow is retried only when that
+    /// retry can remove custom instructions; repeating the same compact request
+    /// would spend another model round-trip on the same deterministic failure.
+    /// Sets `currentTask` so cancellation remains supported.
     private func fetchAIResponse(
         session: LanguageModelSession,
         prompt: String,
         transcription: AudioTranscriptionResult,
-        audioFile: AudioFile
-    ) async throws -> AIAnalysisResponse? {
+        audioFile: AudioFile,
+        hasCustomInstructions: Bool
+    ) async throws -> AIResponseOutcome {
         let task = Task<AIAnalysisResponse, Error> {
             do {
                 return try await session.respond(
@@ -145,12 +173,32 @@ actor AIAnalysisManager {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                Log.analysis.info("⚠️ AI attempt 1 failed (\(type(of: error))) — retrying with minimal prompt")
+                // Log the error itself, not just its type: every Foundation
+                // Models failure surfaces as `GenerationError`, so the type alone
+                // cannot distinguish a context overflow from a guardrail refusal
+                // from missing assets — which are three unrelated fixes.
+                let diagnosis = AIGenerationDiagnosis.classify(error)
+                Log.analysis.info("⚠️ AI attempt 1 failed (\(diagnosis.rawValue)). Reason: \(String(describing: error))")
+
+                // A refusal, a missing model, or a safety host that cannot be
+                // queried will fail identically in a fresh session. A context
+                // overflow can improve only when there is an addendum to drop.
+                guard diagnosis.isRetryable else { throw error }
+                if diagnosis == .contextWindow, hasCustomInstructions == false {
+                    throw error
+                }
+                if hasCustomInstructions {
+                    Log.analysis.info("↻ Retrying compact request without custom instructions")
+                } else {
+                    Log.analysis.info("↻ Retrying compact request in a fresh session")
+                }
             }
-            // Retry with compact prompt; errors here propagate out of the Task.
+            // Retry in a fresh compact session; errors propagate out of the Task.
             let fallback = LanguageModelSession(instructions: AVESystemPrompt.minimalInstructions)
             let shortPrompt = buildTranscriptionPrompt(
-                transcription: transcription, audioFile: audioFile, maxChunkSize: 120
+                transcription: transcription,
+                audioFile: audioFile,
+                maxChunkSize: Self.transcriptSampleCharacterCount
             )
             return try await fallback.respond(
                 to: shortPrompt, generating: AIAnalysisResponse.self
@@ -160,14 +208,19 @@ actor AIAnalysisManager {
         do {
             let response = try await task.value
             currentTask = nil
-            return response
+            return .generated(response)
         } catch is CancellationError {
             currentTask = nil
             throw CancellationError()
         } catch {
-            Log.analysis.info("❌ All AI attempts exhausted (\(type(of: error))) — using keyword fallback")
+            let diagnosis = AIGenerationDiagnosis.classify(error)
+            Log.analysis.info("❌ AI generation gave up (\(diagnosis.rawValue)) — using keyword fallback. Reason: \(String(describing: error))")
+            if diagnosis.isTransient {
+                Log.analysis.info("↺ Transient — analysing this file again later should succeed")
+            }
+            await UsageAnalytics.shared.aiGenerationFallback(reason: diagnosis)
             currentTask = nil
-            return nil
+            return .unavailable(diagnosis)
         }
     }
 
@@ -618,7 +671,8 @@ private extension AIAnalysisManager {
     func makeKeywordFallbackResult(
         audioFile: AudioFile,
         detectedPhases: [PhaseSegment]?,
-        verifiedMetadata: AudioTrackMetadata? = nil
+        verifiedMetadata: AudioTrackMetadata? = nil,
+        diagnosis: AIGenerationDiagnosis.Kind? = nil
     ) -> AnalysisResult {
         let contentType = inferContentType(from: audioFile.displayName)
             ?? (hasMeaningfulHypnosisPhaseEvidence(detectedPhases, duration: audioFile.duration) ? .hypnosis : .unknown)
@@ -675,7 +729,8 @@ private extension AIAnalysisManager {
             suggestedIntensity: intensity,
             suggestedColorTemperature: colorTemp,
             keyMoments: keyMoments,
-            aiSummary: "Analysis via keyword classification (AI generation failed).",
+            aiSummary: diagnosis.map(AIGenerationDiagnosis.fallbackSummary(for:))
+                ?? AIGenerationDiagnosis.keywordFallbackSummary,
             recommendedPreset: presetName,
             contentType: contentType,
             hypnosisMetadata: hypnosisMetadata,

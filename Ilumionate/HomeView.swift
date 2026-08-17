@@ -2,7 +2,18 @@
 //  HomeView.swift
 //  Ilumionate
 //
-//  Trance design Home dashboard with category icons and glass cards
+//  The launcher. Greeting, four doors, and a way back into whatever you were
+//  last doing — nothing else.
+//
+//  This screen used to carry nine sections and six competing ways to start
+//  something, because it was compensating for a tab bar whose four slots do not
+//  match the four things the app actually is. The doors below are that
+//  compensation, made explicit and made equal.
+//
+//  Under the doors sit the two "where was I" sections, in that order: Current
+//  is what is playing this second, Continue is what was left unfinished. They
+//  are deliberately below the doors — leading with resume would quietly bias
+//  every launch toward repeating the last session.
 //
 
 import SwiftUI
@@ -52,124 +63,86 @@ enum BrainwaveCategory: String, CaseIterable, Identifiable {
 // MARK: - HomeView
 
 struct HomeView: View {
-    @Binding var showingAudioLibrary: Bool
-    @Binding var showingSessionPlayer: Bool
     @Binding var selectedSession: LightSession?
 
     let sessions: [LightSession]
     let audioFiles: [AudioFile]
     let engine: LightEngine
     let onRefresh: (() -> Void)?
+    let onOpenLibrary: () -> Void
     let onOpenReader: () -> Void
+    let onOpenCreate: (CreateSessionKind) -> Void
+    let onOpenNowPlaying: () -> Void
+    let onContinueReading: () -> Void
 
-    @State private var isRefreshing = false
     @State private var showingProfile = false
-    @State var showingSessionLibrary = false
-    @State var playerFile: AudioFile?
-    @State var myGeneratedSessions: [MyGeneratedSessionItem] = []
+    @State private var playerFile: AudioFile?
     @State private var cardsVisible = false
-    @State private var selectedChipCategory: BrainwaveCategory?
+    @State private var streakText: String?
+    @State private var readingContinuation: LibraryReadingContinuation?
+    @State private var progressStore = PlaybackProgressStore.shared
+    @State private var nowPlaying = NowPlayingState.shared
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    // Flash session state — for Mind Machine quick presets
-    @State private var showingFlashMode = false
-    @State private var flashFrequency: Double = 10.0
-    @State private var flashIntensity: Double = 0.75
-    @State private var flashKelvin: Int = 4000
-    @State private var flashPattern: MindMachineModel.LightPattern = .sine
-    @State private var flashBinauralEnabled = true
-    @State private var flashBinauralCarrier: Double = 200
-    @State private var flashBinauralVolume: Double = 0.5
-    @State private var flashGoalDuration: TimeInterval?
-
-    // Persist user name and last session progress
     @AppStorage("profileName") private var userName = ""
-    @AppStorage("lastSessionId") private var lastSessionId = ""
-    @AppStorage("lastSessionProgress") private var lastSessionProgress: Double = 0.0
+    @AppStorage("listeningHistoryEnabled") private var historyEnabled = true
 
-    init(showingAudioLibrary: Binding<Bool>,
-         showingSessionPlayer: Binding<Bool>,
-         selectedSession: Binding<LightSession?>,
-         sessions: [LightSession],
-         audioFiles: [AudioFile] = [],
-         engine: LightEngine,
-         onRefresh: (() -> Void)? = nil,
-         onOpenReader: @escaping () -> Void = {}) {
-        self._showingAudioLibrary = showingAudioLibrary
-        self._showingSessionPlayer = showingSessionPlayer
-        self._selectedSession = selectedSession
-        self.sessions = sessions
-        self.audioFiles = audioFiles
-        self.engine = engine
-        self.onRefresh = onRefresh
-        self.onOpenReader = onOpenReader
-    }
+    private let history = SessionHistoryManager.shared
 
     var body: some View {
         ZStack {
-            AuroraBackground(mood: PortalRecommender.category(forHour: Calendar.current.component(.hour, from: .now)))
-                .ignoresSafeArea()
-        ScrollView {
-            VStack(spacing: TranceSpacing.content) {
-                portalSection
-                    .cardEntrance(visible: cardsVisible, delay: 0.00, reduceMotion: reduceMotion)
-
-                greetingSection
-                    .cardEntrance(visible: cardsVisible, delay: 0.06, reduceMotion: reduceMotion)
-
-                HomeStreakPill()
-                    .cardEntrance(visible: cardsVisible, delay: 0.07, reduceMotion: reduceMotion)
-
-                HomeCoreActionsView(
-                    onOpenAudioLibrary: openAudioLibrary,
-                    onOpenReader: openReader
+            AuroraBackground(
+                mood: PortalRecommender.category(
+                    forHour: Calendar.current.component(.hour, from: .now)
                 )
-                .cardEntrance(visible: cardsVisible, delay: 0.08, reduceMotion: reduceMotion)
+            )
+            .ignoresSafeArea()
 
-                if lastSessionProgress > 0 {
-                    if let lastSession = sessions.first(where: { $0.id.uuidString == lastSessionId }) {
-                        continueSessionCard(session: lastSession)
-                            .cardEntrance(visible: cardsVisible, delay: 0.08, reduceMotion: reduceMotion)
-                    } else if let lastAudio = audioFiles.first(where: { $0.id.uuidString == lastSessionId }) {
-                        ContinueAudioCard(audioFile: lastAudio, progress: lastSessionProgress) {
-                            TranceHaptics.shared.medium()
-                            playerFile = lastAudio
-                        }
-                        .cardEntrance(visible: cardsVisible, delay: 0.08, reduceMotion: reduceMotion)
+            ScrollView {
+                VStack(spacing: TranceSpacing.content) {
+                    greeting
+                        .cardEntrance(visible: cardsVisible, delay: 0.00, reduceMotion: reduceMotion)
+
+                    HomeDoorsView(onSelect: open)
+                        .cardEntrance(visible: cardsVisible, delay: 0.06, reduceMotion: reduceMotion)
+
+                    // Gated here rather than inside the subviews: an empty
+                    // section still earns a VStack gap, which reads as a hole.
+                    if nowPlaying.isActive {
+                        HomeCurrentCard(nowPlaying: nowPlaying, onOpen: onOpenNowPlaying)
+                            .cardEntrance(visible: cardsVisible, delay: 0.12, reduceMotion: reduceMotion)
+                    }
+
+                    if hasContinuations {
+                        LibraryContinuationSection(
+                            listening: listeningContinuations,
+                            reading: readingContinuation,
+                            onContinueListening: continueListening,
+                            onContinueReading: onContinueReading
+                        )
+                        .cardEntrance(visible: cardsVisible, delay: 0.18, reduceMotion: reduceMotion)
                     }
                 }
-
-                // User-created sessions get the top shelf (endowment effect:
-                // the thing they made is the first thing they see).
-                if !myGeneratedSessions.isEmpty {
-                    mySessionsSection
-                        .cardEntrance(visible: cardsVisible, delay: 0.10, reduceMotion: reduceMotion)
-                }
-
-                if !sessions.isEmpty {
-                    featuredSessionsSection
-                        .cardEntrance(visible: cardsVisible, delay: 0.12, reduceMotion: reduceMotion)
-                }
-
-                quickStartSection
-                    .cardEntrance(visible: cardsVisible, delay: 0.18, reduceMotion: reduceMotion)
-                recentAudioSection
-                    .cardEntrance(visible: cardsVisible, delay: 0.22, reduceMotion: reduceMotion)
+                .padding(.horizontal, TranceSpacing.screen)
+                .padding(.bottom, TranceSpacing.tabBarClearance)
             }
-            .padding(.horizontal, TranceSpacing.screen)
-            .padding(.bottom, 100)
+            .refreshable { await handleRefresh() }
         }
-        .refreshable {
-            await handleRefresh()
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Settings", systemImage: "gearshape") {
+                    TranceHaptics.shared.light()
+                    showingProfile = true
+                }
+                .foregroundStyle(Color.roseGold)
+            }
         }
         .onAppear {
-            myGeneratedSessions = loadMyGeneratedSessions()
-            // Reset before animating so re-entry (tab switch) always replays the entrance.
             cardsVisible = false
+            loadReadingContinuation()
+            refreshStreakText()
             Task {
-                // One frame of invisible state lets SwiftUI capture the layout
-                // before the spring kicks in.
                 try? await Task.sleep(for: .milliseconds(30))
                 cardsVisible = true
             }
@@ -178,386 +151,58 @@ struct HomeView: View {
         .sheet(isPresented: $showingProfile) {
             ProfileSettingsView()
         }
-        .sheet(isPresented: $showingSessionLibrary) {
-            SessionLibraryView(engine: engine)
-        }
-        .sheet(item: $selectedChipCategory) { category in
-            CategorySessionSheet(
-                category: category,
-                sessions: sessions,
-                onSelect: { session in
-                    selectedChipCategory = nil
-                    selectedSession = session
-                }
-            )
-        }
-        .platformFullScreenCover(isPresented: $showingFlashMode) {
-            UnifiedPlayerView(
-                mode: .flashMode(
-                    frequency: flashFrequency,
-                    intensity: flashIntensity,
-                    colorTemperature: flashKelvin,
-                    pattern: flashPattern,
-                    binauralEnabled: flashBinauralEnabled,
-                    binauralCarrier: flashBinauralCarrier,
-                    binauralVolume: flashBinauralVolume,
-                    goalDuration: flashGoalDuration
-                ),
-                engine: engine,
-                mindMachineEntryPoint: .homePreset,
-                mindMachineMode: .flash
-            )
-        }
         .platformFullScreenCover(item: $playerFile) { file in
             UnifiedPlayerView(mode: .audioLight(audioFile: file), engine: engine)
         }
-        } // end ZStack
     }
 
-    private func openAudioLibrary() {
-        TranceHaptics.shared.light()
-        UsageAnalytics.shared.homeCoreActionSelected(.audioLibrary)
-        showingAudioLibrary = true
-    }
+    // MARK: - Greeting
 
-    private func openReader() {
-        TranceHaptics.shared.light()
-        UsageAnalytics.shared.homeCoreActionSelected(.reader)
-        onOpenReader()
-    }
+    private var greeting: some View {
+        VStack(spacing: TranceSpacing.micro) {
+            Text(portalGreeting)
+                .font(.system(size: 15, weight: .light))
+                .foregroundStyle(Color.textSecondary)
 
-    // MARK: - Greeting Section
+            Text("Ready to descend?")
+                .font(.system(size: 26, weight: .ultraLight))
+                .foregroundStyle(Color.textPrimary)
 
-    private var greetingSection: some View {
-        HStack(alignment: .center) {
-            // Left: branding wordmark only (greeting moved to portalSection)
-            WordmarkView()
-
-            Spacer()
-
-            // Right: profile avatar
-            Button {
-                TranceHaptics.shared.light()
-                showingProfile = true
-            } label: {
-                Circle()
-                    .fill(
-                        LinearGradient(colors: [.roseGold, .blush],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .frame(width: 48, height: 48)
-                    .overlay {
-                        Text(profileInitial)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                    .shadow(
-                        color: TranceShadow.elevated.color,
-                        radius: TranceShadow.elevated.radius,
-                        x: TranceShadow.elevated.x,
-                        y: TranceShadow.elevated.y
-                    )
+            if let streakText {
+                Text(streakText)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textLight)
             }
-            .buttonStyle(.plain)
         }
+        .frame(maxWidth: .infinity)
         .padding(.top, TranceSpacing.statusBar)
     }
 
-    // MARK: - Portal Section
-
-    private var portalSection: some View {
-        let recommended = sessions.first(where: { $0.id.uuidString == lastSessionId && lastSessionProgress > 0 })
-            ?? PortalRecommender.recommend(from: sessions)
-
-        return VStack(spacing: TranceSpacing.content) {
-            VStack(spacing: TranceSpacing.micro) {
-                Text(portalGreeting)
-                    .font(.system(size: 15, weight: .light))
-                    .foregroundStyle(.textSecondary)
-                Text("Ready to descend?")
-                    .font(.system(size: 26, weight: .ultraLight))
-                    .foregroundStyle(.textPrimary)
-            }
-            .padding(.top, TranceSpacing.content)
-
-            Button {
-                TranceHaptics.shared.medium()
-                if let recommended { selectedSession = recommended }
-            } label: {
-                ZStack {
-                    LumeOrb(size: .hero, pulse: recommended?.light_score.first?.frequency)
-                    VStack(spacing: 2) {
-                        Text("Begin")
-                            .font(.system(size: 18, weight: .light))
-                            .foregroundStyle(.textPrimary)
-                        if let recommended {
-                            Text(recommended.session_name)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.textLight)
-                                .lineLimit(1)
-                                .frame(maxWidth: 140)
-                        }
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(recommended.map { "Begin \($0.session_name)" } ?? "Begin a session")
-
-            stateChipsRow
+    /// Only shown once there is momentum worth protecting — a "0 day streak"
+    /// is a discouragement, not a metric.
+    ///
+    /// Cached in `@State` rather than computed in `body`: `currentStreak` walks
+    /// every history entry and builds a `Set` of days, and `body` can run many
+    /// times per second while the aurora drifts behind it.
+    private func refreshStreakText() {
+        guard historyEnabled else {
+            streakText = nil
+            return
         }
-    }
-
-    private var stateChipsRow: some View {
-        HStack(spacing: TranceSpacing.inner) {
-            ForEach(BrainwaveCategory.allCases) { category in
-                Button {
-                    TranceHaptics.shared.selection()
-                    selectedChipCategory = category
-                } label: {
-                    Text("\(category.emoji) \(category.rawValue)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.textSecondary)
-                        .padding(.horizontal, TranceSpacing.list)
-                        .padding(.vertical, TranceSpacing.inner)
-                        .background(category.haloColor.opacity(0.12))
-                        .clipShape(.capsule)
-                        .overlay(Capsule().stroke(category.haloColor.opacity(0.3), lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    // MARK: - Continue Session Card
-
-    private func continueSessionCard(session: LightSession) -> some View {
-        let progress = lastSessionProgress
-        let elapsed = session.duration_sec * progress
-        let remaining = max(0, session.duration_sec - elapsed)
-        let remainingText = formatTime(remaining) + " remaining"
-
-        return GlassCard(label: "Continue Session") {
-            Button {
-                TranceHaptics.shared.medium()
-                selectedSession = session
-                showingSessionPlayer = true
-            } label: {
-                HStack(spacing: TranceSpacing.list) {
-                    WaveformView(
-                        samples: generateSampleWaveform(),
-                        color: .roseGold
-                    )
-                    .frame(width: 120, height: 30)
-
-                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                        Text(session.displayName)
-                            .font(TranceTypography.body)
-                            .foregroundStyle(.textPrimary)
-                            .lineLimit(1)
-
-                        Text(remainingText)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(.textSecondary)
-                    }
-
-                    Spacer()
-
-                    ProgressRingView(progress: progress)
-                }
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    // MARK: - Quick Start Section
-
-    private var quickStartSection: some View {
-        GlassCard(label: "Quick Presets") {
-            VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                Label("Starts flash + binaural audio", systemImage: "headphones")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(.textSecondary)
-
-                HStack(spacing: TranceSpacing.list) {
-                    quickStartMiniCard(title: "Alpha", subtitle: "10 Hz · Focus", color: .bwAlpha) {
-                        launchQuickSession(name: "Alpha Focus", frequency: 10.0, durationMinutes: 10, color: .bwAlpha)
-                    }
-                    quickStartMiniCard(title: "Theta", subtitle: "6 Hz · Relax", color: .bwTheta) {
-                        launchQuickSession(name: "Theta Relax", frequency: 6.0, durationMinutes: 15, color: .bwTheta)
-                    }
-                    quickStartMiniCard(title: "Delta", subtitle: "2 Hz · Sleep", color: .bwDelta) {
-                        launchQuickSession(name: "Delta Sleep", frequency: 2.0, durationMinutes: 20, color: .bwDelta)
-                    }
-                }
-            }
-        }
-    }
-
-    private func quickStartMiniCard(title: String, subtitle: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: TranceSpacing.micro) {
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.textPrimary)
-
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.textSecondary)
-                    .multilineTextAlignment(.center)
-
-                Label("Flash + Audio", systemImage: "headphones")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(color)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, TranceSpacing.inner)
-            .background(color.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: TranceRadius.thumbnail))
-            .overlay {
-                RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                    .stroke(color.opacity(0.3), lineWidth: 1)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Recent Audio Section
-
-    private var recentAudioSection: some View {
-        GlassCard(label: "Recent Audio") {
-            VStack(alignment: .leading, spacing: TranceSpacing.list) {
-                if recentAudioFiles.isEmpty {
-                    // Empty state row
-                    Button {
-                        showingAudioLibrary = true
-                    } label: {
-                        HStack(spacing: TranceSpacing.list) {
-                            Circle()
-                                .fill(Color.phaseInduction)
-                                .frame(width: 44, height: 44)
-                                .overlay {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 18, weight: .medium))
-                                        .foregroundStyle(.white)
-                                }
-
-                            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                                Text("Import Audio")
-                                    .font(TranceTypography.body)
-                                    .foregroundStyle(.textPrimary)
-                                Text("Add your own hypnosis files")
-                                    .font(TranceTypography.caption)
-                                    .foregroundStyle(.textSecondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.textLight)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    ForEach(Array(recentAudioFiles.enumerated()), id: \.element.id) { index, file in
-                        if index > 0 {
-                            Rectangle()
-                                .fill(Color.glassBorder.opacity(0.3))
-                                .frame(height: 1)
-                        }
-                        audioFileRow(file: file, index: index)
-                    }
-
-                    // "See all" link
-                    Button {
-                        showingAudioLibrary = true
-                    } label: {
-                        HStack {
-                            Spacer()
-                            Text("See all \(audioFiles.count) files")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(.roseGold)
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.roseGold)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .opacity(audioFiles.count > 3 ? 1 : 0)
-                }
-            }
-        }
-    }
-
-    private func audioFileRow(file: AudioFile, index: Int) -> some View {
-        Button {
-            TranceHaptics.shared.medium()
-            playerFile = file
-        } label: {
-            HStack(spacing: TranceSpacing.list) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: TranceRadius.thumbnail)
-                        .fill(sessionColors[index % sessionColors.count].opacity(0.15))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: file.isAnalyzed ? "waveform.circle.fill" : "waveform.circle")
-                        .font(.system(size: 20))
-                        .foregroundStyle(sessionColors[index % sessionColors.count])
-                }
-
-                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                    Text(file.displayName)
-                        .font(TranceTypography.body)
-                        .foregroundStyle(.textPrimary)
-                        .lineLimit(1)
-
-                    HStack(spacing: TranceSpacing.small) {
-                        Text(file.durationFormatted)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(.textSecondary)
-                        if file.isAnalyzed {
-                            Text("· Light Sync Ready")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(.roseGold)
-                        }
-                    }
-                }
-
-                Spacer()
-
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 22))
-                    .foregroundStyle(.roseGold)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var recentAudioFiles: [AudioFile] {
-        Array(audioFiles.sorted { $0.createdDate > $1.createdDate }.prefix(3))
-    }
-
-    // MARK: - Helper Properties
-
-    private var displayName: String {
-        userName.isEmpty ? "Friend" : userName
-    }
-
-    private var profileInitial: String {
-        userName.first.map(String.init) ?? "?"
+        let streak = history.currentStreak
+        streakText = streak > 0 ? (streak == 1 ? "1 day streak" : "\(streak) day streak") : nil
     }
 
     private var currentGreeting: String {
         let hour = Calendar.current.component(.hour, from: .now)
         switch hour {
-        case 5..<12: return "Good morning,"
+        case 5..<12:  return "Good morning,"
         case 12..<17: return "Good afternoon,"
         case 17..<21: return "Good evening,"
         default:      return "Good night,"
         }
     }
 
-    /// Greeting shown in portalSection — appends the user's name when one is
-    /// set; strips the trailing comma when displaying without a name.
     private var portalGreeting: String {
         let name = userName.trimmingCharacters(in: .whitespaces)
         if name.isEmpty {
@@ -566,231 +211,60 @@ struct HomeView: View {
         return "\(currentGreeting) \(name)"
     }
 
-    private func generateSampleWaveform() -> [CGFloat] {
-        [0.3, 0.7, 0.4, 0.8, 0.2, 0.6, 0.9, 0.1, 0.5, 0.8, 0.3, 0.7, 0.4, 0.6, 0.2, 0.9]
+    // MARK: - Continue
+
+    private var listeningContinuations: [PlaybackProgressSnapshot] {
+        HomeContinuationContent.listening(
+            snapshots: progressStore.snapshots,
+            audioFiles: audioFiles,
+            sessions: sessions
+        )
     }
 
-    private func formatTime(_ seconds: Double) -> String {
-        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
+    private var hasContinuations: Bool {
+        listeningContinuations.isEmpty == false || readingContinuation != nil
     }
 
-    private let sessionColors: [Color] = [
-        .bwAlpha, .bwBeta, .bwTheta, .bwDelta, .bwGamma,
-        .phaseInduction, .phaseDeepener, .phaseSuggestion
-    ]
+    private func loadReadingContinuation() {
+        readingContinuation = HomeContinuationContent.reading(
+            state: ReaderProgressStore.shared.recentStates.first,
+            importedScripts: ImportedTranceScriptStore.shared.importedScripts,
+            bundledScripts: TranceScriptLibrary.bundled(),
+            documents: ReadingDocumentStore.shared.documents
+        )
+    }
 
     // MARK: - Actions
 
-    private func launchQuickSession(
-        name: String,
-        frequency: Double,
-        durationMinutes: Int,
-        color: Color,
-        bilateral: Bool = false
-    ) {
-        TranceHaptics.shared.heavy()
-        UsageAnalytics.shared.mindMachineStartRequested(
-            mode: .flash,
-            entryPoint: .homePreset
-        )
-        flashFrequency = frequency
-        flashIntensity = 0.75
-        // Map brainwave to a comfortable Kelvin temperature
-        switch frequency {
-        case ..<4:   flashKelvin = 2700  // warm amber — delta/sleep
-        case ..<8:   flashKelvin = 3200  // soft warm — theta/relax
-        case ..<13:  flashKelvin = 4000  // neutral white — alpha/focus
-        default:     flashKelvin = 5500  // cool daylight — beta/energy
+    private func open(_ door: HomeDoor) {
+        TranceHaptics.shared.light()
+        UsageAnalytics.shared.homeCoreActionSelected(door.analyticsAction)
+        switch door.route {
+        case .library:
+            onOpenLibrary()
+        case .reader:
+            onOpenReader()
+        case .create(let kind):
+            onOpenCreate(kind)
         }
-        flashPattern = bilateral ? .sine : .sine
-        flashBinauralEnabled = true
-        flashBinauralCarrier = 200
-        flashBinauralVolume = 0.5
-        flashGoalDuration = TimeInterval(durationMinutes * 60)
-        showingFlashMode = true
+    }
+
+    private func continueListening(_ snapshot: PlaybackProgressSnapshot) {
+        TranceHaptics.shared.medium()
+        switch snapshot.kind {
+        case .audio:
+            playerFile = audioFiles.first { $0.id.uuidString == snapshot.contentID }
+        case .session:
+            selectedSession = sessions.first { $0.id.uuidString == snapshot.contentID }
+        }
     }
 
     private func handleRefresh() async {
-        isRefreshing = true
         TranceHaptics.shared.light()
         try? await Task.sleep(for: .seconds(0.8))
+        loadReadingContinuation()
+        refreshStreakText()
         onRefresh?()
-        isRefreshing = false
-    }
-}
-
-// MARK: - Animated Wordmark
-
-struct WordmarkView: View {
-    @State private var shimmerOffset: CGFloat = -1.0
-    @State private var wavePhase: Double = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    // Fixed bar heights — a hand-crafted waveform silhouette
-    private let bars: [CGFloat] = [
-        0.25, 0.45, 0.60, 0.80, 0.55, 0.95, 0.70, 0.40,
-        0.85, 0.60, 0.45, 0.75, 0.50, 0.35, 0.65, 0.90,
-        0.55, 0.40, 0.70, 0.30
-    ]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Wordmark text with shimmer overlay
-            shimmeringTitle
-
-            // Micro waveform
-            waveformBar
-        }
-    }
-
-    // MARK: Shimmering Title
-
-    private var shimmeringTitle: some View {
-        Text("LumeSync")
-            .font(.system(size: 28, weight: .thin, design: .rounded))
-            .tracking(2)
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [.textPrimary, .roseGold, .bwTheta, .roseGold, .textPrimary],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .opacity(0.9)
-            )
-            .overlay {
-                GeometryReader { geo in
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear,               location: 0.0),
-                            .init(color: .white.opacity(0.12), location: 0.4),
-                            .init(color: .white.opacity(0.18), location: 0.5),
-                            .init(color: .white.opacity(0.12), location: 0.6),
-                            .init(color: .clear,               location: 1.0),
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: geo.size.width * 0.6)
-                    .offset(x: shimmerOffset * geo.size.width * 1.5)
-                    .blendMode(.plusLighter)
-                }
-                .clipped()
-            }
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(
-                    .easeInOut(duration: 6.0)
-                    .repeatForever(autoreverses: false)
-                    .delay(2.0)
-                ) {
-                    shimmerOffset = 1.5
-                }
-            }
-    }
-
-    // MARK: Waveform Bar
-
-    private var waveformBar: some View {
-        TimelineView(.animation(minimumInterval: 1 / 12, paused: reduceMotion)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            Canvas { ctx, size in
-                let count = bars.count
-                let spacing: CGFloat = 3
-                let barW: CGFloat = (size.width - CGFloat(count - 1) * spacing) / CGFloat(count)
-                let maxH = size.height
-
-                for (i, base) in bars.enumerated() {
-                    let phase = t * 0.4 + Double(i) * 0.3
-                    let breathe = 0.05 * sin(phase)
-                    let h = CGFloat(clamp(Double(base) + breathe, 0.12, 1.0)) * maxH
-
-                    let x = CGFloat(i) * (barW + spacing)
-                    let rect = CGRect(x: x, y: maxH - h, width: barW, height: h)
-                    let path = Path(roundedRect: rect, cornerRadius: barW / 2)
-
-                    let t01 = Double(i) / Double(count - 1)
-                    let color = Color(
-                        red:   lerp(0.831, 0.690, t01),
-                        green: lerp(0.471, 0.490, t01),
-                        blue:  lerp(0.604, 0.784, t01)
-                    ).opacity(lerp(0.35, 0.18, t01))
-
-                    ctx.fill(path, with: .color(color))
-                }
-            }
-        }
-        .frame(width: 130, height: 12)
-    }
-}
-
-// Small math helpers (file-private)
-private func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double { max(lo, min(hi, v)) }
-private func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
-
-// MARK: - Category Session Sheet
-
-struct CategorySessionSheet: View {
-    let category: BrainwaveCategory
-    let sessions: [LightSession]
-    let onSelect: (LightSession) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-
-    private var filteredSessions: [LightSession] {
-        let range = category.frequencyRange
-        let filtered = sessions.filter { session in
-            guard let firstMoment = session.light_score.min(by: { $0.time < $1.time }) else { return false }
-            return range.contains(firstMoment.frequency)
-        }
-        // "Trance" shows all; also fall back to all if no match
-        return (category == .trance || filtered.isEmpty) ? sessions : filtered
-    }
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.bgPrimary.ignoresSafeArea()
-
-                if filteredSessions.isEmpty {
-                    VStack(spacing: TranceSpacing.card) {
-                        Image(systemName: "waveform.circle")
-                            .font(.system(size: 52, weight: .ultraLight))
-                            .foregroundStyle(category.haloColor)
-                        Text("No \(category.rawValue) sessions yet")
-                            .font(TranceTypography.body)
-                            .foregroundStyle(.textSecondary)
-                    }
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: TranceSpacing.cardMargin) {
-                            ForEach(filteredSessions) { session in
-                                Button {
-                                    onSelect(session)
-                                } label: {
-                                    SessionListCard(session: session)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, TranceSpacing.screen)
-                        .padding(.vertical, TranceSpacing.cardMargin)
-                    }
-                }
-            }
-            .navigationTitle("\(category.emoji) \(category.rawValue)")
-            .platformLargeNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(.textSecondary)
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -817,20 +291,24 @@ private extension View {
 
 #Preview {
     struct HomeViewPreview: View {
-        @State private var showingAudioLibrary = false
-        @State private var showingSessionPlayer = false
         @State private var selectedSession: LightSession?
         @State private var engine = LightEngine()
 
         var body: some View {
-            HomeView(
-                showingAudioLibrary: $showingAudioLibrary,
-                showingSessionPlayer: $showingSessionPlayer,
-                selectedSession: $selectedSession,
-                sessions: [],
-                engine: engine,
-                onRefresh: nil
-            )
+            NavigationStack {
+                HomeView(
+                    selectedSession: $selectedSession,
+                    sessions: [],
+                    audioFiles: [],
+                    engine: engine,
+                    onRefresh: nil,
+                    onOpenLibrary: {},
+                    onOpenReader: {},
+                    onOpenCreate: { _ in },
+                    onOpenNowPlaying: {},
+                    onContinueReading: {}
+                )
+            }
         }
     }
 

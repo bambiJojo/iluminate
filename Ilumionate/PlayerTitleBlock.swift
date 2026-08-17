@@ -33,11 +33,14 @@ struct PlayerTitleBlock: View {
                     .font(TranceTypography.caption)
                     .foregroundStyle(viewModel.secondaryLabelColor)
                 if case .flashMode(_, _, let colorTemp, _, _, _, _, _) = viewModel.mode {
+                    let flashTint = FlashTintPreference.current()
                     Text("·")
                         .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.5))
-                    Text("\(colorTemp)K")
+                    // An override replaces the rendered colour, so naming the
+                    // session's Kelvin here would contradict the field.
+                    Text(flashTint.overrideTint?.displayName ?? "\(colorTemp)K")
                         .font(TranceTypography.caption)
-                        .foregroundStyle(Color.fromKelvin(colorTemp))
+                        .foregroundStyle(flashTint.color(colorTemperature: colorTemp))
                 }
             }
         } else if viewModel.mode.hasTrackNavigation {
@@ -46,10 +49,7 @@ struct PlayerTitleBlock: View {
                 .foregroundStyle(viewModel.secondaryLabelColor)
                 .lineLimit(1)
         } else {
-            Text(viewModel.formatTime(viewModel.currentTime) + " / " + viewModel.formatTime(viewModel.duration))
-                .font(TranceTypography.caption)
-                .foregroundStyle(viewModel.secondaryLabelColor)
-                .monospacedDigit()
+            PlayerElapsedDuration(viewModel: viewModel)
         }
     }
 }

@@ -14,9 +14,19 @@ nonisolated struct KnownAudioCatalog: Sendable {
     static let reviewedAnalysisVersion = 2
 
     let entries: [KnownAudioCatalogEntry]
+    private let normalizedAliases: [NormalizedAlias]
+    private let fingerprintEntryIndices: [String: Int]
+
+    private struct NormalizedAlias: Sendable {
+        let entryIndex: Int
+        let value: String
+        let tokens: Set<String>
+    }
 
     init(entries: [KnownAudioCatalogEntry]) {
         self.entries = entries
+        self.normalizedAliases = Self.makeNormalizedAliases(for: entries)
+        self.fingerprintEntryIndices = Self.makeFingerprintIndex(for: entries)
     }
 
     init(bundle: Bundle = .main, resourceName: String = "KnownAudioCatalog") {
@@ -27,11 +37,11 @@ nonisolated struct KnownAudioCatalog: Sendable {
         let data = try? Data(contentsOf: url),
         let document = try? JSONDecoder().decode(KnownAudioCatalogDocument.self, from: data),
         document.schemaVersion == 1 else {
-            entries = []
+            self.init(entries: [])
             return
         }
 
-        entries = document.entries
+        self.init(entries: document.entries)
     }
 
     func match(audioFile: AudioFile) -> KnownAudioCatalogMatch? {
@@ -39,10 +49,8 @@ nonisolated struct KnownAudioCatalog: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased(),
            fingerprint.isEmpty == false,
-           let entry = entries.first(where: {
-               $0.contentFingerprints.contains { $0.lowercased() == fingerprint }
-           }) {
-            return KnownAudioCatalogMatch(entry: entry, confidence: 1)
+           let entryIndex = fingerprintEntryIndices[fingerprint] {
+            return KnownAudioCatalogMatch(entry: entries[entryIndex], confidence: 1)
         }
 
         let candidates = [
@@ -284,50 +292,80 @@ nonisolated struct KnownAudioCatalog: Sendable {
     private func match(candidate: String) -> KnownAudioCatalogMatch? {
         let normalizedCandidate = Self.normalized(candidate)
         guard normalizedCandidate.count >= 6 else { return nil }
+        let candidateTokens = Set(normalizedCandidate.split(separator: " ").map(String.init))
 
         var best: KnownAudioCatalogMatch?
-        for entry in entries {
-            for alias in entry.aliases + [entry.title] {
-                let normalizedAlias = Self.normalized(alias)
-                let confidence = Self.matchConfidence(
-                    candidate: normalizedCandidate,
-                    alias: normalizedAlias
-                )
-                guard confidence >= 0.90 else { continue }
+        for alias in normalizedAliases {
+            let confidence = Self.matchConfidence(
+                candidate: normalizedCandidate,
+                candidateTokens: candidateTokens,
+                alias: alias
+            )
+            guard confidence >= 0.90 else { continue }
 
-                if best == nil || confidence > (best?.confidence ?? 0) {
-                    best = KnownAudioCatalogMatch(
-                        entry: entry,
-                        confidence: confidence
-                    )
-                }
+            if best == nil || confidence > (best?.confidence ?? 0) {
+                best = KnownAudioCatalogMatch(
+                    entry: entries[alias.entryIndex],
+                    confidence: confidence
+                )
             }
         }
         return best
     }
 
-    private static func matchConfidence(candidate: String, alias: String) -> Double {
-        guard !alias.isEmpty else { return 0 }
-        if candidate == alias {
+    private static func matchConfidence(
+        candidate: String,
+        candidateTokens: Set<String>,
+        alias: NormalizedAlias
+    ) -> Double {
+        guard !alias.value.isEmpty else { return 0 }
+        if candidate == alias.value {
             return 1
         }
 
-        let aliasTokens = alias.split(separator: " ")
-        if aliasTokens.count >= 3, candidate.hasSuffix(" \(alias)") {
+        if alias.tokens.count >= 3, candidate.hasSuffix(" \(alias.value)") {
             return 0.98
         }
 
-        let candidateTokens = Set(candidate.split(separator: " ").map(String.init))
-        let expectedTokens = Set(aliasTokens.map(String.init))
-        guard expectedTokens.count >= 3 else { return 0 }
+        guard alias.tokens.count >= 3 else { return 0 }
 
-        let coverage = Double(candidateTokens.intersection(expectedTokens).count)
-            / Double(expectedTokens.count)
-        let extraTokenCount = candidateTokens.subtracting(expectedTokens).count
+        let coverage = Double(candidateTokens.intersection(alias.tokens).count)
+            / Double(alias.tokens.count)
+        let extraTokenCount = candidateTokens.subtracting(alias.tokens).count
         if coverage == 1, extraTokenCount <= 4 {
             return 0.92
         }
         return 0
+    }
+
+    private static func makeNormalizedAliases(
+        for entries: [KnownAudioCatalogEntry]
+    ) -> [NormalizedAlias] {
+        entries.enumerated().flatMap { entryIndex, entry in
+            (entry.aliases + [entry.title]).map { alias in
+                let value = normalized(alias)
+                return NormalizedAlias(
+                    entryIndex: entryIndex,
+                    value: value,
+                    tokens: Set(value.split(separator: " ").map(String.init))
+                )
+            }
+        }
+    }
+
+    private static func makeFingerprintIndex(
+        for entries: [KnownAudioCatalogEntry]
+    ) -> [String: Int] {
+        entries.enumerated().reduce(into: [:]) { index, pair in
+            let (entryIndex, entry) = pair
+            for fingerprint in entry.contentFingerprints {
+                let normalized = fingerprint
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                guard normalized.isEmpty == false, index[normalized] == nil else { continue }
+                index[normalized] = entryIndex
+            }
+        }
     }
 
     private func reusableTranscription(for audioFile: AudioFile) -> AudioTranscriptionResult? {

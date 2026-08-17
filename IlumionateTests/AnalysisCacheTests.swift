@@ -40,10 +40,10 @@ struct AnalysisCacheTests {
         _ = result // structural — verifies type is Optional<AnalysisResult>
     }
 
-    @Test func evictCachedResultDoesNotCrashForMissingKey() {
+    @Test func evictCachedResultDoesNotCrashForMissingKey() async {
         // Evicting a file that was never cached must not throw or crash
         let file = makeAudioFile()
-        AnalysisStateManager.shared.evictCachedResult(for: file)
+        await AnalysisStateManager.shared.evictCachedResult(for: file)
         // If we get here without crashing, the test passes
     }
 

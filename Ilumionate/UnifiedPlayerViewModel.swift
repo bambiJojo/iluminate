@@ -19,52 +19,6 @@ nonisolated enum PlaybackState: Equatable, Sendable {
     case complete
 }
 
-struct PlaybackAnalyticsLifecycle: Equatable {
-    private(set) var hasStarted = false
-    private(set) var hasEnded = false
-
-    mutating func prepareForNewAttempt() {
-        hasStarted = false
-        hasEnded = false
-    }
-
-    mutating func markStarted() -> Bool {
-        guard !hasStarted else { return false }
-        hasStarted = true
-        return true
-    }
-
-    mutating func markEnded() -> Bool {
-        guard hasStarted, !hasEnded else { return false }
-        hasEnded = true
-        return true
-    }
-}
-
-nonisolated struct PlaybackResumeDecision: Equatable, Sendable {
-    let startType: PlaybackStartType
-    let startTime: TimeInterval
-
-    init(
-        sessionID: String,
-        duration: TimeInterval,
-        storedSessionID: String,
-        storedProgress: Double
-    ) {
-        guard sessionID == storedSessionID,
-              duration > 0,
-              storedProgress > 0,
-              storedProgress < 1 else {
-            startType = .fresh
-            startTime = 0
-            return
-        }
-
-        startType = .resumed
-        startTime = duration * storedProgress
-    }
-}
-
 // MARK: - Unified Player View Model
 
 @MainActor
@@ -92,6 +46,13 @@ final class UnifiedPlayerViewModel {
     private(set) var playbackState: PlaybackState = .idle
     private(set) var countdownValue: Int? = nil
     private(set) var countdownMessage: String? = nil
+    /// True when this session opened with the VoiceOver numeral fallback
+    /// rather than the threshold. Held explicitly rather than inferred from
+    /// `countdownValue`, which also goes nil mid-flow when the held line
+    /// replaces the count.
+    private(set) var usesNumericCountdown = false
+    /// Drives the threshold arc. Nil on the numeric path.
+    private(set) var thresholdController: ThresholdController?
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
     var showingControls = true
@@ -112,6 +73,7 @@ final class UnifiedPlayerViewModel {
 
     private var lightScorePlayer: LightScorePlayer?
     private var audioSync: AudioSyncController?
+    private var playbackRuntime: (any PlaybackRuntime)?
     var currentPhase = "Induction Phase"
 
     // MARK: - Flash Mode State
@@ -126,6 +88,19 @@ final class UnifiedPlayerViewModel {
     var bilateralDriftProgress: Double { flashController?.bilateralDriftProgress ?? 0.0 }
     var flashFrequency: Double = 10.0
     var flashColorTemperature: Int = 3000
+
+    // MARK: - Visual Field State
+
+    /// Live copy of the field's settings, so strength and speed can be tuned
+    /// mid-session without ending it — the same affordance the reader's tray has.
+    var visualFieldSettings: VisualFieldSettings = .standard
+    /// Rides the field's strength down over the last seconds of a timed session.
+    private(set) var visualFieldFade: Double = 1
+    /// Set when a Visual Field session's accompanying track could not play.
+    ///
+    /// The session keeps running regardless — see VisualFieldAudioFailure. This
+    /// only disables the volume tile and lets the view say so.
+    private(set) var audioUnavailable = false
 
     // MARK: - Binaural State
 
@@ -229,6 +204,10 @@ final class UnifiedPlayerViewModel {
             bilateralMode = mindMachineMode == .bilateral
         }
 
+        if case .visualField(let settings, _, _) = mode {
+            visualFieldSettings = settings
+        }
+
         showingSafetyWarning = mode.requiresSafetyWarning && !hasSeenFlashWarning
         isCurrentSessionSaved = Self.isSaved(mode: mode, savedSessionStore: self.savedSessionStore)
     }
@@ -254,6 +233,15 @@ final class UnifiedPlayerViewModel {
             viewModel: self,
             resetProgress: isFreshPresentation
         )
+
+        // The visual field starts itself: its shader background renders
+        // whenever it is on screen, so an idle player in front of a moving
+        // field reads as a broken paused state. Other modes keep the explicit
+        // play tap. Fresh presentations only — returning from the mini-player
+        // must not restart a session.
+        if isFreshPresentation, mode.beginsAutomatically, !showingSafetyWarning {
+            startCountdownAndPlay()
+        }
     }
 
     /// Records the user's own screen brightness exactly once per presentation,
@@ -363,7 +351,7 @@ final class UnifiedPlayerViewModel {
             }
         case .audioLight(let audioFile):
             Task { await AudioLibraryStore.setFavorite(true, audioFileID: audioFile.id) }
-        case .flashMode, .colorPulse, .playlist:
+        case .flashMode, .colorPulse, .playlist, .visualField:
             return
         }
         isCurrentSessionSaved = true
@@ -377,7 +365,7 @@ final class UnifiedPlayerViewModel {
     var canSaveCompletedSession: Bool {
         switch mode {
         case .session, .audioLight: true
-        case .flashMode, .colorPulse, .playlist: false
+        case .flashMode, .colorPulse, .playlist, .visualField: false
         }
     }
 
@@ -390,18 +378,9 @@ final class UnifiedPlayerViewModel {
     }
 
     func seek(to time: TimeInterval) {
-        switch mode {
-        case .session:
-            lightScorePlayer?.seek(to: time)
-            audioSync?.seek(to: time)
-        case .audioLight:
-            audioLightSyncPlayer?.seek(to: time)
-        case .playlist:
-            playlistController?.seek(to: time)
-        case .flashMode, .colorPulse:
-            break
-        }
-        currentTime = time
+        PerformanceTrace.event("Playback Seek")
+        playbackRuntime?.seek(to: time)
+        currentTime = playbackRuntime?.snapshot(elapsed: 0).currentTime ?? time
     }
 
     func seekByProgress(_ progress: Double) {
@@ -432,16 +411,7 @@ final class UnifiedPlayerViewModel {
 
     func setVolume(_ newVolume: Float) {
         volume = max(0, min(1, newVolume))
-        switch mode {
-        case .session:
-            audioSync?.audioVolume = volume
-        case .audioLight:
-            audioLightSyncPlayer?.setVolume(volume)
-        case .playlist:
-            playlistController?.setVolume(volume)
-        default:
-            break
-        }
+        playbackRuntime?.setVolume(volume)
     }
 
     // MARK: - Light Sync (Audio Mode)
@@ -451,9 +421,11 @@ final class UnifiedPlayerViewModel {
 
         switch lightSyncStatus {
         case .enabled:
+            PerformanceTrace.event("Light Sync Disable")
             withAnimation(.easeInOut(duration: 0.4)) { lightSyncEnabled = false }
             audioLightSyncPlayer?.disableLightSync()
         case .ready:
+            PerformanceTrace.event("Light Sync Enable Requested")
             guard let session = lightSession else { return }
             if hasSeenLightSyncWarning {
                 enableLightSync(session: session)
@@ -615,7 +587,7 @@ final class UnifiedPlayerViewModel {
     /// Whether the chrome should use light or dark text
     var useDarkChrome: Bool {
         switch mode {
-        case .flashMode, .colorPulse, .playlist, .session:
+        case .flashMode, .colorPulse, .playlist, .session, .visualField:
             return true
         case .audioLight:
             return lightSyncEnabled
@@ -630,6 +602,9 @@ final class UnifiedPlayerViewModel {
 
     private func setupMode() {
         guard !hasStarted else { return }
+        let trace = PerformanceTrace.begin("Player Setup")
+        defer { PerformanceTrace.end(trace) }
+
         switch mode {
         case .session(let session, let audioFile):
             setupSessionMode(session: session, audioFile: audioFile)
@@ -638,10 +613,41 @@ final class UnifiedPlayerViewModel {
             setupFlashMode(frequency: frequency, intensity: intensity, pattern: pattern,
                           binauralEnabled: binauralEnabled, binauralCarrier: binauralCarrier, binauralVolume: binauralVolume)
             duration = goalDuration ?? 0
+            if let flashController {
+                playbackRuntime = FlashPlaybackRuntime(
+                    controller: flashController,
+                    binaural: binauralEngine,
+                    duration: duration,
+                    volume: volume,
+                    isBinauralActive: { [weak self] in self?.binauralActive == true }
+                )
+            }
 
         case .colorPulse:
             // No controller needed — TimelineView handles rendering
             duration = 0 // infinite
+            playbackRuntime = ManualPlaybackRuntime(duration: duration, volume: volume)
+
+        case .visualField(let settings, let audioFile, let binaural):
+            // No light controller at all: the field is a shader driven by
+            // TimelineView, and it never touches LightEngine or FlashController.
+            duration = settings.duration ?? 0
+            if let binaural {
+                setupBinaural(
+                    enabled: binaural.enabled,
+                    carrier: binaural.carrier,
+                    volume: binaural.volume,
+                    beatFrequency: binaural.beatFrequency
+                )
+            }
+            let audioPlayer = audioFile.map(setupVisualFieldAudio)
+            playbackRuntime = VisualFieldPlaybackRuntime(
+                duration: duration,
+                volume: volume,
+                audio: audioPlayer,
+                binaural: binauralEngine,
+                isBinauralActive: { [weak self] in self?.binauralActive == true }
+            )
 
         case .audioLight(let audioFile):
             setupAudioMode(audioFile: audioFile)
@@ -683,6 +689,7 @@ final class UnifiedPlayerViewModel {
 
         if let audioFile {
             let sync = AudioSyncController()
+            sync.audioVolume = volume
             audioSync = sync
             Task {
                 do {
@@ -692,6 +699,16 @@ final class UnifiedPlayerViewModel {
                 }
             }
         }
+
+        playbackRuntime = SessionPlaybackRuntime(
+            scorePlayer: player,
+            engine: engine,
+            audio: audioSync,
+            binaural: binauralEngine,
+            duration: duration,
+            volume: volume,
+            isBinauralActive: { [weak self] in self?.binauralActive == true }
+        )
     }
 
     private func setupFlashMode(frequency: Double, intensity: Double, pattern: MindMachineModel.LightPattern,
@@ -700,17 +717,63 @@ final class UnifiedPlayerViewModel {
         flashController = controller
         duration = 0 // infinite
 
+        setupBinaural(
+            enabled: binauralEnabled,
+            carrier: binauralCarrier,
+            volume: binauralVolume,
+            // Flash entrains with light, so the beat agrees with the light.
+            beatFrequency: frequency
+        )
+    }
+
+    /// Builds the binaural engine for whichever mode wants one.
+    ///
+    /// Shared by flash and the visual field. They differ only in where the beat
+    /// frequency comes from: flash derives it from its light frequency, and the
+    /// wordless field carries its own, because it has no light to agree with.
+    private func setupBinaural(
+        enabled: Bool,
+        carrier: Double,
+        volume: Double,
+        beatFrequency: Double
+    ) {
         let binaural = BinauralBeatsEngine()
-        binaural.carrierFrequency = binauralCarrier
-        binaural.volume = binauralVolume
-        binaural.beatFrequency = frequency
+        binaural.carrierFrequency = carrier
+        binaural.volume = volume
+        binaural.beatFrequency = beatFrequency
         binauralEngine = binaural
-        binauralActive = binauralEnabled
+        binauralActive = enabled
+    }
+
+    /// Loads a track to play underneath a wordless field.
+    ///
+    /// Reuses `.audioLight`'s player minus the light-sync generation: the field
+    /// is not driven by the audio, it just plays underneath.
+    ///
+    /// The catch is the point of this method. Everywhere else in the player a
+    /// failed load means a failed session; here the field is the content and
+    /// audio is decoration, so a missing or unreadable file degrades to silence
+    /// and the session carries on. See VisualFieldAudioFailure.
+    private func setupVisualFieldAudio(audioFile: AudioFile) -> AudioLightSyncPlayer {
+        let player = AudioLightSyncPlayer(lightEngine: engine)
+        audioLightSyncPlayer = player
+
+        Task {
+            do {
+                try await player.loadAudio(audioFile: audioFile)
+            } catch {
+                Log.general.info("Visual field audio unavailable: \(error)")
+                audioLightSyncPlayer = nil
+                audioUnavailable = true
+            }
+        }
+        return player
     }
 
     private func setupAudioMode(audioFile: AudioFile) {
         let player = AudioLightSyncPlayer(lightEngine: engine)
         audioLightSyncPlayer = player
+        playbackRuntime = AudioPlaybackRuntime(player: player)
 
         Task {
             do {
@@ -735,11 +798,13 @@ final class UnifiedPlayerViewModel {
     private func setupPlaylistMode(playlist: Playlist) {
         let controller = PlaylistPlayerController(playlist: playlist, engine: engine)
         playlistController = controller
+        playbackRuntime = PlaylistPlaybackRuntime(controller: controller)
     }
 
     // MARK: - Private: Countdown & Play
 
     private func startCountdownAndPlay() {
+        PerformanceTrace.event("Playback Countdown Start")
         analyticsLifecycle.prepareForNewAttempt()
         hasRecordedHistoryForAttempt = false
         hasReportedCreateOutcome = false
@@ -753,31 +818,59 @@ final class UnifiedPlayerViewModel {
         }
 
         let count = countdownDuration
-        countdownMessage = "Close your eyes and relax in\u{2026}"
-        countdownValue = count
+        // VoiceOver keeps the numerals: they announce progress, and the
+        // wordless arc announces nothing. Everyone else gets the threshold.
+        let numeric = ThresholdController.prefersNumericCountdown
+        usesNumericCountdown = numeric
+        countdownMessage = mode.countdownIntroMessage
+        countdownValue = numeric ? count : nil
+        thresholdController = numeric ? nil : ThresholdController(
+            isSuppressed: false,
+            motion: PlatformAccessibility.isReduceMotionEnabled ? .reduced : .full,
+            duration: Double(count)
+        )
         playbackState = .countdown
         haptics.light()
 
         countdownTask = Task {
-            for tick in stride(from: count - 1, through: 1, by: -1) {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { return }
-                withAnimation(.easeInOut(duration: 0.35)) {
-                    countdownValue = tick
+            if numeric {
+                for tick in stride(from: count - 1, through: 1, by: -1) {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        countdownValue = tick
+                    }
+                    haptics.light()
                 }
-                haptics.light()
+                try? await Task.sleep(for: .seconds(1))
+            } else {
+                // The arc carries the whole budget in one stretch — no
+                // per-second ticks, because a pulse every second is the
+                // arousal the threshold exists to avoid.
+                try? await Task.sleep(for: .seconds(Double(count)))
             }
-            try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.35)) {
-                countdownValue = nil
-                countdownMessage = "Close your eyes"
-            }
-            haptics.medium()
-            try? await Task.sleep(for: .seconds(1.5))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.3)) {
-                countdownMessage = nil
+            if let holdMessage = mode.countdownHoldMessage {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    countdownValue = nil
+                    countdownMessage = holdMessage
+                }
+                haptics.medium()
+                try? await Task.sleep(for: .seconds(1.5))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.3)) {
+                    countdownMessage = nil
+                }
+                thresholdController = nil
+            } else {
+                // No held line — the visual field is watched, so the session
+                // begins the moment the count ends.
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    countdownValue = nil
+                    countdownMessage = nil
+                }
+                thresholdController = nil
+                haptics.medium()
             }
             beginPlayback()
             // Auto-hide controls
@@ -791,14 +884,43 @@ final class UnifiedPlayerViewModel {
         }
     }
 
+    /// Brings the session forward when the user taps during the threshold.
+    ///
+    /// The numeric countdown could not be skipped. The arc can, because
+    /// someone who has already settled should not have to sit out ten
+    /// seconds they chose for a day they were less settled. Skipping starts
+    /// the session early; it does not shorten it.
+    func skipCountdown() {
+        guard playbackState == .countdown, !usesNumericCountdown else { return }
+        PerformanceTrace.event("Playback Countdown Skip")
+
+        countdownTask?.cancel()
+        countdownTask = Task {
+            // Let the arc's exit interpolation finish so the field opens
+            // rather than cutting.
+            try? await Task.sleep(for: .seconds(ThresholdChoreography.skipDuration))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.35)) {
+                countdownValue = nil
+                countdownMessage = nil
+            }
+            thresholdController = nil
+            haptics.medium()
+            beginPlayback()
+        }
+    }
+
     private func beginPlayback() {
+        PerformanceTrace.event("Playback Begin")
         playbackState = .playing
+        nowPlaying.updatePlaybackState(.playing)
         interruptionNotice = nil
         if analyticsLifecycle.markStarted() {
             UsageAnalytics.shared.sessionStarted(
                 source: sessionSource,
                 category: sessionCategory,
-                startType: playbackStartType
+                startType: playbackStartType,
+                mode: mode.analyticsName
             )
             if let mindMachineMode {
                 UsageAnalytics.shared.mindMachineStarted(
@@ -816,83 +938,29 @@ final class UnifiedPlayerViewModel {
             }
         }
 
-        switch mode {
-        case .session:
-            lightScorePlayer?.play()
-            engine.resume()
-            if audioSync?.hasAudioLoaded == true { audioSync?.play() }
-            if binauralActive { binauralEngine?.start() }
-
-        case .flashMode:
-            flashController?.start()
-            if binauralActive { binauralEngine?.start() }
-
-        case .colorPulse:
-            // TimelineView handles rendering automatically
-            break
-
-        case .audioLight:
-            audioLightSyncPlayer?.play()
-
-        case .playlist:
-            Task { await playlistController?.startPlayback() }
-        }
+        playbackRuntime?.begin()
     }
 
     private func pause() {
+        PerformanceTrace.event("Playback Pause")
         playbackState = .paused
+        nowPlaying.updatePlaybackState(.paused)
 
-        switch mode {
-        case .session:
-            lightScorePlayer?.pause()
-            engine.pause()
-            audioSync?.pause()
-            binauralEngine?.pause()
-            persistPlaybackProgress()
-
-        case .flashMode:
-            flashController?.pause()
-            binauralEngine?.pause()
-
-        case .colorPulse:
-            break // TimelineView keeps running but we show pause overlay
-
-        case .audioLight:
-            audioLightSyncPlayer?.pause()
-            persistPlaybackProgress()
-
-        case .playlist:
-            playlistController?.pause()
-        }
+        playbackRuntime?.pause()
+        persistPlaybackProgress()
     }
 
     private func resume() {
+        PerformanceTrace.event("Playback Resume")
         playbackState = .playing
+        nowPlaying.updatePlaybackState(.playing)
         interruptionNotice = nil
 
-        switch mode {
-        case .session:
-            lightScorePlayer?.play()
-            engine.resume()
-            if audioSync?.hasAudioLoaded == true { audioSync?.play() }
-            if binauralActive { binauralEngine?.resume() }
-
-        case .flashMode:
-            flashController?.resume()
-            if binauralActive { binauralEngine?.resume() }
-
-        case .colorPulse:
-            break
-
-        case .audioLight:
-            audioLightSyncPlayer?.play()
-
-        case .playlist:
-            playlistController?.play()
-        }
+        playbackRuntime?.resume()
     }
 
     func stopAll(reason: PlaybackEndReason = .userStopped) {
+        PerformanceTrace.event("Playback Stop")
         countdownTask?.cancel()
         countdownTask = nil
         PlatformApplication.screenBrightness = savedBrightness
@@ -902,27 +970,7 @@ final class UnifiedPlayerViewModel {
         recordSessionHistoryIfNeeded()
         persistPlaybackProgress()
 
-        switch mode {
-        case .session:
-            lightScorePlayer?.stop()
-            engine.detachSession()
-            engine.stop()
-            audioSync?.stop()
-            binauralEngine?.stop()
-
-        case .flashMode:
-            flashController?.stop()
-            binauralEngine?.stop()
-
-        case .colorPulse:
-            break
-
-        case .audioLight:
-            audioLightSyncPlayer?.stop()
-
-        case .playlist:
-            playlistController?.stop()
-        }
+        playbackRuntime?.stop()
 
         playbackState = .idle
         nowPlaying.deactivate()
@@ -946,6 +994,7 @@ final class UnifiedPlayerViewModel {
     }
 
     private func cancelPendingStart(message: String) {
+        PerformanceTrace.event("Playback Countdown Cancel")
         countdownTask?.cancel()
         countdownTask = nil
         PlatformApplication.screenBrightness = savedBrightness
@@ -958,6 +1007,7 @@ final class UnifiedPlayerViewModel {
 
     private func completePlayback() {
         guard playbackState == .playing else { return }
+        PerformanceTrace.event("Playback Complete")
 
         currentTime = duration
         playbackState = .complete
@@ -966,26 +1016,7 @@ final class UnifiedPlayerViewModel {
         recordSessionHistoryIfNeeded()
         persistPlaybackProgress()
 
-        switch mode {
-        case .session:
-            lightScorePlayer?.pause()
-            engine.pause()
-            audioSync?.pause()
-            binauralEngine?.pause()
-
-        case .flashMode:
-            flashController?.stop()
-            binauralEngine?.stop()
-
-        case .colorPulse:
-            break
-
-        case .audioLight:
-            audioLightSyncPlayer?.pause()
-
-        case .playlist:
-            playlistController?.pause()
-        }
+        playbackRuntime?.complete()
 
         showingControls = true
         nowPlaying.updateProgress(1)
@@ -1006,7 +1037,8 @@ final class UnifiedPlayerViewModel {
             source: sessionSource,
             category: sessionCategory,
             endReason: resolvedReason,
-            fraction: fraction
+            fraction: fraction,
+            mode: mode.analyticsName
         )
         reportCreateOutcomeIfNeeded()
     }
@@ -1051,6 +1083,8 @@ final class UnifiedPlayerViewModel {
             return bilateralMode ? MindMachineMode.bilateral : MindMachineMode.flash
         case .colorPulse:
             return MindMachineMode.colorPulse
+        case .visualField:
+            return MindMachineMode.visualField
         case .session, .audioLight, .playlist:
             return nil
         }
@@ -1060,6 +1094,7 @@ final class UnifiedPlayerViewModel {
         switch mindMachineMode {
         case .bilateral: .bilateral
         case .colorPulse: .colorPulse
+        case .visualField: .visualField
         case .flash, .none: .flash
         }
     }
@@ -1071,10 +1106,23 @@ final class UnifiedPlayerViewModel {
 
         uiUpdateTask = Task { [weak self] in
             while !Task.isCancelled {
-                self?.updateUI()
-                try? await Task.sleep(for: .milliseconds(100))
+                guard let self else { return }
+                let intervalMilliseconds = self.uiUpdateIntervalMilliseconds
+                if self.playbackState == .playing {
+                    self.updateUI(elapsed: Double(intervalMilliseconds) / 1_000)
+                }
+                try? await Task.sleep(for: .milliseconds(intervalMilliseconds))
             }
         }
+    }
+
+    /// Audio clocks are owned by AVAudioPlayer, so the UI only needs enough
+    /// samples to keep the scrubber visually fluid. Four updates per second
+    /// avoids six redundant full player update groups every second. Manual
+    /// visual modes retain 10 Hz because this task is their authoritative clock.
+    private var uiUpdateIntervalMilliseconds: Int {
+        if case .audioLight = mode { return 250 }
+        return 100
     }
 
     private func stopUIUpdateTimer() {
@@ -1082,12 +1130,16 @@ final class UnifiedPlayerViewModel {
         uiUpdateTask = nil
     }
 
-    private func updateUI() {
+    private func updateUI(elapsed: TimeInterval) {
         guard playbackState != .complete else { return }
+
+        guard let snapshot = playbackRuntime?.snapshot(elapsed: elapsed) else { return }
+        currentTime = snapshot.currentTime
+        duration = snapshot.duration
+        volume = snapshot.volume
 
         switch mode {
         case .session:
-            currentTime = lightScorePlayer?.currentTime ?? 0
             if showingControls || Int(currentTime) % 5 == 0 {
                 updatePhase()
             }
@@ -1095,52 +1147,28 @@ final class UnifiedPlayerViewModel {
             if binauralActive, let state = lightScorePlayer?.currentState() {
                 binauralEngine?.syncBeatFrequency(to: state.frequency)
             }
-            // Check completion
             persistResumeProgressIfNeeded()
-            if PlaybackRetentionPolicy.hasReachedEnd(
-                currentTime: currentTime,
-                duration: duration,
-                state: playbackState
-            ) {
-                completePlayback()
-            }
 
         case .flashMode:
-            currentTime = flashController?.sessionDuration ?? 0
-            if PlaybackRetentionPolicy.hasReachedEnd(
-                currentTime: currentTime,
-                duration: duration,
-                state: playbackState
-            ) {
-                completePlayback()
-            }
+            break
 
         case .colorPulse:
-            // currentTime tracks how long the pulse has been running
-            if playbackState == .playing {
-                currentTime += 0.1
-            }
+            break
+
+        case .visualField(let settings, _, _):
+            visualFieldFade = VisualFieldFade.multiplier(
+                elapsed: currentTime, duration: settings.duration
+            )
 
         case .audioLight:
-            currentTime = audioLightSyncPlayer?.currentTime ?? 0
-            duration = audioLightSyncPlayer?.duration ?? 0
-            volume = audioLightSyncPlayer?.volume ?? 0.7
             persistResumeProgressIfNeeded()
-            // Check completion
-            if let player = audioLightSyncPlayer,
-               !player.isPlaying,
-               PlaybackRetentionPolicy.hasReachedEnd(
-                currentTime: currentTime,
-                duration: duration,
-                state: playbackState
-               ) {
-                completePlayback()
-            }
 
         case .playlist:
-            currentTime = playlistController?.currentTime ?? 0
-            duration = playlistController?.currentItemDuration ?? 0
-            volume = playlistController?.volume ?? 0.7
+            break
+        }
+
+        if playbackState == .playing && snapshot.hasReachedEnd {
+            completePlayback()
         }
 
         // Keep mini-player in sync
@@ -1198,7 +1226,7 @@ final class UnifiedPlayerViewModel {
     private var resumableContentKind: ResumablePlaybackKind {
         switch mode {
         case .audioLight: .audio
-        case .session, .flashMode, .colorPulse, .playlist: .session
+        case .session, .flashMode, .colorPulse, .playlist, .visualField: .session
         }
     }
 
@@ -1216,7 +1244,7 @@ final class UnifiedPlayerViewModel {
             return session.id.uuidString
         case .audioLight(let audioFile):
             return audioFile.id.uuidString
-        case .flashMode, .colorPulse, .playlist:
+        case .flashMode, .colorPulse, .playlist, .visualField:
             return nil
         }
     }
@@ -1227,7 +1255,7 @@ final class UnifiedPlayerViewModel {
             audioFile?.favorite ?? savedSessionStore.contains(session.id.uuidString)
         case .audioLight(let audioFile):
             audioFile.favorite
-        case .flashMode, .colorPulse, .playlist:
+        case .flashMode, .colorPulse, .playlist, .visualField:
             false
         }
     }
@@ -1239,7 +1267,17 @@ final class UnifiedPlayerViewModel {
         switch mode {
         case .audioLight(let currentFile), .session(_, let currentFile?):
             Task { [weak self] in
-                let files = await AudioLibraryStore.loadRepairingStoredFiles()
+                // ContentView primes this snapshot at launch. Reuse it rather
+                // than decoding and repairing the multi-MB library every time
+                // the player appears (519 ms in the navigation-memory trace).
+                let cache = AudioLibraryCache.shared
+                let files: [AudioFile]
+                if cache.hasLoaded {
+                    files = cache.files
+                } else {
+                    files = await AudioLibraryStore.loadRepairingStoredFiles()
+                    cache.store(files)
+                }
                 guard let next = LibraryShelfContent
                     .recommendedNext(from: files)
                     .first(where: { $0.id != currentFile.id }) else { return }
@@ -1248,7 +1286,7 @@ final class UnifiedPlayerViewModel {
         case .session(let currentSession, nil):
             recommendedNextMode = recommendedBuiltInSession(excluding: currentSession.id)
                 .map { .session(session: $0, audioFile: nil) }
-        case .flashMode, .colorPulse, .playlist:
+        case .flashMode, .colorPulse, .playlist, .visualField:
             recommendedNextMode = recommendedBuiltInSession(excluding: nil)
                 .map { .session(session: $0, audioFile: nil) }
         }
@@ -1270,6 +1308,8 @@ final class UnifiedPlayerViewModel {
             break
         case .flashMode(_, _, _, _, _, _, _, let goalDuration):
             guard goalDuration != nil else { return }
+        case .visualField(let settings, _, _):
+            guard settings.duration != nil else { return }
         case .colorPulse, .playlist:
             return
         }
@@ -1291,7 +1331,7 @@ final class UnifiedPlayerViewModel {
             frequency = first.frequency
         case .flashMode(let value, _, _, _, _, _, _, _), .colorPulse(let value, _):
             frequency = value
-        case .audioLight, .playlist:
+        case .audioLight, .playlist, .visualField:
             return "Trance"
         }
 
@@ -1308,7 +1348,7 @@ final class UnifiedPlayerViewModel {
         switch mode {
         case .session(_, let audioFile): audioFile == nil ? .preset : .generated
         case .audioLight:                .generated
-        case .flashMode, .colorPulse:    .mindMachine
+        case .flashMode, .colorPulse, .visualField: .mindMachine
         case .playlist:                  .preset
         }
     }

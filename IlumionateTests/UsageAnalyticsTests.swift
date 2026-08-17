@@ -161,12 +161,13 @@ struct UsageAnalyticsTests {
     func sessionStartedCarriesSourceAndCategory() {
         var captured: [AnalyticsEvent] = []
         let analytics = makeAnalytics(captured: { captured.append($0) })
-        analytics.sessionStarted(source: .generated, category: "Sleep", startType: .resumed)
+        analytics.sessionStarted(source: .generated, category: "Sleep", startType: .resumed, mode: "session")
         #expect(captured == [AnalyticsEvent("session.started",
                                             [
                                                 "source": "generated",
                                                 "category": "Sleep",
                                                 "startType": "resumed",
+                                                "mode": "session",
                                             ]),
                              AnalyticsEvent("activation.completed",
                                             [
@@ -183,7 +184,8 @@ struct UsageAnalyticsTests {
             source: .generated,
             category: "Relax",
             endReason: .userStopped,
-            fraction: 0.70
+            fraction: 0.70,
+            mode: "session"
         )
         #expect(captured == [AnalyticsEvent("session.ended",
                                             [
@@ -191,6 +193,7 @@ struct UsageAnalyticsTests {
                                                 "category": "Relax",
                                                 "endReason": "userStopped",
                                                 "completionBucket": "b50_75",
+                                                "mode": "session",
                                             ])])
     }
 
@@ -202,13 +205,15 @@ struct UsageAnalyticsTests {
             source: .preset,
             category: "Focus",
             endReason: .completed,
-            fraction: 0.97
+            fraction: 0.97,
+            mode: "flash"
         )
         let parameters = [
             "source": "preset",
             "category": "Focus",
             "endReason": "completed",
             "completionBucket": "complete",
+            "mode": "flash",
         ]
         #expect(captured == [
             AnalyticsEvent("session.ended", parameters),
@@ -369,7 +374,8 @@ struct UsageAnalyticsTests {
             source: .mindMachine,
             category: "Trance",
             endReason: .dismissed,
-            fraction: nil
+            fraction: nil,
+            mode: "visualField"
         )
         #expect(captured == [AnalyticsEvent("session.ended",
                                             [
@@ -377,6 +383,7 @@ struct UsageAnalyticsTests {
                                                 "category": "Trance",
                                                 "endReason": "dismissed",
                                                 "completionBucket": "notApplicable",
+                                                "mode": "visualField",
                                             ])])
     }
 
@@ -392,7 +399,7 @@ struct UsageAnalyticsTests {
         )
 
         analytics.textTranceStarted()
-        analytics.sessionStarted(source: .preset, category: "Relax", startType: .fresh)
+        analytics.sessionStarted(source: .preset, category: "Relax", startType: .fresh, mode: "flash")
 
         #expect(captured.filter { $0.name == "activation.completed" } == [
             AnalyticsEvent("activation.completed", ["path": "reading", "timeToValue": "under1Hour"]),

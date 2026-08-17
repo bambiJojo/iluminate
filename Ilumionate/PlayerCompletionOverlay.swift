@@ -6,6 +6,15 @@
 import SwiftUI
 
 struct PlayerCompletionOverlay: View {
+
+    /// Extracted so the rendered text is assertable without a snapshot test.
+    /// This line previously shipped as a string literal that merely looked like
+    /// an interpolation — it compiled, and every completed session showed the
+    /// raw expression to the user (ERR-017).
+    nonisolated static func durationSummary(for duration: TimeInterval) -> String {
+        "You completed \(Duration.seconds(duration).formatted(.time(pattern: .minuteSecond)))."
+    }
+
     let title: String
     let duration: TimeInterval
     let isSaved: Bool
@@ -36,7 +45,7 @@ struct PlayerCompletionOverlay: View {
                         .font(.headline)
 
                     if duration > 0 {
-                        Text("You completed (Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))).")
+                        Text(Self.durationSummary(for: duration))
                             .font(.body)
                             .foregroundStyle(.secondary)
                     }

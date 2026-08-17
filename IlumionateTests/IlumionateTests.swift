@@ -108,10 +108,29 @@ struct PlaylistModelTests {
     }
 
     @Test func playlistStoreEmptyLoad() {
-        // Clear any existing data
+        // Clear any existing data. This writes the defaults key directly rather
+        // than going through `save`, so the store's cache has to be dropped by
+        // hand — otherwise `load` would answer from memory and never look.
         UserDefaults.standard.removeObject(forKey: "playlists")
+        PlaylistStore.invalidateCache()
+
         let loaded = PlaylistStore.load()
         #expect(loaded.isEmpty)
+    }
+
+    @Test func playlistStoreLoadReflectsTheLastSaveWithoutRereadingDefaults() throws {
+        PlaylistStore.save([Playlist(name: "Cached")])
+
+        // Pull the key out from under the store. `save` is the only supported
+        // writer, so the cache is authoritative and this must not be observed.
+        UserDefaults.standard.removeObject(forKey: "playlists")
+
+        let loaded = PlaylistStore.load()
+        let first = try #require(loaded.first)
+        #expect(first.name == "Cached")
+
+        PlaylistStore.invalidateCache()
+        PlaylistStore.save([])
     }
 }
 

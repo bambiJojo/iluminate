@@ -9,50 +9,64 @@ struct ReaderDisplayPreferences: Codable, Equatable, Sendable {
     var theme: ReaderTheme
     var font: ReaderFont
     var fontScale: Double
-    var lineSpacing: Double
     var orpColor: ReaderORPColor
     var backgroundBrightness: Double
     var hideControls: Bool
     var dyslexiaFriendly: Bool
     var colorMode: ReaderColorMode
+    var visual: TranceVisual
+    var visualOpacity: Double
 
     init(theme: ReaderTheme = .void,
          font: ReaderFont = .monospaced,
          fontScale: Double = 1.0,
-         lineSpacing: Double = 1.0,
-         orpColor: ReaderORPColor = .teal,
+         orpColor: ReaderORPColor = .matchBackground,
          backgroundBrightness: Double = 0.5,
          hideControls: Bool = false,
          dyslexiaFriendly: Bool = false,
-         colorMode: ReaderColorMode = .followApp) {
+         colorMode: ReaderColorMode = .followApp,
+         visual: TranceVisual = .breath,
+         visualOpacity: Double = 0.35) {
         self.theme = theme
         self.font = font
         self.fontScale = fontScale
-        self.lineSpacing = lineSpacing
         self.orpColor = orpColor
         self.backgroundBrightness = backgroundBrightness
         self.hideControls = hideControls
         self.dyslexiaFriendly = dyslexiaFriendly
         self.colorMode = colorMode
+        self.visual = visual
+        self.visualOpacity = visualOpacity
     }
 
     private enum CodingKeys: String, CodingKey {
-        case theme, font, fontScale, lineSpacing, orpColor
+        case theme, font, fontScale, orpColor
         case backgroundBrightness, hideControls, dyslexiaFriendly, colorMode
+        case visual, visualOpacity
     }
 
-    // Custom decoder so prefs persisted before colorMode existed still load.
+    /// Every field decodes optionally and falls back to its default.
+    ///
+    /// This is load-bearing, not defensive habit. `ReaderPresetStore` decodes
+    /// all scripts' presets as one `[String: ReaderPreset]` blob with `try?`, so
+    /// a single field that fails to decode does not lose one preference — it
+    /// silently wipes every saved reader preference for every script. A missing
+    /// or unreadable value must degrade to the default, never throw.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        theme = try c.decode(ReaderTheme.self, forKey: .theme)
-        font = try c.decode(ReaderFont.self, forKey: .font)
-        fontScale = try c.decode(Double.self, forKey: .fontScale)
-        lineSpacing = try c.decode(Double.self, forKey: .lineSpacing)
-        orpColor = try c.decode(ReaderORPColor.self, forKey: .orpColor)
-        backgroundBrightness = try c.decode(Double.self, forKey: .backgroundBrightness)
-        hideControls = try c.decode(Bool.self, forKey: .hideControls)
-        dyslexiaFriendly = try c.decode(Bool.self, forKey: .dyslexiaFriendly)
-        colorMode = try c.decodeIfPresent(ReaderColorMode.self, forKey: .colorMode) ?? .followApp
+        let d = Self.standard
+        theme = try c.decodeIfPresent(ReaderTheme.self, forKey: .theme) ?? d.theme
+        font = try c.decodeIfPresent(ReaderFont.self, forKey: .font) ?? d.font
+        fontScale = try c.decodeIfPresent(Double.self, forKey: .fontScale) ?? d.fontScale
+        orpColor = try c.decodeIfPresent(ReaderORPColor.self, forKey: .orpColor) ?? d.orpColor
+        backgroundBrightness = try c.decodeIfPresent(Double.self, forKey: .backgroundBrightness)
+            ?? d.backgroundBrightness
+        hideControls = try c.decodeIfPresent(Bool.self, forKey: .hideControls) ?? d.hideControls
+        dyslexiaFriendly = try c.decodeIfPresent(Bool.self, forKey: .dyslexiaFriendly)
+            ?? d.dyslexiaFriendly
+        colorMode = try c.decodeIfPresent(ReaderColorMode.self, forKey: .colorMode) ?? d.colorMode
+        visual = try c.decodeIfPresent(TranceVisual.self, forKey: .visual) ?? d.visual
+        visualOpacity = try c.decodeIfPresent(Double.self, forKey: .visualOpacity) ?? d.visualOpacity
     }
 
     static let standard = ReaderDisplayPreferences()
@@ -167,6 +181,14 @@ enum ReaderFont: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 enum ReaderORPColor: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// Follow the background — the phase tint the atmosphere glow and the
+    /// background shader already use, so the highlighted letter and the field
+    /// around it are always the same colour.
+    ///
+    /// This deliberately does NOT mean the theme's background fill. That would
+    /// paint the pivot letter in the exact colour of the surface behind it and
+    /// make it invisible. "Background" here is the tint, not the page.
+    case matchBackground
     case teal
     case blue
     case amber
@@ -177,6 +199,7 @@ enum ReaderORPColor: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var displayName: String {
         switch self {
+        case .matchBackground: return "Match Background"
         case .teal: return "Teal"
         case .blue: return "Blue"
         case .amber: return "Amber"
@@ -185,29 +208,37 @@ enum ReaderORPColor: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var color: Color {
+    /// "White" means "match body text" — pure white would vanish on Dawn.
+    ///
+    /// Hoisted to a stored constant rather than built inside `color(phase:)`.
+    /// That function runs on every word render, and a freshly constructed
+    /// dynamic `Color` is both an allocation per word and a value that does not
+    /// compare equal to an identically-configured one.
+    private static let bodyMatching = Color(
+        light: Color(hex: PinkAuroraHex.textInk), dark: .white
+    )
+
+    /// The highlight colour for a given reading phase.
+    ///
+    /// Only `.matchBackground` consults the phase; every fixed choice ignores it.
+    func color(phase: TrancePhase) -> Color {
         switch self {
+        case .matchBackground: return phase.atmosphereColor
         case .teal: return .roseGold
         case .blue: return .roseDeep
         case .amber: return .warmAccent
         case .pink: return .blush
-        // "White" means "match body text" — pure white would vanish on Dawn.
-        case .white: return Color(light: Color(hex: PinkAuroraHex.textInk), dark: .white)
+        case .white: return Self.bodyMatching
         }
     }
 }
 
 extension ReaderDisplayPreferences {
     static let fontScaleRange: ClosedRange<Double> = 0.75...1.45
-    static let lineSpacingRange: ClosedRange<Double> = 0.8...1.8
     static let backgroundBrightnessRange: ClosedRange<Double> = 0.2...0.9
 
     var clampedFontScale: Double {
         min(max(fontScale, Self.fontScaleRange.lowerBound), Self.fontScaleRange.upperBound)
-    }
-
-    var clampedLineSpacing: Double {
-        min(max(lineSpacing, Self.lineSpacingRange.lowerBound), Self.lineSpacingRange.upperBound)
     }
 
     var clampedBackgroundBrightness: Double {
@@ -217,16 +248,17 @@ extension ReaderDisplayPreferences {
         )
     }
 
+    var clampedVisualOpacity: Double {
+        min(max(visualOpacity, VisualModulation.opacityBand.lowerBound),
+            VisualModulation.opacityBand.upperBound)
+    }
+
     var effectiveFont: ReaderFont {
         dyslexiaFriendly ? .rounded : font
     }
 
     var effectiveFontWeight: Font.Weight {
         dyslexiaFriendly ? .medium : .regular
-    }
-
-    var lineSpacingPoints: CGFloat {
-        CGFloat((clampedLineSpacing - 1.0) * 18.0)
     }
 
     var adjustedBackground: Color {
@@ -242,7 +274,14 @@ extension ReaderDisplayPreferences {
 
     var textColor: Color { theme.text }
     var secondaryTextColor: Color { theme.secondaryText }
-    var pivotColor: Color { orpColor.color }
+    /// The highlight colour for the pivot letter.
+    ///
+    /// Takes the phase because `.matchBackground` resolves against it. Callers
+    /// that genuinely have no phase can pass `.induction`, but the reader always
+    /// has one.
+    func pivotColor(phase: TrancePhase) -> Color {
+        orpColor.color(phase: phase)
+    }
 
     /// The color scheme the reader should render in, honoring the override.
     func resolvedScheme(appColorScheme: ColorScheme) -> ColorScheme {

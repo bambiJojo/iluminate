@@ -1,227 +1,188 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository.
 
-## session
-Whenever you start a new session always look over the features list in features.json, the plan.md, and the roadmap.md to understand the current state of the project and what needs to be done. Then pick a feature from the features.json file that is marked as "todo" in the plan.md file to work on and implement it.
+## Session start
 
-NEVER edit the features.json file unless I explicitly ask you to.
+Read `plan.md` first — it is the consolidated, current source of truth for status and open work. Pick up the next unstarted item unless directed otherwise.
 
-Never mark a task as "done" in the plan.md the task has been fully implemented and stress tested for edge cases and bugs user feedback has been incorporated and the task is ready for production.
+- `features.json` is a historical product spec (it still uses the old "Hypnosis Mind Machine" name and an iPhone/Android platform plan). Treat it as archive, not as current scope. **Never edit it unless explicitly asked.**
+- Only mark a `plan.md` item done once it is fully implemented, tested for edge cases, and user feedback is incorporated. Not "compiles" — done.
 
-## Project Overview
+## Project overview
 
-LumeSync is a SwiftUI app for iOS and native macOS that provides light therapy (photoentrainment) sessions synchronized with audio content. Both platforms are first-class destinations built from one shared feature target. The app combines AI-powered audio analysis with customizable light patterns to create personalized therapeutic experiences.
+LumeSync is a SwiftUI light therapy (photoentrainment) app that syncs visual entrainment patterns with audio. iOS and native macOS are both first-class destinations built from one shared feature target. On-device AI analyzes audio (hypnosis, meditation, music) and generates personalized light sessions.
 
-## Build Commands
+The Xcode project and app target are named `Ilumionate`; the user-facing product name is LumeSync.
 
-**Build native macOS:**
+## Build and test
+
 ```bash
 xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' build
 ```
 
-**Build iOS Simulator:**
 ```bash
 xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 ```
 
-**Build Mac Catalyst compatibility destination:**
+Mac Catalyst is a compatibility destination — keep it compiling, but it is not the primary Mac experience:
+
 ```bash
 xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,variant=Mac Catalyst,arch=arm64' build
 ```
 
-**Run shared unit tests on both first-class platforms:**
+Shared unit tests run on both first-class platforms:
+
 ```bash
 xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' test -only-testing:IlumionateTests
+```
+
+```bash
 xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests
 ```
 
-**Clean build:**
 ```bash
 xcodebuild -project Ilumionate.xcodeproj clean
 ```
 
-## Architecture Overview
+### Running a subset of tests
 
-### Core Components
+**A `-only-testing:` filter that matches nothing still reports success.** `xcodebuild` runs
+zero tests and prints `** TEST SUCCEEDED **`, so a failing test reads as passing. Swift
+Testing identifiers end in `()`; XCTest method names do not:
 
-**Light Engine (`EngineLightEngine.swift`)**
-- The heart of the app that drives visual entrainment using the native display-link API on each platform
-- Handles real-time brightness calculations and waveform generation
-- Supports bilateral mode (independent left/right field stimulation)
-- Observable class that publishes brightness values to SwiftUI views
+```bash
+-only-testing:IlumionateTests/MyTests/myTest()   # runs the test
+-only-testing:IlumionateTests/MyTests/myTest     # matches nothing, "succeeds"
+```
 
-**Session System**
-- `LightSession.swift`: Data models for sessions loaded from JSON files
-- `LightScoreReader.swift`: Loads and validates session files from app bundle
-- `SessionPlayerView.swift`: UI for playing sessions with synchronized controls
-- `LightScorePlayer.swift`: Coordinates session playback timing
+Filter at suite level (`-only-testing:IlumionateTests/MyTests`) unless you need one test.
 
-**Audio Processing Pipeline**
-- `AudioManager.swift`: Handles recording, playback, and file import
-- `AIContentAnalyzer.swift`: Uses Apple's on-device Foundation Models for content analysis
-- `AudioAnalyzer.swift`: Audio feature extraction and processing
-- `SessionGenerator.swift`: Generates light sessions from audio analysis
+Prefer the wrapper, which fails when zero test cases ran:
 
-**Content Generation**
-- `AudioFile.swift`: Model representing imported/recorded audio files
-- AI-powered analysis determines content type (hypnosis, meditation, music, etc.)
-- Custom light sessions generated based on audio characteristics
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests
+```
 
-### Key Architectural Patterns
+See ERRORS.md ERR-002.
 
-**Observer Pattern**: Uses SwiftUI's `@Observable` macro extensively for state management rather than traditional `@ObservableObject`.
+### Targets
 
-**Session JSON Format**: Sessions are defined as JSON files with time-based light control points (`LightMoment` structures) that specify frequency, intensity, waveform type, and optional bilateral/color parameters.
+| Target | Purpose |
+|---|---|
+| `Ilumionate` | The app (iOS + macOS, shared sources) |
+| `IlumionateShareExtension` | Share sheet import |
+| `LumeLabel` | Companion labelling/annotation app |
+| `AnalyzerImprover` | Analyzer tuning tool |
+| `IlumionateTests` / `IlumionateUITests` | App tests |
 
-**Main Actor Isolation**: Most classes are marked `@MainActor` to ensure UI thread safety, particularly important for the real-time light engine.
+Additional schemes: `corpus-gen` and `CorpusKit` (local `Tools/CorpusGenerator` package).
 
-**Dependency Management**: Uses Swift Package Manager with WhisperKit for audio transcription.
+### Dependencies (SPM)
 
-**Platform Strategy**: iOS and native macOS share the `Ilumionate` app target and feature sources. `ContentView` selects a compact tab shell on iOS and a native sidebar shell on macOS. Keep conditional compilation in narrow platform adapters or lifecycle/presentation seams; do not fork feature implementations. Mac Catalyst remains a compatibility build, not the primary Mac experience.
+WhisperKit (transcription), TelemetryDeck (analytics), swift-transformers, swift-jinja, swift-crypto, swift-collections, swift-argument-parser, swift-asn1, yyjson. **Ask before adding any new third-party dependency.**
 
-## Development Guidelines
+## Architecture
 
-### File Organization
-- Main app code in `Ilumionate/` directory
-- Test files in `IlumionateTests/` and `IlumionateUITests/`
-- Session JSON files are included as app bundle resources
-- Root-level Swift files (Playlist*.swift) handle playlist functionality
-- Platform-specific behavior is isolated in `Platform*.swift` adapters and the app/navigation shell
+### Light engine
 
-### Testing Strategy
-- `LightEngineTests.swift`: Unit tests for core light engine functionality
-- `SessionIntegrationTests.swift`: Integration tests for session loading and playback
-- Performance tests in separate files for audio processing components
+`EngineLightEngine.swift` drives visual entrainment via the native display-link API on each platform: real-time brightness, waveform generation, and bilateral mode (independent left/right field). It is an `@Observable` class publishing brightness to SwiftUI. Waveform math lives in `EngineWaveforms.swift`.
 
-### Session File Guidelines
-- JSON session files must have target membership enabled in Xcode
-- Session files include metadata like duration and display name
-- Light moments are sorted by time for proper playback sequence
+### Sessions
 
-### AI Integration
-- Uses Apple's Foundation Models for on-device content analysis
-- Graceful fallback when AI models are unavailable
-- Analysis results drive automatic session parameter selection
+- `LightSession.swift` — data models for JSON-defined sessions
+- `LightScoreReader.swift` — loads and validates bundled session files
+- `LightScorePlayer.swift` — playback timing
+- `UnifiedPlayerView.swift` / `UnifiedPlayerViewModel.swift` — the player surface, composed from ~25 `Player*.swift` components (transport, brightness, bilateral, binaural, overlays, trays)
 
-### Audio Requirements
-- Supports M4A and MP3 formats
-- WhisperKit integration for speech recognition (requires speech recognition permission)
-- AVAudioSession is configured on iOS; macOS uses native AVFoundation playback without an iOS audio session
+Sessions are JSON with time-ordered `LightMoment` control points specifying frequency, intensity, waveform, and optional bilateral/color parameters.
 
-## Common Development Tasks
+### Audio and analysis
 
-### Adding New Session Types
-1. Define new session JSON structure following existing patterns
-2. Add to app bundle with target membership
-3. Update session discovery logic in `LightScoreReader.discoverBundledSessions()`
+- `AudioIntake.swift`, `AudioAcquisition.swift`, `AudioImportWorker.swift` — validated file and URL import
+- `PlaybackRuntime.swift`, `AudioLightSyncPlayer.swift` — playback clocks and audio/light synchronization
+- `AudioAnalyzer.swift`, `AudioEnergyAnalyzer.swift` — feature extraction
+- `AIContentAnalyzer.swift`, `AIAnalysisManager*.swift` — Apple Foundation Models, on-device, with graceful fallback when unavailable
+- `AnalysisStateManager.swift` + `AnalysisPipelineProtocols.swift` — queueing, orchestration, recovery, and cache state
+- `SessionGenerator.swift` — turns analysis into light sessions
+- `AudioLibraryStore.swift`, `AudioFile.swift` — library state and models
 
-### Modifying Light Patterns
-1. Update waveform types in `EngineWaveforms.swift`
-2. Extend `WaveformType` enum in `LightSession.swift`
-3. Test real-time performance with `LightEngineTests`
+Audio formats: M4A and MP3. WhisperKit speech recognition requires the speech recognition permission.
 
-### Audio Analysis Customization
-1. Extend `AnalysisResult` structures for new content types
-2. Update generation strategies in `SessionGenerator`
-3. Add new hypnosis phases or meditation patterns as needed
+### Feature directories under `Ilumionate/`
 
-# Agent guide for Swift and SwiftUI
+| Directory | Contents |
+|---|---|
+| `DesignSystem/` | Palettes, orb, aurora backgrounds, motion, shared visual components |
+| `Visuals/` | Trance visual field, Metal shaders, tint/modulation/fade |
+| `TextTrance/` | Reader mode — script import, ORP, attention monitor, reader controls |
+| `Threshold/` | Launch threshold choreography and phase machine |
+| `Create/` | Session creation UI and binaural/mind-machine models |
+| `Analytics/`, `Training/`, `PlaylistImport/`, `AnalyzerConfig/`, `Models/` | Supporting subsystems |
 
-This repository contains an Xcode project written with Swift and SwiftUI. Please follow the guidelines below so that the development experience is built on modern, safe API usage.
+Most app sources sit flat at the top of `Ilumionate/` (~215 files); prefer adding new work into a feature directory rather than growing the flat layer.
 
+### Platform strategy
 
-## Role
+iOS and macOS share the `Ilumionate` target and all feature sources. `ContentView` picks its shell via `AppNavigationPresentation` — compact tabs on iOS, native sidebar on macOS. Confine `#if os(...)` to platform boundaries: lifecycle, permissions, input, window presentation, framework adapters. Platform seams live in `Platform*.swift` (`PlatformAudioSession`, `PlatformApplication`, `PlatformAccessibility`, `PlatformFullScreenCover`, `PlatformViewModifiers`). Do not fork feature implementations per platform.
 
-You are a **Senior Apple Platforms Engineer**, specializing in SwiftUI, SwiftData, and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
+`AVAudioSession` is configured on iOS only; macOS uses AVFoundation playback with no audio session.
 
+### Other layout notes
 
-## Core instructions
+- Root-level `Playlist*.swift` files handle playlist functionality
+- Session JSON files ship as bundle resources and need target membership enabled in Xcode
+- `Scripts/release-testflight.sh` handles TestFlight releases
 
-- Target iOS 26.0 and macOS 26.0 or later. (Yes, they definitely exist.)
-- Swift 6.2 or later, using modern Swift concurrency. Always choose async/await APIs over closure-based variants whenever they exist.
-- SwiftUI backed up by `@Observable` classes for shared data.
-- Do not introduce third-party frameworks without asking first.
-- Avoid UIKit unless requested.
-- Treat iOS and native macOS as first-class. Build and test both destinations for shared app changes; also keep Mac Catalyst compiling as a compatibility destination.
-- Prefer shared feature code. Use `#if os(...)` only at platform boundaries such as lifecycle, permissions, input, window presentation, or framework adapters.
+## Code conventions
 
+Write as a senior Apple platforms engineer. Follow Apple's Human Interface Guidelines and App Review guidelines.
 
-## Swift instructions
+### Swift
 
-- `@Observable` classes must be marked `@MainActor` unless the project has Main Actor default actor isolation. Flag any `@Observable` class missing this annotation.
-- All shared data should use `@Observable` classes with `@State` (for ownership) and `@Bindable` / `@Environment` (for passing).
-- Strongly prefer not to use `ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject`, or `@EnvironmentObject` unless they are unavoidable, or if they exist in legacy/integration contexts when changing architecture would be complicated.
-- Assume strict Swift concurrency rules are being applied.
-- Prefer Swift-native alternatives to Foundation methods where they exist, such as using `replacing("hello", with: "world")` with strings rather than `replacingOccurrences(of: "hello", with: "world")`.
-- Prefer modern Foundation API, for example `URL.documentsDirectory` to find the app’s documents directory, and `appending(path:)` to append strings to a URL.
-- Never use C-style number formatting such as `Text(String(format: "%.2f", abs(myNumber)))`; always use `Text(abs(change), format: .number.precision(.fractionLength(2)))` instead.
-- Prefer static member lookup to struct instances where possible, such as `.circle` rather than `Circle()`, and `.borderedProminent` rather than `BorderedProminentButtonStyle()`.
-- Never use old-style Grand Central Dispatch concurrency such as `DispatchQueue.main.async()`. If behavior like this is needed, always use modern Swift concurrency.
-- Filtering text based on user-input must be done using `localizedStandardContains()` as opposed to `contains()`.
-- Avoid force unwraps and force `try` unless it is unrecoverable.
-- Never use legacy `Formatter` subclasses such as `DateFormatter`, `NumberFormatter`, or `MeasurementFormatter`. Always use the modern `FormatStyle` API instead. For example, to format a date, use `myDate.formatted(date: .abbreviated, time: .shortened)`. To parse a date from a string, use `Date(inputString, strategy: .iso8601)`. For numbers, use `myNumber.formatted(.number)` or custom format styles.
+- Target iOS 26.0 / macOS 26.0+, Swift 6.2+, strict concurrency.
+- Prefer `async`/`await` over closure-based APIs wherever both exist. Never use GCD (`DispatchQueue.main.async`) for new code.
+- Shared state uses `@Observable` classes with `@State` for ownership and `@Bindable`/`@Environment` for passing. Avoid `ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject`, `@EnvironmentObject` except in legacy or integration corners where migrating is disproportionate.
+- `@Observable` classes must be `@MainActor` unless the project adopts main-actor default isolation. Flag any that aren't.
+- Avoid force unwraps and force `try` unless failure is genuinely unrecoverable.
+- Avoid UIKit unless asked; never use UIKit colors in SwiftUI.
+- Prefer Swift-native and modern Foundation API: `replacing(_:with:)` over `replacingOccurrences`, `URL.documentsDirectory`, `appending(path:)`.
+- Use `FormatStyle`, never legacy `Formatter` subclasses and never `String(format:)`: `Text(change, format: .number.precision(.fractionLength(2)))`, `date.formatted(date: .abbreviated, time: .shortened)`, `Date(input, strategy: .iso8601)`.
+- User-input text filtering uses `localizedStandardContains()`, not `contains()`.
+- Prefer static member lookup: `.circle` over `Circle()`, `.borderedProminent` over `BorderedProminentButtonStyle()`.
+- `Task.sleep(for:)`, never `Task.sleep(nanoseconds:)`.
 
-## SwiftUI instructions
+### SwiftUI
 
-- Always use `foregroundStyle()` instead of `foregroundColor()`.
-- Always use `clipShape(.rect(cornerRadius:))` instead of `cornerRadius()`.
-- Always use the `Tab` API instead of `tabItem()`.
-- Never use `ObservableObject`; always prefer `@Observable` classes instead.
-- Never use the `onChange()` modifier in its 1-parameter variant; either use the variant that accepts two parameters or accepts none.
-- Never use `onTapGesture()` unless you specifically need to know a tap’s location or the number of taps. All other usages should use `Button`.
-- Never use `Task.sleep(nanoseconds:)`; always use `Task.sleep(for:)` instead.
-- Never use `UIScreen.main.bounds` to read the size of the available space.
-- Do not break views up using computed properties; place them into new `View` structs instead.
-- Do not force specific font sizes; prefer using Dynamic Type instead.
-- Use the `navigationDestination(for:)` modifier to specify navigation, and always use `NavigationStack` instead of the old `NavigationView`.
-- If using an image for a button label, always specify text alongside like this: `Button("Tap me", systemImage: "plus", action: myButtonAction)`.
-- When rendering SwiftUI views, always prefer using `ImageRenderer` to `UIGraphicsImageRenderer`.
-- Don’t apply the `fontWeight()` modifier unless there is good reason. If you want to make some text bold, always use `bold()` instead of `fontWeight(.bold)`.
-- Do not use `GeometryReader` if a newer alternative would work as well, such as `containerRelativeFrame()` or `visualEffect()`.
-- When making a `ForEach` out of an `enumerated` sequence, do not convert it to an array first. So, prefer `ForEach(x.enumerated(), id: \.element.id)` instead of `ForEach(Array(x.enumerated()), id: \.element.id)`.
-- When hiding scroll view indicators, use the `.scrollIndicators(.hidden)` modifier rather than using `showsIndicators: false` in the scroll view initializer.
-- Use the newest ScrollView APIs for item scrolling and positioning (e.g. `ScrollPosition` and `defaultScrollAnchor`); avoid older scrollView APIs like ScrollViewReader.
-- Place view logic into view models or similar, so it can be tested.
-- Avoid `AnyView` unless it is absolutely required.
-- Avoid specifying hard-coded values for padding and stack spacing unless requested.
-- Avoid using UIKit colors in SwiftUI code.
+- `foregroundStyle()` not `foregroundColor()`; `clipShape(.rect(cornerRadius:))` not `cornerRadius()`; the `Tab` API not `tabItem()`; `NavigationStack` + `navigationDestination(for:)` not `NavigationView`.
+- `onChange()` — use the two-parameter or zero-parameter variant, never the one-parameter form.
+- Use `Button` rather than `onTapGesture()` unless you genuinely need tap location or count.
+- Split views into new `View` structs, not computed properties. Avoid `AnyView` unless truly required.
+- Put view logic in view models so it can be tested.
+- Respect Dynamic Type — don't hardcode font sizes. Use `bold()` rather than `fontWeight(.bold)`.
+- Don't hardcode padding/stack spacing unless asked.
+- Avoid `GeometryReader` when `containerRelativeFrame()` or `visualEffect()` will do. Never read layout size from `UIScreen.main.bounds`.
+- Use current ScrollView APIs (`ScrollPosition`, `defaultScrollAnchor`) over `ScrollViewReader`; `.scrollIndicators(.hidden)` over `showsIndicators: false`.
+- `ForEach(x.enumerated(), id: \.element.id)` — don't wrap in `Array(...)`.
+- Prefer `ImageRenderer` over `UIGraphicsImageRenderer`.
+- Buttons with image labels still carry text: `Button("Tap me", systemImage: "plus", action: action)`.
 
+### Files and naming
 
-## SwiftData instructions
+One primary type per file. Keep folder layout organized by feature. Strict, consistent naming for types, properties, and methods. Add doc comments where the intent isn't obvious. Never commit secrets or API keys.
 
-If SwiftData is configured to use CloudKit:
+## Testing
 
-- Never use `@Attribute(.unique)`.
-- Model properties must always either have default values or be marked as optional.
-- All relationships must be marked optional.
+The test suite uses **Swift Testing** (`import Testing`) throughout — no XCTest. Match that when adding tests.
 
+- `IlumionateTests/` — ~95 test files covering the light engine, analysis pipeline, stores, playback, and import
+- Write unit tests for core logic; reach for UI tests only when a unit test can't cover the behavior
+- Run tests on both macOS and iOS Simulator for shared changes
 
-## Project structure
+## Common tasks
 
-- Use a consistent project structure, with folder layout determined by app features.
-- Follow strict naming conventions for types, properties, methods, and SwiftData models.
-- Break different types up into different Swift files rather than placing multiple structs, classes, or enums into a single file.
-- Write unit tests for core application logic.
-- Only write UI tests if unit tests are not possible.
-- Add code comments and documentation comments as needed.
-- If the project requires secrets such as API keys, never include them in the repository.
-- If the project uses Localizable.xcstrings, prefer to add user-facing strings using symbol keys (e.g. helloWorld) in the string catalog with `extractionState` set to "manual", accessing them via generated symbols such as  `Text(.helloWorld)`. Offer to translate new keys into all languages supported by the project.
+**New session type:** define the JSON following existing patterns → add to the bundle with target membership → update `LightScoreReader.discoverBundledSessions()`.
 
+**New light pattern:** add the waveform in `EngineWaveforms.swift` → extend `WaveformType` in `LightSession.swift:167` → cover it in `WaveformSampleTests.swift` and check real-time behavior against `LightEngineGateTests.swift`.
 
-## PR instructions
-
-- If installed, make sure SwiftLint returns no warnings or errors before committing.
-
-
-## Xcode MCP
-
-If the Xcode MCP is configured, prefer its tools over generic alternatives when working on this project:
-
-- `DocumentationSearch` — verify API availability and correct usage before writing code
-- `BuildProject` — build the project after making changes to confirm compilation succeeds
-- `GetBuildLog` — inspect build errors and warnings
-- `RenderPreview` — visually verify SwiftUI views using Xcode Previews
-- `XcodeListNavigatorIssues` — check for issues visible in the Xcode Issue Navigator
-- `ExecuteSnippet` — test a code snippet in the context of a source file
-- `XcodeRead`, `XcodeWrite`, `XcodeUpdate` — prefer these over generic file tools when working with Xcode project files
+**Analysis changes:** extend the `AnalysisResult` structures → update generation strategy in `SessionGenerator` → add phases/patterns as needed.

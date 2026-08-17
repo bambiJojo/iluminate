@@ -36,6 +36,9 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     let fileSize: Int64
     let createdDate: Date
     var contentFingerprint: String?
+    /// Set when the file was fetched from a publisher rather than imported by
+    /// the user. Optional so every previously stored library decodes unchanged.
+    var remoteSource: RemoteAudioSource?
 
     var transcription: String?
     var analysisResult: AnalysisResult?
@@ -66,6 +69,7 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     // Old stored data may contain a `url` field; Codable ignores unknown keys.
     enum CodingKeys: String, CodingKey {
         case id, filename, duration, fileSize, createdDate, contentFingerprint
+        case remoteSource
         case transcription, analysisResult, deadTimeProfile
         case trackMetadata, userTitle
         case creator, isFavorite, rating, detailedRating, tags
@@ -77,13 +81,15 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
          isFavorite: Bool? = nil, rating: Int? = nil, tags: [String]? = nil,
          lastPlayedDate: Date? = nil, playCount: Int? = nil,
          trackMetadata: AudioTrackMetadata? = nil, userTitle: String? = nil,
-         contentFingerprint: String? = nil) {
+         contentFingerprint: String? = nil,
+         remoteSource: RemoteAudioSource? = nil) {
         self.id = id
         self.filename = filename
         self.duration = duration
         self.fileSize = fileSize
         self.createdDate = createdDate
         self.contentFingerprint = contentFingerprint
+        self.remoteSource = remoteSource
         self.isFavorite = isFavorite
         self.rating = rating
         self.tags = tags
@@ -137,8 +143,18 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
 }
 
 extension AudioFile: Equatable {
-    static func == (lhs: AudioFile, rhs: AudioFile) -> Bool {
+    /// Field-wise rather than identity-only, because SwiftUI diffs on this:
+    /// narrowing it to `id` would stop rows refreshing when a rating or title
+    /// changes in place.
+    ///
+    /// The two identity fields are included so that values differing only in
+    /// which audio they refer to never compare equal — `PlaylistTrackDownloadOutcome`
+    /// wraps an `AudioFile` and is `Equatable`, and without these a downloaded
+    /// file and a different one with the same metadata were indistinguishable.
+    nonisolated static func == (lhs: AudioFile, rhs: AudioFile) -> Bool {
         lhs.id == rhs.id &&
+        lhs.contentFingerprint == rhs.contentFingerprint &&
+        lhs.remoteSource == rhs.remoteSource &&
         lhs.filename == rhs.filename &&
         lhs.isFavorite == rhs.isFavorite &&
         lhs.rating == rhs.rating &&
@@ -154,7 +170,7 @@ extension AudioFile: Equatable {
 }
 
 extension AudioFile: Hashable {
-    func hash(into hasher: inout Hasher) {
+    nonisolated func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
 }

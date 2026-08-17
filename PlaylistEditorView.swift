@@ -250,7 +250,7 @@ struct PlaylistEditorView: View {
     private var dominantContentTypes: [AnalysisResult.ContentType] {
         // Collect unique content types from playlist items
         let allFiles = playlist.items.compactMap { item -> AudioFile? in
-            storedAudioFiles.first { $0.id == item.audioFileId }
+            PlaylistTrackBinding.resolve(item, in: storedAudioFiles)
         }
         return PlaylistArtwork.distinctTypes(from: allFiles.map { $0.analysisResult?.contentType })
     }
@@ -310,11 +310,14 @@ struct PlaylistEditorView: View {
     }
 
     private var wholeSessionAnalysisStatusText: String {
+        // Naming the tracks matters more than counting them: a listener looking
+        // at a disabled button and a row of identical dots has no other way to
+        // learn which session is holding the playlist back.
         if !missingAudioFileNames.isEmpty {
-            return "\(missingAudioFileNames.count) session unavailable"
+            return "Missing audio: \(Self.listed(missingAudioFileNames))"
         }
         if !missingAnalysisNames.isEmpty {
-            return "Needs \(missingAnalysisNames.count) analyzed session\(missingAnalysisNames.count == 1 ? "" : "s")"
+            return "Needs analysis: \(Self.listed(missingAnalysisNames))"
         }
         guard let analysis = playlist.wholeSessionAnalysis else {
             return "Not built yet"
@@ -336,15 +339,24 @@ struct PlaylistEditorView: View {
 
     private var missingAudioFileNames: [String] {
         playlist.items.compactMap { item in
-            storedAudioFiles.contains(where: { $0.id == item.audioFileId }) ? nil : item.displayName
+            PlaylistTrackBinding.resolve(item, in: storedAudioFiles) == nil ? item.displayName : nil
         }
     }
 
     private var missingAnalysisNames: [String] {
         playlist.items.compactMap { item in
-            guard let file = storedAudioFiles.first(where: { $0.id == item.audioFileId }) else { return nil }
+            guard let file = PlaylistTrackBinding.resolve(item, in: storedAudioFiles) else { return nil }
             return file.analysisResult == nil ? item.displayName : nil
         }
+    }
+
+    /// "A, B and 3 more" — enough to act on without overrunning a caption.
+    private static func listed(_ names: [String], limit: Int = 2) -> String {
+        guard names.count > limit else {
+            return names.formatted(.list(type: .and))
+        }
+        let shown = Array(names.prefix(limit))
+        return "\(shown.formatted(.list(type: .and))) and \(names.count - limit) more"
     }
 
     private func quickAnalyzePlaylist() {
@@ -557,6 +569,14 @@ struct PlaylistEditorView: View {
         readySessionIds = Set(
             files.filter { GeneratedSessionStore.shared.exists(for: $0) }.map(\.id)
         )
+
+        // Re-attach items whose library entry was re-registered under a new id.
+        // Done against the draft so the repair persists on Done and the playlist
+        // stops re-deriving it on every open.
+        let rebound = PlaylistTrackBinding.rebinding(playlist.items, to: files)
+        if rebound.map(\.audioFileId) != playlist.items.map(\.audioFileId) {
+            playlist.items = rebound
+        }
     }
 }
 
@@ -573,11 +593,18 @@ private struct TrackRow: View {
     let audioFiles: [AudioFile]
 
     private var audioFile: AudioFile? {
-        audioFiles.first { $0.id == item.audioFileId }
+        PlaylistTrackBinding.resolve(item, in: audioFiles)
     }
 
     private var contentType: AnalysisResult.ContentType {
         audioFile?.analysisResult?.contentType ?? .unknown
+    }
+
+    /// The unknown-content tint is the same teal as `.music`, so the dot alone
+    /// cannot say "this one still needs analysis". Spell it out instead.
+    private var statusNote: String? {
+        guard let audioFile else { return "Missing from library" }
+        return audioFile.isAnalyzed ? nil : "Not analyzed yet"
     }
 
     var body: some View {
@@ -604,6 +631,16 @@ private struct TrackRow: View {
                     Text(item.durationFormatted)
                         .font(TranceTypography.caption)
                         .foregroundColor(.textLight)
+
+                    if let statusNote {
+                        Text("·")
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.textLight)
+                        Label(statusNote, systemImage: "waveform.badge.exclamationmark")
+                            .font(TranceTypography.caption)
+                            .foregroundColor(.warmAccent)
+                            .labelStyle(.titleAndIcon)
+                    }
                 }
             }
         }
@@ -626,6 +663,39 @@ struct SessionPickerView: View {
     @State private var searchText = ""
     @State private var selectedFilter: ContentFilterOption = .all
     @State private var selectedIds = Set<UUID>()
+    @State private var analysisManager = AnalysisStateManager.shared
+    /// Recomputed as analyses land. `nil` until the first refresh, so the
+    /// caller's snapshot renders the first frame without a flash of "empty".
+    @State private var refreshedReadyIds: Set<UUID>?
+
+    private var readyIds: Set<UUID> { refreshedReadyIds ?? readySessionIds }
+
+    private func rowState(for file: AudioFile) -> PlaylistPickerRowState {
+        PlaylistPickerRowState.resolve(
+            hasGeneratedSession: readyIds.contains(file.id),
+            isAlreadyAdded: existingItemIds.contains(file.id),
+            isAnalyzing: analysisManager.isQueuedOrActive(file)
+        )
+    }
+
+    private func handleTap(on file: AudioFile, state: PlaylistPickerRowState) {
+        if state.canStartAnalysis {
+            Task { await analysisManager.queueForAnalysis(file) }
+            return
+        }
+        guard state.isSelectable else { return }
+        if selectedIds.contains(file.id) {
+            selectedIds.remove(file.id)
+        } else {
+            selectedIds.insert(file.id)
+        }
+    }
+
+    private func refreshReadyIds() {
+        refreshedReadyIds = Set(
+            audioFiles.filter { GeneratedSessionStore.shared.exists(for: $0) }.map(\.id)
+        )
+    }
 
     enum ContentFilterOption: String, CaseIterable {
         case all = "All"
@@ -743,20 +813,14 @@ struct SessionPickerView: View {
                         ScrollView {
                             LazyVStack(spacing: 0) {
                                 ForEach(filteredFiles) { file in
+                                    let state = rowState(for: file)
                                     PickerSessionRow(
                                         file: file,
-                                        isReady: readySessionIds.contains(file.id),
-                                        isAlreadyAdded: existingItemIds.contains(file.id),
+                                        state: state,
                                         isSelected: selectedIds.contains(file.id)
                                     ) {
                                         TranceHaptics.shared.light()
-                                        guard readySessionIds.contains(file.id) else { return }
-                                        if existingItemIds.contains(file.id) { return }
-                                        if selectedIds.contains(file.id) {
-                                            selectedIds.remove(file.id)
-                                        } else {
-                                            selectedIds.insert(file.id)
-                                        }
+                                        handleTap(on: file, state: state)
                                     }
 
                                     if file.id != filteredFiles.last?.id {
@@ -784,7 +848,7 @@ struct SessionPickerView: View {
                 if newlySelectedCount > 0 {
                     Button {
                         let toAdd = filteredFiles.filter { selectedIds.contains($0.id)
-                            && readySessionIds.contains($0.id)
+                            && readyIds.contains($0.id)
                             && !existingItemIds.contains($0.id) }
                         onAddFiles(toAdd)
                         dismiss()
@@ -816,6 +880,12 @@ struct SessionPickerView: View {
                         .foregroundColor(.roseGold)
                 }
             }
+            .task { refreshReadyIds() }
+            // An analysis started from this sheet lands here: the file gains a
+            // generated session and its row becomes selectable in place.
+            .onChange(of: analysisManager.completedAnalyses.count) {
+                refreshReadyIds()
+            }
         }
     }
 }
@@ -824,9 +894,7 @@ struct SessionPickerView: View {
 
 private struct PickerSessionRow: View {
     let file: AudioFile
-    /// Whether the file has a generated light session and can be added.
-    let isReady: Bool
-    let isAlreadyAdded: Bool
+    let state: PlaylistPickerRowState
     let isSelected: Bool
     let onTap: () -> Void
 
@@ -864,25 +932,32 @@ private struct PickerSessionRow: View {
                     .animation(.spring(response: 0.25), value: isSelected)
             }
             .padding(.vertical, TranceSpacing.card)
-            .opacity(isReady && !isAlreadyAdded ? 1.0 : 0.45)
+            .opacity(state == .ready ? 1.0 : 0.45)
         }
         .buttonStyle(PlainButtonStyle())
-        .disabled(!isReady || isAlreadyAdded)
+        // Un-analyzed rows stay tappable — tapping them starts the analysis
+        // that makes them addable.
+        .disabled(!state.isSelectable && !state.canStartAnalysis)
     }
 
     @ViewBuilder
     private var trailingIndicator: some View {
-        if !isReady {
-            // Un-analyzed: surfaced but not addable.
-            Text("Needs analysis")
-                .font(TranceTypography.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.textLight)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.glassBorder.opacity(0.18))
-                .clipShape(Capsule())
-        } else if isAlreadyAdded {
+        if let badgeTitle = state.badgeTitle {
+            HStack(spacing: 5) {
+                if state == .analyzing {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+                Text(badgeTitle)
+                    .font(TranceTypography.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(state == .needsAnalysis ? .roseGold : .textLight)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color.glassBorder.opacity(0.18))
+            .clipShape(Capsule())
+        } else if state == .alreadyAdded {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 22))
                 .foregroundColor(.textLight)

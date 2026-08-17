@@ -12,17 +12,18 @@ struct SessionDetailView: View {
     let engine: LightEngine
     private let audioFileID: AudioFile.ID
 
+    /// Injected by the app root. Session Detail filters the shared snapshot to
+    /// this file rather than reading the manager's collections itself.
+    @Environment(AnalysisCenterModel.self) private var analysisCenter
     @State private var lightSession: LightSession?
     @State private var showingPlayer = false
     @State private var showingReanalyze = false
     @State private var audioFile: AudioFile
+    @State private var catalogEntry: KnownAudioCatalogEntry?
 
     private var analysis: AnalysisResult? { audioFile.analysisResult }
     private var phases: [PhaseSegment]? { analysis?.hypnosisMetadata?.phases }
     private var transcript: String? { audioFile.transcription }
-    private var catalogEntry: KnownAudioCatalogEntry? {
-        KnownAudioCatalog.shared.match(audioFile: audioFile)?.entry
-    }
     private var hasReviewedGoldScore: Bool {
         guard let catalogEntry else { return false }
         return catalogEntry.goldLightScore.evidenceKind != .catalogMetadata
@@ -32,6 +33,9 @@ struct SessionDetailView: View {
         self.engine = engine
         self.audioFileID = audioFile.id
         _audioFile = State(initialValue: audioFile)
+        _catalogEntry = State(
+            initialValue: KnownAudioCatalog.shared.match(audioFile: audioFile)?.entry
+        )
     }
 
     var body: some View {
@@ -85,17 +89,13 @@ struct SessionDetailView: View {
                 )
             }
         }
-        .onAppear {
-            refreshAudioFile()
-            loadLightSession()
-            UsageAnalytics.shared.screen(.sessionDetail)
-        }
+        .task { await refreshDetail() }
+        .onAppear { UsageAnalytics.shared.screen(.sessionDetail) }
         .onChange(of: AnalysisStateManager.shared.completedAnalyses.count) {
-            refreshAudioFile()
-            loadLightSession()
+            Task { await refreshDetail() }
         }
         .onChange(of: AnalysisStateManager.shared.partialResultsRevision) {
-            refreshAudioFile()
+            Task { await refreshAudioFile() }
         }
     }
 
@@ -151,23 +151,30 @@ struct SessionDetailView: View {
 
                 // Analysis status badge
                 if audioFile.isAnalyzed {
-                    HStack(spacing: TranceSpacing.inner) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(Color.roseGold)
-                        Text(
-                            hasReviewedGoldScore
-                                ? "Gold Standard"
-                                : (catalogEntry == nil ? "AI Analyzed" : "Catalog Template")
-                        )
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(Color.roseGold)
+                    VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                        HStack(spacing: TranceSpacing.inner) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundStyle(Color.roseGold)
+                            Text(analysisProvenanceLabel)
+                                .font(TranceTypography.caption)
+                                .foregroundStyle(Color.roseGold)
 
-                        if let confidence = analysis?.classificationConfidence?.overallConfidence {
-                            Text("·")
-                                .foregroundStyle(Color.textLight)
-                            Text("\(confidence, format: .percent.precision(.fractionLength(0))) confidence")
+                            if let confidence = analysis?.classificationConfidence?.overallConfidence {
+                                Text("·")
+                                    .foregroundStyle(Color.textLight)
+                                Text("\(confidence, format: .percent.precision(.fractionLength(0))) confidence")
+                                    .font(TranceTypography.caption)
+                                    .foregroundStyle(Color.textSecondary)
+                            }
+                        }
+
+                        // The badge alone says the model did not run; this says
+                        // why, and whether analysing again is worth the time.
+                        if let reason = analysis?.keywordFallbackReason {
+                            Text(reason)
                                 .font(TranceTypography.caption)
                                 .foregroundStyle(Color.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 } else if audioFile.hasTranscription {
@@ -431,6 +438,15 @@ struct SessionDetailView: View {
 
     // MARK: - Analyze Now (unanalyzed files)
 
+    /// Credits whichever path actually produced the analysis. Claiming "AI
+    /// Analyzed" after the model declined and keyword classification stood in
+    /// contradicts the AI Insights card directly below it.
+    private var analysisProvenanceLabel: String {
+        if hasReviewedGoldScore { return "Gold Standard" }
+        if catalogEntry != nil { return "Catalog Template" }
+        return analysis?.usedKeywordFallback == true ? "Keyword Analysis" : "AI Analyzed"
+    }
+
     private var analyzeNowSection: some View {
         LiminalCard {
             VStack(spacing: TranceSpacing.card) {
@@ -443,13 +459,55 @@ struct SessionDetailView: View {
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
 
-                GlowButton(title: "Analyze Now", systemImage: "sparkles") {
-                    Task {
-                        AnalysisStateManager.shared.evictCachedResult(for: audioFile)
-                        await AnalysisStateManager.shared.queueForAnalysis(audioFile)
+                // Reading the shared snapshot here means the button swaps to live
+                // progress the moment work is queued, rather than looking as
+                // though the tap did nothing.
+                if isWorkInFlight {
+                    analyzingIndicator
+                } else {
+                    GlowButton(title: "Analyze Now", systemImage: "sparkles") {
+                        Task {
+                            await AnalysisStateManager.shared.evictCachedResult(for: audioFile)
+                            await AnalysisStateManager.shared.queueForAnalysis(audioFile)
+                        }
                     }
                 }
             }
+        }
+    }
+
+    /// This file's slice of the shared snapshot.
+    private var task: AnalysisTask? {
+        analysisCenter.task(for: audioFile.id)
+    }
+
+    private var isWorkInFlight: Bool {
+        switch task?.state {
+        case .queued, .preparing, .running: true
+        default: false
+        }
+    }
+
+    private var analyzingIndicator: some View {
+        HStack(spacing: TranceSpacing.list) {
+            ProgressView()
+                .controlSize(.small)
+            Text(stageText)
+                .font(TranceTypography.body)
+                .foregroundStyle(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, TranceSpacing.card)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The task already answers "is this file the active one", so there is no
+    /// id comparison to get wrong here.
+    private var stageText: String {
+        switch task?.state {
+        case .running(let stage, _, _): AnalysisStageFeedback.stageSummary(stage)
+        case .preparing:                "Preparing analyzer"
+        default:                        "Waiting in queue…"
         }
     }
 
@@ -461,7 +519,7 @@ struct SessionDetailView: View {
                 Button {
                     TranceHaptics.shared.light()
                     Task {
-                        AnalysisStateManager.shared.evictCachedResult(for: audioFile)
+                        await AnalysisStateManager.shared.evictCachedResult(for: audioFile)
                         await AnalysisStateManager.shared.queueForAnalysis(audioFile)
                     }
                 } label: {
@@ -487,14 +545,18 @@ struct SessionDetailView: View {
 
     // MARK: - Helpers
 
-    private func refreshAudioFile() {
-        guard let data = UserDefaults.standard.data(forKey: AnalysisStateManager.audioFilesUserDefaultsKey),
-              let files = try? JSONDecoder().decode([AudioFile].self, from: data),
-              let updated = files.first(where: { $0.id == audioFileID }) else {
+    private func refreshDetail() async {
+        await refreshAudioFile()
+        loadLightSession()
+    }
+
+    private func refreshAudioFile() async {
+        guard let updated = await AudioLibraryStore.file(withID: audioFileID) else {
             return
         }
 
         audioFile = updated
+        catalogEntry = KnownAudioCatalog.shared.match(audioFile: updated)?.entry
     }
 
     private func loadLightSession() {

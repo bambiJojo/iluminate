@@ -1,0 +1,2529 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Analysis Task Center — Phase 1 Implementation Plan</title>
+<style>
+:root {
+  --bg:#0e0b12; --panel:#161119; --line:#2b2333; --text:#ece6f2;
+  --muted:#9a8fa6; --accent:#e9b7ba; --accent2:#be96ff; --code:#120e17;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg:#faf7fb; --panel:#fff; --line:#e6dfe9; --text:#1d1721;
+    --muted:#6b6274; --accent:#a35c63; --accent2:#6b3fa0; --code:#f3eff5; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+.wrap { display:grid; grid-template-columns:250px minmax(0,1fr); gap:44px;
+  max-width:1180px; margin:0 auto; padding:56px 28px 120px; }
+nav { position:sticky; top:36px; align-self:start; font-size:13px; }
+nav .navtitle { text-transform:uppercase; letter-spacing:.12em; font-size:10px;
+  color:var(--muted); margin-bottom:12px; }
+nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 0;
+  border-left:2px solid transparent; padding-left:12px; }
+nav a:hover { color:var(--accent); border-left-color:var(--accent); }
+main { min-width:0; }
+h1 { font-size:2rem; line-height:1.2; margin:0 0 .6rem; letter-spacing:-.02em; }
+h2 { font-size:1.3rem; margin:2.6rem 0 .8rem; padding-bottom:.4rem;
+  border-bottom:1px solid var(--line); letter-spacing:-.01em; }
+h3 { font-size:1.05rem; margin:1.8rem 0 .5rem; color:var(--accent); }
+h4 { font-size:.95rem; margin:1.3rem 0 .4rem; color:var(--muted); }
+p { margin:.75rem 0; }
+a { color:var(--accent2); }
+code { background:var(--code); border:1px solid var(--line); border-radius:4px;
+  padding:.1em .35em; font-size:.86em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-radius:10px;
+  padding:16px 18px; overflow-x:auto; margin:1rem 0; }
+pre code { background:none; border:none; padding:0; font-size:.85em; line-height:1.55; }
+.tablewrap { overflow-x:auto; margin:1rem 0; }
+table { border-collapse:collapse; width:100%; font-size:.9rem; }
+th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+th { color:var(--muted); font-weight:600; font-size:.75rem;
+  text-transform:uppercase; letter-spacing:.07em; }
+tbody tr:hover { background:var(--panel); }
+blockquote { margin:1.1rem 0; padding:12px 18px; background:var(--panel);
+  border-left:3px solid var(--accent); border-radius:0 8px 8px 0; color:var(--muted); }
+ul,ol { margin:.75rem 0; padding-left:1.4rem; }
+li { margin:.35rem 0; }
+li::marker { color:var(--accent); }
+@media (max-width:900px) {
+  .wrap { grid-template-columns:1fr; gap:0; padding:32px 20px 80px; }
+  nav { position:static; margin-bottom:32px; }
+}
+</style></head><body>
+<div class="wrap">
+<nav><div class="navtitle">Contents</div><a href="#build-and-test-commands">Build and test commands</a><a href="#xcode-project-note">Xcode project note</a><a href="#file-structure">File structure</a><a href="#task-1-snapshot-value-types">Task 1: Snapshot value types</a><a href="#task-2-the-task-and-its-state">Task 2: The task and its state</a><a href="#task-3-failure-merge">Task 3: Failure merge</a><a href="#task-4-the-projection-collapse-precedence">Task 4: The projection — collapse precedence</a><a href="#task-5-tier-ordering-and-the-stranded-automatic-failure">Task 5: Tier ordering and the stranded automatic failure</a><a href="#task-6-persist-dismissal-on-the-failure-occurrence">Task 6: Persist dismissal on the failure occurrence</a><a href="#task-7-attempt-identity-on-the-active-analysis">Task 7: Attempt identity on the active analysis</a><a href="#task-8-input-assembler">Task 8: Input assembler</a><a href="#task-9-the-refresh-loop">Task 9: The refresh loop</a><a href="#task-10-the-center-model">Task 10: The center model</a><a href="#task-11-wire-the-model-to-the-pipeline">Task 11: Wire the model to the pipeline</a><a href="#task-12-the-four-surfaces">Task 12: The four surfaces</a><a href="#task-13-delete-the-legacy-views">Task 13: Delete the legacy views</a><a href="#self-review">Self-review</a></nav>
+<main><h1>Analysis Task Center — Phase 1 Implementation Plan</h1>
+<blockquote><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</blockquote>
+<p><strong>Goal:</strong> Replace six independent readers of analysis state with one canonical <code>[AnalysisTask]</code> snapshot, produced by a pure projection and consumed by four surfaces, and make failure dismissal durable.</p>
+<p><strong>Architecture:</strong> A pure <code>nonisolated</code> function maps a plain-value input struct to an ordered <code>[AnalysisTask]</code>. A single <code>@MainActor @Observable AnalysisCenterModel</code>, owned at the app root, assembles that input (off the main actor), publishes the snapshot, and coalesces refreshes behind a generation guard. Pill, Task Center, Library row, and Session Detail all filter the same published array. Dismissal state persists inside <code>AnalysisManualRecovery</code> so it survives relaunch without discarding resumable checkpoints.</p>
+<p><strong>Tech Stack:</strong> Swift 6.2 strict concurrency, SwiftUI, <code>@Observable</code>, Swift Testing, actor-isolated <code>AnalysisProgressStore</code>.</p>
+<p><strong>Spec:</strong> <code>docs/superpowers/specs/2026-08-16-analysis-task-center-design.md</code> (revision 3, commit <code>e940af8</code>).</p>
+<p><strong>Out of scope:</strong> Phase 2a (teardown spike), 2b (watchdog / <code>.stalled</code>), 2c (model-download callback). <code>ModelDownloadProgress</code> and <code>AnalysisTaskState.preparing</code> are <em>defined</em> here so the model is stable, but nothing produces them until 2c.</p>
+<p>---</p>
+<h2 id="build-and-test-commands">Build and test commands</h2>
+<pre><code class="lang-bash">xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=macOS,arch=arm64&#x27; build</code></pre>
+<pre><code class="lang-bash">Scripts/run-tests.sh -destination &#x27;platform=macOS,arch=arm64&#x27; -only-testing:IlumionateTests/&lt;SuiteName&gt;</code></pre>
+<p>Always use <code>Scripts/run-tests.sh</code> rather than raw <code>xcodebuild test</code>. A <code>-only-testing:</code> filter that matches nothing makes <code>xcodebuild</code> print <code>** TEST SUCCEEDED **</code> having run zero tests (ERR-002). The wrapper fails when zero cases ran.</p>
+<p>Filter at <strong>suite</strong> level (<code>-only-testing:IlumionateTests/AnalysisTaskProjectionTests</code>), not individual test level. Swift Testing identifiers end in <code>()</code>; omitting them matches nothing.</p>
+<p>Before the final commit, run the full suite on both platforms:</p>
+<pre><code class="lang-bash">Scripts/run-tests.sh -destination &#x27;platform=macOS,arch=arm64&#x27; -only-testing:IlumionateTests</code></pre>
+<pre><code class="lang-bash">Scripts/run-tests.sh -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; -only-testing:IlumionateTests</code></pre>
+<h2 id="xcode-project-note">Xcode project note</h2>
+<p><code>Ilumionate.xcodeproj</code> uses <code>PBXFileSystemSynchronizedRootGroup</code>. <strong>New <code>.swift</code> files under <code>Ilumionate/</code> are picked up automatically</strong> — there is no "add to target" step. Do not edit <code>project.pbxproj</code>.</p>
+<p>---</p>
+<h2 id="file-structure">File structure</h2>
+<h3 id="created">Created</h3>
+<div class='tablewrap'><table><thead><tr><th>File</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>Ilumionate/AnalysisCenter/AnalysisTask.swift</code></td><td><code>AnalysisTask</code>, <code>AnalysisTaskState</code></td></tr><tr><td><code>Ilumionate/AnalysisCenter/AnalysisTaskSnapshots.swift</code></td><td>The five immutable input snapshots</td></tr><tr><td><code>Ilumionate/AnalysisCenter/AnalysisFailureMerge.swift</code></td><td>Durable + runtime failure merge</td></tr><tr><td><code>Ilumionate/AnalysisCenter/AnalysisTaskProjection.swift</code></td><td>Pure input → <code>[AnalysisTask]</code>, collapse + sort</td></tr><tr><td><code>Ilumionate/AnalysisCenter/AnalysisTaskInputAssembler.swift</code></td><td>Disk/store reads → <code>AnalysisTaskProjectionInput</code></td></tr><tr><td><code>Ilumionate/AnalysisCenter/AnalysisCenterModel.swift</code></td><td>Ownership, refresh loop, publication</td></tr><tr><td><code>Ilumionate/AnalysisCenter/AnalysisStatusPill.swift</code></td><td>Bottom-chrome ambient signal</td></tr><tr><td><code>Ilumionate/AnalysisCenter/AnalysisCenterView.swift</code></td><td>The sheet</td></tr><tr><td><code>Ilumionate/AnalysisCenter/AnalysisTaskRow.swift</code></td><td>One row, all six states</td></tr><tr><td><code>Ilumionate/AnalysisCenter/LibraryAnalysisEntryRow.swift</code></td><td>Library summary row</td></tr></tbody></table></div>
+<h3 id="modified">Modified</h3>
+<div class='tablewrap'><table><thead><tr><th>File</th><th>Change</th></tr></thead><tbody><tr><td><code>Ilumionate/AnalysisProgressStore.swift</code></td><td><code>dismissedAt</code>, <code>persist()</code> returns <code>Bool</code>, <code>dismiss</code>/<code>remove</code></td></tr><tr><td><code>Ilumionate/AnalysisStateManager.swift</code></td><td><code>attemptID</code>, structural-invalidation hook, snapshot accessors</td></tr><tr><td><code>Ilumionate/ContentView.swift:197-235</code></td><td>Pill replaces the two overlays</td></tr><tr><td><code>Ilumionate/LibraryView.swift:261</code></td><td>Entry row replaces <code>LibraryAnalysisStatusSection</code></td></tr><tr><td><code>Ilumionate/SessionDetailView.swift:447-495</code></td><td>Read from the task, not the manager</td></tr></tbody></table></div>
+<h3 id="deleted-task-13-last">Deleted (Task 13, last)</h3>
+<ul>
+<li><code>Ilumionate/AnalysisStatusBar.swift</code></li>
+<li><code>Ilumionate/AnalysisStatusOverlay.swift</code></li>
+<li><code>Ilumionate/LibraryAnalysisStatusSection.swift</code></li>
+</ul>
+<p>---</p>
+<h2 id="task-1-snapshot-value-types">Task 1: Snapshot value types</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisTaskSnapshots.swift</code></li>
+<li>Test: <code>IlumionateTests/AnalysisTaskSnapshotTests.swift</code></li>
+</ul>
+<p>Background: <code>ActiveAnalysis</code> is an <code>@Observable final class</code> (<code>AnalysisStateManager.swift:1367</code>) — a non-<code>Sendable</code> reference type. <code>SyncPlayerItem</code> has <code>let id = UUID()</code> which regenerates per instance, and <code>FailedAnalysis</code> is not <code>Equatable</code>. None of them can appear in the published model. These snapshots are the value-type replacements.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisTaskSnapshotTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisTaskSnapshotTests.swift
+//  IlumionateTests
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+struct AnalysisTaskSnapshotTests {
+
+    @Test func manualUndismissedFailureNeedsDecisionIntrinsically() {
+        let failure = AnalysisFailureSnapshot(
+            reason: .transcription,
+            failedStage: .transcription,
+            failedAt: Date(timeIntervalSince1970: 100),
+            recoveryStage: .transcription,
+            retryState: .manual,
+            dismissedAt: nil
+        )
+        #expect(failure.needsDecisionIntrinsically)
+    }
+
+    @Test func dismissedFailureDoesNotNeedDecision() {
+        let failure = AnalysisFailureSnapshot(
+            reason: .transcription,
+            failedStage: .transcription,
+            failedAt: Date(timeIntervalSince1970: 100),
+            recoveryStage: .transcription,
+            retryState: .manual,
+            dismissedAt: Date(timeIntervalSince1970: 200)
+        )
+        #expect(failure.needsDecisionIntrinsically == false)
+    }
+
+    @Test func automaticFailureDoesNotNeedDecisionIntrinsically() {
+        let failure = AnalysisFailureSnapshot(
+            reason: .transcription,
+            failedStage: .transcription,
+            failedAt: Date(timeIntervalSince1970: 100),
+            recoveryStage: .none,
+            retryState: .automatic,
+            dismissedAt: nil
+        )
+        #expect(failure.needsDecisionIntrinsically == false)
+    }
+
+    @Test func activeSnapshotTerminalStages() {
+        func snapshot(_ stage: AnalysisStage) -&gt; ActiveAnalysisSnapshot {
+            ActiveAnalysisSnapshot(
+                audioFileID: UUID(),
+                attemptID: UUID(),
+                stage: stage,
+                progress: 0.5,
+                startedAt: Date(timeIntervalSince1970: 0)
+            )
+        }
+        #expect(snapshot(.complete).isTerminal)
+        #expect(snapshot(.failed).isTerminal)
+        #expect(snapshot(.transcribing).isTerminal == false)
+        #expect(snapshot(.starting).isTerminal == false)
+        #expect(snapshot(.analyzing).isTerminal == false)
+        #expect(snapshot(.generatingSession).isTerminal == false)
+    }
+
+    @Test func identicalSnapshotsAreEqual() {
+        let id = UUID()
+        let attempt = UUID()
+        let date = Date(timeIntervalSince1970: 42)
+        let a = ActiveAnalysisSnapshot(
+            audioFileID: id, attemptID: attempt, stage: .transcribing, progress: 0.25, startedAt: date
+        )
+        let b = ActiveAnalysisSnapshot(
+            audioFileID: id, attemptID: attempt, stage: .transcribing, progress: 0.25, startedAt: date
+        )
+        #expect(a == b)
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskSnapshotTests</code></p>
+<p>Expected: <strong>build failure</strong>, <code>cannot find 'AnalysisFailureSnapshot' in scope</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisTaskSnapshots.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisTaskSnapshots.swift
+//  Ilumionate
+//
+//  Immutable value snapshots of everything the Analysis Task Center projects.
+//  The live types cannot be used: ActiveAnalysis is a non-Sendable @Observable
+//  class, SyncPlayerItem regenerates its id per instance, and FailedAnalysis is
+//  not Equatable.
+//
+
+import Foundation
+
+/// The active analysis, flattened to values.
+nonisolated struct ActiveAnalysisSnapshot: Equatable, Sendable {
+    let audioFileID: UUID
+    let attemptID: UUID
+    let stage: AnalysisStage
+    let progress: Double
+    let startedAt: Date
+
+    /// `.complete` and `.failed` are terminal: the pipeline leaves
+    /// `currentAnalysis` populated after it has stopped working on the file.
+    var isTerminal: Bool { stage == .complete || stage == .failed }
+}
+
+/// Progress of a WhisperKit model download. Produced in Phase 2c; defined here
+/// so the model does not change when that lands.
+nonisolated struct ModelDownloadProgress: Equatable, Sendable {
+    /// The file whose analysis this download is bootstrapping. A speculative
+    /// prefetch downloads for the *next* file, not the active one.
+    let audioFileID: UUID
+    let attemptID: UUID
+    let completedUnitCount: Int64
+    let totalUnitCount: Int64
+    let fractionCompleted: Double
+}
+
+/// A recorded failure, merged from the durable recovery and the runtime list.
+nonisolated struct AnalysisFailureSnapshot: Equatable, Sendable {
+    let reason: AnalyticsAnalysisFailureReason
+    let failedStage: AnalyticsAnalysisStage
+    let failedAt: Date
+    let recoveryStage: AnalysisRecoveryStage
+    let retryState: AnalysisRetryState
+    let dismissedAt: Date?
+
+    var presentation: AnalysisFailurePresentation {
+        AnalysisFailurePresentation(
+            reason: reason,
+            failedStage: failedStage,
+            recoveryStage: recoveryStage,
+            retryState: retryState
+        )
+    }
+
+    /// True when this failure needs a decision *regardless of queue state*.
+    /// Tier-1 eligibility is broader — an `.automatic` failure that is no
+    /// longer queued is also stranded. See `AnalysisTaskProjection`.
+    var needsDecisionIntrinsically: Bool {
+        dismissedAt == nil &amp;&amp; (retryState == .manual || retryState == .unavailable)
+    }
+}
+
+/// A durable checkpoint, flattened. Carries `lastUpdated` because tier-4
+/// ordering needs it and because it is the only way to detect a checkpoint
+/// overtaken by a completed session.
+nonisolated struct AnalysisCheckpointSnapshot: Equatable, Sendable {
+    let recoveryStage: AnalysisRecoveryStage
+    let startedAt: Date
+    let lastUpdated: Date
+}
+
+/// A generated session that is ready to play.
+nonisolated struct AnalysisReadySnapshot: Equatable, Sendable {
+    /// `LightSession.id` — decoded from stored JSON, stable across loads.
+    /// Deliberately not `SyncPlayerItem.id`, which regenerates per instance.
+    let sessionID: UUID
+    let readyAt: Date
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskSnapshotTests</code></p>
+<p>Expected: PASS, 5 tests.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter/AnalysisTaskSnapshots.swift IlumionateTests/AnalysisTaskSnapshotTests.swift
+git commit -m &quot;feat: add immutable snapshot types for the analysis task model&quot;</code></pre>
+<p>---</p>
+<h2 id="task-2-the-task-and-its-state">Task 2: The task and its state</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisTask.swift</code></li>
+<li>Test: <code>IlumionateTests/AnalysisTaskTests.swift</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisTaskTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisTaskTests.swift
+//  IlumionateTests
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+private func makeAudioFile(id: UUID = UUID()) -&gt; AudioFile {
+    AudioFile(
+        id: id,
+        filename: &quot;test_\(id.uuidString).m4a&quot;,
+        duration: 300,
+        fileSize: 1_024_000,
+        createdDate: Date(timeIntervalSince1970: 0)
+    )
+}
+
+struct AnalysisTaskTests {
+
+    @Test func taskIdentityComesFromAudioFile() {
+        let id = UUID()
+        let task = AnalysisTask(
+            audioFile: makeAudioFile(id: id),
+            state: .queued(position: 1),
+            lastFailure: nil,
+            recovery: .none,
+            ready: nil
+        )
+        #expect(task.id == id)
+    }
+
+    /// Guards the SyncPlayerItem trap: two projections of identical state must
+    /// compare equal, or every progress tick looks like a full list change.
+    @Test func identicalTasksAreEqual() {
+        let file = makeAudioFile()
+        let ready = AnalysisReadySnapshot(
+            sessionID: UUID(uuidString: &quot;00000000-0000-0000-0000-0000000000FF&quot;)!,
+            readyAt: Date(timeIntervalSince1970: 10)
+        )
+        let a = AnalysisTask(audioFile: file, state: .ready, lastFailure: nil, recovery: .none, ready: ready)
+        let b = AnalysisTask(audioFile: file, state: .ready, lastFailure: nil, recovery: .none, ready: ready)
+        #expect(a == b)
+    }
+
+    @Test func differingStateBreaksEquality() {
+        let file = makeAudioFile()
+        let a = AnalysisTask(audioFile: file, state: .queued(position: 1), lastFailure: nil, recovery: .none, ready: nil)
+        let b = AnalysisTask(audioFile: file, state: .queued(position: 2), lastFailure: nil, recovery: .none, ready: nil)
+        #expect(a != b)
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskTests</code></p>
+<p>Expected: <strong>build failure</strong>, <code>cannot find 'AnalysisTask' in scope</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisTask.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisTask.swift
+//  Ilumionate
+//
+//  One task per audio file. `state` is what the pipeline is doing right now;
+//  `lastFailure`, `recovery`, and `ready` are what has been salvaged, and are
+//  populated independently of `state`.
+//
+
+import Foundation
+
+nonisolated struct AnalysisTask: Identifiable, Equatable, Sendable {
+    var id: UUID { audioFile.id }
+
+    let audioFile: AudioFile
+    let state: AnalysisTaskState
+    /// Present whenever a failure has been recorded, including when `state` has
+    /// moved on to `.queued` for an automatic retry.
+    let lastFailure: AnalysisFailureSnapshot?
+    /// The most useful partial result on disk, independent of `state`.
+    let recovery: AnalysisRecoveryStage
+    /// Present whenever a generated session exists, including during re-analysis.
+    let ready: AnalysisReadySnapshot?
+}
+
+nonisolated enum AnalysisTaskState: Equatable, Sendable {
+    case queued(position: Int)          // one-based
+    case preparing(ModelDownloadProgress)
+    case running(stage: AnalysisStage, progress: Double, startedAt: Date)
+    /// A durable checkpoint exists and nothing is scheduled. Named for what the
+    /// user sees, not for what was saved: `recovery` may be `.none` when a
+    /// cancellation left a checkpoint with no partial result yet.
+    case paused
+    case failed
+    case ready
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskTests</code></p>
+<p>Expected: PASS, 3 tests.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter/AnalysisTask.swift IlumionateTests/AnalysisTaskTests.swift
+git commit -m &quot;feat: add AnalysisTask and AnalysisTaskState&quot;</code></pre>
+<p>---</p>
+<h2 id="task-3-failure-merge">Task 3: Failure merge</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisFailureMerge.swift</code></li>
+<li>Test: <code>IlumionateTests/AnalysisFailureMergeTests.swift</code></li>
+</ul>
+<p>Background: failures live in two places. Durable manual recoveries (<code>AnalysisProgressStore.manualRecoveryCheckpoints()</code>) carry <code>dismissedAt</code> and survive relaunch, but exist only for <code>.manual</code> failures. Runtime <code>failedAnalyses</code> also holds <code>.automatic</code> and <code>.unavailable</code>, but is lost on termination. The merge must be total over the union of both key sets.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisFailureMergeTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisFailureMergeTests.swift
+//  IlumionateTests
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+private func snapshot(
+    failedAt: TimeInterval,
+    retryState: AnalysisRetryState = .manual,
+    dismissedAt: Date? = nil,
+    recoveryStage: AnalysisRecoveryStage = .transcription
+) -&gt; AnalysisFailureSnapshot {
+    AnalysisFailureSnapshot(
+        reason: .transcription,
+        failedStage: .transcription,
+        failedAt: Date(timeIntervalSince1970: failedAt),
+        recoveryStage: recoveryStage,
+        retryState: retryState,
+        dismissedAt: dismissedAt
+    )
+}
+
+struct AnalysisFailureMergeTests {
+
+    @Test func durableWinsOnEqualFailedAt() {
+        let id = UUID()
+        let durable = snapshot(failedAt: 100, dismissedAt: Date(timeIntervalSince1970: 150))
+        let runtime = snapshot(failedAt: 100, dismissedAt: nil)
+        let merged = AnalysisFailureMerge.merge(durable: [id: durable], runtime: [id: runtime])
+        #expect(merged[id]?.dismissedAt == Date(timeIntervalSince1970: 150))
+    }
+
+    @Test func laterFailedAtWins() {
+        let id = UUID()
+        let durable = snapshot(failedAt: 100, dismissedAt: Date(timeIntervalSince1970: 150))
+        let runtime = snapshot(failedAt: 300, dismissedAt: nil)
+        let merged = AnalysisFailureMerge.merge(durable: [id: durable], runtime: [id: runtime])
+        #expect(merged[id]?.failedAt == Date(timeIntervalSince1970: 300))
+        #expect(merged[id]?.dismissedAt == nil)
+    }
+
+    @Test func durableOnlyIsRetained() {
+        let id = UUID()
+        let durable = snapshot(failedAt: 100)
+        let merged = AnalysisFailureMerge.merge(durable: [id: durable], runtime: [:])
+        #expect(merged[id]?.failedAt == Date(timeIntervalSince1970: 100))
+    }
+
+    @Test func runtimeOnlyIsRetained() {
+        let id = UUID()
+        let runtime = snapshot(failedAt: 100, retryState: .unavailable, recoveryStage: .none)
+        let merged = AnalysisFailureMerge.merge(durable: [:], runtime: [id: runtime])
+        #expect(merged[id]?.retryState == .unavailable)
+    }
+
+    @Test func mergeCoversUnionOfBothKeySets() {
+        let a = UUID(), b = UUID()
+        let merged = AnalysisFailureMerge.merge(
+            durable: [a: snapshot(failedAt: 1)],
+            runtime: [b: snapshot(failedAt: 2)]
+        )
+        #expect(merged.count == 2)
+        #expect(merged[a] != nil)
+        #expect(merged[b] != nil)
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisFailureMergeTests</code></p>
+<p>Expected: <strong>build failure</strong>, <code>cannot find 'AnalysisFailureMerge' in scope</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisFailureMerge.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisFailureMerge.swift
+//  Ilumionate
+//
+//  Failures live in two places with different lifetimes. The durable manual
+//  recovery survives relaunch and carries `dismissedAt`, but only exists for
+//  `.manual` failures. The runtime list also holds `.automatic` and
+//  `.unavailable`, but is lost on termination.
+//
+
+import Foundation
+
+nonisolated enum AnalysisFailureMerge {
+
+    /// Total over the union of both key sets. The durable record is
+    /// authoritative on an equal `failedAt`; otherwise the later occurrence
+    /// wins, because `markRequiresManualRetry` writes a fresh recovery per
+    /// occurrence and a newer failure genuinely supersedes an older one.
+    static func merge(
+        durable: [UUID: AnalysisFailureSnapshot],
+        runtime: [UUID: AnalysisFailureSnapshot]
+    ) -&gt; [UUID: AnalysisFailureSnapshot] {
+        var merged = durable
+        for (id, runtimeFailure) in runtime {
+            guard let durableFailure = merged[id] else {
+                merged[id] = runtimeFailure
+                continue
+            }
+            if runtimeFailure.failedAt &gt; durableFailure.failedAt {
+                merged[id] = runtimeFailure
+            }
+        }
+        return merged
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisFailureMergeTests</code></p>
+<p>Expected: PASS, 5 tests.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter/AnalysisFailureMerge.swift IlumionateTests/AnalysisFailureMergeTests.swift
+git commit -m &quot;feat: merge durable and runtime analysis failures&quot;</code></pre>
+<p>---</p>
+<h2 id="task-4-the-projection-collapse-precedence">Task 4: The projection — collapse precedence</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisTaskProjection.swift</code></li>
+<li>Test: <code>IlumionateTests/AnalysisTaskProjectionTests.swift</code></li>
+</ul>
+<p>This is the correctness core. Read the spec's "Per-file collapse precedence" section before starting.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisTaskProjectionTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisTaskProjectionTests.swift
+//  IlumionateTests
+//
+//  Pure projection: no actor, no async, no disk.
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+private func makeAudioFile(id: UUID = UUID()) -&gt; AudioFile {
+    AudioFile(
+        id: id,
+        filename: &quot;test_\(id.uuidString).m4a&quot;,
+        duration: 300,
+        fileSize: 1_024_000,
+        createdDate: Date(timeIntervalSince1970: 0)
+    )
+}
+
+private func input(
+    files: [AudioFile],
+    active: ActiveAnalysisSnapshot? = nil,
+    download: ModelDownloadProgress? = nil,
+    queue: [UUID] = [],
+    failures: [UUID: AnalysisFailureSnapshot] = [:],
+    checkpoints: [UUID: AnalysisCheckpointSnapshot] = [:],
+    ready: [UUID: AnalysisReadySnapshot] = [:]
+) -&gt; AnalysisTaskProjectionInput {
+    AnalysisTaskProjectionInput(
+        libraryFiles: files,
+        activeAnalysis: active,
+        modelDownload: download,
+        queue: queue,
+        failures: failures,
+        checkpoints: checkpoints,
+        ready: ready
+    )
+}
+
+private func failure(
+    failedAt: TimeInterval = 100,
+    retryState: AnalysisRetryState = .manual,
+    dismissedAt: Date? = nil,
+    recoveryStage: AnalysisRecoveryStage = .transcription
+) -&gt; AnalysisFailureSnapshot {
+    AnalysisFailureSnapshot(
+        reason: .transcription,
+        failedStage: .transcription,
+        failedAt: Date(timeIntervalSince1970: failedAt),
+        recoveryStage: recoveryStage,
+        retryState: retryState,
+        dismissedAt: dismissedAt
+    )
+}
+
+private func checkpoint(
+    recoveryStage: AnalysisRecoveryStage = .transcription,
+    lastUpdated: TimeInterval = 100
+) -&gt; AnalysisCheckpointSnapshot {
+    AnalysisCheckpointSnapshot(
+        recoveryStage: recoveryStage,
+        startedAt: Date(timeIntervalSince1970: 0),
+        lastUpdated: Date(timeIntervalSince1970: lastUpdated)
+    )
+}
+
+private func ready(readyAt: TimeInterval = 100) -&gt; AnalysisReadySnapshot {
+    AnalysisReadySnapshot(sessionID: UUID(), readyAt: Date(timeIntervalSince1970: readyAt))
+}
+
+private func active(
+    _ fileID: UUID,
+    stage: AnalysisStage = .transcribing,
+    attemptID: UUID = UUID(),
+    progress: Double = 0.4
+) -&gt; ActiveAnalysisSnapshot {
+    ActiveAnalysisSnapshot(
+        audioFileID: fileID,
+        attemptID: attemptID,
+        stage: stage,
+        progress: progress,
+        startedAt: Date(timeIntervalSince1970: 50)
+    )
+}
+
+struct AnalysisTaskProjectionTests {
+
+    // MARK: Rule 1 / 2 — active
+
+    @Test func nonTerminalActiveCollapsesToRunning() {
+        let file = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(files: [file], active: active(file.id)))
+        #expect(tasks.first?.state == .running(stage: .transcribing, progress: 0.4, startedAt: Date(timeIntervalSince1970: 50)))
+    }
+
+    @Test func preparingRequiresMatchingFileAndAttempt() {
+        let file = makeAudioFile()
+        let attempt = UUID()
+        let download = ModelDownloadProgress(
+            audioFileID: file.id, attemptID: attempt,
+            completedUnitCount: 5, totalUnitCount: 10, fractionCompleted: 0.5
+        )
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file],
+            active: active(file.id, attemptID: attempt),
+            download: download
+        ))
+        #expect(tasks.first?.state == .preparing(download))
+    }
+
+    /// The lookahead prefetch downloads for the *next* file while the current
+    /// file is generating. A global download flag would mislabel the active file.
+    @Test func speculativeDownloadDoesNotRelabelActiveFile() {
+        let current = makeAudioFile()
+        let next = makeAudioFile()
+        let download = ModelDownloadProgress(
+            audioFileID: next.id, attemptID: UUID(),
+            completedUnitCount: 5, totalUnitCount: 10, fractionCompleted: 0.5
+        )
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [current, next],
+            active: active(current.id, stage: .generatingSession),
+            download: download,
+            queue: [next.id]
+        ))
+        let currentTask = tasks.first { $0.id == current.id }
+        let nextTask = tasks.first { $0.id == next.id }
+        #expect(currentTask?.state == .running(stage: .generatingSession, progress: 0.4, startedAt: Date(timeIntervalSince1970: 50)))
+        #expect(nextTask?.state == .queued(position: 1))
+    }
+
+    // MARK: Terminal active falls through
+
+    @Test func terminalFailedActiveCollapsesToQueuedNotRunning() {
+        let file = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file],
+            active: active(file.id, stage: .failed),
+            queue: [file.id],
+            failures: [file.id: failure(retryState: .automatic)]
+        ))
+        #expect(tasks.first?.state == .queued(position: 1))
+    }
+
+    @Test func terminalCompleteActiveCollapsesToReadyWhenReadyExists() {
+        let file = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file],
+            active: active(file.id, stage: .complete),
+            ready: [file.id: ready()]
+        ))
+        #expect(tasks.first?.state == .ready)
+    }
+
+    @Test func terminalCompleteWithoutReadySnapshotDoesNotSynthesiseReady() {
+        let file = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file],
+            active: active(file.id, stage: .complete),
+            checkpoints: [file.id: checkpoint()]
+        ))
+        #expect(tasks.first?.state == .paused)
+    }
+
+    // MARK: Rule 3 above rule 4
+
+    @Test func automaticRetryCollapsesToQueuedAndKeepsFailureAsAttribute() {
+        let file = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file],
+            queue: [file.id],
+            failures: [file.id: failure(retryState: .automatic)]
+        ))
+        #expect(tasks.first?.state == .queued(position: 1))
+        #expect(tasks.first?.lastFailure != nil)
+    }
+
+    @Test func queuePositionsAreOneBased() {
+        let a = makeAudioFile(), b = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(files: [a, b], queue: [a.id, b.id]))
+        #expect(tasks.first { $0.id == a.id }?.state == .queued(position: 1))
+        #expect(tasks.first { $0.id == b.id }?.state == .queued(position: 2))
+    }
+
+    @Test func duplicateQueueEntriesUseFirstOccurrence() {
+        let file = makeAudioFile()
+        let other = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file, other],
+            queue: [file.id, other.id, file.id]
+        ))
+        #expect(tasks.first { $0.id == file.id }?.state == .queued(position: 1))
+    }
+
+    // MARK: Rule 5 — paused
+
+    @Test func checkpointWithNoRecoveryStageStillProducesPausedTask() {
+        let file = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file],
+            checkpoints: [file.id: checkpoint(recoveryStage: .none)]
+        ))
+        #expect(tasks.first?.state == .paused)
+        #expect(tasks.first?.recovery == AnalysisRecoveryStage.none)
+    }
+
+    @Test func checkpointOlderThanReadyYieldsReady() {
+        let file = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file],
+            checkpoints: [file.id: checkpoint(lastUpdated: 50)],
+            ready: [file.id: ready(readyAt: 100)]
+        ))
+        #expect(tasks.first?.state == .ready)
+    }
+
+    @Test func checkpointNewerThanReadyYieldsPaused() {
+        let file = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file],
+            checkpoints: [file.id: checkpoint(lastUpdated: 150)],
+            ready: [file.id: ready(readyAt: 100)]
+        ))
+        #expect(tasks.first?.state == .paused)
+    }
+
+    // MARK: Library is the spine
+
+    @Test func fileAbsentFromLibraryEmitsNoTask() {
+        let orphan = UUID()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [],
+            queue: [orphan],
+            failures: [orphan: failure()]
+        ))
+        #expect(tasks.isEmpty)
+    }
+
+    @Test func fileWithNoStateAtAllEmitsNoTask() {
+        let file = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(files: [file]))
+        #expect(tasks.isEmpty)
+    }
+
+    // MARK: Attributes survive collapse
+
+    @Test func attributesSurviveQueuedCollapse() {
+        let file = makeAudioFile()
+        let readySnapshot = ready()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [file],
+            queue: [file.id],
+            failures: [file.id: failure(retryState: .automatic)],
+            checkpoints: [file.id: checkpoint(recoveryStage: .analysis)],
+            ready: [file.id: readySnapshot]
+        ))
+        let task = tasks.first
+        #expect(task?.state == .queued(position: 1))
+        #expect(task?.lastFailure?.retryState == .automatic)
+        #expect(task?.recovery == AnalysisRecoveryStage.analysis)
+        #expect(task?.ready == readySnapshot)
+    }
+
+    // MARK: Determinism
+
+    @Test func identicalInputsProduceEqualSnapshots() {
+        let file = makeAudioFile()
+        let shared = input(files: [file], queue: [file.id])
+        #expect(AnalysisTaskProjection.tasks(from: shared) == AnalysisTaskProjection.tasks(from: shared))
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskProjectionTests</code></p>
+<p>Expected: <strong>build failure</strong>, <code>cannot find 'AnalysisTaskProjection' in scope</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisTaskProjection.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisTaskProjection.swift
+//  Ilumionate
+//
+//  Pure input -&gt; ordered [AnalysisTask]. No actor, no async, no disk access.
+//  Every analysis surface renders this one list; none re-derives state.
+//
+
+import Foundation
+
+nonisolated struct AnalysisTaskProjectionInput: Equatable, Sendable {
+    let libraryFiles: [AudioFile]
+    let activeAnalysis: ActiveAnalysisSnapshot?
+    let modelDownload: ModelDownloadProgress?
+    /// Audio file ids in queue order. The assembler enforces uniqueness; the
+    /// projection uses first occurrence if a duplicate slips through.
+    let queue: [UUID]
+    let failures: [UUID: AnalysisFailureSnapshot]
+    let checkpoints: [UUID: AnalysisCheckpointSnapshot]
+    let ready: [UUID: AnalysisReadySnapshot]
+}
+
+nonisolated enum AnalysisTaskProjection {
+
+    static func tasks(from input: AnalysisTaskProjectionInput) -&gt; [AnalysisTask] {
+        var positions: [UUID: Int] = [:]
+        for (index, id) in input.queue.enumerated() where positions[id] == nil {
+            positions[id] = index + 1          // one-based, first occurrence
+        }
+
+        let tasks = input.libraryFiles.compactMap { file -&gt; AnalysisTask? in
+            guard let state = state(for: file.id, in: input, queuePosition: positions[file.id]) else {
+                return nil
+            }
+            return AnalysisTask(
+                audioFile: file,
+                state: state,
+                lastFailure: input.failures[file.id],
+                recovery: input.checkpoints[file.id]?.recoveryStage ?? .none,
+                ready: input.ready[file.id]
+            )
+        }
+
+        return sorted(tasks, queuePositions: positions)
+    }
+
+    // MARK: Collapse
+
+    private static func state(
+        for fileID: UUID,
+        in input: AnalysisTaskProjectionInput,
+        queuePosition: Int?
+    ) -&gt; AnalysisTaskState? {
+        // Rules 1 and 2 — an active, non-terminal analysis. Terminal stages fall
+        // through: the pipeline leaves `currentAnalysis` populated with
+        // `.failed` while re-queueing the file, and collapsing that to
+        // `.running(.failed)` would defeat the automatic-retry rule.
+        if let active = input.activeAnalysis, active.audioFileID == fileID, !active.isTerminal {
+            if let download = input.modelDownload,
+               download.audioFileID == fileID,
+               download.attemptID == active.attemptID {
+                return .preparing(download)
+            }
+            return .running(stage: active.stage, progress: active.progress, startedAt: active.startedAt)
+        }
+
+        // Rule 3 — above rule 4 so an automatic retry reads as queued.
+        if let position = queuePosition {
+            return .queued(position: position)
+        }
+
+        // Rule 4
+        if input.failures[fileID] != nil {
+            return .failed
+        }
+
+        // Rule 5 — a checkpoint counts even with `.none` recovery, but not when
+        // a completed session has already superseded it.
+        if let checkpoint = input.checkpoints[fileID] {
+            let overtaken = input.ready[fileID].map { checkpoint.lastUpdated &lt;= $0.readyAt } ?? false
+            if !overtaken {
+                return .paused
+            }
+        }
+
+        // Rule 6
+        if input.ready[fileID] != nil {
+            return .ready
+        }
+
+        return nil
+    }
+
+    // MARK: Sort
+
+    /// Tier 1 is computed here rather than on the failure snapshot because it
+    /// depends on queue membership: an `.automatic` failure is only harmless
+    /// while something is going to retry it.
+    static func needsDecision(_ task: AnalysisTask, queuePositions: [UUID: Int]) -&gt; Bool {
+        guard let failure = task.lastFailure, failure.dismissedAt == nil else { return false }
+        return failure.needsDecisionIntrinsically || queuePositions[task.id] == nil
+    }
+
+    private static func tier(_ task: AnalysisTask, queuePositions: [UUID: Int]) -&gt; Int {
+        if needsDecision(task, queuePositions: queuePositions) { return 1 }
+        switch task.state {
+        case .preparing, .running: return 2
+        case .queued:              return 3
+        case .paused:              return 4
+        case .failed:              return 5
+        case .ready:               return 6
+        }
+    }
+
+    private static func sorted(_ tasks: [AnalysisTask], queuePositions: [UUID: Int]) -&gt; [AnalysisTask] {
+        tasks.sorted { lhs, rhs in
+            let lhsTier = tier(lhs, queuePositions: queuePositions)
+            let rhsTier = tier(rhs, queuePositions: queuePositions)
+            if lhsTier != rhsTier { return lhsTier &lt; rhsTier }
+            if let ordering = withinTier(lhsTier, lhs, rhs, queuePositions: queuePositions) { return ordering }
+            return lhs.id.uuidString &lt; rhs.id.uuidString      // stable tie-breaker
+        }
+    }
+
+    private static func withinTier(
+        _ tier: Int,
+        _ lhs: AnalysisTask,
+        _ rhs: AnalysisTask,
+        queuePositions: [UUID: Int]
+    ) -&gt; Bool? {
+        switch tier {
+        case 1, 5:
+            guard let l = lhs.lastFailure?.failedAt, let r = rhs.lastFailure?.failedAt, l != r else { return nil }
+            return l &gt; r
+        case 2:
+            guard case .running(_, _, let l) = lhs.state, case .running(_, _, let r) = rhs.state, l != r else { return nil }
+            return l &gt; r
+        case 3:
+            guard let l = queuePositions[lhs.id], let r = queuePositions[rhs.id], l != r else { return nil }
+            return l &lt; r
+        case 6:
+            guard let l = lhs.ready?.readyAt, let r = rhs.ready?.readyAt, l != r else { return nil }
+            return l &gt; r
+        default:
+            return nil
+        }
+    }
+}</code></pre>
+<p>Note: tier 4 (<code>.paused</code>) ordering by checkpoint <code>lastUpdated</code> is added in Task 5, which is where the sorting tests live. The projection carries <code>recovery</code> but not <code>lastUpdated</code>, so tier 4 currently falls to the id tie-breaker.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskProjectionTests</code></p>
+<p>Expected: PASS, 16 tests.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter/AnalysisTaskProjection.swift IlumionateTests/AnalysisTaskProjectionTests.swift
+git commit -m &quot;feat: project analysis state into one ordered task list&quot;</code></pre>
+<p>---</p>
+<h2 id="task-5-tier-ordering-and-the-stranded-automatic-failure">Task 5: Tier ordering and the stranded automatic failure</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>Ilumionate/AnalysisCenter/AnalysisTask.swift</code></li>
+<li>Modify: <code>Ilumionate/AnalysisCenter/AnalysisTaskProjection.swift</code></li>
+<li>Test: <code>IlumionateTests/AnalysisTaskSortingTests.swift</code></li>
+</ul>
+<p>Tier 4 needs the checkpoint's <code>lastUpdated</code>, which the task does not currently carry. Add it to <code>AnalysisTask</code> so sorting is total without re-reading the input.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisTaskSortingTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisTaskSortingTests.swift
+//  IlumionateTests
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+private func makeAudioFile(id: UUID = UUID()) -&gt; AudioFile {
+    AudioFile(
+        id: id,
+        filename: &quot;test_\(id.uuidString).m4a&quot;,
+        duration: 300,
+        fileSize: 1_024_000,
+        createdDate: Date(timeIntervalSince1970: 0)
+    )
+}
+
+private func failure(
+    failedAt: TimeInterval,
+    retryState: AnalysisRetryState = .manual,
+    dismissedAt: Date? = nil
+) -&gt; AnalysisFailureSnapshot {
+    AnalysisFailureSnapshot(
+        reason: .transcription,
+        failedStage: .transcription,
+        failedAt: Date(timeIntervalSince1970: failedAt),
+        recoveryStage: .transcription,
+        retryState: retryState,
+        dismissedAt: dismissedAt
+    )
+}
+
+private func input(
+    files: [AudioFile],
+    active: ActiveAnalysisSnapshot? = nil,
+    queue: [UUID] = [],
+    failures: [UUID: AnalysisFailureSnapshot] = [:],
+    checkpoints: [UUID: AnalysisCheckpointSnapshot] = [:],
+    ready: [UUID: AnalysisReadySnapshot] = [:]
+) -&gt; AnalysisTaskProjectionInput {
+    AnalysisTaskProjectionInput(
+        libraryFiles: files, activeAnalysis: active, modelDownload: nil,
+        queue: queue, failures: failures, checkpoints: checkpoints, ready: ready
+    )
+}
+
+struct AnalysisTaskSortingTests {
+
+    @Test func actionRequiredFailureOutranksActiveWork() {
+        let failed = makeAudioFile()
+        let running = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [running, failed],
+            active: ActiveAnalysisSnapshot(
+                audioFileID: running.id, attemptID: UUID(), stage: .transcribing,
+                progress: 0.5, startedAt: Date(timeIntervalSince1970: 10)
+            ),
+            failures: [failed.id: failure(failedAt: 100)]
+        ))
+        #expect(tasks.first?.id == failed.id)
+    }
+
+    /// Criterion 7: an automatic retry is still queued, so it must not
+    /// masquerade as something needing a decision.
+    @Test func queuedAutomaticRetryStaysBelowActiveWork() {
+        let retrying = makeAudioFile()
+        let running = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [retrying, running],
+            active: ActiveAnalysisSnapshot(
+                audioFileID: running.id, attemptID: UUID(), stage: .transcribing,
+                progress: 0.5, startedAt: Date(timeIntervalSince1970: 10)
+            ),
+            queue: [retrying.id],
+            failures: [retrying.id: failure(failedAt: 100, retryState: .automatic)]
+        ))
+        #expect(tasks.first?.id == running.id)
+    }
+
+    /// The hole: clearQueue() strands an automatic failure. Nothing will retry
+    /// it, so it must surface rather than sitting in no tier at all.
+    @Test func strandedAutomaticFailureReachesTierOne() {
+        let stranded = makeAudioFile()
+        let running = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [stranded, running],
+            active: ActiveAnalysisSnapshot(
+                audioFileID: running.id, attemptID: UUID(), stage: .transcribing,
+                progress: 0.5, startedAt: Date(timeIntervalSince1970: 10)
+            ),
+            queue: [],
+            failures: [stranded.id: failure(failedAt: 100, retryState: .automatic)]
+        ))
+        #expect(tasks.first?.id == stranded.id)
+    }
+
+    @Test func dismissedFailuresSortBelowPaused() {
+        let dismissed = makeAudioFile()
+        let paused = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [dismissed, paused],
+            failures: [dismissed.id: failure(failedAt: 100, dismissedAt: Date(timeIntervalSince1970: 200))],
+            checkpoints: [paused.id: AnalysisCheckpointSnapshot(
+                recoveryStage: .transcription,
+                startedAt: Date(timeIntervalSince1970: 0),
+                lastUpdated: Date(timeIntervalSince1970: 10)
+            )]
+        ))
+        #expect(tasks.first?.id == paused.id)
+    }
+
+    @Test func pausedTasksOrderByCheckpointLastUpdatedDescending() {
+        let older = makeAudioFile()
+        let newer = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [older, newer],
+            checkpoints: [
+                older.id: AnalysisCheckpointSnapshot(
+                    recoveryStage: .transcription,
+                    startedAt: Date(timeIntervalSince1970: 0),
+                    lastUpdated: Date(timeIntervalSince1970: 10)
+                ),
+                newer.id: AnalysisCheckpointSnapshot(
+                    recoveryStage: .transcription,
+                    startedAt: Date(timeIntervalSince1970: 0),
+                    lastUpdated: Date(timeIntervalSince1970: 99)
+                )
+            ]
+        ))
+        #expect(tasks.first?.id == newer.id)
+    }
+
+    @Test func readyTasksOrderByReadyAtDescending() {
+        let older = makeAudioFile()
+        let newer = makeAudioFile()
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [older, newer],
+            ready: [
+                older.id: AnalysisReadySnapshot(sessionID: UUID(), readyAt: Date(timeIntervalSince1970: 10)),
+                newer.id: AnalysisReadySnapshot(sessionID: UUID(), readyAt: Date(timeIntervalSince1970: 99))
+            ]
+        ))
+        #expect(tasks.first?.id == newer.id)
+    }
+
+    @Test func equalTimestampsFallBackToStableIDOrder() {
+        let a = makeAudioFile(id: UUID(uuidString: &quot;00000000-0000-0000-0000-00000000000A&quot;)!)
+        let b = makeAudioFile(id: UUID(uuidString: &quot;00000000-0000-0000-0000-00000000000B&quot;)!)
+        let sameReady = Date(timeIntervalSince1970: 50)
+        let tasks = AnalysisTaskProjection.tasks(from: input(
+            files: [b, a],
+            ready: [
+                a.id: AnalysisReadySnapshot(sessionID: UUID(), readyAt: sameReady),
+                b.id: AnalysisReadySnapshot(sessionID: UUID(), readyAt: sameReady)
+            ]
+        ))
+        #expect(tasks.map(\.id) == [a.id, b.id])
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskSortingTests</code></p>
+<p>Expected: FAIL on <code>pausedTasksOrderByCheckpointLastUpdatedDescending</code> — tier 4 currently falls to the id tie-breaker, so the order is by UUID rather than recency.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>In <code>Ilumionate/AnalysisCenter/AnalysisTask.swift</code>, add the field after <code>recovery</code>:</p>
+<pre><code class="lang-swift">    /// The most useful partial result on disk, independent of `state`.
+    let recovery: AnalysisRecoveryStage
+    /// Checkpoint recency, carried so tier-4 ordering is total without
+    /// re-reading the projection input. `nil` when no checkpoint exists.
+    let checkpointLastUpdated: Date?</code></pre>
+<p>In <code>AnalysisTaskProjection.tasks(from:)</code>, populate it:</p>
+<pre><code class="lang-swift">            return AnalysisTask(
+                audioFile: file,
+                state: state,
+                lastFailure: input.failures[file.id],
+                recovery: input.checkpoints[file.id]?.recoveryStage ?? .none,
+                checkpointLastUpdated: input.checkpoints[file.id]?.lastUpdated,
+                ready: input.ready[file.id]
+            )</code></pre>
+<p>In <code>withinTier</code>, add the tier-4 case before <code>default</code>:</p>
+<pre><code class="lang-swift">        case 4:
+            guard let l = lhs.checkpointLastUpdated, let r = rhs.checkpointLastUpdated, l != r else { return nil }
+            return l &gt; r</code></pre>
+<p>Then update the three existing <code>AnalysisTask(...)</code> literals in <code>IlumionateTests/AnalysisTaskTests.swift</code> to pass <code>checkpointLastUpdated: nil</code> after <code>recovery:</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run tests to verify they pass</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskSortingTests</code></p>
+<p>Expected: PASS, 7 tests.</p>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskTests</code></p>
+<p>Expected: PASS, 3 tests.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter IlumionateTests/AnalysisTaskSortingTests.swift IlumionateTests/AnalysisTaskTests.swift
+git commit -m &quot;feat: order analysis tasks by tier with deterministic tie-breaking&quot;</code></pre>
+<p>---</p>
+<h2 id="task-6-persist-dismissal-on-the-failure-occurrence">Task 6: Persist dismissal on the failure occurrence</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>Ilumionate/AnalysisProgressStore.swift:58-62</code> (struct), <code>:236-242</code> (<code>persist</code>)</li>
+<li>Test: <code>IlumionateTests/AnalysisDismissalTests.swift</code></li>
+</ul>
+<p><code>restoreManualRecoveries()</code> rebuilds <code>failedAnalyses</code> from durable checkpoints on every launch, so dismissal held only in memory is resurrected — this is ERR-013. Storing <code>dismissedAt</code> inside <code>AnalysisManualRecovery</code> means <code>saveQueued</code> (which already nils <code>manualRecovery</code> at <code>:120-129</code>) and <code>markRequiresManualRetry</code> (which builds a fresh recovery at <code>:212</code>) invalidate it for free.</p>
+<p><code>persist()</code> currently swallows both encoding and write errors. Same defect class as ERR-005.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisDismissalTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisDismissalTests.swift
+//  IlumionateTests
+//
+//  ERR-013: dismissal must survive relaunch without discarding resumable work.
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+private func makeAudioFile(id: UUID = UUID()) -&gt; AudioFile {
+    AudioFile(
+        id: id,
+        filename: &quot;test_\(id.uuidString).m4a&quot;,
+        duration: 300,
+        fileSize: 1_024_000,
+        createdDate: Date(timeIntervalSince1970: 0)
+    )
+}
+
+private func temporaryStoreURL() -&gt; URL {
+    URL.temporaryDirectory.appending(path: &quot;AnalysisProgress-\(UUID().uuidString).json&quot;)
+}
+
+struct AnalysisDismissalTests {
+
+    @Test func dismissedRecoveryRoundTripsThroughANewStore() async throws {
+        let url = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let file = makeAudioFile()
+        let failedAt = Date(timeIntervalSince1970: 100)
+
+        let store = AnalysisProgressStore(storeURL: url)
+        await store.saveTranscription(.empty, for: file)
+        await store.markRequiresManualRetry(
+            for: file, reason: .transcription, failedStage: .transcription, failedAt: failedAt
+        )
+        let dismissed = await store.dismiss(fileID: file.id, expectingFailedAt: failedAt)
+        #expect(dismissed)
+
+        let reloaded = AnalysisProgressStore(storeURL: url)
+        let checkpoint = await reloaded.checkpoint(for: file)
+        #expect(checkpoint?.manualRecovery?.dismissedAt != nil)
+        // The whole point: dismissal must not discard resumable work.
+        #expect(checkpoint?.transcription != nil)
+    }
+
+    @Test func staleFailedAtCannotDismissANewerOccurrence() async throws {
+        let url = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let file = makeAudioFile()
+        let store = AnalysisProgressStore(storeURL: url)
+
+        await store.markRequiresManualRetry(
+            for: file, reason: .transcription, failedStage: .transcription,
+            failedAt: Date(timeIntervalSince1970: 300)
+        )
+        let dismissed = await store.dismiss(
+            fileID: file.id, expectingFailedAt: Date(timeIntervalSince1970: 100)
+        )
+        #expect(dismissed == false)
+        let checkpoint = await store.checkpoint(for: file)
+        #expect(checkpoint?.manualRecovery?.dismissedAt == nil)
+    }
+
+    @Test func newFailureOccurrenceStartsUndismissed() async throws {
+        let url = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let file = makeAudioFile()
+        let store = AnalysisProgressStore(storeURL: url)
+        let first = Date(timeIntervalSince1970: 100)
+
+        await store.markRequiresManualRetry(
+            for: file, reason: .transcription, failedStage: .transcription, failedAt: first
+        )
+        _ = await store.dismiss(fileID: file.id, expectingFailedAt: first)
+
+        let second = Date(timeIntervalSince1970: 500)
+        await store.markRequiresManualRetry(
+            for: file, reason: .transcription, failedStage: .transcription, failedAt: second
+        )
+        let checkpoint = await store.checkpoint(for: file)
+        #expect(checkpoint?.manualRecovery?.dismissedAt == nil)
+        #expect(checkpoint?.manualRecovery?.failedAt == second)
+    }
+
+    @Test func retryClearsDismissal() async throws {
+        let url = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let file = makeAudioFile()
+        let store = AnalysisProgressStore(storeURL: url)
+        let failedAt = Date(timeIntervalSince1970: 100)
+
+        await store.saveTranscription(.empty, for: file)
+        await store.markRequiresManualRetry(
+            for: file, reason: .transcription, failedStage: .transcription, failedAt: failedAt
+        )
+        _ = await store.dismiss(fileID: file.id, expectingFailedAt: failedAt)
+
+        await store.saveQueued(file)          // this is what a retry does
+        let checkpoint = await store.checkpoint(for: file)
+        #expect(checkpoint?.manualRecovery == nil)
+        // Retry resumes from the saved transcript rather than transcribing again.
+        #expect(checkpoint?.transcription != nil)
+    }
+
+    @Test func removeDeletesTheCheckpointEntirely() async throws {
+        let url = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let file = makeAudioFile()
+        let store = AnalysisProgressStore(storeURL: url)
+        let failedAt = Date(timeIntervalSince1970: 100)
+
+        await store.saveTranscription(.empty, for: file)
+        await store.markRequiresManualRetry(
+            for: file, reason: .transcription, failedStage: .transcription, failedAt: failedAt
+        )
+        let removed = await store.remove(fileID: file.id, expectingFailedAt: failedAt)
+        #expect(removed)
+
+        let reloaded = AnalysisProgressStore(storeURL: url)
+        #expect(await reloaded.checkpoint(for: file) == nil)
+        #expect(await reloaded.manualRecoveryCheckpoints().isEmpty)
+    }
+
+    @Test func dismissReturnsFalseWhenNoRecoveryExists() async throws {
+        let url = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let file = makeAudioFile()
+        let store = AnalysisProgressStore(storeURL: url)
+        let dismissed = await store.dismiss(
+            fileID: file.id, expectingFailedAt: Date(timeIntervalSince1970: 100)
+        )
+        #expect(dismissed == false)
+    }
+}</code></pre>
+<p>If <code>AudioTranscriptionResult</code> has no <code>.empty</code> static, replace <code>.empty</code> with a minimal literal matching its initialiser — check <code>Ilumionate/AudioAnalyzer.swift</code> for the declaration and use the same shape the existing <code>AnalysisCacheTests.swift</code> fixtures use.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisDismissalTests</code></p>
+<p>Expected: <strong>build failure</strong>, <code>value of type 'AnalysisProgressStore' has no member 'dismiss'</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>In <code>Ilumionate/AnalysisProgressStore.swift</code>, change the recovery struct:</p>
+<pre><code class="lang-swift">nonisolated struct AnalysisManualRecovery: Codable, Sendable {
+    let reason: AnalyticsAnalysisFailureReason
+    let failedStage: AnalyticsAnalysisStage
+    let failedAt: Date
+    /// Set when the user dismisses this specific occurrence. Optional with a
+    /// default so existing on-disk checkpoints decode unchanged. Living on the
+    /// occurrence means `saveQueued` and `markRequiresManualRetry` invalidate
+    /// it for free.
+    var dismissedAt: Date? = nil
+}</code></pre>
+<p>Replace <code>persist()</code> and add the two operations:</p>
+<pre><code class="lang-swift">    func dismiss(fileID: UUID, expectingFailedAt: Date) -&gt; Bool {
+        guard var checkpoint = checkpoints[fileID],
+              var recovery = checkpoint.manualRecovery,
+              recovery.failedAt == expectingFailedAt else { return false }
+
+        let previous = checkpoints[fileID]
+        recovery.dismissedAt = Date()
+        checkpoint.manualRecovery = recovery
+        checkpoints[fileID] = checkpoint
+
+        guard persist() else {
+            checkpoints[fileID] = previous          // never report a write that did not land
+            return false
+        }
+        Log.analysis.info(&quot;🙈 Checkpoint: dismissed failure for \(checkpoint.audioFile.filename)&quot;)
+        return true
+    }
+
+    func remove(fileID: UUID, expectingFailedAt: Date) -&gt; Bool {
+        guard let checkpoint = checkpoints[fileID],
+              let recovery = checkpoint.manualRecovery,
+              recovery.failedAt == expectingFailedAt else { return false }
+
+        checkpoints.removeValue(forKey: fileID)
+        guard persist() else {
+            checkpoints[fileID] = checkpoint
+            return false
+        }
+        Log.analysis.info(&quot;🗑️ Checkpoint: removed \(checkpoint.audioFile.filename)&quot;)
+        return true
+    }
+
+    // MARK: Private
+
+    /// Reports whether the write landed. Previously swallowed both failures,
+    /// which is how a dismissal could appear to stick and then return on the
+    /// next launch (ERR-013), and the same defect class as ERR-005.
+    @discardableResult
+    private func persist() -&gt; Bool {
+        let stringKeyed = Dictionary(
+            uniqueKeysWithValues: checkpoints.map { ($0.key.uuidString, $0.value) }
+        )
+        do {
+            let data = try JSONEncoder().encode(stringKeyed)
+            try data.write(to: storeURL, options: .atomic)
+            return true
+        } catch {
+            Log.analysis.error(&quot;❌ Checkpoint store write failed: \(error)&quot;)
+            return false
+        }
+    }</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisDismissalTests</code></p>
+<p>Expected: PASS, 6 tests.</p>
+<p>Then confirm nothing else broke:</p>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisCacheTests</code></p>
+<p>Expected: PASS.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisProgressStore.swift IlumionateTests/AnalysisDismissalTests.swift
+git commit -m &quot;fix: persist failure dismissal on the occurrence (ERR-013)&quot;</code></pre>
+<p>---</p>
+<h2 id="task-7-attempt-identity-on-the-active-analysis">Task 7: Attempt identity on the active analysis</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>Ilumionate/AnalysisStateManager.swift:1367-1396</code></li>
+<li>Test: <code>IlumionateTests/AnalysisAttemptIdentityTests.swift</code></li>
+</ul>
+<p><code>ActiveAnalysis</code> has no attempt identity. <code>ActiveAnalysisSnapshot.attemptID</code> needs a source, and Phase 2b's exactly-once terminalisation will need the same field. Adding it now keeps Phase 2 additive.</p>
+<p>Note <code>ActiveAnalysis.==</code> deliberately excludes <code>startedAt</code> so elapsed time does not cause spurious UI diffs. <code>attemptID</code> is likewise excluded — it is constant for the lifetime of the instance, so comparing it adds nothing.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisAttemptIdentityTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisAttemptIdentityTests.swift
+//  IlumionateTests
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+private func makeAudioFile(id: UUID = UUID()) -&gt; AudioFile {
+    AudioFile(
+        id: id,
+        filename: &quot;test_\(id.uuidString).m4a&quot;,
+        duration: 300,
+        fileSize: 1_024_000,
+        createdDate: Date(timeIntervalSince1970: 0)
+    )
+}
+
+@MainActor
+struct AnalysisAttemptIdentityTests {
+
+    @Test func eachActiveAnalysisGetsADistinctAttemptID() {
+        let file = makeAudioFile()
+        let first = ActiveAnalysis(audioFile: file, stage: .starting, progress: 0)
+        let second = ActiveAnalysis(audioFile: file, stage: .starting, progress: 0)
+        #expect(first.attemptID != second.attemptID)
+    }
+
+    @Test func attemptIDIsStableForTheLifetimeOfTheInstance() {
+        let analysis = ActiveAnalysis(audioFile: makeAudioFile(), stage: .starting, progress: 0)
+        let captured = analysis.attemptID
+        analysis.stage = .transcribing
+        analysis.progress = 0.5
+        #expect(analysis.attemptID == captured)
+    }
+
+    @Test func snapshotCarriesAttemptID() {
+        let analysis = ActiveAnalysis(audioFile: makeAudioFile(), stage: .transcribing, progress: 0.5)
+        let snapshot = analysis.snapshot
+        #expect(snapshot.attemptID == analysis.attemptID)
+        #expect(snapshot.audioFileID == analysis.audioFile.id)
+        #expect(snapshot.stage == .transcribing)
+        #expect(snapshot.progress == 0.5)
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisAttemptIdentityTests</code></p>
+<p>Expected: <strong>build failure</strong>, <code>value of type 'ActiveAnalysis' has no member 'attemptID'</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>In <code>Ilumionate/AnalysisStateManager.swift</code>, add to <code>ActiveAnalysis</code> after <code>startedAt</code>:</p>
+<pre><code class="lang-swift">    /// Identifies this attempt. Phase 2b uses it so a late result cannot
+    /// overwrite a failure the watchdog already recorded; Phase 2c uses it to
+    /// attribute a model download to the right attempt. Excluded from `==` for
+    /// the same reason as `startedAt`: it never changes within an instance.
+    let attemptID = UUID()
+
+    /// Value snapshot for the Analysis Task Center projection.
+    var snapshot: ActiveAnalysisSnapshot {
+        ActiveAnalysisSnapshot(
+            audioFileID: audioFile.id,
+            attemptID: attemptID,
+            stage: stage,
+            progress: progress,
+            startedAt: startedAt
+        )
+    }</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisAttemptIdentityTests</code></p>
+<p>Expected: PASS, 3 tests.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisStateManager.swift IlumionateTests/AnalysisAttemptIdentityTests.swift
+git commit -m &quot;feat: give each analysis attempt a stable identity&quot;</code></pre>
+<p>---</p>
+<h2 id="task-8-input-assembler">Task 8: Input assembler</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisTaskInputAssembler.swift</code></li>
+<li>Modify: <code>Ilumionate/AnalysisProgressStore.swift</code> (add <code>allCheckpoints()</code>)</li>
+<li>Test: <code>IlumionateTests/AnalysisTaskInputAssemblerTests.swift</code></li>
+</ul>
+<p>The assembler owns every disk and store read. It is the only place that knows <code>GeneratedSessionStore</code> cannot enumerate — each accessor takes an <code>AudioFile</code>, so ready sessions must be discovered by walking the library inventory.</p>
+<p>Responsibilities the projection deliberately does not have: de-duplicating the queue, omitting sessions that fail to decode, and deriving <code>readyAt</code> from the session file's modification date.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisTaskInputAssemblerTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisTaskInputAssemblerTests.swift
+//  IlumionateTests
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+private func makeAudioFile(id: UUID = UUID()) -&gt; AudioFile {
+    AudioFile(
+        id: id,
+        filename: &quot;test_\(id.uuidString).m4a&quot;,
+        duration: 300,
+        fileSize: 1_024_000,
+        createdDate: Date(timeIntervalSince1970: 0)
+    )
+}
+
+struct AnalysisTaskInputAssemblerTests {
+
+    @Test func queueIsDeduplicatedPreservingFirstOccurrence() {
+        let a = UUID(), b = UUID()
+        #expect(AnalysisTaskInputAssembler.deduplicate(queue: [a, b, a, b]) == [a, b])
+    }
+
+    @Test func deduplicateLeavesAUniqueQueueUnchanged() {
+        let a = UUID(), b = UUID()
+        #expect(AnalysisTaskInputAssembler.deduplicate(queue: [a, b]) == [a, b])
+    }
+
+    @Test func failureSnapshotCarriesDismissalFromTheDurableRecovery() {
+        let file = makeAudioFile()
+        let dismissedAt = Date(timeIntervalSince1970: 200)
+        let checkpoint = AnalysisCheckpoint(
+            audioFile: file,
+            transcription: nil,
+            analysis: nil,
+            startedAt: Date(timeIntervalSince1970: 0),
+            lastUpdated: Date(timeIntervalSince1970: 100),
+            manualRecovery: AnalysisManualRecovery(
+                reason: .transcription,
+                failedStage: .transcription,
+                failedAt: Date(timeIntervalSince1970: 100),
+                dismissedAt: dismissedAt
+            )
+        )
+        let snapshot = AnalysisTaskInputAssembler.failureSnapshot(from: checkpoint)
+        #expect(snapshot?.dismissedAt == dismissedAt)
+        #expect(snapshot?.retryState == .manual)
+        #expect(snapshot?.failedAt == Date(timeIntervalSince1970: 100))
+    }
+
+    @Test func checkpointWithoutManualRecoveryYieldsNoFailureSnapshot() {
+        let checkpoint = AnalysisCheckpoint(
+            audioFile: makeAudioFile(),
+            transcription: nil,
+            analysis: nil,
+            startedAt: Date(timeIntervalSince1970: 0),
+            lastUpdated: Date(timeIntervalSince1970: 100)
+        )
+        #expect(AnalysisTaskInputAssembler.failureSnapshot(from: checkpoint) == nil)
+    }
+
+    @Test func checkpointSnapshotCarriesRecoveryStageAndRecency() {
+        let checkpoint = AnalysisCheckpoint(
+            audioFile: makeAudioFile(),
+            transcription: nil,
+            analysis: nil,
+            startedAt: Date(timeIntervalSince1970: 0),
+            lastUpdated: Date(timeIntervalSince1970: 100)
+        )
+        let snapshot = AnalysisTaskInputAssembler.checkpointSnapshot(from: checkpoint)
+        #expect(snapshot.recoveryStage == AnalysisRecoveryStage.none)
+        #expect(snapshot.lastUpdated == Date(timeIntervalSince1970: 100))
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskInputAssemblerTests</code></p>
+<p>Expected: <strong>build failure</strong>, <code>cannot find 'AnalysisTaskInputAssembler' in scope</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>First add the combined accessor to <code>Ilumionate/AnalysisProgressStore.swift</code>, next to <code>allPending()</code>:</p>
+<pre><code class="lang-swift">    /// Every checkpoint, pending and manual-recovery alike. `allPending()` and
+    /// `manualRecoveryCheckpoints()` each filter one way; the task projection
+    /// needs both.
+    func allCheckpoints() -&gt; [AnalysisCheckpoint] {
+        Array(checkpoints.values)
+    }</code></pre>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisTaskInputAssembler.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisTaskInputAssembler.swift
+//  Ilumionate
+//
+//  Every disk and store read for the task projection happens here. The
+//  projection itself is pure and receives already-built maps.
+//
+//  GeneratedSessionStore cannot enumerate — each accessor takes an AudioFile —
+//  so ready sessions are discovered by walking the library inventory.
+//
+
+import Foundation
+
+nonisolated enum AnalysisTaskInputAssembler {
+
+    // MARK: Pure helpers (unit-tested directly)
+
+    /// Queue uniqueness is enforced here so the projection never has to guess.
+    static func deduplicate(queue: [UUID]) -&gt; [UUID] {
+        var seen: Set&lt;UUID&gt; = []
+        return queue.filter { seen.insert($0).inserted }
+    }
+
+    static func failureSnapshot(from checkpoint: AnalysisCheckpoint) -&gt; AnalysisFailureSnapshot? {
+        guard let recovery = checkpoint.manualRecovery else { return nil }
+        return AnalysisFailureSnapshot(
+            reason: recovery.reason,
+            failedStage: recovery.failedStage,
+            failedAt: recovery.failedAt,
+            recoveryStage: checkpoint.recoveryStage,
+            // A durable recovery exists precisely because automatic retry was
+            // exhausted, so it is always `.manual`.
+            retryState: .manual,
+            dismissedAt: recovery.dismissedAt
+        )
+    }
+
+    static func checkpointSnapshot(from checkpoint: AnalysisCheckpoint) -&gt; AnalysisCheckpointSnapshot {
+        AnalysisCheckpointSnapshot(
+            recoveryStage: checkpoint.recoveryStage,
+            startedAt: checkpoint.startedAt,
+            lastUpdated: checkpoint.lastUpdated
+        )
+    }
+
+    static func failureSnapshot(from failure: FailedAnalysis) -&gt; AnalysisFailureSnapshot {
+        AnalysisFailureSnapshot(
+            reason: failure.reason,
+            failedStage: failure.failedStage,
+            failedAt: failure.failedAt,
+            recoveryStage: failure.recoveryStage,
+            retryState: failure.retryState,
+            // The runtime list has no dismissal concept; only the durable
+            // record carries it, and the merge prefers that on equal failedAt.
+            dismissedAt: nil
+        )
+    }
+
+    /// Ready sessions for the given inventory. A session that is missing or
+    /// fails to decode is omitted, so a task never advertises something
+    /// unplayable. `readyAt` is the session file&#x27;s modification date, which
+    /// survives relaunch and needs no new persistence format; a bundled gold
+    /// session has no generated file, so it falls back to the import date.
+    static func readySnapshots(
+        for files: [AudioFile],
+        store: GeneratedSessionStore
+    ) -&gt; [UUID: AnalysisReadySnapshot] {
+        var result: [UUID: AnalysisReadySnapshot] = [:]
+        for file in files {
+            guard let session = store.load(for: file) else { continue }
+            let url = store.sessionURL(forAudioFileID: file.id)
+            let modified = (try? FileManager.default.attributesOfItem(atPath: url.path())[.modificationDate]) as? Date
+            result[file.id] = AnalysisReadySnapshot(
+                sessionID: session.id,
+                readyAt: modified ?? file.createdDate
+            )
+        }
+        return result
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisTaskInputAssemblerTests</code></p>
+<p>Expected: PASS, 5 tests.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter/AnalysisTaskInputAssembler.swift Ilumionate/AnalysisProgressStore.swift IlumionateTests/AnalysisTaskInputAssemblerTests.swift
+git commit -m &quot;feat: assemble the analysis task projection input&quot;</code></pre>
+<p>---</p>
+<h2 id="task-9-the-refresh-loop">Task 9: The refresh loop</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisRefreshCoordinator.swift</code></li>
+<li>Test: <code>IlumionateTests/AnalysisRefreshCoordinatorTests.swift</code></li>
+</ul>
+<p><strong>This is the riskiest task in Phase 1.</strong> There is no existing generation-guarded coalescing in this codebase to copy. Write the tests first and take them seriously.</p>
+<p>The problem: structural refresh is asynchronous (disk reads, actor hops); progress refresh is synchronous and frequent. An in-flight structural read can finish <em>after</em> a newer progress tick and clobber it. Four rules prevent that — see the spec's "The refresh loop".</p>
+<p>Extracting this as its own type keeps the concurrency logic testable without a view, and keeps it out of <code>AnalysisStateManager</code> (already 1,406 lines).</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisRefreshCoordinatorTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisRefreshCoordinatorTests.swift
+//  IlumionateTests
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+@MainActor
+struct AnalysisRefreshCoordinatorTests {
+
+    /// Rule 2: a burst of invalidations during an in-flight pass collapses into
+    /// exactly one further pass, not one per invalidation.
+    @Test func burstOfInvalidationsCoalescesIntoOneFurtherPass() async {
+        var passes = 0
+        let gate = AsyncGate()
+        let coordinator = AnalysisRefreshCoordinator { 
+            passes += 1
+            await gate.wait()
+            return 0
+        }
+
+        coordinator.invalidate()
+        await Task.yield()
+        for _ in 0..&lt;10 { coordinator.invalidate() }
+        await gate.open()
+        await coordinator.drain()
+
+        #expect(passes == 2)
+    }
+
+    /// Rule 3: a slow pass that started earlier must not commit over a newer one.
+    @Test func staleGenerationIsDiscardedAtCommit() async {
+        var committed: [Int] = []
+        let coordinator = AnalysisRefreshCoordinator(
+            load: { 0 },
+            commit: { committed.append($0) }
+        )
+        coordinator.commitIfCurrent(value: 1, generation: 5)
+        coordinator.commitIfCurrent(value: 2, generation: 3)   // older, must be dropped
+        coordinator.commitIfCurrent(value: 3, generation: 6)
+
+        #expect(committed == [1, 3])
+    }
+
+    @Test func invalidationBeforeFirstLoadIsNotLost() async {
+        var passes = 0
+        let coordinator = AnalysisRefreshCoordinator {
+            passes += 1
+            return 0
+        }
+        coordinator.invalidate()          // raised before any pass has started
+        await coordinator.drain()
+        #expect(passes &gt;= 1)
+    }
+
+    @Test func drainReturnsOnlyWhenNoPassIsPending() async {
+        var passes = 0
+        let coordinator = AnalysisRefreshCoordinator {
+            passes += 1
+            return 0
+        }
+        coordinator.invalidate()
+        await coordinator.drain()
+        let settled = passes
+        await coordinator.drain()
+        #expect(passes == settled)
+    }
+}
+
+/// Minimal one-shot gate so a test can hold a pass open deterministically,
+/// without sleeping on wall-clock time.
+private actor AsyncGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation&lt;Void, Never&gt;] = []
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        for waiter in waiters { waiter.resume() }
+        waiters.removeAll()
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisRefreshCoordinatorTests</code></p>
+<p>Expected: <strong>build failure</strong>, <code>cannot find 'AnalysisRefreshCoordinator' in scope</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisRefreshCoordinator.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisRefreshCoordinator.swift
+//  Ilumionate
+//
+//  Coalesces structural refreshes behind a generation guard.
+//
+//  Structural refresh is async (disk, actor hops); progress refresh is
+//  synchronous and frequent. Without a guard, a slow structural read can commit
+//  after a newer progress tick and rewind it. Generic over the loaded value so
+//  the concurrency rules are testable without disk or SwiftUI.
+//
+
+import Foundation
+
+@MainActor
+final class AnalysisRefreshCoordinator&lt;Value&gt; {
+
+    private let load: () async -&gt; Value
+    private let commit: (Value) -&gt; Void
+
+    private var generation = 0
+    private var committedGeneration = -1
+    private var isLoading = false
+    private var isDirty = false
+    private var drainWaiters: [CheckedContinuation&lt;Void, Never&gt;] = []
+
+    init(load: @escaping () async -&gt; Value, commit: @escaping (Value) -&gt; Void = { _ in }) {
+        self.load = load
+        self.commit = commit
+    }
+
+    /// Request a structural refresh. Safe to call from any mutation site; calls
+    /// arriving during an in-flight pass set a dirty flag rather than starting
+    /// a second pass, so importing forty files costs two passes, not forty.
+    func invalidate() {
+        guard !isLoading else {
+            isDirty = true
+            return
+        }
+        startPass()
+    }
+
+    /// Commit a loaded value only if no newer pass has already committed.
+    func commitIfCurrent(value: Value, generation passGeneration: Int) {
+        guard passGeneration &gt; committedGeneration else { return }
+        committedGeneration = passGeneration
+        commit(value)
+    }
+
+    /// Resumes once no pass is in flight and nothing is pending. Test support;
+    /// production code never needs to wait for a refresh.
+    func drain() async {
+        guard isLoading || isDirty else { return }
+        await withCheckedContinuation { drainWaiters.append($0) }
+    }
+
+    // MARK: Private
+
+    private func startPass() {
+        isLoading = true
+        generation += 1
+        let passGeneration = generation
+        Task { @MainActor in
+            let value = await load()
+            commitIfCurrent(value: value, generation: passGeneration)
+            isLoading = false
+            if isDirty {
+                isDirty = false
+                startPass()
+            } else {
+                let waiters = drainWaiters
+                drainWaiters.removeAll()
+                for waiter in waiters { waiter.resume() }
+            }
+        }
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisRefreshCoordinatorTests</code></p>
+<p>Expected: PASS, 4 tests.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter/AnalysisRefreshCoordinator.swift IlumionateTests/AnalysisRefreshCoordinatorTests.swift
+git commit -m &quot;feat: coalesce structural refreshes behind a generation guard&quot;</code></pre>
+<p>---</p>
+<h2 id="task-10-the-center-model">Task 10: The center model</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisCenterModel.swift</code></li>
+<li>Test: <code>IlumionateTests/AnalysisCenterModelTests.swift</code></li>
+</ul>
+<p>Owns the input, publishes the snapshot, and routes the two refresh paths. Progress refresh replaces only <code>activeAnalysis</code> and <code>modelDownload</code> and <strong>never touches disk</strong>; structural refresh rebuilds everything else and merges the live progress fields at commit time so it cannot rewind them.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Create <code>IlumionateTests/AnalysisCenterModelTests.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisCenterModelTests.swift
+//  IlumionateTests
+//
+
+import Testing
+import Foundation
+@testable import Ilumionate
+
+private func makeAudioFile(id: UUID = UUID()) -&gt; AudioFile {
+    AudioFile(
+        id: id,
+        filename: &quot;test_\(id.uuidString).m4a&quot;,
+        duration: 300,
+        fileSize: 1_024_000,
+        createdDate: Date(timeIntervalSince1970: 0)
+    )
+}
+
+@MainActor
+struct AnalysisCenterModelTests {
+
+    @Test func snapshotIsNilBeforeFirstPublication() {
+        let model = AnalysisCenterModel(loadStructure: { .empty })
+        #expect(model.tasks == nil)
+    }
+
+    @Test func snapshotIsEmptyArrayAfterPublishingAnEmptyLibrary() async {
+        let model = AnalysisCenterModel(loadStructure: { .empty })
+        await model.refreshAndWait()
+        #expect(model.tasks == [])
+    }
+
+    @Test func progressRefreshPerformsNoStructuralLoad() async {
+        var loads = 0
+        let file = makeAudioFile()
+        let model = AnalysisCenterModel(loadStructure: {
+            loads += 1
+            return AnalysisStructuralInput(
+                libraryFiles: [file], queue: [file.id], failures: [:], checkpoints: [:], ready: [:]
+            )
+        })
+        await model.refreshAndWait()
+        let afterFirstLoad = loads
+
+        model.updateProgress(active: ActiveAnalysisSnapshot(
+            audioFileID: file.id, attemptID: UUID(), stage: .transcribing,
+            progress: 0.5, startedAt: Date(timeIntervalSince1970: 0)
+        ), download: nil)
+
+        #expect(loads == afterFirstLoad)
+        #expect(model.tasks?.first?.state == .running(
+            stage: .transcribing, progress: 0.5, startedAt: Date(timeIntervalSince1970: 0)
+        ))
+    }
+
+    /// Rule 4: a structural commit must not rewind progress newer than the
+    /// pass that produced it.
+    @Test func structuralCommitPreservesNewerProgress() async {
+        let file = makeAudioFile()
+        let model = AnalysisCenterModel(loadStructure: {
+            AnalysisStructuralInput(
+                libraryFiles: [file], queue: [file.id], failures: [:], checkpoints: [:], ready: [:]
+            )
+        })
+        await model.refreshAndWait()
+
+        model.updateProgress(active: ActiveAnalysisSnapshot(
+            audioFileID: file.id, attemptID: UUID(), stage: .analyzing,
+            progress: 0.9, startedAt: Date(timeIntervalSince1970: 0)
+        ), download: nil)
+
+        await model.refreshAndWait()
+
+        #expect(model.tasks?.first?.state == .running(
+            stage: .analyzing, progress: 0.9, startedAt: Date(timeIntervalSince1970: 0)
+        ))
+    }
+
+    @Test func pillCandidatesExcludeDismissedFailures() async {
+        let dismissed = makeAudioFile()
+        let queued = makeAudioFile()
+        let model = AnalysisCenterModel(loadStructure: {
+            AnalysisStructuralInput(
+                libraryFiles: [dismissed, queued],
+                queue: [queued.id],
+                failures: [dismissed.id: AnalysisFailureSnapshot(
+                    reason: .transcription, failedStage: .transcription,
+                    failedAt: Date(timeIntervalSince1970: 100),
+                    recoveryStage: .transcription, retryState: .manual,
+                    dismissedAt: Date(timeIntervalSince1970: 200)
+                )],
+                checkpoints: [:], ready: [:]
+            )
+        })
+        await model.refreshAndWait()
+        #expect(model.pillCandidates.map(\.id) == [queued.id])
+    }
+
+    @Test func pillShowsActiveProgressAndAFailureSimultaneously() async {
+        let failed = makeAudioFile()
+        let running = makeAudioFile()
+        let model = AnalysisCenterModel(loadStructure: {
+            AnalysisStructuralInput(
+                libraryFiles: [failed, running],
+                queue: [],
+                failures: [failed.id: AnalysisFailureSnapshot(
+                    reason: .transcription, failedStage: .transcription,
+                    failedAt: Date(timeIntervalSince1970: 100),
+                    recoveryStage: .transcription, retryState: .manual, dismissedAt: nil
+                )],
+                checkpoints: [:], ready: [:]
+            )
+        })
+        await model.refreshAndWait()
+        model.updateProgress(active: ActiveAnalysisSnapshot(
+            audioFileID: running.id, attemptID: UUID(), stage: .transcribing,
+            progress: 0.3, startedAt: Date(timeIntervalSince1970: 0)
+        ), download: nil)
+
+        #expect(model.activeTask?.id == running.id)
+        #expect(model.attentionCount == 1)
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisCenterModelTests</code></p>
+<p>Expected: <strong>build failure</strong>, <code>cannot find 'AnalysisCenterModel' in scope</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Write minimal implementation</strong></li>
+</ul>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisCenterModel.swift</code>:</p>
+<pre><code class="lang-swift">//
+//  AnalysisCenterModel.swift
+//  Ilumionate
+//
+//  Single owner of the published [AnalysisTask] snapshot. Created at the app
+//  root and injected into every analysis surface; no surface builds its own.
+//
+
+import Foundation
+
+/// The disk- and store-backed half of the projection input. The progress half
+/// (`activeAnalysis`, `modelDownload`) is held separately so a progress tick
+/// never triggers a disk read.
+nonisolated struct AnalysisStructuralInput: Equatable, Sendable {
+    let libraryFiles: [AudioFile]
+    let queue: [UUID]
+    let failures: [UUID: AnalysisFailureSnapshot]
+    let checkpoints: [UUID: AnalysisCheckpointSnapshot]
+    let ready: [UUID: AnalysisReadySnapshot]
+
+    static let empty = AnalysisStructuralInput(
+        libraryFiles: [], queue: [], failures: [:], checkpoints: [:], ready: [:]
+    )
+}
+
+@MainActor
+@Observable
+final class AnalysisCenterModel {
+
+    /// `nil` until the first publication, so surfaces can tell &quot;still loading&quot;
+    /// from &quot;nothing to show&quot; and the pill does not flash an empty state.
+    private(set) var tasks: [AnalysisTask]?
+
+    private var structure: AnalysisStructuralInput = .empty
+    private var activeAnalysis: ActiveAnalysisSnapshot?
+    private var modelDownload: ModelDownloadProgress?
+
+    private var coordinator: AnalysisRefreshCoordinator&lt;AnalysisStructuralInput&gt;!
+
+    init(loadStructure: @escaping () async -&gt; AnalysisStructuralInput) {
+        // Observers are installed before any load starts, so an invalidation
+        // racing bootstrap is recorded rather than lost.
+        coordinator = AnalysisRefreshCoordinator(
+            load: loadStructure,
+            commit: { [weak self] structure in
+                guard let self else { return }
+                self.structure = structure
+                // Merge the *live* progress fields, never the values captured
+                // when the pass began.
+                self.republish()
+            }
+        )
+    }
+
+    // MARK: Refresh
+
+    func invalidateStructure() {
+        coordinator.invalidate()
+    }
+
+    /// Test support: request a refresh and wait for it to settle.
+    func refreshAndWait() async {
+        coordinator.invalidate()
+        await coordinator.drain()
+    }
+
+    /// High-frequency path. Never touches disk.
+    func updateProgress(active: ActiveAnalysisSnapshot?, download: ModelDownloadProgress?) {
+        activeAnalysis = active
+        modelDownload = download
+        republish()
+    }
+
+    private func republish() {
+        tasks = AnalysisTaskProjection.tasks(from: AnalysisTaskProjectionInput(
+            libraryFiles: structure.libraryFiles,
+            activeAnalysis: activeAnalysis,
+            modelDownload: modelDownload,
+            queue: structure.queue,
+            failures: structure.failures,
+            checkpoints: structure.checkpoints,
+            ready: structure.ready
+        ))
+    }
+
+    // MARK: Selectors
+
+    /// Everything the pill may represent: live work plus failures that need a
+    /// decision. Dismissed failures are excluded.
+    var pillCandidates: [AnalysisTask] {
+        guard let tasks else { return [] }
+        var positions: [UUID: Int] = [:]
+        for (index, id) in structure.queue.enumerated() where positions[id] == nil {
+            positions[id] = index + 1
+        }
+        return tasks.filter { task in
+            switch task.state {
+            case .preparing, .running, .queued:
+                return true
+            case .paused, .failed, .ready:
+                return AnalysisTaskProjection.needsDecision(task, queuePositions: positions)
+            }
+        }
+    }
+
+    /// The pill&#x27;s headline: live progress, because it is transient and
+    /// self-resolving. A failure is a standing decision and gets the chip.
+    var activeTask: AnalysisTask? {
+        tasks?.first { task in
+            switch task.state {
+            case .preparing, .running: return true
+            default: return false
+            }
+        }
+    }
+
+    var attentionCount: Int {
+        guard let tasks else { return 0 }
+        var positions: [UUID: Int] = [:]
+        for (index, id) in structure.queue.enumerated() where positions[id] == nil {
+            positions[id] = index + 1
+        }
+        return tasks.count { AnalysisTaskProjection.needsDecision($0, queuePositions: positions) }
+    }
+
+    func task(for audioFileID: UUID) -&gt; AnalysisTask? {
+        tasks?.first { $0.id == audioFileID }
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/AnalysisCenterModelTests</code></p>
+<p>Expected: PASS, 6 tests.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter/AnalysisCenterModel.swift IlumionateTests/AnalysisCenterModelTests.swift
+git commit -m &quot;feat: publish one analysis task snapshot from a single owner&quot;</code></pre>
+<p>---</p>
+<h2 id="task-11-wire-the-model-to-the-pipeline">Task 11: Wire the model to the pipeline</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>Ilumionate/AnalysisStateManager.swift</code></li>
+<li>Modify: <code>Ilumionate/IlumionateApp.swift</code></li>
+<li>Modify: <code>Ilumionate/ContentView.swift</code></li>
+</ul>
+<p>Connect the model to real data: one production <code>loadStructure</code>, one <code>invalidateStructure()</code> funnel called from every structural mutation, and progress forwarding.</p>
+<ul>
+<li>[ ] <strong>Step 1: Add the production loader</strong></li>
+</ul>
+<p>Add to <code>Ilumionate/AnalysisCenter/AnalysisCenterModel.swift</code>:</p>
+<pre><code class="lang-swift">extension AnalysisCenterModel {
+
+    /// Production wiring. Disk work happens inside `load`, off the main actor,
+    /// via the store&#x27;s own actor isolation and `AudioLibraryStore`&#x27;s async API.
+    static func live(manager: AnalysisStateManager = .shared) -&gt; AnalysisCenterModel {
+        AnalysisCenterModel {
+            let files = await AudioLibraryStore.loadRepairingStoredFiles()
+            let (checkpoints, durableFailures) = await manager.recoverySnapshot()
+            let runtimeFailures = await MainActor.run {
+                Dictionary(
+                    uniqueKeysWithValues: manager.failedAnalyses.map {
+                        ($0.audioFile.id, AnalysisTaskInputAssembler.failureSnapshot(from: $0))
+                    }
+                )
+            }
+            let queue = await MainActor.run {
+                AnalysisTaskInputAssembler.deduplicate(queue: manager.analysisQueue.map(\.id))
+            }
+            let ready = AnalysisTaskInputAssembler.readySnapshots(
+                for: files, store: GeneratedSessionStore.shared
+            )
+            return AnalysisStructuralInput(
+                libraryFiles: files,
+                queue: queue,
+                failures: AnalysisFailureMerge.merge(durable: durableFailures, runtime: runtimeFailures),
+                checkpoints: checkpoints,
+                ready: ready
+            )
+        }
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Add the manager's snapshot accessor</strong></li>
+</ul>
+<p><code>AnalysisProgressStore</code> is a <code>private</code> actor on the manager, so the model must not reach into it. Add to <code>Ilumionate/AnalysisStateManager.swift</code>:</p>
+<pre><code class="lang-swift">    /// Flattens the durable store into plain values for the task projection.
+    /// Exists so `AnalysisCenterModel` never touches the private actor.
+    func recoverySnapshot() async -&gt; (
+        checkpoints: [UUID: AnalysisCheckpointSnapshot],
+        failures: [UUID: AnalysisFailureSnapshot]
+    ) {
+        let all = await progressStore.allCheckpoints()
+        var checkpoints: [UUID: AnalysisCheckpointSnapshot] = [:]
+        var failures: [UUID: AnalysisFailureSnapshot] = [:]
+        for checkpoint in all {
+            let id = checkpoint.audioFile.id
+            checkpoints[id] = AnalysisTaskInputAssembler.checkpointSnapshot(from: checkpoint)
+            if let failure = AnalysisTaskInputAssembler.failureSnapshot(from: checkpoint) {
+                failures[id] = failure
+            }
+        }
+        return (checkpoints, failures)
+    }
+
+    /// Called by every structural mutation. Set by the app root at launch.
+    var onStructuralChange: (@MainActor () -&gt; Void)?</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Call the funnel from every structural mutation</strong></li>
+</ul>
+<p>In <code>Ilumionate/AnalysisStateManager.swift</code>, call <code>onStructuralChange?()</code> at the end of each of these, which is the complete set of structural triggers from the spec:</p>
+<ul>
+<li><code>queueForAnalysis(_:priority:)</code> (both overloads)</li>
+<li><code>removeFromQueue(audioFile:)</code></li>
+<li><code>moveUpInQueue(audioFile:)</code>, <code>moveDownInQueue(audioFile:)</code>, <code>prioritizeInQueue(audioFile:)</code></li>
+<li><code>clearQueue()</code></li>
+<li><code>cancelCurrentAnalysis()</code>, <code>cancelAllAnalyses()</code></li>
+<li><code>recordFailure(_:)</code></li>
+<li><code>retryFailedAnalysis(_:)</code></li>
+<li><code>restoreManualRecoveries()</code></li>
+<li><code>handleAnalysisComplete</code> (the success path that clears a checkpoint)</li>
+<li><code>removeCompletedAnalysis(for:)</code></li>
+</ul>
+<p>Queue mutations matter as much as the rest: queue position is projection input, so a reorder that does not invalidate leaves every position stale.</p>
+<ul>
+<li>[ ] <strong>Step 4: Own the model at the app root</strong></li>
+</ul>
+<p>In <code>Ilumionate/IlumionateApp.swift</code>, create the single instance and inject it:</p>
+<pre><code class="lang-swift">    @State private var analysisCenter = AnalysisCenterModel.live()</code></pre>
+<p>Pass it into the root view's environment:</p>
+<pre><code class="lang-swift">            ContentView(engine: engine)
+                .environment(analysisCenter)
+                .task {
+                    // Observers before bootstrap: an invalidation raised during
+                    // the first load is recorded, not lost.
+                    AnalysisStateManager.shared.onStructuralChange = { [analysisCenter] in
+                        analysisCenter.invalidateStructure()
+                    }
+                    analysisCenter.invalidateStructure()
+                }</code></pre>
+<p>In <code>Ilumionate/ContentView.swift</code>, forward progress on every change of the active analysis:</p>
+<pre><code class="lang-swift">        .onChange(of: analysisManager.currentAnalysis?.snapshot) { _, snapshot in
+            analysisCenter.updateProgress(active: snapshot, download: nil)
+        }</code></pre>
+<p><code>download:</code> is always <code>nil</code> in Phase 1 — nothing produces <code>ModelDownloadProgress</code> until Phase 2c.</p>
+<ul>
+<li>[ ] <strong>Step 5: Verify the build and commit</strong></li>
+</ul>
+<p>Run: <code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' build</code></p>
+<p>Expected: <code>** BUILD SUCCEEDED **</code></p>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter Ilumionate/AnalysisStateManager.swift Ilumionate/IlumionateApp.swift Ilumionate/ContentView.swift
+git commit -m &quot;feat: wire the analysis center model to the pipeline&quot;</code></pre>
+<p>---</p>
+<h2 id="task-12-the-four-surfaces">Task 12: The four surfaces</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisStatusPill.swift</code></li>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisTaskRow.swift</code></li>
+<li>Create: <code>Ilumionate/AnalysisCenter/AnalysisCenterView.swift</code></li>
+<li>Create: <code>Ilumionate/AnalysisCenter/LibraryAnalysisEntryRow.swift</code></li>
+<li>Modify: <code>Ilumionate/ContentView.swift:197-235</code>, <code>Ilumionate/LibraryView.swift:261</code>, <code>Ilumionate/SessionDetailView.swift:447-495</code></li>
+</ul>
+<p>Follow the existing Trance design system: <code>LiminalCard</code> / <code>GlassCard</code>, <code>TranceSpacing</code>, <code>TranceTypography</code>, <code>Color.roseGold</code>, <code>Color.textPrimary</code>, <code>Color.textSecondary</code>. Do not hardcode font sizes or padding.</p>
+<ul>
+<li>[ ] <strong>Step 1: Build the pill</strong></li>
+</ul>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisStatusPill.swift</code>. The pill shows <strong>live progress as the headline and a persistent attention chip</strong> — both at once. This is the deliberate divergence from the tier order: applied literally, a <code>.manual</code> failure would take the headline and hide progress for as long as it existed, which reintroduces the defect being removed.</p>
+<pre><code class="lang-swift">//
+//  AnalysisStatusPill.swift
+//  Ilumionate
+//
+//  Ambient analysis signal in the bottom chrome. Replaces AnalysisStatusOverlay
+//  and AnalysisRecoveryStatusOverlay, which shared one slot and so could never
+//  show active work and a failure at the same time.
+//
+
+import SwiftUI
+
+struct AnalysisStatusPill: View {
+    let activeTask: AnalysisTask?
+    let queuedCount: Int
+    let attentionCount: Int
+    let onTap: () -&gt; Void
+
+    var body: some View {
+        Button {
+            TranceHaptics.shared.light()
+            onTap()
+        } label: {
+            HStack(spacing: TranceSpacing.inner) {
+                if let activeTask {
+                    ProgressView().tint(.roseGold).controlSize(.small)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(activeTask.audioFile.displayName)
+                            .font(TranceTypography.caption).bold()
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(1)
+                        Text(headlineDetail(for: activeTask))
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                } else {
+                    Image(systemName: &quot;exclamationmark.triangle.fill&quot;)
+                        .foregroundStyle(Color.roseGold)
+                    Text(&quot;Analysis needs attention&quot;)
+                        .font(TranceTypography.caption).bold()
+                        .foregroundStyle(Color.textPrimary)
+                }
+
+                Spacer(minLength: TranceSpacing.inner)
+
+                if queuedCount &gt; 0 {
+                    Text(&quot;+\(queuedCount)&quot;)
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, TranceSpacing.micro)
+                        .padding(.vertical, 2)
+                        .background(Color.roseGold.opacity(0.8))
+                        .clipShape(.capsule)
+                }
+
+                // The whole point of the rewrite: a failure stays visible while
+                // other work runs.
+                if attentionCount &gt; 0 {
+                    Label(&quot;\(attentionCount)&quot;, systemImage: &quot;exclamationmark.circle.fill&quot;)
+                        .font(TranceTypography.caption).bold()
+                        .foregroundStyle(Color.roseDeep)
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+            .padding(.horizontal, TranceSpacing.card)
+            .padding(.vertical, TranceSpacing.inner)
+            .background(.ultraThinMaterial)
+            .background(Color.bgCard)
+            .clipShape(.rect(cornerRadius: TranceRadius.tabItem))
+            .overlay {
+                RoundedRectangle(cornerRadius: TranceRadius.tabItem)
+                    .strokeBorder(Color.roseGold.opacity(0.3), lineWidth: 1)
+            }
+            .padding(.horizontal, TranceSpacing.screen)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(&quot;Opens the analysis center&quot;)
+    }
+
+    private func headlineDetail(for task: AnalysisTask) -&gt; String {
+        switch task.state {
+        case .preparing:
+            return &quot;Preparing analyzer&quot;
+        case .running(let stage, _, _):
+            return AnalysisStageFeedback.stageSummary(stage)
+        default:
+            return &quot;&quot;
+        }
+    }
+
+    private var accessibilityLabel: String {
+        var parts: [String] = []
+        if let activeTask { parts.append(&quot;Analyzing \(activeTask.audioFile.displayName)&quot;) }
+        if queuedCount &gt; 0 { parts.append(&quot;\(queuedCount) queued&quot;) }
+        if attentionCount &gt; 0 { parts.append(&quot;\(attentionCount) need attention&quot;) }
+        return parts.joined(separator: &quot;, &quot;)
+    }
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Replace the overlays in ContentView</strong></li>
+</ul>
+<p>In <code>Ilumionate/ContentView.swift</code>, replace the <code>Group</code> at <code>:202-217</code> (the <code>if let analysis … else if let failure …</code> block) with:</p>
+<pre><code class="lang-swift">                Group {
+                    if analysisCenter.activeTask != nil || analysisCenter.attentionCount &gt; 0 {
+                        AnalysisStatusPill(
+                            activeTask: analysisCenter.activeTask,
+                            queuedCount: analysisCenter.pillCandidates.count(where: {
+                                if case .queued = $0.state { return true } else { return false }
+                            }),
+                            attentionCount: analysisCenter.attentionCount
+                        ) {
+                            showingAnalysisQueue = true
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }</code></pre>
+<p>Add <code>@Environment(AnalysisCenterModel.self) private var analysisCenter</code> to <code>ContentView</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Build the row and the center</strong></li>
+</ul>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisTaskRow.swift</code> rendering one task for each of the six states, plus the actions each state allows:</p>
+<ul>
+<li><code>.queued</code> — Remove from queue, Move to front</li>
+<li><code>.preparing</code> / <code>.running</code> — Cancel</li>
+<li><code>.paused</code> — Retry</li>
+<li><code>.failed</code> — Retry (when <code>lastFailure.presentation.canRetry</code>), Dismiss, Remove</li>
+<li><code>.ready</code> — Play</li>
+</ul>
+<p>Use <code>task.lastFailure?.presentation</code> for all failure copy — <code>title</code>, <code>message</code>, <code>recoveryMessage</code>, <code>statusMessage</code> already exist on <code>AnalysisFailurePresentation</code> and are the stable user-facing strings.</p>
+<p><strong>Remove is destructive and must be confirmed.</strong> Present a <code>confirmationDialog</code> whose message says it deletes <em>saved analysis progress</em> — the transcript or analysis a retry would have resumed from — and that it does <strong>not</strong> delete the audio file. Pass <code>task.lastFailure!.failedAt</code> as <code>expectingFailedAt</code> so a confirmation raised for one occurrence cannot act on a newer one.</p>
+<p>Create <code>Ilumionate/AnalysisCenter/AnalysisCenterView.swift</code> presenting <code>model.tasks</code> grouped by tier, with a <code>ProgressView</code> while <code>model.tasks == nil</code> and an idle card when it is <code>[]</code>. Keep the existing "Clear Queue" toolbar item and its confirmation dialog from <code>AnalyzerView.swift:48-62</code>.</p>
+<p>Activity-oriented views show the three most recent <code>.ready</code> tasks; the center's full list shows all of them. Ageing out is a view filter, never a model deletion.</p>
+<ul>
+<li>[ ] <strong>Step 4: Replace the Library section and Session Detail reads</strong></li>
+</ul>
+<p>Create <code>Ilumionate/AnalysisCenter/LibraryAnalysisEntryRow.swift</code> — one row summarising counts from the shared snapshot (<code>"3 analyzing · 1 needs attention"</code>), opening the center on tap. In <code>Ilumionate/LibraryView.swift:261</code>, replace the <code>LibraryAnalysisStatusSection(...)</code> call with it.</p>
+<p>In <code>Ilumionate/SessionDetailView.swift</code>, replace the manager reads in <code>analyzeNowSection</code>, <code>analyzingIndicator</code>, and <code>stageText(active:isThisFile:)</code> (<code>:447-495</code>) with a single lookup:</p>
+<pre><code class="lang-swift">    private var task: AnalysisTask? {
+        analysisCenter.task(for: audioFile.id)
+    }</code></pre>
+<p><code>analyzingIndicator</code> then switches on <code>task?.state</code> rather than comparing <code>AnalysisStateManager.shared.currentAnalysis?.audioFile.id</code> itself. Delete <code>stageText(active:isThisFile:)</code> — the task already answers "is this file active".</p>
+<ul>
+<li>[ ] <strong>Step 5: Verify the build and commit</strong></li>
+</ul>
+<p>Run: <code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' build</code></p>
+<p>Expected: <code>** BUILD SUCCEEDED **</code></p>
+<p>Run the same for iOS Simulator:</p>
+<pre><code class="lang-bash">xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination &#x27;platform=iOS Simulator,name=iPhone 17 Pro&#x27; build</code></pre>
+<pre><code class="lang-bash">git add Ilumionate/AnalysisCenter Ilumionate/ContentView.swift Ilumionate/LibraryView.swift Ilumionate/SessionDetailView.swift
+git commit -m &quot;feat: render every analysis surface from the shared task snapshot&quot;</code></pre>
+<p>---</p>
+<h2 id="task-13-delete-the-legacy-views">Task 13: Delete the legacy views</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Delete: <code>Ilumionate/AnalysisStatusBar.swift</code>, <code>Ilumionate/AnalysisStatusOverlay.swift</code>, <code>Ilumionate/LibraryAnalysisStatusSection.swift</code></li>
+<li>Modify: <code>Ilumionate/AnalyzerView.swift</code>, <code>Ilumionate/AudioLibraryView.swift:264</code>, <code>Ilumionate/LibraryView.swift:193-195</code></li>
+</ul>
+<p><code>AnalyzerView</code> is <strong>not</strong> deleted. Its Live Status and Ready Sessions sections are replaced by the center, but its third section <code>AnalyzerLibraryIntelligenceSection</code> is out of scope and has no other entry point. Leaving it reachable from one entry avoids orphaning a working feature; <code>task_34b6360c</code> relocates it to Library and deletes both together.</p>
+<ul>
+<li>[ ] <strong>Step 1: Confirm nothing references the doomed files</strong></li>
+</ul>
+<pre><code class="lang-bash">grep -rn &quot;AnalysisStatusBar\|AnalysisStatusOverlay\|AnalysisRecoveryStatusOverlay\|LibraryAnalysisStatusSection&quot; --include=&quot;*.swift&quot; Ilumionate/ IlumionateTests/</code></pre>
+<p>Expected: only the three files' own definitions. If <code>ContentView.swift</code> still appears, Task 12 Step 2 is incomplete.</p>
+<ul>
+<li>[ ] <strong>Step 2: Delete them</strong></li>
+</ul>
+<pre><code class="lang-bash">git rm Ilumionate/AnalysisStatusBar.swift Ilumionate/AnalysisStatusOverlay.swift Ilumionate/LibraryAnalysisStatusSection.swift</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Repoint the sheet presentations</strong></li>
+</ul>
+<p>In <code>Ilumionate/ContentView.swift:91-93</code>, <code>Ilumionate/LibraryView.swift:193-195</code>, and <code>Ilumionate/AudioLibraryView.swift:264</code>, present <code>AnalysisCenterView()</code> instead of <code>AnalyzerView(engine:)</code>. Add a single overflow entry inside <code>AnalysisCenterView</code> that pushes <code>AnalyzerView(engine:)</code> so Library Intelligence stays reachable.</p>
+<p>Then strip <code>AnalyzerLiveStatusSection</code> and the <code>AnalysisReadySessionsCard</code> call from <code>AnalyzerView.swift</code>, leaving only <code>AnalyzerLibraryIntelligenceSection</code>. Delete the now-unused <code>AnalyzerActiveAnalysisContent</code>, the queue card, and the failure-log card.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify the build and full suite</strong></li>
+</ul>
+<p>Run: <code>xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' build</code></p>
+<p>Expected: <code>** BUILD SUCCEEDED **</code></p>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests</code></p>
+<p>Expected: PASS. ERR-001 records six timing tests that are flaky under full-suite parallel load — if failures are confined to that set, they are pre-existing.</p>
+<p>Run: <code>Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:IlumionateTests</code></p>
+<p>Expected: PASS.</p>
+<ul>
+<li>[ ] <strong>Step 5: Update the records and commit</strong></li>
+</ul>
+<p>Mark ERR-013 <code>completed</code> in <code>ERRORS.md</code>, move it to Resolved, and fill in the Resolution with what changed and how it was verified.</p>
+<p>Update <code>plan.md</code>'s Audio Library section to note the Task Center replaced the scattered analysis surfaces.</p>
+<pre><code class="lang-bash">git add -A
+git commit -m &quot;refactor: delete the superseded analysis status views&quot;</code></pre>
+<p>---</p>
+<h2 id="self-review">Self-review</h2>
+<p><strong>Spec coverage.</strong> Every acceptance criterion maps to a task: (1) Task 2, (2) Task 10, (3) Task 4, (4) Task 4, (5) Task 5, (6) Task 5, (7) Tasks 4 and 5, (8) Task 4 attribute tests, (9) Tasks 5 and 12, (10) Tasks 10 and 12. Dismissal persistence is Task 6; refresh mechanics are Tasks 9 and 11; deletions are Task 13.</p>
+<p><strong>Deliberately deferred within Phase 1.</strong> <code>.preparing</code> is defined and projected but never produced — nothing constructs a <code>ModelDownloadProgress</code> until Phase 2c, and Task 11 Step 4 passes <code>download: nil</code> explicitly. The projection test covers it via a hand-built snapshot, which is the correct level.</p>
+<p><strong>Known gap to watch.</strong> Task 12 Steps 3 and 4 describe the row and center in prose rather than complete code, because the row's six states times four actions is largely mechanical composition against an existing design system. If the implementing agent needs literal code there, that step should be expanded before it starts rather than improvised — it is the one place in this plan where taste is being delegated.</p>
+<p><strong>Riskiest task:</strong> Task 9. There is no precedent for generation-guarded coalescing in this codebase, its four tests are the ones most likely to expose a design error, and every surface depends on it being right.</p></main>
+</div></body></html>

@@ -165,12 +165,14 @@ final class UsageAnalytics {
     func sessionStarted(
         source: SessionSource,
         category: String,
-        startType: PlaybackStartType
+        startType: PlaybackStartType,
+        mode: String
     ) {
         send(AnalyticsEvent("session.started", [
             "source": source.rawValue,
             "category": category,
             "startType": startType.rawValue,
+            "mode": mode,
         ]))
         markActivated(path: .playback)
     }
@@ -179,7 +181,8 @@ final class UsageAnalytics {
         source: SessionSource,
         category: String,
         endReason: PlaybackEndReason,
-        fraction: Double?
+        fraction: Double?,
+        mode: String
     ) {
         let bucket = fraction.map { CompletionBucket(fraction: $0) } ?? .notApplicable
         let parameters = [
@@ -187,6 +190,7 @@ final class UsageAnalytics {
             "category": category,
             "endReason": endReason.rawValue,
             "completionBucket": bucket.rawValue,
+            "mode": mode,
         ]
         send(AnalyticsEvent("session.ended", parameters))
         if bucket == .complete {
@@ -266,6 +270,13 @@ final class UsageAnalytics {
             parameters,
             kind: .error(.thrownException)
         ))
+    }
+
+    /// On-device AI declined or failed and keyword classification was used
+    /// instead. Emitted because the fallback is otherwise invisible: analysis
+    /// still "completes", so nothing in the funnel shows that the AI never ran.
+    func aiGenerationFallback(reason: AIGenerationDiagnosis.Kind) {
+        send(AnalyticsEvent("ai.generationFallback", ["reason": reason.rawValue]))
     }
 
     func audioAnalyzeCancelled(

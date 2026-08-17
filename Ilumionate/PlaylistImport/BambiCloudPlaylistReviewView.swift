@@ -12,6 +12,10 @@ struct BambiCloudPlaylistReviewView: View {
     let downloadError: (BambiCloudPlaylistImportPlan.Row.ID) -> String?
     let onChoose: (BambiCloudPlaylistImportPlan.Row) -> Void
     let onDownload: (BambiCloudPlaylistImportPlan.Row) -> Void
+    /// Binds a likely-duplicate row to the library file it matched.
+    let onUseExisting: (BambiCloudPlaylistImportPlan.Row, AudioFile.ID) -> Void
+    /// Fetches a fresh copy despite the likely match.
+    let onDownloadAnyway: (BambiCloudPlaylistImportPlan.Row) -> Void
     let onDownloadAll: () -> Void
     let onStartOver: () -> Void
 
@@ -43,7 +47,13 @@ struct BambiCloudPlaylistReviewView: View {
                         isDownloading: isDownloading(row.id),
                         downloadError: downloadError(row.id),
                         onChoose: { onChoose(row) },
-                        onDownload: { onDownload(row) }
+                        onDownload: { onDownload(row) },
+                        possibleDuplicate: possibleDuplicate(for: row),
+                        onUseExisting: {
+                            guard case .possibleDuplicate(let id) = row.status else { return }
+                            onUseExisting(row, id)
+                        },
+                        onDownloadAnyway: { onDownloadAnyway(row) }
                     )
                     .listRowBackground(Color.bgCard)
                 }
@@ -103,6 +113,13 @@ struct BambiCloudPlaylistReviewView: View {
         }
 
         return "\(matchedCount) matched, \(unresolvedCount) need attention"
+    }
+
+    private func possibleDuplicate(
+        for row: BambiCloudPlaylistImportPlan.Row
+    ) -> AudioFile? {
+        guard case .possibleDuplicate(let id) = row.status else { return nil }
+        return audioFiles.first { $0.id == id }
     }
 
     private func selectedAudioFile(

@@ -30,7 +30,6 @@ class AudioLightSyncPlayer: Sendable {
     private var audioPlayer: AVAudioPlayer?
     private var lightEngine: LightEngine
     private var lightPlayer: LightScorePlayer?
-    private var playbackTimer: Timer?
     private var currentAudioFile: AudioFile?
     private var currentLightSession: LightSession?
 
@@ -47,6 +46,9 @@ class AudioLightSyncPlayer: Sendable {
 
     /// Load audio only — no light session required. Light sync can be enabled later via enableLightSync(_:).
     func loadAudio(audioFile: AudioFile) async throws {
+        let trace = PerformanceTrace.begin("Audio Player Load")
+        defer { PerformanceTrace.end(trace) }
+
         stop()
 
         #if os(iOS)
@@ -73,12 +75,15 @@ class AudioLightSyncPlayer: Sendable {
 
     /// Attach a light session to a running audio player and start syncing lights.
     func enableLightSync(lightSession: LightSession) {
+        let trace = PerformanceTrace.begin("Light Sync Attach")
+        defer { PerformanceTrace.end(trace) }
+
         let wasPlaying = isPlaying
-        let currentPos = currentTime
+        let currentPos = audioPlayer?.currentTime ?? currentTime
+        currentTime = currentPos
 
         if wasPlaying {
             audioPlayer?.pause()
-            stopPlaybackTimer()
             isPlaying = false
         }
 
@@ -95,7 +100,6 @@ class AudioLightSyncPlayer: Sendable {
         if wasPlaying {
             audioPlayer?.play()
             player.play()
-            startPlaybackTimer()
             isPlaying = true
         }
         print("💡 Light sync enabled")
@@ -113,6 +117,9 @@ class AudioLightSyncPlayer: Sendable {
 
     /// Load and prepare audio file with its generated light session
     func loadAudioWithLights(audioFile: AudioFile, lightSession: LightSession) async throws {
+        let trace = PerformanceTrace.begin("Audio Player Load With Lights")
+        defer { PerformanceTrace.end(trace) }
+
         print("🎵🔆 Loading synchronized playback...")
         print("📄 Audio: \(audioFile.filename)")
         print("💡 Session: \(lightSession.session_name)")
@@ -184,10 +191,10 @@ class AudioLightSyncPlayer: Sendable {
             if !lightEngine.isRunning { lightEngine.start() }
             if !lightEngine.hasActiveSession { lightEngine.attachSession(player: lightPlayer) }
             lightPlayer.play()
+            lightEngine.resume()
         }
 
         audioPlayer.play()
-        startPlaybackTimer()
         isPlaying = true
         print("▶️ Playback started")
     }
@@ -195,9 +202,10 @@ class AudioLightSyncPlayer: Sendable {
     /// Pause playback.
     func pause() {
         guard isPlaying else { return }
+        currentTime = audioPlayer?.currentTime ?? currentTime
         audioPlayer?.pause()
         lightPlayer?.pause()
-        stopPlaybackTimer()
+        if lightPlayer != nil { lightEngine.pause() }
         isPlaying = false
         print("⏸️ Playback paused at \(Int(currentTime))s")
     }
@@ -212,7 +220,6 @@ class AudioLightSyncPlayer: Sendable {
             lightEngine.detachSession()
             lightEngine.stop()
         }
-        stopPlaybackTimer()
         currentTime = 0
         isPlaying = false
         print("⏹️ Playback stopped")
@@ -237,35 +244,29 @@ class AudioLightSyncPlayer: Sendable {
         print("🔊 Volume set to \(Int(volume * 100))%")
     }
 
-    // MARK: - Private Methods
+    // MARK: - Playback Snapshot
 
-    private func startPlaybackTimer() {
-        stopPlaybackTimer()
-
-        playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-
-                if let audioPlayer = self.audioPlayer {
-                    self.currentTime = audioPlayer.currentTime
-
-                    // Check if playback finished
-                    if !audioPlayer.isPlaying && self.isPlaying {
-                        self.handlePlaybackFinished()
-                    }
-                }
-            }
+    /// Pulls the authoritative AVAudioPlayer clock when the owning runtime
+    /// publishes UI state. AudioLightSyncPlayer previously ran a second 10 Hz
+    /// timer alongside UnifiedPlayerViewModel's clock, doubling wakeups and
+    /// observable writes for the same playback position.
+    func refreshPlaybackState() {
+        guard let audioPlayer else { return }
+        currentTime = audioPlayer.currentTime
+        if !audioPlayer.isPlaying && isPlaying {
+            handlePlaybackFinished()
         }
-    }
-
-    private func stopPlaybackTimer() {
-        playbackTimer?.invalidate()
-        playbackTimer = nil
     }
 
     private func handlePlaybackFinished() {
         print("🏁 Playback finished")
-        stop()
+        // Preserve the terminal position. Resetting to zero here made the
+        // outer runtime observe an idle track instead of a completed one, so
+        // the player never entered its completion state.
+        audioPlayer?.currentTime = duration
+        lightPlayer?.seek(to: duration)
+        currentTime = duration
+        isPlaying = false
     }
 
     // MARK: - Helper Methods

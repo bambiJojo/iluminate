@@ -16,13 +16,21 @@ struct TextTranceSetupView: View {
     @State private var displayPreferences: ReaderDisplayPreferences = .standard
     @State private var lightEnabled = true
     @State private var binauralEnabled = false
-    @State private var subliminalEnabled = true
+    // Off by default: the flash reads as an interruption to the reading flow,
+    // which costs more in broken trance than it gains in word recall. Users who
+    // want it can still switch it on; saved sessions keep their own choice.
+    @State private var subliminalEnabled = false
     @State private var subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium
     @State private var attentionGateEnabled = false
     @State private var resumeIndex = 0
     @State private var activePlayerSession: TextTranceSession?
     @State private var loadedPreset = false
     @State private var showingAdvancedOptions = false
+    @State private var mode: ReaderMode
+
+    /// What this script would be without a user override — shown beside the
+    /// switcher so an override reads as a deliberate departure from the default.
+    private var derivedMode: ReaderMode { ReaderMode.derived(from: script.source) }
 
     private let progressStore = ReaderProgressStore.shared
     private let presetStore = ReaderPresetStore.shared
@@ -30,6 +38,52 @@ struct TextTranceSetupView: View {
     init(script: TranceScript) {
         self.script = script
         _arc = State(initialValue: script.supportedArcs.first ?? .fullText)
+        _mode = State(initialValue: ReaderMode.derived(from: script.source))
+    }
+
+    /// The control for one settings group. The catalog decides *whether* a group
+    /// is shown; this decides what it looks like.
+    @ViewBuilder
+    private func card(for group: ReaderSettingsGroup) -> some View {
+        switch group {
+        case .arc:
+            ArcCard(script: script, arc: $arc)
+        case .pacingPreset:
+            ReaderPacingPresetCard(selection: pacingPreset) { preset in
+                pacingPreset = preset
+                speedTraining = preset.settings
+                speedMultiplier = preset.settings.targetSpeedMultiplier
+            }
+        case .speedTarget:
+            SpeedTargetCard(settings: $speedTraining)
+        case .readingComfort:
+            ReadingComfortCard(preferences: $displayPreferences)
+        case .visual:
+            LiminalCard(label: group.title) {
+                VStack(spacing: TranceSpacing.list) {
+                    ReaderVisualControls(preferences: $displayPreferences, style: .setupCard)
+                }
+            }
+        case .attention:
+            AttentionGateCard(enabled: $attentionGateEnabled)
+        case .binaural:
+            BinauralLayerCard(enabled: $binauralEnabled)
+        case .speedDetail:
+            SpeedTrainingCard(settings: $speedTraining)
+        case .displayDetail:
+            ReaderDisplayCard(preferences: $displayPreferences)
+        case .subliminal:
+            SubliminalCard(enabled: $subliminalEnabled, speed: $subliminalSpeed)
+        case .lightHandoff:
+            // Light runs only in the post-handoff tail, so the card is pointless
+            // on a full-text arc.
+            if arc == .handoff {
+                HandoffLightCard(
+                    lightEnabled: $lightEnabled,
+                    binauralEnabled: binauralEnabled
+                )
+            }
+        }
     }
 
     private var scriptText: String { script.segments.map(\.text).joined(separator: " ") }
@@ -52,31 +106,29 @@ struct TextTranceSetupView: View {
             ScrollView {
                 VStack(spacing: TranceSpacing.cardMargin) {
                     ScriptOverviewCard(script: script)
-                    ArcCard(script: script, arc: $arc)
-                    ReaderPacingPresetCard(selection: pacingPreset) { preset in
-                        pacingPreset = preset
-                        speedTraining = preset.settings
-                        speedMultiplier = preset.settings.targetSpeedMultiplier
+                    ReaderModeCard(mode: $mode, derived: derivedMode)
+
+                    // Which groups appear, and at which tier, is decided once in
+                    // ReaderSettingsCatalog so this view and ReaderSettingsDrawer
+                    // cannot drift apart.
+                    ForEach(ReaderSettingsGroup.groups(in: mode, tier: .main)) { group in
+                        card(for: group)
                     }
 
-                    LiminalCard {
-                        DisclosureGroup("Advanced options", isExpanded: $showingAdvancedOptions) {
-                            VStack(spacing: TranceSpacing.cardMargin) {
-                                LayersCard(
-                                    arc: arc,
-                                    lightEnabled: $lightEnabled,
-                                    binauralEnabled: $binauralEnabled
-                                )
-                                AttentionGateCard(enabled: $attentionGateEnabled)
-                                SpeedTrainingCard(settings: $speedTraining)
-                                ReaderDisplayCard(preferences: $displayPreferences)
-                                SubliminalCard(enabled: $subliminalEnabled, speed: $subliminalSpeed)
+                    if !ReaderSettingsGroup.groups(in: mode, tier: .advanced).isEmpty {
+                        LiminalCard {
+                            DisclosureGroup("Advanced options", isExpanded: $showingAdvancedOptions) {
+                                VStack(spacing: TranceSpacing.cardMargin) {
+                                    ForEach(ReaderSettingsGroup.groups(in: mode, tier: .advanced)) { group in
+                                        card(for: group)
+                                    }
+                                }
+                                .padding(.top, TranceSpacing.list)
                             }
-                            .padding(.top, TranceSpacing.list)
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(Color.textPrimary)
+                            .tint(Color.roseGold)
                         }
-                        .font(TranceTypography.sectionTitle)
-                        .foregroundStyle(Color.textPrimary)
-                        .tint(Color.roseGold)
                     }
                 }
                 .padding(TranceSpacing.screen)
@@ -136,22 +188,32 @@ struct TextTranceSetupView: View {
     private func makeSession() -> TextTranceSession {
         let useLight = arc == .handoff && lightEnabled
         let activeSpeedTraining = normalizedSpeedTraining()
+
+        // The mode gates the session, not just the settings list, so a layer
+        // whose control the mode hides cannot keep running behind it. Every
+        // engine below is attached from the NORMALISED settings — deriving them
+        // from the raw state would reattach exactly what the mode just stripped.
+        let settings = TextTranceSessionSettings(
+            arc: arc,
+            speedMultiplier: activeSpeedTraining.targetSpeedMultiplier,
+            lightEnabled: useLight,
+            binauralEnabled: binauralEnabled,
+            beatFrequency: 10,
+            postHandoffDuration: 600,
+            subliminalEnabled: subliminalEnabled,
+            subliminalSpeed: subliminalSpeed,
+            attentionGateEnabled: attentionGateEnabled,
+            speedTraining: activeSpeedTraining,
+            displayPreferences: displayPreferences
+        ).normalized(for: mode, supportedArcs: script.supportedArcs)
+
         return TextTranceSession(
             script: script,
-            settings: TextTranceSessionSettings(
-                arc: arc,
-                speedMultiplier: activeSpeedTraining.targetSpeedMultiplier,
-                lightEnabled: useLight,
-                binauralEnabled: binauralEnabled,
-                beatFrequency: 10,
-                postHandoffDuration: 600,
-                subliminalEnabled: subliminalEnabled,
-                subliminalSpeed: subliminalSpeed,
-                attentionGateEnabled: attentionGateEnabled,
-                speedTraining: activeSpeedTraining,
-                displayPreferences: displayPreferences),
-            light: useLight ? FlashController(frequency: 10, intensity: 0.7, pattern: .sine) : nil,
-            audio: binauralEnabled ? BinauralBeatsEngine() : nil,
+            settings: settings,
+            light: settings.lightEnabled
+                ? FlashController(frequency: 10, intensity: 0.7, pattern: .sine)
+                : nil,
+            audio: settings.binauralEnabled ? BinauralBeatsEngine() : nil,
             progressStore: progressStore,
             scriptContentHash: contentHash)
     }
@@ -203,13 +265,17 @@ struct TextTranceSetupView: View {
         pacingPreset = ReaderPacingPreset.closest(to: preset.speedTraining)
         speedMultiplier = preset.speedTraining.targetSpeedMultiplier
         displayPreferences = preset.displayPreferences
+        mode = preset.resolvedMode(for: script)
     }
 
     private func savePreset() {
         presetStore.save(
             ReaderPreset(
                 speedTraining: normalizedSpeedTraining(),
-                displayPreferences: displayPreferences
+                displayPreferences: displayPreferences,
+                // Only record an override when it departs from the derived value,
+                // so a script whose source kind later changes still follows it.
+                mode: mode == derivedMode ? nil : mode
             ),
             forScriptId: script.id
         )
@@ -282,37 +348,143 @@ private struct ScriptOverviewCard: View {
     }
 }
 
-private struct LayersCard: View {
-    let arc: ScriptArc
-    @Binding var lightEnabled: Bool
-    @Binding var binauralEnabled: Bool
+/// Binaural is a headline trance layer, so it gets its own main-tier card
+/// rather than sitting inside a card called "Layers" inside Advanced.
+private struct BinauralLayerCard: View {
+    @Binding var enabled: Bool
 
     var body: some View {
-        LiminalCard(label: "Layers") {
+        LiminalCard(label: "Binaural beats") {
             VStack(spacing: TranceSpacing.list) {
-                Toggle("Binaural beats", isOn: $binauralEnabled)
+                Toggle("Binaural beats", isOn: $enabled)
                 Text("Requires headphones")
                     .font(TranceTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                // Light runs only in the post-handoff tail in M1.
-                if arc == .handoff {
-                    Toggle("Light pulse after handoff", isOn: $lightEnabled)
-                    Text(handoffStatusText)
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+            }
+            .tint(.roseGold)
+        }
+    }
+}
+
+/// What keeps running once the text hands off and the reader's eyes close.
+private struct HandoffLightCard: View {
+    @Binding var lightEnabled: Bool
+    let binauralEnabled: Bool
+
+    var body: some View {
+        LiminalCard(label: "After handoff") {
+            VStack(spacing: TranceSpacing.list) {
+                Toggle("Light pulse after handoff", isOn: $lightEnabled)
+                Text(statusText)
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .tint(.roseGold)
         }
     }
 
-    private var handoffStatusText: String {
+    private var statusText: String {
         if lightEnabled || binauralEnabled {
             return "Enabled layers continue after the final reading line."
         }
         return "With both layers off, the session ends after the final reading line."
+    }
+}
+
+/// Mode switcher. Shows the derived default so an override reads as deliberate.
+private struct ReaderModeCard: View {
+    @Binding var mode: ReaderMode
+    let derived: ReaderMode
+
+    var body: some View {
+        LiminalCard(label: "Mode") {
+            VStack(spacing: TranceSpacing.list) {
+                Picker("Mode", selection: $mode) {
+                    ForEach(ReaderMode.allCases) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .tint(.roseGold)
+
+                Text(mode == derived
+                     ? mode.detail
+                     : "\(mode.detail) · default for this script is \(derived.displayName)")
+                    .font(TranceTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+/// Words per minute, exposed as a number. In plain reading mode the rate *is*
+/// the feature, so it sits top-level instead of under a named pacing preset.
+private struct SpeedTargetCard: View {
+    @Binding var settings: ReaderSpeedTrainingSettings
+
+    private var targetBinding: Binding<Double> {
+        Binding(
+            get: { Double(settings.clampedTargetWPM) },
+            set: {
+                settings.targetWPM = Int($0.rounded())
+                settings.warmUpWPM = min(settings.warmUpWPM, settings.targetWPM)
+                settings.rampStartWPM = min(settings.rampStartWPM, settings.targetWPM)
+            }
+        )
+    }
+
+    var body: some View {
+        LiminalCard(label: "Speed") {
+            VStack(spacing: TranceSpacing.list) {
+                SetupControlLabel(text: "\(settings.clampedTargetWPM) wpm")
+                Slider(
+                    value: targetBinding,
+                    in: ReaderSpeedTrainingSettings.setupTargetWPMRange,
+                    step: 5
+                )
+                .tint(.roseGold)
+            }
+        }
+    }
+}
+
+/// The three display controls people actually reach for. Everything else in
+/// ReaderDisplayCard is a once-ever adjustment and stays in Advanced.
+private struct ReadingComfortCard: View {
+    @Binding var preferences: ReaderDisplayPreferences
+
+    private var fontScaleBinding: Binding<Double> {
+        Binding(
+            get: { preferences.clampedFontScale },
+            set: { preferences.fontScale = $0 }
+        )
+    }
+
+    var body: some View {
+        LiminalCard(label: "Reading comfort") {
+            VStack(spacing: TranceSpacing.list) {
+                SetupPickerRow(title: "Reader mode") {
+                    Picker("Reader mode", selection: $preferences.colorMode) {
+                        ForEach(ReaderColorMode.allCases) {
+                            Text($0.displayName).tag($0)
+                        }
+                    }
+                }
+
+                SetupPickerRow(title: "Font") {
+                    Picker("Font", selection: $preferences.font) {
+                        ForEach(ReaderFont.allCases) {
+                            Text($0.displayName).tag($0)
+                        }
+                    }
+                }
+
+                SetupControlLabel(text: "Size \(Int((preferences.clampedFontScale * 100).rounded()))%")
+                Slider(value: fontScaleBinding, in: ReaderDisplayPreferences.fontScaleRange)
+                    .tint(.roseGold)
+            }
+        }
     }
 }
 
@@ -414,13 +586,6 @@ private struct ReaderDisplayCard: View {
         )
     }
 
-    private var lineSpacingBinding: Binding<Double> {
-        Binding(
-            get: { preferences.clampedLineSpacing },
-            set: { preferences.lineSpacing = $0 }
-        )
-    }
-
     private var brightnessBinding: Binding<Double> {
         Binding(
             get: { preferences.clampedBackgroundBrightness },
@@ -439,22 +604,7 @@ private struct ReaderDisplayCard: View {
                     }
                 }
 
-                SetupPickerRow(title: "Font") {
-                    Picker("Font", selection: $preferences.font) {
-                        ForEach(ReaderFont.allCases) {
-                            Text($0.displayName).tag($0)
-                        }
-                    }
-                }
-
-                SetupControlLabel(text: "Size \(Int((preferences.clampedFontScale * 100).rounded()))%")
-                Slider(value: fontScaleBinding, in: ReaderDisplayPreferences.fontScaleRange)
-                    .tint(.roseGold)
-
-                SetupControlLabel(text: "Line \(String(format: "%.1fx", preferences.clampedLineSpacing))")
-                Slider(value: lineSpacingBinding, in: ReaderDisplayPreferences.lineSpacingRange)
-                    .tint(.roseDeep)
-
+                // Font and size live in ReadingComfortCard at main tier.
                 SetupPickerRow(title: "Highlight color") {
                     Picker("Highlight color", selection: $preferences.orpColor) {
                         ForEach(ReaderORPColor.allCases) {

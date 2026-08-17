@@ -91,7 +91,7 @@ final class LightEngine {
         didSet {
             guard oldValue != mindMachineEnabled else { return }
             if mindMachineEnabled {
-                guard isRunning else { return }
+                guard isRunning, !isPaused else { return }
                 // Re-prime the tick: a stale timestamp would produce a huge
                 // deltaTime and blow up the phase accumulator on the first frame.
                 phase = 0.0
@@ -135,10 +135,13 @@ final class LightEngine {
     /// Calculate optimal refresh rate based on current therapeutic frequencies
     /// Uses 8x oversampling minimum for smooth waveform rendering
     private func calculateOptimalRefreshRate() -> Int {
-        let leftFreq = currentFrequency + (bilateralMode ? currentBilateralOffset : 0.0)
-        let rightFreq = currentFrequency - (bilateralMode ? currentBilateralOffset : 0.0)
-
-        let maxTherapeuticFreq = max(leftFreq, rightFreq)
+        // `currentBilateralOffset` is a PHASE offset, not a frequency one —
+        // `evaluateOscillator` uses it as `waveform.evaluate(at: phase + offset)`,
+        // so both eyes run at the same rate and only their phase differs.
+        // Treating it as a frequency delta here modelled a per-eye rate that
+        // never exists, inflating the required refresh and quietly eroding the
+        // power saving this function is here to produce.
+        let maxTherapeuticFreq = currentFrequency
 
         // Minimum 8 samples per cycle for smooth waveforms
         let minRequiredRefresh = maxTherapeuticFreq * 8.0
@@ -173,7 +176,7 @@ final class LightEngine {
             )
 
             let efficiencyText = powerEfficiencyGain > 0 ? String(format: " (%.1f%% power savings)", powerEfficiencyGain) : ""
-            Log.engine.info("🔄 Adaptive refresh rate: \(optimalRate)Hz (therapeutic: \(String(format: "%.1f", max(self.currentFrequency + abs(self.currentBilateralOffset), self.currentFrequency - abs(self.currentBilateralOffset))))Hz)\(efficiencyText)")
+            Log.engine.info("🔄 Adaptive refresh rate: \(optimalRate)Hz (therapeutic: \(String(format: "%.1f", self.currentFrequency))Hz)\(efficiencyText)")
         }
     }
 
@@ -424,6 +427,7 @@ final class LightEngine {
     func pause() {
         guard isRunning else { return }
         isPaused = true
+        stopDisplayLink()
         brightness = 0.0
         brightnessLeft = 0.0
         brightnessRight = 0.0
@@ -433,7 +437,12 @@ final class LightEngine {
     /// Resume the engine from pause state
     func resume() {
         guard isRunning else { return }
+        let wasPaused = isPaused
         isPaused = false
+        if wasPaused, mindMachineEnabled {
+            lastTimestamp = 0.0
+            startDisplayLink()
+        }
         Log.engine.info("▶️ Light engine resumed")
     }
 
@@ -457,9 +466,14 @@ final class LightEngine {
         // score player that is not playing. The timestamp is already refreshed
         // above, which prevents a phase jump on resume.
         if isOutputSuspended {
-            brightness = 0.0
-            brightnessLeft = 0.0
-            brightnessRight = 0.0
+            // Some defensive callers pause only the attached score. Avoid
+            // publishing identical zeroes every display frame in that fallback
+            // path; explicit engine pauses suspend the display link entirely.
+            if brightness != 0 || brightnessLeft != 0 || brightnessRight != 0 {
+                brightness = 0.0
+                brightnessLeft = 0.0
+                brightnessRight = 0.0
+            }
             return
         }
 
@@ -469,11 +483,11 @@ final class LightEngine {
         applySessionState()
         advanceFrequency(deltaTime: deltaTime)
 
-        // Reduce Motion: hold a steady "on" brightness (the maximum/mid level)
-        // instead of advancing the oscillator, so the light never strobes for
-        // motion-sensitive users. Checked every frame, so a mid-session toggle
-        // of the system setting is respected.
-        if PlatformAccessibility.isReduceMotionEnabled {
+        // Steady light: hold a steady "on" brightness (the maximum/mid level)
+        // instead of advancing the oscillator, so the light never strobes.
+        // Driven by the in-app toggle or system Reduce Motion. Checked every
+        // frame, so a mid-session toggle of either source is respected.
+        if SteadyLightPreference.prefersSteadyLight() {
             let steady = max(0.0, min(1.0, maximumBrightness))
             brightness = steady
             brightnessLeft = steady

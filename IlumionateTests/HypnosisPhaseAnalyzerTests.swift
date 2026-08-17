@@ -171,6 +171,53 @@ struct MajorityVoteSmoothTests {
     }
 }
 
+// MARK: - Final Timeline Stability Tests
+
+struct FinalTimelineStabilityTests {
+
+    private let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
+
+    @Test func adaptationDoesNotReintroduceRapidPhaseChanges() {
+        let transcriptionSegments = [
+            makeSegment(text: "Take a slow breath and relax now.", start: 0, duration: 6),
+            makeSegment(text: "You will accept every suggestion.", start: 6, duration: 6),
+            makeSegment(text: "Going deeper now, deeper and deeper.", start: 12, duration: 6),
+            makeSegment(text: "You will feel this change automatically.", start: 18, duration: 6),
+            makeSegment(text: "Relax and drift deeper with every breath.", start: 24, duration: 6),
+            makeSegment(text: "Every time you hear these words you respond.", start: 30, duration: 6),
+            makeSegment(text: "Sink deeper and let your body relax.", start: 36, duration: 6),
+            makeSegment(text: "From now on this response becomes automatic.", start: 42, duration: 6),
+            makeSegment(text: "Breathe slowly and continue relaxing.", start: 48, duration: 6),
+            makeSegment(text: "You will accept these suggestions easily.", start: 54, duration: 6)
+        ]
+        let transcription = AudioTranscriptionResult(
+            fullText: transcriptionSegments.map(\.text).joined(separator: " "),
+            segments: transcriptionSegments,
+            duration: 60,
+            detectedLanguage: "en"
+        )
+        let primary = [
+            PhaseSegment(
+                phase: .induction,
+                startTime: 0,
+                endTime: 60,
+                characteristics: "Induction",
+                tranceDepthEstimate: TrancePhase.induction.tranceDepthEstimate
+            )
+        ]
+
+        let result = analyzer.adaptPredictedPhases(primary, transcription: transcription)
+        let runs = result
+            .map { "\($0.phase.rawValue) \($0.startTime)-\($0.endTime)" }
+            .joined(separator: ", ")
+
+        #expect(
+            result.allSatisfy { $0.endTime - $0.startTime >= 20 },
+            "Final adaptation must honor the configured 20-second minimum: \(runs)"
+        )
+    }
+}
+
 // MARK: - consolidatePhaseSegments Tests
 
 struct ConsolidatePhaseSegmentsTests {
@@ -588,13 +635,13 @@ struct TranscriptConfidenceEnrichmentTests {
             and as i count to five you become wide awake
             """,
             segments: [
-                makeSegment(text: "welcome and get comfortable as you settle in", start: 0, duration: 18),
-                makeSegment(text: "now begin to relax and close your eyes", start: 18, duration: 18),
-                makeSegment(text: "with every breath you can go deeper and deeper", start: 36, duration: 20),
-                makeSegment(text: "when i snap my fingers this response returns instantly", start: 56, duration: 20),
-                makeSegment(text: "and as i count to five you become wide awake", start: 76, duration: 20)
+                makeSegment(text: "welcome and get comfortable as you settle in", start: 0, duration: 20),
+                makeSegment(text: "now begin to relax and close your eyes", start: 20, duration: 20),
+                makeSegment(text: "with every breath you can go deeper and deeper", start: 40, duration: 20),
+                makeSegment(text: "when i snap my fingers this response returns instantly", start: 60, duration: 20),
+                makeSegment(text: "and as i count to five you become wide awake", start: 80, duration: 20)
             ],
-            duration: 96,
+            duration: 100,
             detectedLanguage: "en"
         )
 
@@ -620,14 +667,14 @@ struct TranscriptConfidenceEnrichmentTests {
             and now wide awake and back in the room
             """,
             segments: [
-                makeSegment(text: "welcome and get comfortable", start: 0, duration: 16),
-                makeSegment(text: "now begin to relax and close your eyes", start: 16, duration: 16),
-                makeSegment(text: "deeper and deeper with every breath", start: 32, duration: 16),
-                makeSegment(text: "from now on these suggestions settle in", start: 48, duration: 16),
-                makeSegment(text: "when i snap my fingers this trigger activates", start: 64, duration: 16),
-                makeSegment(text: "and now wide awake and back in the room", start: 80, duration: 16)
+                makeSegment(text: "welcome and get comfortable", start: 0, duration: 20),
+                makeSegment(text: "now begin to relax and close your eyes", start: 20, duration: 20),
+                makeSegment(text: "deeper and deeper with every breath", start: 40, duration: 20),
+                makeSegment(text: "from now on these suggestions settle in", start: 60, duration: 20),
+                makeSegment(text: "when i snap my fingers this trigger activates", start: 80, duration: 20),
+                makeSegment(text: "and now wide awake and back in the room", start: 100, duration: 20)
             ],
-            duration: 96,
+            duration: 120,
             detectedLanguage: "en"
         )
 
@@ -636,7 +683,7 @@ struct TranscriptConfidenceEnrichmentTests {
                 PhaseSegment(
                     phase: .therapy,
                     startTime: 0,
-                    endTime: 96,
+                    endTime: 120,
                     characteristics: "Therapy",
                     tranceDepthEstimate: 0.84
                 )

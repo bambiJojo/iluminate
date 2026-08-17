@@ -57,6 +57,9 @@ struct IlumionateApp: App {
         #if os(macOS)
         BackgroundAnalysisScheduler.shared.register()
         #endif
+        // Reclaim files left staged by a session that was killed during an
+        // undo window. They are already gone from the library.
+        PendingAudioDeletion.shared.sweepOrphans()
     }
 
     var body: some Scene {

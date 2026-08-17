@@ -40,18 +40,48 @@ require_command() {
 
 read_project_versions() {
   /usr/bin/ruby -e '
-    path, app_bundle = ARGV
+    path, app_bundle, extension_bundle = ARGV
     text = File.read(path)
     blocks = text.scan(/buildSettings = \{.*?^\s+\};/m)
-    app_blocks = blocks.select { |block| block.include?("PRODUCT_BUNDLE_IDENTIFIER = #{app_bundle};") }
-    abort "Expected two Ilumionate build configurations, found #{app_blocks.length}" unless app_blocks.length == 2
 
-    versions = app_blocks.map { |block| block[/MARKETING_VERSION = ([^;]+);/, 1] }.compact.uniq
-    builds = app_blocks.map { |block| block[/CURRENT_PROJECT_VERSION = ([^;]+);/, 1] }.compact.uniq
-    abort "Ilumionate marketing versions are missing or inconsistent" unless versions.length == 1
-    abort "Ilumionate build numbers are missing or inconsistent" unless builds.length == 1
-    puts "#{versions.first}|#{builds.first}"
-  ' "${PROJECT_FILE}" "${BUNDLE_ID}"
+    # Read the app AND the extension together. Apple rejects an upload whose
+    # extension version or build differs from its parent app (ITMS-90473), and
+    # a release that only bumps the app produces exactly that. Checking both
+    # here fails before any archive work rather than part-way through it.
+    def blocks_for(blocks, bundle)
+      blocks.select { |block| block.include?("PRODUCT_BUNDLE_IDENTIFIER = #{bundle};") }
+    end
+
+    app_blocks = blocks_for(blocks, app_bundle)
+    extension_blocks = blocks_for(blocks, extension_bundle)
+    abort "Expected two #{app_bundle} build configurations, found #{app_blocks.length}" unless app_blocks.length == 2
+    abort "Expected two #{extension_bundle} build configurations, found #{extension_blocks.length}" unless extension_blocks.length == 2
+
+    def field(blocks, key)
+      blocks.map { |block| block[/#{key} = ([^;]+);/, 1] }.compact.uniq
+    end
+
+    app_versions = field(app_blocks, "MARKETING_VERSION")
+    app_builds = field(app_blocks, "CURRENT_PROJECT_VERSION")
+    ext_versions = field(extension_blocks, "MARKETING_VERSION")
+    ext_builds = field(extension_blocks, "CURRENT_PROJECT_VERSION")
+
+    abort "App marketing versions are missing or inconsistent: #{app_versions.inspect}" unless app_versions.length == 1
+    abort "App build numbers are missing or inconsistent: #{app_builds.inspect}" unless app_builds.length == 1
+    abort "Extension marketing versions are missing or inconsistent: #{ext_versions.inspect}" unless ext_versions.length == 1
+    abort "Extension build numbers are missing or inconsistent: #{ext_builds.inspect}" unless ext_builds.length == 1
+
+    unless app_versions.first == ext_versions.first && app_builds.first == ext_builds.first
+      abort <<~MESSAGE
+        Extension version does not match the app, which Apple rejects on upload.
+          app       #{app_bundle}: #{app_versions.first} (#{app_builds.first})
+          extension #{extension_bundle}: #{ext_versions.first} (#{ext_builds.first})
+        Align them in #{path} before releasing.
+      MESSAGE
+    end
+
+    puts "#{app_versions.first}|#{app_builds.first}"
+  ' "${PROJECT_FILE}" "${BUNDLE_ID}" "${SHARE_EXTENSION_BUNDLE_ID}"
 }
 
 increment_patch_version() {

@@ -8,6 +8,7 @@
 import SwiftUI
 import WebKit
 import AVFoundation
+import os
 
 // MARK: - In-App Browser View
 
@@ -28,6 +29,9 @@ struct InAppBrowserView: View {
     
     // We hold a reference to the web view to trigger navigations from the SwiftUI bar
     @State private var webView: WKWebView?
+    @State private var discoveredLinks: [DiscoveredAudioLink] = []
+    @State private var showingDiscoveredAudio = false
+    @State private var isScanningForAudio = false
 
     @Environment(\.dismiss) private var dismiss
     
@@ -90,6 +94,19 @@ struct InAppBrowserView: View {
                     Button("Done") { dismiss() }
                         .foregroundStyle(.roseGold)
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Find Audio", systemImage: "waveform.badge.magnifyingglass") {
+                        scanPageForAudio()
+                    }
+                    .foregroundStyle(.roseGold)
+                    .disabled(webView == nil || isScanningForAudio)
+                }
+            }
+            .sheet(isPresented: $showingDiscoveredAudio) {
+                DiscoveredAudioSheet(links: discoveredLinks) { link in
+                    showingDiscoveredAudio = false
+                    downloadDiscovered(link)
+                }
             }
             .alert("Download Error", isPresented: Binding(
                 get: { errorMessage != nil },
@@ -98,6 +115,51 @@ struct InAppBrowserView: View {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
                 if let msg = errorMessage { Text(msg) }
+            }
+        }
+    }
+
+    /// Asks the page what audio it references, then offers whatever is fetchable.
+    private func scanPageForAudio() {
+        guard let webView else { return }
+        isScanningForAudio = true
+
+        Task {
+            defer { isScanningForAudio = false }
+
+            let raw = try? await webView.evaluateJavaScript(
+                AudioLinkDiscovery.collectionScript
+            )
+            // The script returns [{href, title}]; anything else means the page
+            // blocked evaluation or returned something unexpected.
+            let entries = (raw as? [[String: Any]])?.map { entry in
+                entry.compactMapValues { $0 as? String }
+            } ?? []
+
+            discoveredLinks = AudioLinkDiscovery.links(
+                fromRawEntries: entries,
+                pageURL: webView.url
+            )
+
+            if discoveredLinks.isEmpty {
+                errorMessage = "No downloadable audio found on this page. "
+                    + "Streaming players often keep their audio out of reach."
+            } else {
+                showingDiscoveredAudio = true
+            }
+        }
+    }
+
+    private func downloadDiscovered(_ link: DiscoveredAudioLink) {
+        Task {
+            do {
+                if let file = try await AudioIntake.shared.downloadAudio(from: link.url) {
+                    handleDownload(file)
+                }
+            } catch let rejection as AudioDownloadValidation.Rejection {
+                errorMessage = rejection.userFacingMessage
+            } catch {
+                errorMessage = "Download failed: \(error.localizedDescription)"
             }
         }
     }
@@ -572,7 +634,25 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, WKDownloa
         let name = suggestedName ?? tempURL.lastPathComponent
         let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
         let validExts: Set<String> = ["mp3", "m4a", "wav", "aac", "flac", "ogg"]
-        let finalExt = validExts.contains(ext) ? ext : "mp3"
+
+        // A page can link to ".mp3" and still serve a sign-in page or a 404 body.
+        // Check the bytes before anything reaches the library.
+        let leadingBytes = (try? FileHandle(forReadingFrom: tempURL).read(upToCount: 64)) ?? Data()
+        if let rejection = AudioDownloadValidation.rejectionReason(
+            contentType: nil,
+            data: leadingBytes
+        ) {
+            try? FileManager.default.removeItem(at: tempURL)
+            Log.audio.info("❌ Rejected non-audio download from browser: \(rejection)")
+            UsageAnalytics.shared.errorOccurred(.audioURLServerRejected)
+            onError(rejection.userFacingMessage)
+            isLoading = false
+            return
+        }
+
+        // Never guess an extension: prefer the payload's own signature.
+        let inferred = AudioDownloadValidation.inferredExtension(from: leadingBytes)
+        let finalExt = validExts.contains(ext) ? ext : (inferred ?? "mp3")
         let baseName = (name as NSString).deletingPathExtension
         let finalName = validExts.contains(ext) ? name : "\(baseName).\(finalExt)"
 

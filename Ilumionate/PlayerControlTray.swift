@@ -18,9 +18,14 @@ struct PlayerControlTray: View {
 
     @State private var volumeDragStart: Double?
     @State private var brightnessDragStart: Double?
+    @State private var visualSpeedDragStart: Double?
+    @State private var visualStrengthDragStart: Double?
 
     private static let volumeMapper = DragValueMapper(range: 0...1)
     private static let brightnessMapper = DragValueMapper(range: 0.1...1.0)
+    private static let visualSpeedMapper = DragValueMapper(range: 0...1)
+    private static let visualStrengthMapper =
+        DragValueMapper(range: VisualModulation.opacityBand)
 
     private var slots: [PlayerControlSlot] { PlayerControlSlot.slots(for: viewModel.mode) }
 
@@ -45,7 +50,14 @@ struct PlayerControlTray: View {
 
     @ViewBuilder
     private func tile(for slot: PlayerControlSlot) -> some View {
-        let state = slot.state(lightsAreOn: lightsAreOn)
+        // Handled here rather than in PlayerControlSlot.state(lightsAreOn:),
+        // which deliberately takes no view-model state. The tile's PRESENCE
+        // still comes only from the mode, so the tray does not reflow — only
+        // its state changes.
+        let state: PlayerControlTile.State =
+            (slot == .volume && viewModel.audioUnavailable)
+                ? .disabled
+                : slot.state(lightsAreOn: lightsAreOn)
 
         PlayerControlTile(
             systemImage: slot.systemImage(lightsAreOn: lightsAreOn),
@@ -65,6 +77,11 @@ struct PlayerControlTray: View {
         switch slot {
         case .volume:     return viewModel.volumeDouble
         case .brightness: return engine.userBrightnessMultiplier
+        case .visualSpeed: return viewModel.visualFieldSettings.speed
+        case .visualStrength:
+            let band = VisualModulation.opacityBand
+            return (viewModel.visualFieldSettings.clampedOpacity - band.lowerBound)
+                / (band.upperBound - band.lowerBound)
         default:          return nil
         }
     }
@@ -100,7 +117,7 @@ struct PlayerControlTray: View {
         case .mindMachine: viewModel.toggleMindMachine()
         case .lightSync:   viewModel.toggleLightSync()
         case .more:        showingOverflow = true
-        case .volume, .brightness: break
+        case .volume, .brightness, .visualStrength, .visualSpeed: break
         }
     }
 
@@ -129,6 +146,30 @@ struct PlayerControlTray: View {
             engine.userBrightnessMultiplier = new
             tick(from: old, to: new, in: 0.1...1.0)
 
+        case .visualSpeed:
+            let start = visualSpeedDragStart ?? viewModel.visualFieldSettings.speed
+            if visualSpeedDragStart == nil {
+                visualSpeedDragStart = start
+                TranceHaptics.shared.selection()
+            }
+            let old = viewModel.visualFieldSettings.speed
+            let new = Self.visualSpeedMapper.value(from: start, translation: translation)
+            viewModel.visualFieldSettings.speed = new
+            tick(from: old, to: new, in: 0...1)
+
+        case .visualStrength:
+            let band = VisualModulation.opacityBand
+            let start = visualStrengthDragStart
+                ?? viewModel.visualFieldSettings.clampedOpacity
+            if visualStrengthDragStart == nil {
+                visualStrengthDragStart = start
+                TranceHaptics.shared.selection()
+            }
+            let old = viewModel.visualFieldSettings.clampedOpacity
+            let new = Self.visualStrengthMapper.value(from: start, translation: translation)
+            viewModel.visualFieldSettings.opacity = new
+            tick(from: old, to: new, in: band)
+
         default:
             break
         }
@@ -138,6 +179,8 @@ struct PlayerControlTray: View {
         switch slot {
         case .volume:     volumeDragStart = nil
         case .brightness: brightnessDragStart = nil
+        case .visualSpeed: visualSpeedDragStart = nil
+        case .visualStrength: visualStrengthDragStart = nil
         default:          break
         }
     }

@@ -208,7 +208,10 @@ class AudioAnalyzer: Sendable {
 
     /// Transcribe an audio file using modern async/await patterns
     func transcribe(audioFile: AudioFile) async throws -> AudioTranscriptionResult {
-        try await AudioTranscriptResolver().transcribe(
+        let trace = PerformanceTrace.begin("Transcription")
+        defer { PerformanceTrace.end(trace) }
+
+        return try await AudioTranscriptResolver().transcribe(
             filename: audioFile.filename,
             duration: audioFile.duration
         ) {
@@ -329,6 +332,9 @@ actor WhisperManager {
 
     func ensureReady() async throws {
         if whisperKit != nil { return }
+
+        let trace = PerformanceTrace.begin("Whisper Model Bootstrap")
+        defer { PerformanceTrace.end(trace) }
 
         if case .loading = modelState {
             try await waitForInitialization()

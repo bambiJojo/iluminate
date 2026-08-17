@@ -32,7 +32,6 @@ extension AudioLibraryView {
 
                     if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
                         audioFiles[index] = updatedFile
-                        await saveAudioFiles()
                     }
                     break
                 }
@@ -43,15 +42,6 @@ extension AudioLibraryView {
         }
     }
 
-    func handleAnalysisComplete(analyzedFile: AudioFile, result: AnalysisResult) {
-        // Update the file with analysis results
-        if let index = audioFiles.firstIndex(where: { $0.id == analyzedFile.id }) {
-            audioFiles[index] = analyzedFile
-            Task { await saveAudioFiles() }
-        }
-        showingExpandedProgress = false
-    }
-
     // MARK: - File Management
 
     func loadAudioFiles() async {
@@ -60,29 +50,27 @@ extension AudioLibraryView {
         Log.audio.info("📦 Loaded \(files.count) audio files")
     }
 
-    func saveAudioFiles() async {
-        await AudioLibraryStore.save(audioFiles)
-        Log.audio.info("💾 Saved \(audioFiles.count) audio files")
-    }
-
-    func addAudioFile(_ file: AudioFile) async {
-        let reviewedFile = KnownAudioCatalog.shared.applyingReviewedAnalysis(to: file) ?? file
-        audioFiles.insert(reviewedFile, at: 0)
-        await saveAudioFiles()
-        Log.audio.info("✅ Added audio file: \(reviewedFile.filename)")
-    }
-
+    /// Removes the row and stages the file for undo. Nothing is destroyed here —
+    /// `PendingAudioDeletion.commit()` does that once the undo window closes.
     func deleteFile(_ file: AudioFile) {
-        // Delete the audio file
-        try? FileManager.default.removeItem(at: file.url)
+        guard let index = audioFiles.firstIndex(where: { $0.id == file.id }) else { return }
 
-        // Delete the generated session if it exists
-        GeneratedSessionStore.shared.delete(for: file)
+        let staged = pendingDeletion.stage([
+            StagedAudioFile(file: file, originalURL: file.url, originalIndex: index)
+        ])
 
-        // Remove from list
-        audioFiles.removeAll { $0.id == file.id }
-        Task { await saveAudioFiles() }
-        Log.audio.info("🗑 Deleted: \(file.filename)")
+        // The move failed, so the file is still sitting in Documents. Keep the
+        // row: dropping it would let the next library scan re-register the file
+        // as a duplicate.
+        guard !staged.isEmpty else { return }
+
+        audioFiles.remove(at: index)
+        Task {
+            if let persisted = await AudioLibraryStore.remove(audioFileIDs: [file.id]) {
+                audioFiles = persisted
+            }
+        }
+        TranceHaptics.shared.medium()
     }
 
     func renameFile(_ file: AudioFile, newName: String) {
@@ -91,7 +79,9 @@ extension AudioLibraryView {
 
         if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
             audioFiles[index].userTitle = cleanName
-            Task { await saveAudioFiles() }
+            Task {
+                await AudioLibraryStore.setUserTitle(cleanName, audioFileID: file.id)
+            }
             Log.audio.info("✏️ Updated library title to: \(cleanName)")
         }
     }
@@ -100,8 +90,11 @@ extension AudioLibraryView {
 
     func toggleFavorite(for file: AudioFile) {
         if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
-            audioFiles[index].isFavorite = !(audioFiles[index].isFavorite ?? false)
-            Task { await saveAudioFiles() }
+            let isFavorite = !(audioFiles[index].isFavorite ?? false)
+            audioFiles[index].isFavorite = isFavorite
+            Task {
+                await AudioLibraryStore.setFavorite(isFavorite, audioFileID: file.id)
+            }
             TranceHaptics.shared.light()
         }
     }
@@ -109,7 +102,9 @@ extension AudioLibraryView {
     func updateRating(for file: AudioFile, rating: Int) {
         if let index = audioFiles.firstIndex(where: { $0.id == file.id }) {
             audioFiles[index].rating = rating
-            Task { await saveAudioFiles() }
+            Task {
+                await AudioLibraryStore.setRating(rating, audioFileID: file.id)
+            }
             TranceHaptics.shared.light()
         }
     }
@@ -134,15 +129,108 @@ extension AudioLibraryView {
         Log.audio.info("📋 Total selected: \(selectedFiles.count)")
     }
 
-    func deleteSelectedFiles() {
-        let filesToDelete = audioFiles.filter { selectedFiles.contains($0.id) }
-        for file in filesToDelete {
-            deleteFile(file)
-        }
+    /// Stages the whole selection as one batch, so a single Undo brings all of
+    /// it back. Calling `deleteFile` in a loop would not — each `stage(_:)`
+    /// commits the batch before it.
+    /// True when every *visible* file is selected. Scoped to the filtered set —
+    /// "Select All" must never reach files the current filter is hiding.
+    var allVisibleSelected: Bool {
+        !filteredAudioFiles.isEmpty && filteredAudioFiles.allSatisfy { selectedFiles.contains($0.id) }
+    }
 
-        // Exit selection mode
+    func toggleSelectAll() {
+        TranceHaptics.shared.light()
+        if allVisibleSelected {
+            for file in filteredAudioFiles {
+                selectedFiles.remove(file.id)
+            }
+        } else {
+            for file in filteredAudioFiles {
+                selectedFiles.insert(file.id)
+            }
+        }
+    }
+
+    func deleteSelectedFiles() {
+        let entries = audioFiles.enumerated()
+            .filter { selectedFiles.contains($0.element.id) }
+            .map { index, file in
+                StagedAudioFile(file: file, originalURL: file.url, originalIndex: index)
+            }
+        guard !entries.isEmpty else { return }
+
+        let staged = pendingDeletion.stage(entries)
+        let stagedIDs = Set(staged.map(\.file.id))
+        audioFiles.removeAll { stagedIDs.contains($0.id) }
+        Task {
+            if let persisted = await AudioLibraryStore.remove(audioFileIDs: stagedIDs) {
+                audioFiles = persisted
+            }
+        }
+        TranceHaptics.shared.medium()
+
         selectedFiles.removeAll()
         isSelectionMode = false
+    }
+
+    /// Collapses each selected duplicate group to one entry.
+    ///
+    /// The redundant files must actually leave `Documents`. Dropping only the
+    /// row would leave the file in place for `discoverUnregisteredDocumentFiles`
+    /// to re-register under a fresh identifier on the next load, recreating the
+    /// duplicate this just removed.
+    ///
+    /// Everything is staged as one batch so a single Undo reverses the whole
+    /// merge — `PendingAudioDeletion` holds exactly one batch, and staging in a
+    /// loop would commit each group before the next.
+    func mergeDuplicates(_ resolution: DuplicateAudioReviewViewModel.Resolution) async {
+        guard !resolution.removed.isEmpty else { return }
+
+        let entries = resolution.removed.map { file in
+            StagedAudioFile(
+                file: file,
+                originalURL: file.url,
+                originalIndex: audioFiles.firstIndex { $0.id == file.id } ?? 0
+            )
+        }
+        let staged = pendingDeletion.stage(entries)
+        let stagedIDs = Set(staged.map(\.file.id))
+        guard !stagedIDs.isEmpty else { return }
+
+        let successfulRemap = resolution.remap.filter { stagedIDs.contains($0.key) }
+        guard let persisted = await AudioLibraryStore.mergeDuplicates(
+            remapping: successfulRemap
+        ) else {
+            _ = pendingDeletion.restore()
+            Log.audio.error("Could not persist duplicate merge; restored staged audio files")
+            return
+        }
+        audioFiles = persisted
+
+        PlaylistStore.rebindAll(to: audioFiles, remapping: successfulRemap)
+
+        TranceHaptics.shared.medium()
+        Log.audio.info(
+            "🧹 Merged \(Set(successfulRemap.values).count) duplicate group(s), removed \(stagedIDs.count) file(s)"
+        )
+    }
+
+    /// Puts the staged batch back where it came from.
+    func undoDelete() {
+        let recovered = pendingDeletion.restore()
+        // Ascending by original index, so inserting in order reproduces the
+        // original arrangement. Clamped because filters or a concurrent reload
+        // may have changed the array's length in the meantime.
+        for entry in recovered {
+            audioFiles.insert(entry.file, at: min(entry.originalIndex, audioFiles.count))
+        }
+        Task {
+            if let persisted = await AudioLibraryStore.restore(recovered) {
+                audioFiles = persisted
+            }
+        }
+        TranceHaptics.shared.light()
+        Log.audio.info("↩️ Restored \(recovered.count) deleted file(s)")
     }
 
     func analyzeSelectedFiles() {
@@ -156,97 +244,5 @@ extension AudioLibraryView {
         // Exit selection mode
         selectedFiles.removeAll()
         isSelectionMode = false
-    }
-
-    func handleImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            // Import multiple files with progress tracking
-            Task {
-                var importedFiles: [AudioFile] = []
-                let totalFiles = urls.count
-
-                Log.audio.info("📥 Starting import of \(totalFiles) audio files...")
-
-                for (index, url) in urls.enumerated() {
-                    guard url.startAccessingSecurityScopedResource() else {
-                        Log.audio.info("❌ Failed to access file: \(url.lastPathComponent)")
-                        continue
-                    }
-
-                    Log.audio.info("📥 Processing file \(index + 1)/\(totalFiles): \(url.lastPathComponent)")
-
-                    // Import with timeout handling
-                    if let file = await audioManager.importAudio(from: url) {
-                        await addAudioFile(file)
-                        importedFiles.append(file)
-                        Log.audio.info("✅ Imported (\(index + 1)/\(totalFiles)): \(file.filename)")
-                    } else {
-                        Log.audio.info("⚠️ Skipped (\(index + 1)/\(totalFiles)): \(url.lastPathComponent) - Import failed")
-                    }
-
-                    url.stopAccessingSecurityScopedResource()
-                }
-
-                // Automatically queue all imported files for analysis
-                if !importedFiles.isEmpty {
-                    if AnalysisPreferences.shared.autoAnalyzeOnImport {
-                        Log.audio.info("🔬 Auto-queuing \(importedFiles.count) files for analysis...")
-                        await analysisManager.queueForAnalysis(importedFiles)
-                    }
-                    Log.audio.info("✅ Import complete: \(importedFiles.count)/\(totalFiles) files processed")
-                } else {
-                    Log.audio.info("⚠️ No files were successfully imported")
-                }
-            }
-
-        case .failure(let error):
-            Log.audio.info("❌ Import failed: \(error)")
-        }
-    }
-
-    func handleURLDownload() {
-        guard let url = URL(string: audioURLInput.trimmingCharacters(in: .whitespacesAndNewlines)),
-              url.scheme == "http" || url.scheme == "https" else {
-            downloadError = "Please enter a valid http:// or https:// URL."
-            UsageAnalytics.shared.errorOccurred(.audioURLInvalid)
-            return
-        }
-
-        isDownloadingURL = true
-
-        Task {
-            do {
-                if let file = try await audioManager.downloadAudio(from: url) {
-                    await addAudioFile(file)
-                    showingURLDownloader = false
-                    audioURLInput = ""
-                    isDownloadingURL = false
-
-                    // Auto queue for analysis
-                    if AnalysisPreferences.shared.autoAnalyzeOnImport {
-                        Log.audio.info("🔬 Auto-queuing downloaded file for analysis...")
-                        await analysisManager.queueForAnalysis([file])
-                    }
-                } else {
-                    await MainActor.run {
-                        isDownloadingURL = false
-                        downloadError = "Download completed but the file could not be saved. Please try again."
-                    }
-                }
-            } catch let urlError as URLError where urlError.code == .badServerResponse {
-                UsageAnalytics.shared.errorOccurred(.audioURLServerRejected)
-                await MainActor.run {
-                    isDownloadingURL = false
-                    downloadError = "The server returned an error. Please check the URL and try again."
-                }
-            } catch {
-                UsageAnalytics.shared.errorOccurred(.audioURLDownloadFailed)
-                await MainActor.run {
-                    isDownloadingURL = false
-                    downloadError = "Download failed: \(error.localizedDescription)"
-                }
-            }
-        }
     }
 }

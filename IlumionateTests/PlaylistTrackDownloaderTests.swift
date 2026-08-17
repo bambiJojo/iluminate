@@ -116,7 +116,10 @@ struct PlaylistTrackDownloaderTests {
             return (temp, response)
         }
 
-        let audioFile = try await downloader.download(track)
+        guard case .saved(let audioFile) = try await downloader.download(track) else {
+            Issue.record("Expected the track to be saved")
+            return
+        }
 
         #expect(audioFile.filename == "Bubble Induction.mp3")
         #expect(audioFile.fileSize == 2_048)
@@ -148,7 +151,13 @@ struct PlaylistTrackDownloaderTests {
             return (temp, response)
         }
 
-        let audioFile = try await downloader.download(track)
+        // Genuinely different content, and no library index — a real filename
+        // collision still resolves by suffixing. Only a *duplicate* is now
+        // recognised before anything is written.
+        guard case .saved(let audioFile) = try await downloader.download(track) else {
+            Issue.record("Expected the track to be saved")
+            return
+        }
 
         #expect(audioFile.filename == "Bubble Induction (1).mp3")
         // The original file is untouched.
@@ -202,7 +211,13 @@ struct PlaylistTrackDownloaderTests {
             return (temp, response)
         }
 
-        let audioFile = try await downloader.download(track, allowingLargeFile: true)
+        guard case .saved(let audioFile) = try await downloader.download(
+            track,
+            allowingLargeFile: true
+        ) else {
+            Issue.record("Expected the track to be saved")
+            return
+        }
 
         #expect(audioFile.filename == "Bambi Therapy Pretty in Pink.mp3")
     }
@@ -250,5 +265,85 @@ struct PlaylistTrackDownloaderTests {
         await #expect(throws: PlaylistTrackDownloadError.networkUnavailable) {
             try await downloader.download(track)
         }
+    }
+
+    @Test("A saved download carries its fingerprint and its provenance")
+    func savedDownloadCarriesIdentity() async throws {
+        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/a.mp3")
+        let documents = try temporaryDirectory()
+
+        let downloader = PlaylistTrackDownloader(documentsURL: documents) { _ in
+            let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
+            try Data("audio-bytes".utf8).write(to: temp)
+            return (temp, URLResponse())
+        }
+
+        guard case .saved(let audioFile) = try await downloader.download(track) else {
+            Issue.record("Expected the track to be saved")
+            return
+        }
+
+        #expect(audioFile.contentFingerprint?.count == 64)
+        #expect(audioFile.remoteSource?.service == RemoteAudioSource.bambiCloudService)
+        #expect(audioFile.remoteSource?.trackID == track.id.uuidString)
+        #expect(audioFile.remoteSource?.url.absoluteString == "https://cdn.bambicloud.com/a.mp3")
+    }
+
+    // The whole point of the feature: identical bytes must not become a second
+    // file on disk. The old code called `uniqueDestination` first and so had
+    // already created "Rapid Induction (1).mp3" before anything could object.
+    @Test("Downloading content the library already holds writes nothing")
+    func identicalContentIsNotSavedTwice() async throws {
+        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/a.mp3")
+        let documents = try temporaryDirectory()
+        let payload = Data("audio-bytes".utf8)
+
+        let downloader = PlaylistTrackDownloader(documentsURL: documents) { _ in
+            let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
+            try payload.write(to: temp)
+            return (temp, URLResponse())
+        }
+
+        guard case .saved(let savedFile) = try await downloader.download(track) else {
+            Issue.record("First download should save")
+            return
+        }
+
+        let second = try await downloader.download(
+            track,
+            existing: DuplicateAudioIndex([savedFile])
+        )
+
+        #expect(second == .alreadyInLibrary(existing: savedFile.id))
+
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: documents,
+            includingPropertiesForKeys: nil
+        )
+        #expect(contents.count == 1)
+        #expect(contents.contains { $0.lastPathComponent.contains("(1)") } == false)
+    }
+
+    @Test("A distinct track still saves normally")
+    func distinctContentStillSaves() async throws {
+        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/a.mp3")
+        let documents = try temporaryDirectory()
+
+        let downloader = PlaylistTrackDownloader(documentsURL: documents) { _ in
+            let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
+            try Data("unique-bytes".utf8).write(to: temp)
+            return (temp, URLResponse())
+        }
+
+        let outcome = try await downloader.download(
+            track,
+            existing: DuplicateAudioIndex([])
+        )
+
+        guard case .saved(let file) = outcome else {
+            Issue.record("A distinct track should save")
+            return
+        }
+        #expect(file.filename == "Rapid Induction.mp3")
     }
 }

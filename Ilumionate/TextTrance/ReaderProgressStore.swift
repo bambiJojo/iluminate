@@ -40,12 +40,13 @@ final class ReaderProgressStore {
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? JSONDecoder().decode([String: ReaderResumeState].self, from: data)
-        else { return }
+        guard let data = try? Data(contentsOf: fileURL) else { return }
+        // Per-entry: one unreadable resume point should cost that script's
+        // progress, not every script's.
+        let (decoded, dropped) = ResilientDecoding.dictionary(ReaderResumeState.self, from: data)
         let cutoff = Date.now.addingTimeInterval(-Self.maxAge)
         entries = decoded.filter { $0.value.savedAt >= cutoff }
-        if entries.count != decoded.count { persist() }   // write back the pruned set
+        if entries.count != decoded.count || dropped > 0 { persist() }
     }
 
     private func persist() {
