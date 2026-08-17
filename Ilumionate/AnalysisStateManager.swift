@@ -148,6 +148,25 @@ class AnalysisStateManager {
     // MARK: - Queue Management
 
     /// Remove a file from the analysis queue
+    /// Flattens the durable store into plain values for the task projection.
+    /// Exists so `AnalysisCenterModel` never reaches into the private actor.
+    func recoverySnapshot() async -> (
+        checkpoints: [UUID: AnalysisCheckpointSnapshot],
+        failures: [UUID: AnalysisFailureSnapshot]
+    ) {
+        let all = await progressStore.allCheckpoints()
+        var checkpoints: [UUID: AnalysisCheckpointSnapshot] = [:]
+        var failures: [UUID: AnalysisFailureSnapshot] = [:]
+        for checkpoint in all {
+            let id = checkpoint.audioFile.id
+            checkpoints[id] = AnalysisTaskInputAssembler.checkpointSnapshot(from: checkpoint)
+            if let failure = AnalysisTaskInputAssembler.failureSnapshot(from: checkpoint) {
+                failures[id] = failure
+            }
+        }
+        return (checkpoints, failures)
+    }
+
     func removeFromQueue(audioFile: AudioFile) {
         analysisQueue.removeAll { $0.id == audioFile.id }
         Log.analysis.info("🗑 Removed \(audioFile.filename) from analysis queue")

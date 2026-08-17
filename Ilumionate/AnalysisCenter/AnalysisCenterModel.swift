@@ -134,3 +134,58 @@ final class AnalysisCenterModel {
         tasks?.first { $0.id == audioFileID }
     }
 }
+
+// MARK: - Production wiring
+
+extension AnalysisCenterModel {
+
+    /// The live model. Disk work — the library load and the generated-session
+    /// enumeration — happens off the main actor; only the bundled-catalog match
+    /// and the manager's published collections are read on it.
+    static func live(manager: AnalysisStateManager = .shared) -> AnalysisCenterModel {
+        AnalysisCenterModel {
+            let files = await AudioLibraryStore.loadRepairingStoredFiles()
+            let (checkpoints, durableFailures) = await manager.recoverySnapshot()
+
+            // Off the main actor: one JSON decode per file that has a score.
+            let sessionStore = GeneratedSessionStore.shared
+            var ready = AnalysisTaskInputAssembler.generatedReadySnapshots(
+                for: files, store: sessionStore
+            )
+
+            let (queue, runtimeFailures, goldReady) = await MainActor.run {
+                let queue = AnalysisTaskInputAssembler.deduplicate(
+                    queue: manager.analysisQueue.map(\.id)
+                )
+                let runtime = Dictionary(
+                    uniqueKeysWithValues: manager.failedAnalyses.map {
+                        ($0.audioFile.id, AnalysisTaskInputAssembler.failureSnapshot(from: $0))
+                    }
+                )
+                // Bundled gold scores have no file on disk, so the off-actor
+                // pass cannot see them. Fold them in here; the match is cached
+                // in-memory and never touches disk.
+                var gold: [UUID: AnalysisReadySnapshot] = [:]
+                for file in files where ready[file.id] == nil {
+                    guard let session = sessionStore.goldSessionIfAny(for: file) else { continue }
+                    gold[file.id] = AnalysisReadySnapshot(
+                        sessionID: session.id,
+                        readyAt: file.createdDate
+                    )
+                }
+                return (queue, runtime, gold)
+            }
+            ready.merge(goldReady) { current, _ in current }
+
+            return AnalysisStructuralInput(
+                libraryFiles: files,
+                queue: queue,
+                failures: AnalysisFailureMerge.merge(
+                    durable: durableFailures, runtime: runtimeFailures
+                ),
+                checkpoints: checkpoints,
+                ready: ready
+            )
+        }
+    }
+}

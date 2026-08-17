@@ -38,6 +38,9 @@ struct ContentView: View {
     @State private var createRequestedKind: CreateSessionKind?
     @State private var nowPlaying = NowPlayingState.shared
     @State private var analysisManager = AnalysisStateManager.shared
+    /// Single owner of the analysis task snapshot. Every analysis surface
+    /// filters this one list; none rebuilds state of its own.
+    @State private var analysisCenter = AnalysisCenterModel.live()
 
     // Synced to engine on appear and on change
     @AppStorage("userFrequencyMultiplier") private var userFrequencyMultiplierPref = 1.0
@@ -49,9 +52,14 @@ struct ContentView: View {
 
     var body: some View {
         mainLayout
+        .environment(analysisCenter)
         .task {
             await analysisManager.prepareCachedResults()
             await analysisManager.restoreManualRecoveries()
+            // Bootstrap ordering: recoveries and checkpoints are restored above,
+            // so the first published snapshot already reflects them rather than
+            // arriving empty and then correcting itself.
+            analysisCenter.invalidateStructure()
             loadSessions()
             await loadAudioFiles()
             checkForFirstLaunch()
@@ -71,6 +79,27 @@ struct ContentView: View {
                 UsageAnalytics.shared.appBecameActive()
                 BackgroundAnalysisScheduler.shared.resumeWhenForegrounded()
             }
+        }
+        // Structural invalidation is driven by observing the state itself rather
+        // than by calls placed in each mutating method. A new mutation site
+        // cannot forget to notify, because there is nothing to remember.
+        // Queue identity is mapped rather than counted so a reorder — which
+        // changes every projected position — still invalidates.
+        .onChange(of: analysisManager.analysisQueue.map(\.id)) { _, _ in
+            analysisCenter.invalidateStructure()
+        }
+        .onChange(of: analysisManager.failedAnalyses.map(\.id)) { _, _ in
+            analysisCenter.invalidateStructure()
+        }
+        .onChange(of: analysisManager.completedAnalyses.count) { _, _ in
+            analysisCenter.invalidateStructure()
+        }
+        .onChange(of: analysisManager.partialResultsRevision) { _, _ in
+            analysisCenter.invalidateStructure()
+        }
+        // The high-frequency path: progress only, never a disk read.
+        .onChange(of: analysisManager.currentAnalysis?.snapshot) { _, snapshot in
+            analysisCenter.updateProgress(active: snapshot, download: nil)
         }
         .onOpenURL { url in
             handleDeepLink(url)

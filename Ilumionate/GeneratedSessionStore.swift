@@ -134,6 +134,16 @@ final class GeneratedSessionStore {
         }
     }
 
+    /// The bundled catalog score for a file, if one matches.
+    ///
+    /// Exposed for the Analysis Task Center, whose ready enumeration runs the
+    /// disk half off the main actor and cannot reach `load(for:)`. This half is
+    /// an in-memory catalog match backed by `goldMatchCache`, so calling it per
+    /// library file costs nothing after the first pass.
+    func goldSessionIfAny(for audioFile: AudioFile) -> LightSession? {
+        goldSession(for: audioFile)
+    }
+
     private func goldSession(for audioFile: AudioFile) -> LightSession? {
         if let cached = goldMatchCache[audioFile.id] { return cached }
         let matched = goldSessionProvider(audioFile)
