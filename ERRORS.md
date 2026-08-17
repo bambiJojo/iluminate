@@ -116,12 +116,12 @@ None for the fix itself. Worth grepping for the same slip elsewhere — a `Text(
 `.formatted(` or `.count` inside and no preceding backslash is the signature. This entry is
 one instance of a pattern that string-literal validation would not catch anywhere in the app.
 
----
+## Resolved
 
 ### ERR-013 — Failed analyses can never be dismissed and are restored on every launch
 
 - **Date discovered:** 2026-08-14
-- **Status:** identified
+- **Status:** completed
 - **Severity:** medium
 - **Area:** analysis pipeline / UI
 
@@ -192,13 +192,44 @@ Two errors in this entry, both found while designing the fix.
    unrecoverable ones — which changes the fix: dismissal must preserve the checkpoint so a
    later retry still resumes from the saved transcript.
 
-**Resolution**
-Not yet fixed. The dismissal semantics this entry deferred are settled in
-`docs/superpowers/specs/2026-08-16-analysis-task-center-design.md`: `dismiss` persists
-`dismissedAt` inside `AnalysisManualRecovery` and leaves the checkpoint intact, while a
-separate explicit `remove` clears both.
+**Resolution** _(2026-08-16, commit `5f7c7f2` and Phase 1 of the Analysis Task Center)_
+Fixed. `dismissedAt` is now a field on `AnalysisManualRecovery`
+(`AnalysisProgressStore.swift:58`), so dismissal is stored on the failure *occurrence*
+rather than the file. Two existing code paths then invalidate it for free: `saveQueued`
+already nils `manualRecovery` when a manual retry is queued (`:120-129`), and
+`markRequiresManualRetry` builds a fresh recovery per failure (`:212`).
 
-## Resolved
+Two operations, both occurrence-guarded by `failedAt` so a confirmation raised for an old
+row cannot act on a newer failure for the same file:
+
+- `dismiss(fileID:expectingFailedAt:)` — persists `dismissedAt`, **leaves the checkpoint
+  intact**, so a later retry still resumes from the saved transcript. This is what the
+  original "Risks / blockers" note could not decide; preserving the checkpoint is correct
+  because the entries that actually survive a relaunch are the retryable `.manual` ones.
+- `remove(fileID:expectingFailedAt:)` — clears the recovery, the checkpoint, and the
+  runtime `failedAnalyses` entry. Destructive, confirmed in the UI, and the confirmation
+  names what it deletes (saved analysis progress) and what it does not (the audio file).
+
+`AnalysisProgressStore.persist()` now returns `Bool` instead of swallowing encoding and
+write errors, and both operations roll back their in-memory change when the write does not
+land — otherwise a dismissal could appear to stick and return on the next launch, which is
+the same defect class as ERR-005.
+
+`.unavailable` failures have no checkpoint (that path clears it before the failure is
+recorded), so `AnalysisStateManager.dismissFailure` removes them from `failedAnalyses`
+directly and they stay gone; nothing durable ever referenced them.
+
+Verified by `IlumionateTests/AnalysisDismissalTests.swift` — six tests including a dismissed
+recovery round-tripping through a freshly constructed store, a stale `failedAt` failing to
+dismiss a newer occurrence, and a retry after dismissal still finding the saved transcript.
+Full suite green on both platforms: 1539 cases on macOS, 1540 on iOS Simulator, zero
+failures.
+
+The UI half is the Analysis Task Center
+(`docs/superpowers/specs/2026-08-16-analysis-task-center-design.md`), which replaced the
+"Recent Failures" card and the bottom recovery banner named in this entry.
+
+---
 
 ### ERR-015 — Unreachable view files compiled into the app
 

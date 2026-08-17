@@ -261,7 +261,7 @@ struct AudioLibraryView: View {
             .audioAcquisition(acquisition)
             .sheet(isPresented: $showingQueueManagement) {
                 NavigationStack {
-                    AnalyzerView(engine: engine)
+                    AnalysisCenterView(engine: engine)
                 }
             }
             .sheet(isPresented: $showingFilters) {

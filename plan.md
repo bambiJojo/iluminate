@@ -153,8 +153,23 @@ A premium Apple-platform light therapy (photoentrainment) app for iOS and native
 - ✅ `AIContentAnalyzer` — Foundation Models integration, `@Generable` structured output
 - ✅ Content type detection (hypnosis, meditation, affirmations, guided imagery)
 - ✅ Multi-pass hypnosis analysis: structural pass (phases, induction style, techniques) + therapeutic pass (trance depth curve, receptivity, voice characteristics)
-- ✅ `AnalyzerView` plus `AnalysisStatusBar` / `AnalysisStatusOverlay` — queue, stage,
-      recovery, and progress UI
+- ✅ **Analysis Task Center (Phase 1)** — one canonical `AnalysisTask` per audio file,
+      produced by a pure `AnalysisTaskProjection` and published by a single
+      `AnalysisCenterModel`. The pill, the center sheet, Library's entry row, and Session
+      Detail all filter that one snapshot; none rebuilds state of its own. Replaced
+      `AnalysisStatusOverlay`, `AnalysisRecoveryStatusOverlay`, `LibraryAnalysisStatusSection`,
+      and the dead `AnalysisStatusBar`, all deleted. The pill now shows active progress and
+      outstanding failures at the same time — the two overlays it replaced shared one slot,
+      so a failure was invisible while anything was running. Failure dismissal is durable
+      (ERR-013) and preserves the checkpoint so a retry still resumes from the saved
+      transcript. `AnalyzerView` survives carrying only Library Intelligence, reachable from
+      the center's toolbar until that moves to Library.
+      Design: `docs/superpowers/specs/2026-08-16-analysis-task-center-design.md`
+      Plan: `docs/superpowers/plans/2026-08-16-analysis-task-center-phase-1.md`
+- ❌ Analysis Task Center Phase 2 — 2a teardown/cancellation spike, 2b stall watchdog and
+      `.stalled`, 2c WhisperKit model-download progress (`.preparing` ships unused in Phase 1).
+      **Stalls remain unobservable until 2b lands:** no timeout exists in the pipeline, so a
+      hung analysis still shows a frozen percentage and emits no terminal event
 
 ### Phase 3 — Session Generation ✅ (backend) / 🔄 (UI integration)
 - ✅ `SessionGenerator` — converts AnalysisResult into `LightSession` with phase-aware light patterns

@@ -40,6 +40,16 @@ struct AnalysisCenterView: View {
                     .foregroundStyle(Color.roseGold)
                 }
             }
+            // Library-wide statistics are a different thing from in-flight work,
+            // and this is their only remaining entry point until they move to
+            // Library. Keeping it reachable avoids orphaning a working feature.
+            ToolbarItem(placement: .secondaryAction) {
+                NavigationLink {
+                    AnalyzerView(engine: engine)
+                } label: {
+                    Label("Library Intelligence", systemImage: "brain.head.profile")
+                }
+            }
         }
         .confirmationDialog(
             "Clear all queued analyses?",
