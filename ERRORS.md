@@ -70,10 +70,14 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
+_None._
+
+## Resolved
+
 ### ERR-017 — Session Complete prints raw Swift source to the user
 
 - **Date discovered:** 2026-08-16
-- **Status:** identified
+- **Status:** completed
 - **Severity:** high
 - **Area:** player / session completion
 
@@ -116,7 +120,22 @@ None for the fix itself. Worth grepping for the same slip elsewhere — a `Text(
 `.formatted(` or `.count` inside and no preceding backslash is the signature. This entry is
 one instance of a pattern that string-literal validation would not catch anywhere in the app.
 
-## Resolved
+**Resolution** _(2026-08-16)_
+Fixed. The line is now built by `PlayerCompletionOverlay.durationSummary(for:)`, a
+`nonisolated static func` extracted specifically so the rendered text is assertable without
+a snapshot test — the original defect was invisible to the compiler and to every existing
+test because a literal is valid Swift.
+
+**The pattern does not exist elsewhere.** A repo-wide grep for a `Text("` literal containing
+an unescaped `(` followed by a call returned exactly this one site, so the "other instances"
+risk noted above is closed rather than outstanding.
+
+Verified by `IlumionateTests/PlayerCompletionOverlayTests.swift` — four tests covering the
+12:30 case, two-digit second padding, a sub-minute session, and a session past an hour
+(`minuteSecond` keeps counting in minutes, so 3903s renders "65:03"). One test asserts the
+absence of the literal `Duration.seconds` text, which is the specific failure mode.
+
+---
 
 ### ERR-013 — Failed analyses can never be dismissed and are restored on every launch
 
@@ -1026,6 +1045,27 @@ passing on iOS Simulator.
 asserts that saving a large library keeps the main actor free. That property rests on
 `AudioLibraryPersistence` remaining a non-main actor. Making it `@MainActor` would reintroduce
 the original bug and no test would object.
+
+**New sighting** _(2026-08-16, status `identified`)_ — a **seventh** test shows the same
+behaviour and is not in the list above:
+
+- `StagedAnalysisPipelineTests/automaticallyRetriesOnceWithoutRepeatingTranscription()`
+
+Observed once during the Analysis Task Center Phase 1 verification: a full-suite iOS
+Simulator run aborted after **47 of ~1544 cases** with this test reported failed. The same
+commit passed the full macOS suite (1543 cases, zero failures), the suite passed in isolation
+on iOS in 0.111s, and an immediate re-run of the full iOS suite passed all 1544 with zero
+failures. So it is load-dependent rather than a logic fault, and it is a sibling of
+`keepsWhisperPrefetchOutOfContentAnalysis()` in the same suite, which is already listed.
+
+Two things make this worth its own note rather than a silent addition to the list. It
+**aborts the whole run** rather than failing alone, so one flake costs all remaining
+coverage on that platform — worse than the original six. And the reported "60.000 seconds"
+must not be read as a duration: per the correction above, `xcodebuild`'s per-test seconds are
+cumulative from the start of the run.
+
+Not investigated. Anyone touching `StagedAnalysisPipelineTests` should treat a full-iOS-suite
+failure here as suspect until reproduced twice.
 
 ---
 
