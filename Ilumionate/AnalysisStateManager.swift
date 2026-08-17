@@ -1372,6 +1372,22 @@ private extension AnalyticsAnalysisFailureReason {
     /// When this analysis began — drives the "still working" reassurance copy.
     /// Excluded from `==` so elapsed time never causes spurious UI diffs.
     let startedAt: Date
+    /// Identifies this attempt. Phase 2b uses it so a late result cannot
+    /// overwrite a failure the watchdog already recorded; Phase 2c uses it to
+    /// attribute a model download to the right attempt. Excluded from `==` for
+    /// the same reason as `startedAt`: it never changes within an instance.
+    let attemptID = UUID()
+
+    /// Value snapshot for the Analysis Task Center projection.
+    var snapshot: ActiveAnalysisSnapshot {
+        ActiveAnalysisSnapshot(
+            audioFileID: audioFile.id,
+            attemptID: attemptID,
+            stage: stage,
+            progress: progress,
+            startedAt: startedAt
+        )
+    }
 
     init(
         audioFile: AudioFile,
