@@ -39,6 +39,10 @@ nonisolated struct AnalysisCheckpoint: Codable, Sendable {
     /// asks to retry. Keeping it separate prevents BackgroundTasks from
     /// repeatedly launching work that already exhausted its automatic retry.
     var manualRecovery: AnalysisManualRecovery? = nil
+    /// Set when the model declined for a passing reason and the file is waiting
+    /// for a better moment. The checkpoint is kept so the retry re-runs only the
+    /// AI stage, not transcription.
+    var deferredAIRetry: DeferredAIRetry? = nil
 
     /// The most advanced stage that has been saved to disk.
     var resumeStage: AnalysisStage {
@@ -53,6 +57,15 @@ nonisolated struct AnalysisCheckpoint: Codable, Sendable {
         if transcription != nil { return .transcription }
         return .none
     }
+}
+
+/// A file whose AI stage was declined for a transient reason and is waiting to
+/// be tried again — Game Mode refusing the foreground app, or a rate limit.
+nonisolated struct DeferredAIRetry: Codable, Sendable {
+    let kind: AIGenerationDiagnosis.Kind
+    var attempts: Int
+    var deferredAt: Date
+    var lastAttemptAt: Date?
 }
 
 nonisolated struct AnalysisManualRecovery: Codable, Sendable {
@@ -110,8 +123,18 @@ actor AnalysisProgressStore {
         checkpoints[audioFile.id]
     }
 
+    /// Work to resume automatically. Excludes both a manual recovery and a
+    /// deferred AI retry: resuming the latter would re-queue it at launch, in
+    /// the foreground, where the device recorded 0 successes in 16 attempts —
+    /// spending the retry budget on attempts that cannot succeed.
     func allPending() -> [AnalysisCheckpoint] {
-        checkpoints.values.filter { $0.manualRecovery == nil }
+        checkpoints.values.filter { $0.manualRecovery == nil && $0.deferredAIRetry == nil }
+    }
+
+    func deferredAIRetryCheckpoints() -> [AnalysisCheckpoint] {
+        checkpoints.values
+            .filter { $0.deferredAIRetry != nil }
+            .sorted { $0.lastUpdated < $1.lastUpdated }
     }
 
     /// Every checkpoint, pending and manual-recovery alike. `allPending()` and
@@ -134,8 +157,9 @@ actor AnalysisProgressStore {
     /// iOS suspends or terminates the process during transcription.
     func saveQueued(_ audioFile: AudioFile) {
         if var checkpoint = checkpoints[audioFile.id] {
-            guard checkpoint.manualRecovery != nil else { return }
+            guard checkpoint.manualRecovery != nil || checkpoint.deferredAIRetry != nil else { return }
             checkpoint.manualRecovery = nil
+            checkpoint.deferredAIRetry = nil
             checkpoint.attemptCount = 0
             checkpoint.failureCount = 0
             checkpoint.lastUpdated = Date()
@@ -234,6 +258,42 @@ actor AnalysisProgressStore {
         checkpoints[audioFile.id] = checkpoint
         persist()
         Log.analysis.info("⏸️ Checkpoint: waiting for manual retry of \(audioFile.filename)")
+    }
+
+    /// Records that the AI stage was declined for a passing reason. Everything
+    /// already saved is kept: the retry re-runs only the model call.
+    @discardableResult
+    func markAwaitingAIRetry(for audioFile: AudioFile, kind: AIGenerationDiagnosis.Kind) -> Bool {
+        guard var checkpoint = checkpoints[audioFile.id] else { return false }
+        let existing = checkpoint.deferredAIRetry
+        checkpoint.deferredAIRetry = DeferredAIRetry(
+            kind: kind,
+            attempts: existing?.attempts ?? 0,
+            deferredAt: existing?.deferredAt ?? Date(),
+            lastAttemptAt: existing?.lastAttemptAt
+        )
+        checkpoint.lastUpdated = Date()
+        checkpoints[audioFile.id] = checkpoint
+        guard persist() else { return false }
+        Log.analysis.info(
+            "⏳ Checkpoint: \(audioFile.filename) awaiting a better moment for AI (\(kind.rawValue))"
+        )
+        return true
+    }
+
+    /// Counted before the attempt runs, so a crash mid-retry still consumes
+    /// budget rather than letting the file loop forever.
+    @discardableResult
+    func recordAIRetryAttempt(for audioFileID: UUID) -> Int {
+        guard var checkpoint = checkpoints[audioFileID],
+              var deferred = checkpoint.deferredAIRetry else { return 0 }
+        deferred.attempts += 1
+        deferred.lastAttemptAt = Date()
+        checkpoint.deferredAIRetry = deferred
+        checkpoint.lastUpdated = Date()
+        checkpoints[audioFileID] = checkpoint
+        persist()
+        return deferred.attempts
     }
 
     func clear(for audioFile: AudioFile) {

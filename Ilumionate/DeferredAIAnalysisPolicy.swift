@@ -59,6 +59,26 @@ nonisolated enum DeferredAIAnalysisPolicy {
         fallbackKind.isTransient
     }
 
+    /// The eligible slice of a set of checkpoints, already ordered and bounded.
+    ///
+    /// A `.guardrail` should never have been deferred in the first place, but
+    /// filtering here too means a checkpoint written by an earlier build cannot
+    /// put the retry loop up against a deterministic refusal.
+    static func candidates(from checkpoints: [AnalysisCheckpoint]) -> [DeferredAIAnalysisCandidate] {
+        let eligible = checkpoints.compactMap { checkpoint -> DeferredAIAnalysisCandidate? in
+            guard let deferred = checkpoint.deferredAIRetry,
+                  isEligible(fallbackKind: deferred.kind, attempts: deferred.attempts) else {
+                return nil
+            }
+            return DeferredAIAnalysisCandidate(
+                audioFileID: checkpoint.audioFile.id,
+                attempts: deferred.attempts,
+                lastAttemptAt: deferred.lastAttemptAt
+            )
+        }
+        return selectForWindow(eligible)
+    }
+
     /// Oldest wait first, and anything never tried ahead of anything already
     /// tried, so a large backlog drains fairly rather than starving its tail.
     static func selectForWindow(

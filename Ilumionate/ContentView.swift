@@ -89,6 +89,11 @@ struct ContentView: View {
                 startWatchingCableInbox()
             } else {
                 cableWatcher.stop()
+                // Foundation Models answers in the background and is refused in
+                // the foreground while Game Mode is active — measured at 0/16
+                // against 3/7. Files declined for a passing reason kept their
+                // transcript, so this re-runs only the model call.
+                Task { await analysisManager.retryDeferredAIAnalyses() }
             }
         }
         // Structural invalidation is driven by observing the state itself rather

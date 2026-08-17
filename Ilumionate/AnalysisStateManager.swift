@@ -184,6 +184,47 @@ class AnalysisStateManager {
         return true
     }
 
+    /// Re-runs the AI stage for files that were declined for a passing reason.
+    ///
+    /// Called when the app backgrounds, because that is where the model
+    /// actually answers: the device recorded `foreground 0/16 used AI,
+    /// background 3/7`. Each file re-runs from its saved transcript, so this
+    /// costs a model call rather than a WhisperKit pass.
+    ///
+    /// Attempts are counted *before* running, so a crash or a jetsam mid-retry
+    /// still consumes budget instead of leaving the file to loop.
+    func retryDeferredAIAnalyses() async {
+        let candidates = DeferredAIAnalysisPolicy.candidates(
+            from: await progressStore.deferredAIRetryCheckpoints()
+        )
+        guard candidates.isEmpty == false else { return }
+
+        Log.analysis.info("↺ Retrying AI for \(candidates.count) deferred file(s)")
+
+        let library = AudioLibraryStore.load()
+        for (index, candidate) in candidates.enumerated() {
+            guard !Task.isCancelled else { break }
+            guard let audioFile = library.first(where: { $0.id == candidate.audioFileID }) else {
+                continue
+            }
+
+            // Spacing exists because a successful AI stage is followed by one
+            // chunk request per 15 seconds of transcript. See the spec: the
+            // interval that actually avoids rate limiting is unmeasured.
+            if index > 0 {
+                try? await Task.sleep(for: DeferredAIAnalysisPolicy.spacingBetweenAttempts)
+                guard !Task.isCancelled else { break }
+            }
+
+            await progressStore.recordAIRetryAttempt(for: candidate.audioFileID)
+            // Without eviction the cached keyword result is reused and the
+            // retry is a no-op. `saveQueued` clears the deferral so the file
+            // becomes ordinary pending work again.
+            await evictCachedResult(for: audioFile)
+            await queueForAnalysis(audioFile)
+        }
+    }
+
     /// Flattens the durable store into plain values for the task projection.
     /// Exists so `AnalysisCenterModel` never reaches into the private actor.
     func recoverySnapshot() async -> (
@@ -1276,8 +1317,25 @@ final class AnalysisCoordinator {
                     }
                 }
 
-                // Stage 5: Mark complete and clear checkpoint
-                await progressStore.clear(for: audioFile)
+                // Stage 5: Mark complete.
+                //
+                // A transient refusal keeps its checkpoint instead of clearing
+                // it, so the AI stage can be tried again from the saved
+                // transcript. Clearing here is what made "↺ Transient —
+                // analysing this file again later should succeed" a promise
+                // nothing could keep: the device recorded foreground 0/16, and
+                // sixteen files were permanently downgraded by a condition that
+                // was going to pass.
+                //
+                // The session has already been generated and saved above, so
+                // the file is playable either way — deferring improves it
+                // later rather than withholding it now.
+                let deferredKind = analysisResult.aiFallbackKind
+                if let deferredKind, DeferredAIAnalysisPolicy.retainsCheckpoint(after: deferredKind) {
+                    await progressStore.markAwaitingAIRetry(for: audioFile, kind: deferredKind)
+                } else {
+                    await progressStore.clear(for: audioFile)
+                }
 
                 await MainActor.run {
                     analysisManager.currentAnalysis?.stage = .complete
