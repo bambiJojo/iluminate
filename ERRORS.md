@@ -70,7 +70,105 @@ Filled in when status becomes `completed`: what was changed, and how it was veri
 
 ## Open issues
 
-_None._
+### ERR-009 — Memory climbs past 500 MB during queued analysis
+
+- **Date discovered:** 2026-08-11
+- **Status:** identified
+- **Severity:** medium
+- **Area:** analysis pipeline, memory
+
+**Symptom**
+A device run reported `⚠️ High memory usage: 269MB` at launch and `🔥 CRITICAL memory usage:
+565MB` a few seconds later, while WhisperKit was initialising and the analysis queue was
+filling. The previous run peaked at 450 MB, so it is getting worse, not better.
+
+The app's own pressure handling reacts (`🔥 Performing aggressive memory cleanup...`,
+`🧹 Performing moderate memory cleanup...`) and the app survives, so this is a headroom
+problem rather than a crash today. On a lower-memory device or with a longer queue it would
+be a termination.
+
+**Where**
+Not attributed. Candidates, in rough order of size: the WhisperKit model
+(`🔄 Initializing WhisperKit...` immediately precedes the 565 MB reading), the 108 entries of
+`cachedResults` held by `AnalysisStateManager` (`📂 Loaded 108 cached analysis result(s)`),
+and the audio library itself — every `AudioFile` carries its full transcript and
+`AnalysisResult`, and `AudioLibraryStore.load` decodes all of them into memory on every call.
+
+**Reproduction**
+Run on device with a ~100-file analysed library and queue several files. Watch for the
+`🔥 CRITICAL memory usage` line. Instruments' Allocations template would attribute it; the
+log alone does not.
+
+**The allocation rate is the sharper signal.** Three Allocations traces were attempted on
+2026-08-11. Two crashed Instruments by growing past **30 GB**; the two that could be saved are
+**10 GB** and **4.1 GB**. The 4.1 GB one covers **55.6 seconds**
+(`allocationRun002.trace`, template `Allocations`, pid 14007) — about **74 MB of allocation
+records per second**.
+
+An Allocations trace records roughly one event per malloc/free, so that implies tens of
+millions of allocation events in under a minute. The problem is therefore **churn**, not only
+the 565 MB resident peak: something in the analysis path is allocating and freeing
+continuously. A steady 565 MB of retained objects would produce a small trace.
+
+**Root cause**
+Unknown. The traces are too large to analyse on the machine that produced them — exporting
+the 81 MB Time Profiler trace expanded it 2.3× to 189 MB and filled the disk, so exporting a
+4.1 GB one is not viable at present.
+
+Note the capture strategy is the obstacle, not the bug. Full Allocations recording is the
+wrong instrument for a churn-heavy app: it records every event. Better options, cheapest
+first:
+
+1. **Memory Graph Debugger** (Xcode, Debug Navigator → capture) at the 565 MB peak. A
+   point-in-time snapshot of what is *retained*, with object counts. No trace at all, and it
+   answers "what is holding 565 MB" directly.
+2. **Allocations with "Discard events for freed memory" enabled** — records only live
+   allocations and drops the churn, shrinking the trace by orders of magnitude.
+3. **Mark Generation** snapshots either side of one file's analysis, then diff — this
+   attributes growth to a specific operation rather than to a whole session.
+4. Failing all that, record a much shorter window: launch, let it settle, then start
+   recording immediately before the suspect operation.
+
+**Proposed fix**
+Measure before changing anything. If the library decode is a material share, the fix pairs
+naturally with ERR-005's note: keep `transcription` and `analysisResult` out of the in-memory
+`AudioFile` and read them from the analysis cache file on demand, so the resident library is
+metadata only.
+
+**Risks / blockers**
+`AudioLibraryStore.load()` is called from many places and returns a full `[AudioFile]`; making
+the heavy fields lazy changes the shape of the type every consumer sees.
+
+**Correction** _(2026-08-17)_
+This entry was filed under "Resolved" with `Status: completed` while ending at "Proposed fix:
+Measure before changing anything" and carrying no Resolution section. Nothing was fixed.
+Status corrected to `identified` and the entry moved to Open issues. This is the second
+mis-filed entry found this way, after ERR-013 — an entry with no Resolution section should
+never be in Resolved.
+
+**New sighting** _(2026-08-17)_ — the peak is now **higher**, not stable:
+
+```
+🔥 CRITICAL memory usage: 628MB
+🔥 Performing aggressive memory cleanup...
+🧹 Performing moderate memory cleanup...
+```
+
+628 MB against the 565 MB recorded above, on a device log during resumed analysis of a
+`.wav` import. Two things changed since the original measurement that plausibly bear on it:
+the library grew by 21 tracks via the Finder cable import, and `.wav` files are far larger
+than the `.mp3`/`.m4a` the original sighting covered.
+
+This matters more than the number suggests. `~/Library/Logs/CrashReporter/MobileDevice/`
+contains `JetsamEvent` entries for this device, and an iOS app sitting at 628 MB is a
+candidate for exactly that — the app would be killed mid-analysis with no crash report
+attributable to app code, which is indistinguishable from the stall class ERR-001 and the
+Analysis Task Center's Phase 2b watchdog are concerned with.
+
+Still unmeasured. The instrument guidance above (Memory Graph Debugger at peak, rather than a
+full Allocations trace) remains the cheapest next step.
+
+---
 
 ## Resolved
 
@@ -379,77 +477,6 @@ window, so this issue remains open until that trace is symbolicated.
 **Risks / blockers**
 Needs the dSYM for the exact build that produced the trace. Without symbolication this is not
 diagnosable from the export, only observable.
-
----
-
-### ERR-009 — Memory climbs past 500 MB during queued analysis
-
-- **Date discovered:** 2026-08-11
-- **Status:** completed
-- **Severity:** medium
-- **Area:** analysis pipeline, memory
-
-**Symptom**
-A device run reported `⚠️ High memory usage: 269MB` at launch and `🔥 CRITICAL memory usage:
-565MB` a few seconds later, while WhisperKit was initialising and the analysis queue was
-filling. The previous run peaked at 450 MB, so it is getting worse, not better.
-
-The app's own pressure handling reacts (`🔥 Performing aggressive memory cleanup...`,
-`🧹 Performing moderate memory cleanup...`) and the app survives, so this is a headroom
-problem rather than a crash today. On a lower-memory device or with a longer queue it would
-be a termination.
-
-**Where**
-Not attributed. Candidates, in rough order of size: the WhisperKit model
-(`🔄 Initializing WhisperKit...` immediately precedes the 565 MB reading), the 108 entries of
-`cachedResults` held by `AnalysisStateManager` (`📂 Loaded 108 cached analysis result(s)`),
-and the audio library itself — every `AudioFile` carries its full transcript and
-`AnalysisResult`, and `AudioLibraryStore.load` decodes all of them into memory on every call.
-
-**Reproduction**
-Run on device with a ~100-file analysed library and queue several files. Watch for the
-`🔥 CRITICAL memory usage` line. Instruments' Allocations template would attribute it; the
-log alone does not.
-
-**The allocation rate is the sharper signal.** Three Allocations traces were attempted on
-2026-08-11. Two crashed Instruments by growing past **30 GB**; the two that could be saved are
-**10 GB** and **4.1 GB**. The 4.1 GB one covers **55.6 seconds**
-(`allocationRun002.trace`, template `Allocations`, pid 14007) — about **74 MB of allocation
-records per second**.
-
-An Allocations trace records roughly one event per malloc/free, so that implies tens of
-millions of allocation events in under a minute. The problem is therefore **churn**, not only
-the 565 MB resident peak: something in the analysis path is allocating and freeing
-continuously. A steady 565 MB of retained objects would produce a small trace.
-
-**Root cause**
-Unknown. The traces are too large to analyse on the machine that produced them — exporting
-the 81 MB Time Profiler trace expanded it 2.3× to 189 MB and filled the disk, so exporting a
-4.1 GB one is not viable at present.
-
-Note the capture strategy is the obstacle, not the bug. Full Allocations recording is the
-wrong instrument for a churn-heavy app: it records every event. Better options, cheapest
-first:
-
-1. **Memory Graph Debugger** (Xcode, Debug Navigator → capture) at the 565 MB peak. A
-   point-in-time snapshot of what is *retained*, with object counts. No trace at all, and it
-   answers "what is holding 565 MB" directly.
-2. **Allocations with "Discard events for freed memory" enabled** — records only live
-   allocations and drops the churn, shrinking the trace by orders of magnitude.
-3. **Mark Generation** snapshots either side of one file's analysis, then diff — this
-   attributes growth to a specific operation rather than to a whole session.
-4. Failing all that, record a much shorter window: launch, let it settle, then start
-   recording immediately before the suspect operation.
-
-**Proposed fix**
-Measure before changing anything. If the library decode is a material share, the fix pairs
-naturally with ERR-005's note: keep `transcription` and `analysisResult` out of the in-memory
-`AudioFile` and read them from the analysis cache file on demand, so the resident library is
-metadata only.
-
-**Risks / blockers**
-`AudioLibraryStore.load()` is called from many places and returns a full `[AudioFile]`; making
-the heavy fields lazy changes the shape of the type every consumer sees.
 
 ---
 
