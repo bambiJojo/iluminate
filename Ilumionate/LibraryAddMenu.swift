@@ -18,6 +18,8 @@ struct LibraryAddMenu: View {
     let onNewPlaylist: () -> Void
     let onImportPlaylistLink: () -> Void
     let onBrowseForPlaylist: () -> Void
+    let isCheckingIncomingAudio: Bool
+    let onCheckIncomingAudio: () -> Void
     /// Select, rename, find duplicates — management, not adding. It lives at the
     /// bottom of this menu because the "+" is its only entry point in the app.
     let onManageAudio: () -> Void
@@ -49,6 +51,19 @@ struct LibraryAddMenu: View {
                 onBrowseForPlaylist()
             }
         }
+
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        Section("Cable Transfer") {
+            Button(
+                isCheckingIncomingAudio ? "Checking Incoming Audio…" : "Check Incoming Audio",
+                systemImage: isCheckingIncomingAudio ? "hourglass" : "arrow.down.doc"
+            ) {
+                TranceHaptics.shared.light()
+                onCheckIncomingAudio()
+            }
+            .disabled(isCheckingIncomingAudio)
+        }
+        #endif
 
         Section {
             Button("Manage Audio Files", systemImage: "slider.horizontal.3") {

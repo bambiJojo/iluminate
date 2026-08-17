@@ -38,7 +38,25 @@ struct RemoteAudioSourceTests {
         let decoded = try JSONDecoder().decode(AudioFile.self, from: json)
 
         #expect(decoded.remoteSource == nil)
+        #expect(decoded.storageLocation == nil)
+        #expect(decoded.url == URL.documentsDirectory.appending(path: "a.mp3"))
         #expect(decoded.filename == "a.mp3")
+    }
+
+    @Test("Managed storage survives the library encoding")
+    func managedStorageRoundTrips() throws {
+        let file = AudioFile(
+            filename: "private.mp3",
+            duration: 60,
+            fileSize: 1_000,
+            storageLocation: .managed
+        )
+
+        let data = try JSONEncoder().encode(file)
+        let decoded = try JSONDecoder().decode(AudioFile.self, from: data)
+
+        #expect(decoded.storageLocation == .managed)
+        #expect(decoded.url == AppStoragePaths.managedAudio.appending(path: "private.mp3"))
     }
 }
 

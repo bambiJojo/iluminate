@@ -207,6 +207,7 @@ enum AppSettingsManager {
         defaults: UserDefaults = .standard,
         fileManager: FileManager = .default,
         documentsDirectory: URL = URL.documentsDirectory,
+        applicationSupportDirectory: URL = AppStoragePaths.supportRoot,
         audioLibraryStorage: AudioLibraryStorage = .standard,
         resetAnalysisPreferences: Bool = true,
         clearSharedHistory: Bool = true
@@ -249,6 +250,10 @@ enum AppSettingsManager {
             for item in items {
                 try fileManager.removeItem(at: item)
             }
+        }
+
+        if fileManager.fileExists(atPath: applicationSupportDirectory.path()) {
+            try fileManager.removeItem(at: applicationSupportDirectory)
         }
     }
 

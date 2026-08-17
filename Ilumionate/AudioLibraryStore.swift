@@ -30,7 +30,8 @@ nonisolated enum AudioLibraryStore {
     @concurrent
     nonisolated static func loadRepairingStoredFiles(
         storage: AudioLibraryStorage = .standard,
-        documentsURL: URL = .documentsDirectory
+        documentsURL: URL = .documentsDirectory,
+        managedAudioURL: URL = AppStoragePaths.managedAudio
     ) async -> [AudioFile] {
         let trace = PerformanceTrace.begin("Library Refresh")
         defer { PerformanceTrace.end(trace) }
@@ -38,16 +39,21 @@ nonisolated enum AudioLibraryStore {
         let files = load(storage: storage)
         let repair = await discoverUnregisteredDocumentFiles(
             existingFiles: files,
-            documentsURL: documentsURL
+            documentsURL: documentsURL,
+            managedAudioURL: managedAudioURL
         )
-        let reconciled = await persistence.reconcileRepair(
+        _ = await persistence.reconcileRepair(
             repair,
             storage: storage
         )
         if !repair.addedFiles.isEmpty {
             Log.audio.info("📦 Registered \(repair.addedFiles.count) audio file(s) discovered in Documents")
         }
-        return reconciled
+        return await persistence.migrateLegacyAudio(
+            storage: storage,
+            documentsURL: documentsURL,
+            managedAudioURL: managedAudioURL
+        )
     }
 
     static func load(storage: AudioLibraryStorage = .standard) -> [AudioFile] {
@@ -372,61 +378,39 @@ nonisolated enum AudioLibraryStore {
     @concurrent
     private static func discoverUnregisteredDocumentFiles(
         existingFiles: [AudioFile],
-        documentsURL: URL
+        documentsURL: URL,
+        managedAudioURL: URL
     ) async -> LibraryRepair {
-        let fileManager = FileManager.default
         var repairedExistingFiles = existingFiles
         for index in repairedExistingFiles.indices where repairedExistingFiles[index].contentFingerprint == nil {
             guard !Task.isCancelled else { break }
-            let storedURL = repairedExistingFiles[index].filename.hasPrefix("/")
-                ? repairedExistingFiles[index].url
-                : documentsURL.appending(path: repairedExistingFiles[index].filename)
+            let storedURL: URL
+            if repairedExistingFiles[index].filename.hasPrefix("/") {
+                storedURL = repairedExistingFiles[index].url
+            } else if repairedExistingFiles[index].storageLocation == .managed {
+                storedURL = managedAudioURL.appending(
+                    path: repairedExistingFiles[index].filename
+                )
+            } else {
+                storedURL = documentsURL.appending(
+                    path: repairedExistingFiles[index].filename
+                )
+            }
             if let fingerprint = AudioFingerprintService.computeFingerprint(for: storedURL) {
                 repairedExistingFiles[index].contentFingerprint = fingerprint
             }
         }
 
-        let existingFilenames = Set(repairedExistingFiles.map { $0.url.lastPathComponent })
-
-        let urls = (try? fileManager.contentsOfDirectory(
-            at: documentsURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .creationDateKey],
-            options: [.skipsHiddenFiles]
-        )) ?? []
-
-        let discoveredURLs = urls
-            .filter { url in
-                supportedExtensions.contains(url.pathExtension.lowercased())
-            }
-            .filter { url in
-                let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
-                return values?.isRegularFile == true
-            }
-            .filter { url in
-                !existingFilenames.contains(url.lastPathComponent)
-            }
-            .sorted {
-                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
-            }
-
-        var addedFiles: [AudioFile] = []
-        addedFiles.reserveCapacity(discoveredURLs.count)
-        for url in discoveredURLs {
-            guard !Task.isCancelled else { break }
-            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .creationDateKey])
-            let asset = AVURLAsset(url: url)
-            let duration = (try? await asset.load(.duration)).map(CMTimeGetSeconds) ?? 0
-            addedFiles.append(AudioFile(
-                filename: url.lastPathComponent,
-                duration: duration.isFinite ? duration : 0,
-                fileSize: Int64(values?.fileSize ?? 0),
-                createdDate: values?.creationDate ?? Date(),
-                contentFingerprint: AudioFingerprintService.computeFingerprint(for: url)
-            ))
-        }
+        // Discovery of unregistered Documents-root audio was retired when the
+        // cable inbox landed. Both scanned the same directory, so whichever ran
+        // first won — and this one had no stability check, so it could register
+        // a file Finder was still copying. `CableAudioImportService` now owns
+        // root intake and routes it through the full import pipeline.
+        //
+        // The fingerprint repair above is unrelated and still required.
         return LibraryRepair(
             existingFiles: repairedExistingFiles,
-            addedFiles: addedFiles
+            addedFiles: []
         )
     }
 
@@ -439,6 +423,91 @@ nonisolated enum AudioLibraryStore {
 /// Serializes library writes away from the main actor. Keeping one persistence
 /// actor also prevents two rapid UI edits from writing snapshots concurrently.
 private actor AudioLibraryPersistence {
+    /// Moves each legacy library file behind Application Support, persisting
+    /// its new location before proceeding to the next file. A failed library
+    /// write rolls that file back, while a crash after the move is recovered by
+    /// the deterministic per-ID destination on the next launch.
+    func migrateLegacyAudio(
+        storage: AudioLibraryStorage,
+        documentsURL: URL,
+        managedAudioURL: URL
+    ) -> [AudioFile] {
+        var files = decode(storage) ?? []
+        let fileManager = FileManager.default
+
+        for index in files.indices {
+            let current = files[index]
+            guard current.filename.hasPrefix("/") == false,
+                  current.storageLocation != .managed else {
+                continue
+            }
+
+            let sourceURL = documentsURL.appending(path: current.filename)
+            let relativePath = "\(current.id.uuidString)/\(sourceURL.lastPathComponent)"
+            let destinationURL = managedAudioURL.appending(path: relativePath)
+            let destinationExists = fileManager.fileExists(atPath: destinationURL.path)
+            let sourceExists = fileManager.fileExists(atPath: sourceURL.path)
+            guard destinationExists || sourceExists else {
+                continue
+            }
+
+            // A destination left by a completed move is valid crash recovery,
+            // but an unrelated file at the deterministic path must never
+            // replace the library's legacy bytes. Keep using Documents until a
+            // human can resolve the collision.
+            if destinationExists, sourceExists {
+                let sourceFingerprint = AudioFingerprintService.computeFingerprint(for: sourceURL)
+                let destinationFingerprint = AudioFingerprintService.computeFingerprint(
+                    for: destinationURL
+                )
+                guard sourceFingerprint != nil,
+                      sourceFingerprint == destinationFingerprint else {
+                    Log.audio.error(
+                        "Could not privatize \(sourceURL.lastPathComponent, privacy: .public): the private destination contains different audio"
+                    )
+                    continue
+                }
+            }
+
+            do {
+                if destinationExists == false {
+                    try fileManager.createDirectory(
+                        at: destinationURL.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    try fileManager.moveItem(at: sourceURL, to: destinationURL)
+                }
+
+                var migrated = current
+                migrated.filename = relativePath
+                migrated.storageLocation = .managed
+                var candidate = files
+                candidate[index] = migrated
+
+                guard save(candidate, storage: storage) else {
+                    if destinationExists == false {
+                        try? fileManager.moveItem(at: destinationURL, to: sourceURL)
+                    }
+                    continue
+                }
+
+                files = candidate
+                if destinationExists,
+                   fileManager.fileExists(atPath: sourceURL.path),
+                   AudioFingerprintService.computeFingerprint(for: sourceURL)
+                    == AudioFingerprintService.computeFingerprint(for: destinationURL) {
+                    try? fileManager.removeItem(at: sourceURL)
+                }
+            } catch {
+                Log.audio.error(
+                    "Could not privatize \(sourceURL.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+
+        return files
+    }
+
     func deleteLibrary(storage: AudioLibraryStorage) throws {
         let trace = PerformanceTrace.begin("Library Delete Files")
         defer { PerformanceTrace.end(trace) }

@@ -2,7 +2,7 @@
 //  AnalyzerConfigLoader.swift
 //  Ilumionate
 //
-//  Loads AnalyzerConfig from Documents (trained) or Bundle (default).
+//  Loads AnalyzerConfig from private app storage (trained) or Bundle (default).
 //
 
 import Foundation
@@ -12,6 +12,12 @@ nonisolated enum AnalyzerConfigLoader {
 
     static let documentsConfigURL: URL =
         URL.documentsDirectory.appending(path: "AnalyzerConfig.json")
+    private static var appConfigURL: URL {
+        PrivateStorageMigration.migrateItemIfNeeded(
+            from: documentsConfigURL,
+            to: AppStoragePaths.analyzerConfig
+        )
+    }
     static let minimumPublishedConfigFitness = 0.30
 
     private static let baseConfigCache = AnalyzerConfigCache()
@@ -23,14 +29,15 @@ nonisolated enum AnalyzerConfigLoader {
     }
 
     private static func loadBaseConfigFromDisk() -> AnalyzerConfig {
-        // 1. Try trained config in Documents
-        if let data = try? Data(contentsOf: documentsConfigURL),
+        // 1. Try the trained config in private app storage.
+        let configURL = appConfigURL
+        if let data = try? Data(contentsOf: configURL),
            let config = try? JSONDecoder().decode(AnalyzerConfig.self, from: data) {
             if isUsablePublishedConfig(config) {
                 Log.analysis.info("📐 Loaded trained AnalyzerConfig (gen \(config.generation), fitness \(config.fitness))")
                 return config
             }
-            Log.analysis.warning("Ignoring trained AnalyzerConfig at \(documentsConfigURL.path(), privacy: .public); fitness \(config.fitness, privacy: .public) is below minimum \(minimumPublishedConfigFitness, privacy: .public)")
+            Log.analysis.warning("Ignoring trained AnalyzerConfig at \(configURL.path(), privacy: .public); fitness \(config.fitness, privacy: .public) is below minimum \(minimumPublishedConfigFitness, privacy: .public)")
         }
 
         // 2. Fall back to bundled default
@@ -42,16 +49,16 @@ nonisolated enum AnalyzerConfigLoader {
         }
 
         // 3. Last resort — should never happen in production
-        fatalError("No AnalyzerConfig found in Documents or Bundle — app cannot start")
+        fatalError("No AnalyzerConfig found in app storage or Bundle — app cannot start")
     }
 
     static func isUsablePublishedConfig(_ config: AnalyzerConfig) -> Bool {
         config.fitness.isFinite && config.fitness >= minimumPublishedConfigFitness
     }
 
-    /// Saves a trained config to Documents for the app to pick up.
+    /// Saves a trained config to private app storage for the app to pick up.
     static func save(_ config: AnalyzerConfig) throws {
-        try save(config, to: documentsConfigURL)
+        try save(config, to: appConfigURL)
     }
 
     /// Saves a trained config to an explicit location for tooling/export workflows.
@@ -59,8 +66,15 @@ nonisolated enum AnalyzerConfigLoader {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(config)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         try data.write(to: url, options: .atomic)
-        if url.standardizedFileURL == documentsConfigURL.standardizedFileURL {
+        // Do not evaluate `appConfigURL` here: doing so would migrate a config
+        // that an explicit tooling/export call intentionally wrote to
+        // Documents. Only the app's private destination updates this cache.
+        if url.standardizedFileURL == AppStoragePaths.analyzerConfig.standardizedFileURL {
             baseConfigCache.update(config)
         }
         Log.analysis.info("💾 Saved AnalyzerConfig (gen \(config.generation)) to \(url.path())")

@@ -30,8 +30,11 @@ struct LibraryView: View {
     /// which meant a synchronous JSON decode on the main actor every single
     /// time the Library tab was tapped.
     let builtInSessions: [LightSession]
+    let isCheckingIncomingAudio: Bool
+    let onCheckIncomingAudio: () -> Void
 
     @State private var audioFiles: [AudioFile] = []
+    @State private var audioLibraryCache = AudioLibraryCache.shared
     /// Seeded at construction, not in `.task`. `.task` runs after the first
     /// paint, so loading there left the playlist shelf empty for a frame.
     /// `PlaylistStore.load()` is cached, so this is free on re-entry.
@@ -123,6 +126,8 @@ struct LibraryView: View {
                                 onNewPlaylist: { editingPlaylist = Playlist(name: "") },
                                 onImportPlaylistLink: { playlistImportRequest = PlaylistImportRequest(audioFiles: audioFiles) },
                                 onBrowseForPlaylist: { showingPlaylistLinkBrowser = true },
+                                isCheckingIncomingAudio: isCheckingIncomingAudio,
+                                onCheckIncomingAudio: onCheckIncomingAudio,
                                 onManageAudio: { showingSessionsManager = true }
                             )
                         }
@@ -247,6 +252,9 @@ struct LibraryView: View {
                 await loadAudioFiles()
             }
             .onChange(of: audioFiles) { _, _ in recomputeDerivedCollections() }
+            .onChange(of: audioLibraryCache.files) { _, files in
+                audioFiles = files
+            }
             .onChange(of: analysisManager.partialResultsRevision) {
                 Task { await loadAudioFiles(forceRefresh: true) }
             }

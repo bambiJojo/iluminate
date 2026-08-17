@@ -19,22 +19,56 @@ struct AudioLibraryStoreTests {
     // deterministically by `AudioLibraryStorageTests.oversizedLibraryRoundTrips`.
     // See ERRORS.md ERR-001.
 
-    @Test func registersSupportedFilesDiscoveredInDocuments() async throws {
+    /// Retired deliberately. This path and `CableAudioImportService` both
+    /// scanned the Documents root, so whichever ran first won — and this one had
+    /// no stability check, so it could register a file Finder was still
+    /// copying. Root intake now belongs to the cable service, which runs the
+    /// full import pipeline and reports a result.
+    @Test func leavesAudioAtTheDocumentsRootForTheCableImporter() async throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
 
-        try Data("not real audio".utf8).write(to: fixture.documentsURL.appending(path: "Dropped Session.mp3"))
+        let droppedURL = fixture.documentsURL.appending(path: "Dropped Session.mp3")
+        try Data([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]).write(to: droppedURL)
         try Data("ignored".utf8).write(to: fixture.documentsURL.appending(path: "notes.txt"))
 
         let files = await AudioLibraryStore.loadRepairingStoredFiles(
             storage: fixture.storage,
-            documentsURL: fixture.documentsURL
+            documentsURL: fixture.documentsURL,
+            managedAudioURL: fixture.managedAudioURL
         )
 
-        #expect(files.count == 1)
-        #expect(files.first?.filename == "Dropped Session.mp3")
-        #expect(files.first?.contentFingerprint?.count == 64)
-        #expect(AudioLibraryStore.load(storage: fixture.storage).count == 1)
+        #expect(files.isEmpty)
+        #expect(AudioLibraryStore.load(storage: fixture.storage).isEmpty)
+        // Untouched, not consumed — the cable importer will claim it.
+        #expect(FileManager.default.fileExists(atPath: droppedURL.path))
+        #expect(try FileManager.default.contentsOfDirectory(
+            at: fixture.managedAudioURL,
+            includingPropertiesForKeys: nil
+        ).isEmpty)
+    }
+
+    @Test func doesNotRegisterNonAudioBytesFromDocuments() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+
+        let invalidURL = fixture.documentsURL.appending(path: "Not Audio.mp3")
+        try Data("<html>not audio</html>".utf8).write(to: invalidURL)
+
+        let files = await AudioLibraryStore.loadRepairingStoredFiles(
+            storage: fixture.storage,
+            documentsURL: fixture.documentsURL,
+            managedAudioURL: fixture.managedAudioURL
+        )
+
+        #expect(files.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: invalidURL.path))
+        #expect(
+            try FileManager.default.contentsOfDirectory(
+                at: fixture.managedAudioURL,
+                includingPropertiesForKeys: nil
+            ).isEmpty
+        )
     }
 
     @Test func doesNotDuplicateAlreadyRegisteredDocumentFiles() async throws {
@@ -49,11 +83,46 @@ struct AudioLibraryStoreTests {
 
         let files = await AudioLibraryStore.loadRepairingStoredFiles(
             storage: fixture.storage,
-            documentsURL: fixture.documentsURL
+            documentsURL: fixture.documentsURL,
+            managedAudioURL: fixture.managedAudioURL
         )
 
         #expect(files.count == 1)
         #expect(files.first?.id == existing.id)
+    }
+
+    @Test func conflictingPrivateDestinationDoesNotReplaceLegacyAudio() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+
+        let existing = AudioFile(filename: "Existing.mp3", duration: 12, fileSize: 99)
+        await AudioLibraryStore.save([existing], storage: fixture.storage)
+
+        let sourceURL = fixture.documentsURL.appending(path: existing.filename)
+        let sourceBytes = Data([0x49, 0x44, 0x33, 0x01])
+        try sourceBytes.write(to: sourceURL)
+
+        let destinationURL = fixture.managedAudioURL
+            .appending(path: existing.id.uuidString, directoryHint: .isDirectory)
+            .appending(path: existing.filename)
+        try FileManager.default.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let conflictingBytes = Data([0x49, 0x44, 0x33, 0x02])
+        try conflictingBytes.write(to: destinationURL)
+
+        let files = await AudioLibraryStore.loadRepairingStoredFiles(
+            storage: fixture.storage,
+            documentsURL: fixture.documentsURL,
+            managedAudioURL: fixture.managedAudioURL
+        )
+
+        let retained = try #require(files.first)
+        #expect(retained.storageLocation != .managed)
+        #expect(retained.filename == existing.filename)
+        #expect(try Data(contentsOf: sourceURL) == sourceBytes)
+        #expect(try Data(contentsOf: destinationURL) == conflictingBytes)
     }
 
     @Test func loadingLibraryAutomaticallyAppliesRecognizedGoldReview() async throws {
@@ -71,7 +140,8 @@ struct AudioLibraryStoreTests {
 
         let files = await AudioLibraryStore.loadRepairingStoredFiles(
             storage: fixture.storage,
-            documentsURL: fixture.documentsURL
+            documentsURL: fixture.documentsURL,
+            managedAudioURL: fixture.managedAudioURL
         )
         let recognized = try #require(files.first)
 
@@ -155,11 +225,14 @@ struct AudioLibraryStoreTests {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "AudioLibraryStoreTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         let documentsURL = root.appending(path: "Documents", directoryHint: .isDirectory)
+        let managedAudioURL = root.appending(path: "Managed Audio", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: documentsURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: managedAudioURL, withIntermediateDirectories: true)
 
         return Fixture(
             root: root,
             documentsURL: documentsURL,
+            managedAudioURL: managedAudioURL,
             storage: AudioLibraryStorage(
                 fileURL: root.appending(path: "library.json"),
                 legacyDefaults: nil
@@ -170,6 +243,7 @@ struct AudioLibraryStoreTests {
     private struct Fixture {
         let root: URL
         let documentsURL: URL
+        let managedAudioURL: URL
         let storage: AudioLibraryStorage
 
         func cleanup() {

@@ -36,6 +36,9 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     let fileSize: Int64
     let createdDate: Date
     var contentFingerprint: String?
+    /// `nil` is the backward-compatible spelling of `.documents` for library
+    /// entries encoded before private managed storage was introduced.
+    var storageLocation: AudioStorageLocation?
     /// Set when the file was fetched from a publisher rather than imported by
     /// the user. Optional so every previously stored library decodes unchanged.
     var remoteSource: RemoteAudioSource?
@@ -56,19 +59,25 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     var playCount: Int?
     var sessionNotes: String? // User notes about the session
 
-    // Library files are typically stored relative to Documents, but training and
-    // migration flows can hand us an absolute path that should be preserved.
+    // Library files are stored relative to their declared root, but training
+    // and migration flows can hand us an absolute path that must be preserved.
     nonisolated var url: URL {
         if filename.hasPrefix("/") {
             return URL(filePath: filename).standardizedFileURL
         }
-        return URL.documentsDirectory.appending(path: filename)
+        switch storageLocation ?? .documents {
+        case .documents:
+            return URL.documentsDirectory.appending(path: filename)
+        case .managed:
+            return AppStoragePaths.managedAudio.appending(path: filename)
+        }
     }
 
     // Exclude `url` from serialization — it is always derived from `filename`.
     // Old stored data may contain a `url` field; Codable ignores unknown keys.
     enum CodingKeys: String, CodingKey {
         case id, filename, duration, fileSize, createdDate, contentFingerprint
+        case storageLocation
         case remoteSource
         case transcription, analysisResult, deadTimeProfile
         case trackMetadata, userTitle
@@ -82,6 +91,7 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
          lastPlayedDate: Date? = nil, playCount: Int? = nil,
          trackMetadata: AudioTrackMetadata? = nil, userTitle: String? = nil,
          contentFingerprint: String? = nil,
+         storageLocation: AudioStorageLocation? = nil,
          remoteSource: RemoteAudioSource? = nil) {
         self.id = id
         self.filename = filename
@@ -89,6 +99,7 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
         self.fileSize = fileSize
         self.createdDate = createdDate
         self.contentFingerprint = contentFingerprint
+        self.storageLocation = storageLocation
         self.remoteSource = remoteSource
         self.isFavorite = isFavorite
         self.rating = rating
@@ -142,7 +153,7 @@ nonisolated struct AudioFile: Identifiable, Codable, Sendable {
     var voiceQualityRating: Int { detailedRating?.voiceQuality ?? 0 }
 }
 
-extension AudioFile: Equatable {
+nonisolated extension AudioFile: Equatable {
     /// Field-wise rather than identity-only, because SwiftUI diffs on this:
     /// narrowing it to `id` would stop rows refreshing when a rating or title
     /// changes in place.
@@ -154,6 +165,7 @@ extension AudioFile: Equatable {
     nonisolated static func == (lhs: AudioFile, rhs: AudioFile) -> Bool {
         lhs.id == rhs.id &&
         lhs.contentFingerprint == rhs.contentFingerprint &&
+        lhs.storageLocation == rhs.storageLocation &&
         lhs.remoteSource == rhs.remoteSource &&
         lhs.filename == rhs.filename &&
         lhs.isFavorite == rhs.isFavorite &&
@@ -169,7 +181,7 @@ extension AudioFile: Equatable {
     }
 }
 
-extension AudioFile: Hashable {
+nonisolated extension AudioFile: Hashable {
     nonisolated func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }

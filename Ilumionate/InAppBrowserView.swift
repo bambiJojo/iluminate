@@ -656,16 +656,21 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, WKDownloa
         let baseName = (name as NSString).deletingPathExtension
         let finalName = validExts.contains(ext) ? name : "\(baseName).\(finalExt)"
 
-        let destURL = URL.documentsDirectory.appending(path: finalName)
+        let managedAudioURL = AppStoragePaths.managedAudio
+        let destURL = managedAudioURL.appending(path: finalName)
         var uniqueURL = destURL
         var counter = 1
         while FileManager.default.fileExists(atPath: uniqueURL.path) {
             let nameWithoutExt = (finalName as NSString).deletingPathExtension
-            uniqueURL = URL.documentsDirectory.appending(path: "\(nameWithoutExt) (\(counter)).\(finalExt)")
+            uniqueURL = managedAudioURL.appending(path: "\(nameWithoutExt) (\(counter)).\(finalExt)")
             counter += 1
         }
 
         do {
+            try FileManager.default.createDirectory(
+                at: managedAudioURL,
+                withIntermediateDirectories: true
+            )
             try FileManager.default.moveItem(at: tempURL, to: uniqueURL)
 
             // Get duration
@@ -684,7 +689,9 @@ final class BrowserWebViewCoordinator: NSObject, WKNavigationDelegate, WKDownloa
             let audioFile = AudioFile(
                 filename: uniqueURL.lastPathComponent,
                 duration: durationSeconds,
-                fileSize: fileSize
+                fileSize: fileSize,
+                contentFingerprint: AudioFingerprintService.computeFingerprint(for: uniqueURL),
+                storageLocation: .managed
             )
 
             isLoading = false

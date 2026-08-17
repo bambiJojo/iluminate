@@ -595,7 +595,10 @@ class AnalysisStateManager {
 
     /// URL of the on-disk analysis cache. Internal so tests can verify the path.
     nonisolated static var cacheURL: URL {
-        URL.documentsDirectory.appending(path: "AnalysisCache.json")
+        PrivateStorageMigration.migrateItemIfNeeded(
+            from: URL.documentsDirectory.appending(path: "AnalysisCache.json"),
+            to: AppStoragePaths.analysisCache
+        )
     }
 
     /// Re-queues durable work and waits for the active processing loop. Used by

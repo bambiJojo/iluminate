@@ -35,10 +35,7 @@ final class GeneratedSessionStore {
     private var goldMatchCache: [UUID: LightSession?] = [:]
 
     init(
-        directoryURL: URL = URL.documentsDirectory.appending(
-            path: "GeneratedSessions",
-            directoryHint: .isDirectory
-        ),
+        directoryURL: URL? = nil,
         onSessionSaved: @escaping () -> Void = {
             UsageAnalytics.shared.sessionGenerated()
         },
@@ -46,7 +43,13 @@ final class GeneratedSessionStore {
             KnownAudioCatalog.shared.goldLightSession(for: $0)
         }
     ) {
-        self.directoryURL = directoryURL
+        self.directoryURL = directoryURL ?? PrivateStorageMigration.migrateItemIfNeeded(
+            from: URL.documentsDirectory.appending(
+                path: "GeneratedSessions",
+                directoryHint: .isDirectory
+            ),
+            to: AppStoragePaths.generatedSessions
+        )
         self.onSessionSaved = onSessionSaved
         self.goldSessionProvider = goldSessionProvider
     }

@@ -69,11 +69,11 @@ struct AnalysisCacheTests {
 
     // MARK: Cache URL shape
 
-    @Test @MainActor func cacheURLIsInDocumentsDirectory() {
+    @Test @MainActor func cacheURLIsInPrivateApplicationSupport() {
         let url = AnalysisStateManager.cacheURL
-        let docsPath = URL.documentsDirectory.path
-        #expect(url.path.hasPrefix(docsPath),
-            "Cache URL must be inside Documents directory")
+        #expect(url.path.hasPrefix(URL.applicationSupportDirectory.path))
+        #expect(url.path.hasPrefix(URL.documentsDirectory.path) == false,
+            "Private cache must not appear in Finder file sharing")
     }
 
     @Test @MainActor func cacheURLHasJSONExtension() {

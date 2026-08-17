@@ -14,8 +14,22 @@ final class PlaylistGeneratedSessionStore {
 
     private let directoryURL: URL
 
-    init(directoryURL: URL = URL.documentsDirectory.appending(path: "GeneratedSessions/Playlists", directoryHint: .isDirectory)) {
-        self.directoryURL = directoryURL
+    init(directoryURL: URL? = nil) {
+        if let directoryURL {
+            self.directoryURL = directoryURL
+            return
+        }
+        let generatedSessionsRoot = PrivateStorageMigration.migrateItemIfNeeded(
+            from: URL.documentsDirectory.appending(
+                path: "GeneratedSessions",
+                directoryHint: .isDirectory
+            ),
+            to: AppStoragePaths.generatedSessions
+        )
+        self.directoryURL = generatedSessionsRoot.appending(
+            path: "Playlists",
+            directoryHint: .isDirectory
+        )
     }
 
     func sessionURL(forPlaylistID id: UUID) -> URL {

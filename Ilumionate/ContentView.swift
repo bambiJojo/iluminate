@@ -38,9 +38,15 @@ struct ContentView: View {
     @State private var createRequestedKind: CreateSessionKind?
     @State private var nowPlaying = NowPlayingState.shared
     @State private var analysisManager = AnalysisStateManager.shared
-    /// Single owner of the analysis task snapshot. Every analysis surface
+    @State private var cableImport = CableAudioImportModel()
+    /// Finder writes while the app is running. Without this, a transfer that
+    /// finishes after the app foregrounds is invisible until something else
+    /// happens to trigger a scan.
+    @State private var cableWatcher = CableInboxWatcher()
+    /// Single owner of the analysis task snapshot, provided by the app root so
+    /// that nested sheets and covers all resolve it. Every analysis surface
     /// filters this one list; none rebuilds state of its own.
-    @State private var analysisCenter = AnalysisCenterModel.live()
+    @Environment(AnalysisCenterModel.self) private var analysisCenter
 
     // Synced to engine on appear and on change
     @AppStorage("userFrequencyMultiplier") private var userFrequencyMultiplierPref = 1.0
@@ -52,7 +58,6 @@ struct ContentView: View {
 
     var body: some View {
         mainLayout
-        .environment(analysisCenter)
         .task {
             await analysisManager.prepareCachedResults()
             await analysisManager.restoreManualRecoveries()
@@ -62,6 +67,8 @@ struct ContentView: View {
             analysisCenter.invalidateStructure()
             loadSessions()
             await loadAudioFiles()
+            await scanCableInbox()
+            startWatchingCableInbox()
             checkForFirstLaunch()
             checkForAnalyticsConsentPrompt()
             engine.userFrequencyMultiplier = userFrequencyMultiplierPref
@@ -78,6 +85,10 @@ struct ContentView: View {
             if phase == .active {
                 UsageAnalytics.shared.appBecameActive()
                 BackgroundAnalysisScheduler.shared.resumeWhenForegrounded()
+                Task { await scanCableInbox() }
+                startWatchingCableInbox()
+            } else {
+                cableWatcher.stop()
             }
         }
         // Structural invalidation is driven by observing the state itself rather
@@ -131,6 +142,25 @@ struct ContentView: View {
             }
         } message: {
             Text("Share anonymous usage analytics so we can understand what works, find problems, and improve the app. This never includes audio, transcripts, generated session text, imported documents, or reading-source URLs.")
+        }
+        .alert(
+            cableImportAlertTitle,
+            isPresented: showingCableImportResult
+        ) {
+            if cableImport.presentedResult?.imported.isEmpty == false {
+                Button("Not Now", role: .cancel) {
+                    cableImport.dismissResult()
+                }
+                Button("Analyze All") {
+                    analyzeCableImports()
+                }
+            } else {
+                Button("OK", role: .cancel) {
+                    cableImport.dismissResult()
+                }
+            }
+        } message: {
+            Text(cableImport.presentedResult?.message ?? "")
         }
         .preferredColorScheme(ThemeMode(persisted: appearanceModeRaw).colorScheme)
     }
@@ -199,7 +229,14 @@ struct ContentView: View {
                     )
                 }
             } else if selectedTab == .library {
-                LibraryView(engine: engine, builtInSessions: sessions)
+                LibraryView(
+                    engine: engine,
+                    builtInSessions: sessions,
+                    isCheckingIncomingAudio: cableImport.isScanning,
+                    onCheckIncomingAudio: {
+                        Task { await scanCableInbox(manual: true) }
+                    }
+                )
             } else if selectedTab == .read {
                 TextTranceRootView(
                     sharedImportTrigger: readerSharedImportTrigger,
@@ -290,6 +327,52 @@ struct ContentView: View {
         await audioLibraryCache.refresh()
     }
 
+    private var cableImportAlertTitle: String {
+        cableImport.presentedResult?.title ?? "Audio Transfer"
+    }
+
+    private var showingCableImportResult: Binding<Bool> {
+        Binding(
+            get: { cableImport.presentedResult != nil },
+            set: { isPresented in
+                if isPresented == false {
+                    cableImport.dismissResult()
+                }
+            }
+        )
+    }
+
+    /// Finder cable sharing is an iPhone/iPad feature. Keeping the platform
+    /// gate here prevents the macOS app from treating its own Documents folder
+    /// as a transfer inbox while still compiling one shared root view.
+    private func scanCableInbox(manual: Bool = false) async {
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        await cableImport.scan(manual: manual)
+        #endif
+    }
+
+    /// A watcher-triggered scan reports its result like a manual one. The user
+    /// did ask for these files — they just asked in Finder rather than in the
+    /// app — so importing them silently would be the wrong kind of quiet.
+    private func startWatchingCableInbox() {
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        cableWatcher.start(url: AppStoragePaths.cableRootInbox) {
+            Task { await cableImport.scan(manual: true) }
+        }
+        #endif
+    }
+
+    private func analyzeCableImports() {
+        let imported = cableImport.consumeImportedForAnalysis()
+        guard imported.isEmpty == false else { return }
+        Task {
+            await analysisManager.queueForAnalysis(
+                imported,
+                priority: .userInitiated
+            )
+        }
+    }
+
     private func checkForFirstLaunch() {
         let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         if !hasCompletedOnboarding {
@@ -351,5 +434,8 @@ struct ContentView: View {
 }
 
 #Preview {
+    // The app root provides this at runtime; the preview has to stand in for
+    // it, or resolving the environment traps.
     ContentView()
+        .environment(AnalysisCenterModel { .empty })
 }

@@ -36,7 +36,7 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
     private let probe: Prober
     private let documentsURL: URL
 
-    init(session: URLSession = .shared, documentsURL: URL = .documentsDirectory) {
+    init(session: URLSession = .shared, documentsURL: URL = AppStoragePaths.managedAudio) {
         load = { try await session.download(from: $0) }
         probe = { try await session.data(for: $0) }
         self.documentsURL = documentsURL
@@ -143,6 +143,10 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
 
         let destination = uniqueDestination(for: track, source: source)
         do {
+            try FileManager.default.createDirectory(
+                at: documentsURL,
+                withIntermediateDirectories: true
+            )
             try FileManager.default.moveItem(at: temporaryURL, to: destination)
         } catch {
             try? FileManager.default.removeItem(at: temporaryURL)
@@ -155,6 +159,7 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
                 duration: await measuredDuration(of: destination, fallback: track.duration),
                 fileSize: byteCount,
                 contentFingerprint: fingerprint,
+                storageLocation: .managed,
                 remoteSource: remoteSource
             )
         )

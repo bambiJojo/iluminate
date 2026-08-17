@@ -146,7 +146,50 @@ struct AudioImportWorkerTests {
         #expect(imported.remoteSource == source)
         #expect(imported.creator == "Remote Artist")
     }
+
+    @Test("A failed move admission restores the source instead of deleting the only copy")
+    func failedMoveRestoresSource() async throws {
+        let root = URL.temporaryDirectory.appending(
+            path: "AudioImportRollback-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+        let sourceDirectory = root.appending(path: "Inbox", directoryHint: .isDirectory)
+        let destinationDirectory = root.appending(path: "Managed", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: sourceDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let source = sourceDirectory.appending(path: "Keep Me.mp3")
+        let payload = Data("only-copy".utf8)
+        try payload.write(to: source)
+
+        await #expect(throws: ForcedTransferError.self) {
+            _ = try await AudioImportWorker.prepareAudioFile(
+                from: source,
+                targetFilename: source.lastPathComponent,
+                transferMode: .move,
+                durationTimeout: .milliseconds(50),
+                documentsURL: destinationDirectory,
+                transferOperation: { source, destination, _ in
+                    try FileManager.default.moveItem(at: source, to: destination)
+                    throw ForcedTransferError()
+                }
+            )
+        }
+
+        #expect(try Data(contentsOf: source) == payload)
+        #expect(
+            try FileManager.default.contentsOfDirectory(
+                at: destinationDirectory,
+                includingPropertiesForKeys: nil
+            ).isEmpty
+        )
+    }
 }
+
+private nonisolated struct ForcedTransferError: Error {}
 
 /// Records which thread the injected transfer ran on. A plain `var` captured by
 /// the `@Sendable` transfer closure will not compile under strict concurrency.

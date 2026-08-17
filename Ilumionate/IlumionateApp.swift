@@ -42,6 +42,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
 @main
 struct IlumionateApp: App {
+
+    /// Owned at the app root, not inside `ContentView`.
+    ///
+    /// Every analysis surface reads this through the environment, and some of
+    /// them are reached through nested sheets. Injecting it from inside
+    /// `ContentView` left those presentations without an ancestor that
+    /// provided it, which trapped with "No Observable object of type
+    /// AnalysisCenterModel found". The scene root is the only place that is
+    /// unambiguously an ancestor of everything.
+    @State private var analysisCenter = AnalysisCenterModel.live()
+
     #if canImport(UIKit)
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     #endif
@@ -67,11 +78,14 @@ struct IlumionateApp: App {
             #if os(macOS)
             ContentView(navigationPresentation: .macSidebar)
                 .frame(minWidth: 760, minHeight: 560)
+                .environment(analysisCenter)
             #elseif targetEnvironment(macCatalyst)
             ContentView()
                 .frame(minWidth: 760, minHeight: 560)
+                .environment(analysisCenter)
             #else
             ContentView()
+                .environment(analysisCenter)
             #endif
         }
         #if os(macOS)

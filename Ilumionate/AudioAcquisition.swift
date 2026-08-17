@@ -145,7 +145,7 @@ final class AudioAcquisition {
 
     // MARK: - In-app browser
 
-    /// The browser hands back a file it has already written to Documents.
+    /// The browser hands back a file it has already written to managed storage.
     func adopt(_ file: AudioFile) {
         Task {
             let added = await store(file)

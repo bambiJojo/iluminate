@@ -78,7 +78,10 @@ actor AnalysisProgressStore {
     private let storeURL: URL
 
     private static var defaultStoreURL: URL {
-        URL.documentsDirectory.appending(path: "AnalysisProgress.json")
+        PrivateStorageMigration.migrateItemIfNeeded(
+            from: URL.documentsDirectory.appending(path: "AnalysisProgress.json"),
+            to: AppStoragePaths.analysisProgress
+        )
     }
 
     // MARK: Init

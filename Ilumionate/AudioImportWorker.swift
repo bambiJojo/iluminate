@@ -36,6 +36,7 @@ nonisolated enum AudioImportWorker {
         durationTimeout: Duration,
         documentsURL: URL = .documentsDirectory,
         existing: DuplicateAudioIndex = DuplicateAudioIndex([]),
+        storageLocation: AudioStorageLocation = .documents,
         remoteSource: RemoteAudioSource? = nil,
         creator: String? = nil,
         transferOperation: AudioFileTransferOperation? = nil
@@ -82,6 +83,10 @@ nonisolated enum AudioImportWorker {
             return .alreadyInLibrary(existing: existingID)
         }
 
+        try FileManager.default.createDirectory(
+            at: documentsURL,
+            withIntermediateDirectories: true
+        )
         let destinationURL = uniqueDestinationURL(for: targetFilename, in: documentsURL)
 
         do {
@@ -114,12 +119,35 @@ nonisolated enum AudioImportWorker {
                 trackMetadata: metadata,
                 contentFingerprint: sourceFingerprint
                     ?? AudioFingerprintService.computeFingerprint(for: destinationURL),
+                storageLocation: storageLocation,
                 remoteSource: remoteSource
             )
             audioFile.creator = creator
             return .imported(audioFile)
         } catch {
-            try? FileManager.default.removeItem(at: destinationURL)
+            let fileManager = FileManager.default
+            switch transferMode {
+            case .copy:
+                // The source is still authoritative, so the failed copy is
+                // ours to remove.
+                try? fileManager.removeItem(at: destinationURL)
+            case .move:
+                // A move may have succeeded before a later duration, metadata,
+                // or cancellation check failed. Restore the only copy. If the
+                // rollback itself fails, retain the destination rather than
+                // deleting the user's bytes.
+                if fileManager.fileExists(atPath: destinationURL.path) {
+                    if fileManager.fileExists(atPath: sourceURL.path) {
+                        try? fileManager.removeItem(at: destinationURL)
+                    } else {
+                        try? fileManager.createDirectory(
+                            at: sourceURL.deletingLastPathComponent(),
+                            withIntermediateDirectories: true
+                        )
+                        try? fileManager.moveItem(at: destinationURL, to: sourceURL)
+                    }
+                }
+            }
             throw error
         }
     }

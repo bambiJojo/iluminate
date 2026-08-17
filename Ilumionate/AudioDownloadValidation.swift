@@ -18,7 +18,7 @@
 
 import Foundation
 
-enum AudioDownloadValidation {
+nonisolated enum AudioDownloadValidation {
 
     enum Rejection: Error, Equatable {
         /// The server told us it was not audio.

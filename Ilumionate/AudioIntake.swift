@@ -149,7 +149,9 @@ final class AudioIntake {
             targetFilename: targetFilename,
             transferMode: transferMode,
             durationTimeout: durationTimeout,
+            documentsURL: AppStoragePaths.managedAudio,
             existing: await AudioLibraryStore.duplicateIndex(),
+            storageLocation: .managed,
             remoteSource: remoteSource,
             creator: creator
         )
