@@ -59,6 +59,12 @@ nonisolated struct AnalysisManualRecovery: Codable, Sendable {
     let reason: AnalyticsAnalysisFailureReason
     let failedStage: AnalyticsAnalysisStage
     let failedAt: Date
+    /// Set when the user dismisses this specific occurrence. Optional with a
+    /// default so existing on-disk checkpoints decode unchanged. Living on the
+    /// occurrence means `saveQueued` and `markRequiresManualRetry` invalidate
+    /// it for free — a retry or a fresh failure clears it with no extra
+    /// bookkeeping.
+    var dismissedAt: Date? = nil
 }
 
 // MARK: - Store
@@ -231,13 +237,62 @@ actor AnalysisProgressStore {
         persist()
     }
 
+    /// Marks this failure occurrence dismissed. The checkpoint is left intact,
+    /// so a later retry still resumes from the saved transcript.
+    ///
+    /// `expectingFailedAt` guards against a confirmation raised for an older
+    /// failure acting on a newer one for the same file.
+    func dismiss(fileID: UUID, expectingFailedAt: Date) -> Bool {
+        guard var checkpoint = checkpoints[fileID],
+              var recovery = checkpoint.manualRecovery,
+              recovery.failedAt == expectingFailedAt else { return false }
+
+        let previous = checkpoints[fileID]
+        recovery.dismissedAt = Date()
+        checkpoint.manualRecovery = recovery
+        checkpoints[fileID] = checkpoint
+
+        guard persist() else {
+            checkpoints[fileID] = previous          // never report a write that did not land
+            return false
+        }
+        Log.analysis.info("🙈 Checkpoint: dismissed failure for \(checkpoint.audioFile.filename)")
+        return true
+    }
+
+    /// Destructive counterpart to `dismiss`: clears the recovery *and* the
+    /// checkpoint, discarding any saved transcript or analysis.
+    func remove(fileID: UUID, expectingFailedAt: Date) -> Bool {
+        guard let checkpoint = checkpoints[fileID],
+              let recovery = checkpoint.manualRecovery,
+              recovery.failedAt == expectingFailedAt else { return false }
+
+        checkpoints.removeValue(forKey: fileID)
+        guard persist() else {
+            checkpoints[fileID] = checkpoint
+            return false
+        }
+        Log.analysis.info("🗑️ Checkpoint: removed \(checkpoint.audioFile.filename)")
+        return true
+    }
+
     // MARK: Private
 
-    private func persist() {
+    /// Reports whether the write landed. Previously swallowed both failures,
+    /// which is how a dismissal could appear to stick and then return on the
+    /// next launch (ERR-013) — the same defect class as ERR-005.
+    @discardableResult
+    private func persist() -> Bool {
         let stringKeyed = Dictionary(
             uniqueKeysWithValues: checkpoints.map { ($0.key.uuidString, $0.value) }
         )
-        guard let data = try? JSONEncoder().encode(stringKeyed) else { return }
-        try? data.write(to: storeURL, options: .atomic)
+        do {
+            let data = try JSONEncoder().encode(stringKeyed)
+            try data.write(to: storeURL, options: .atomic)
+            return true
+        } catch {
+            Log.analysis.error("❌ Checkpoint store write failed: \(error)")
+            return false
+        }
     }
 }
