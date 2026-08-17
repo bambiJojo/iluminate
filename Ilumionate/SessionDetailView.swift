@@ -12,6 +12,9 @@ struct SessionDetailView: View {
     let engine: LightEngine
     private let audioFileID: AudioFile.ID
 
+    /// Injected by the app root. Session Detail filters the shared snapshot to
+    /// this file rather than reading the manager's collections itself.
+    @Environment(AnalysisCenterModel.self) private var analysisCenter
     @State private var lightSession: LightSession?
     @State private var showingPlayer = false
     @State private var showingReanalyze = false
@@ -456,10 +459,10 @@ struct SessionDetailView: View {
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
 
-                // Reading the manager here means the button swaps to live progress
-                // the moment work is queued, rather than looking as though the tap
-                // did nothing.
-                if AnalysisStateManager.shared.isQueuedOrActive(audioFile) {
+                // Reading the shared snapshot here means the button swaps to live
+                // progress the moment work is queued, rather than looking as
+                // though the tap did nothing.
+                if isWorkInFlight {
                     analyzingIndicator
                 } else {
                     GlowButton(title: "Analyze Now", systemImage: "sparkles") {
@@ -473,13 +476,23 @@ struct SessionDetailView: View {
         }
     }
 
+    /// This file's slice of the shared snapshot.
+    private var task: AnalysisTask? {
+        analysisCenter.task(for: audioFile.id)
+    }
+
+    private var isWorkInFlight: Bool {
+        switch task?.state {
+        case .queued, .preparing, .running: true
+        default: false
+        }
+    }
+
     private var analyzingIndicator: some View {
-        let active = AnalysisStateManager.shared.currentAnalysis
-        let isThisFile = active?.audioFile.id == audioFile.id
-        return HStack(spacing: TranceSpacing.list) {
+        HStack(spacing: TranceSpacing.list) {
             ProgressView()
                 .controlSize(.small)
-            Text(stageText(active: active, isThisFile: isThisFile))
+            Text(stageText)
                 .font(TranceTypography.body)
                 .foregroundStyle(Color.textSecondary)
         }
@@ -488,9 +501,14 @@ struct SessionDetailView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func stageText(active: ActiveAnalysis?, isThisFile: Bool) -> String {
-        guard isThisFile, let active else { return "Waiting in queue…" }
-        return AnalysisStageFeedback.stageSummary(active.stage)
+    /// The task already answers "is this file the active one", so there is no
+    /// id comparison to get wrong here.
+    private var stageText: String {
+        switch task?.state {
+        case .running(let stage, _, _): AnalysisStageFeedback.stageSummary(stage)
+        case .preparing:                "Preparing analyzer"
+        default:                        "Waiting in queue…"
+        }
     }
 
     // MARK: - Re-analyze

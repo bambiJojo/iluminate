@@ -49,6 +49,9 @@ struct LibraryView: View {
     @State private var quickFilter: LibraryQuickFilter = .all
     @State private var savedSessionStore = SavedSessionStore.shared
     @State private var analysisManager = AnalysisStateManager.shared
+    /// Injected by the app root. Library filters the shared snapshot rather than
+    /// rebuilding analysis state of its own.
+    @Environment(AnalysisCenterModel.self) private var analysisCenter
     @State private var navPath = NavigationPath()
     @State private var showingPlaylists = false
     @State private var showingSessionsManager = false
@@ -192,7 +195,7 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $showingAnalysisQueue) {
                 NavigationStack {
-                    AnalyzerView(engine: engine)
+                    AnalysisCenterView(engine: engine)
                 }
             }
             .platformFullScreenCover(item: $playerFile, onDismiss: {
@@ -258,9 +261,10 @@ struct LibraryView: View {
     /// so resuming does not require a tab hop first.
     @ViewBuilder
     private var browseShelves: some View {
-        LibraryAnalysisStatusSection(
-            manager: analysisManager,
-            partialFiles: partialAnalysisFiles,
+        LibraryAnalysisEntryRow(
+            activeTask: analysisCenter.activeTask,
+            queuedCount: analysisCenter.queuedCount,
+            attentionCount: analysisCenter.attentionCount,
             onOpen: openAnalysisQueue
         )
         .padding(.horizontal, TranceSpacing.screen)

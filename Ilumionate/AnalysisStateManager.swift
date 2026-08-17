@@ -148,6 +148,42 @@ class AnalysisStateManager {
     // MARK: - Queue Management
 
     /// Remove a file from the analysis queue
+    /// Dismisses a failure occurrence: it leaves the pill and the attention
+    /// tier but stays listed, and its checkpoint survives so a later retry
+    /// still resumes from the saved transcript.
+    ///
+    /// An `.unavailable` failure has no checkpoint — that path clears it before
+    /// the failure is recorded — so there is nothing durable to annotate and
+    /// nothing that could restore it. Dismissing one succeeds immediately.
+    @discardableResult
+    func dismissFailure(fileID: UUID, failedAt: Date, retryState: AnalysisRetryState) async -> Bool {
+        if retryState == .unavailable {
+            failedAnalyses.removeAll { $0.audioFile.id == fileID }
+            return true
+        }
+        guard await progressStore.dismiss(fileID: fileID, expectingFailedAt: failedAt) else {
+            return false
+        }
+        failedAnalyses.removeAll { $0.audioFile.id == fileID }
+        return true
+    }
+
+    /// Destructive: clears the checkpoint *and* the runtime entry. Discards any
+    /// saved transcript or analysis. Mutating `failedAnalyses` matters — the
+    /// next structural refresh would otherwise rebuild the row.
+    @discardableResult
+    func removeFailure(fileID: UUID, failedAt: Date, retryState: AnalysisRetryState) async -> Bool {
+        if retryState == .unavailable {
+            failedAnalyses.removeAll { $0.audioFile.id == fileID }
+            return true
+        }
+        guard await progressStore.remove(fileID: fileID, expectingFailedAt: failedAt) else {
+            return false
+        }
+        failedAnalyses.removeAll { $0.audioFile.id == fileID }
+        return true
+    }
+
     /// Flattens the durable store into plain values for the task projection.
     /// Exists so `AnalysisCenterModel` never reaches into the private actor.
     func recoverySnapshot() async -> (

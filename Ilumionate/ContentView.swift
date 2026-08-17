@@ -119,7 +119,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingAnalysisQueue) {
             NavigationStack {
-                AnalyzerView(engine: engine)
+                AnalysisCenterView(engine: engine)
             }
         }
         .alert("Help Improve LumeSync", isPresented: $showingAnalyticsConsentPrompt) {
@@ -229,16 +229,15 @@ struct ContentView: View {
                 // Measured so screens can reserve space for it — its height
                 // grows with the stage/estimate/reassurance text.
                 Group {
-                    if let analysis = analysisManager.currentAnalysis {
-                        AnalysisStatusOverlay(
-                            analysis: analysis,
-                            queueCount: analysisManager.analysisQueue.count
+                    // One pill, showing active work and outstanding failures at
+                    // the same time. The two overlays this replaces shared a
+                    // slot, so a failure was invisible while anything ran.
+                    if analysisCenter.activeTask != nil || analysisCenter.attentionCount > 0 {
+                        AnalysisStatusPill(
+                            activeTask: analysisCenter.activeTask,
+                            queuedCount: analysisCenter.queuedCount,
+                            attentionCount: analysisCenter.attentionCount
                         ) {
-                            showingAnalysisQueue = true
-                        }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    } else if let failure = analysisManager.failedAnalyses.last {
-                        AnalysisRecoveryStatusOverlay(failure: failure) {
                             showingAnalysisQueue = true
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
