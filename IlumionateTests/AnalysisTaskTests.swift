@@ -26,6 +26,7 @@ struct AnalysisTaskTests {
             state: .queued(position: 1),
             lastFailure: nil,
             recovery: .none,
+            checkpointLastUpdated: nil,
             ready: nil
         )
         #expect(task.id == id)
@@ -39,15 +40,15 @@ struct AnalysisTaskTests {
             sessionID: UUID(uuidString: "00000000-0000-0000-0000-0000000000FF")!,
             readyAt: Date(timeIntervalSince1970: 10)
         )
-        let a = AnalysisTask(audioFile: file, state: .ready, lastFailure: nil, recovery: .none, ready: ready)
-        let b = AnalysisTask(audioFile: file, state: .ready, lastFailure: nil, recovery: .none, ready: ready)
+        let a = AnalysisTask(audioFile: file, state: .ready, lastFailure: nil, recovery: .none, checkpointLastUpdated: nil, ready: ready)
+        let b = AnalysisTask(audioFile: file, state: .ready, lastFailure: nil, recovery: .none, checkpointLastUpdated: nil, ready: ready)
         #expect(a == b)
     }
 
     @Test func differingStateBreaksEquality() {
         let file = makeAudioFile()
-        let a = AnalysisTask(audioFile: file, state: .queued(position: 1), lastFailure: nil, recovery: .none, ready: nil)
-        let b = AnalysisTask(audioFile: file, state: .queued(position: 2), lastFailure: nil, recovery: .none, ready: nil)
+        let a = AnalysisTask(audioFile: file, state: .queued(position: 1), lastFailure: nil, recovery: .none, checkpointLastUpdated: nil, ready: nil)
+        let b = AnalysisTask(audioFile: file, state: .queued(position: 2), lastFailure: nil, recovery: .none, checkpointLastUpdated: nil, ready: nil)
         #expect(a != b)
     }
 }

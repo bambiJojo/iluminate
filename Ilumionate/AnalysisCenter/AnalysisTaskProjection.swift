@@ -37,6 +37,7 @@ nonisolated enum AnalysisTaskProjection {
                 state: state,
                 lastFailure: input.failures[file.id],
                 recovery: input.checkpoints[file.id]?.recoveryStage ?? .none,
+                checkpointLastUpdated: input.checkpoints[file.id]?.lastUpdated,
                 ready: input.ready[file.id]
             )
         }
@@ -138,6 +139,9 @@ nonisolated enum AnalysisTaskProjection {
         case 3:
             guard let l = queuePositions[lhs.id], let r = queuePositions[rhs.id], l != r else { return nil }
             return l < r
+        case 4:
+            guard let l = lhs.checkpointLastUpdated, let r = rhs.checkpointLastUpdated, l != r else { return nil }
+            return l > r
         case 6:
             guard let l = lhs.ready?.readyAt, let r = rhs.ready?.readyAt, l != r else { return nil }
             return l > r

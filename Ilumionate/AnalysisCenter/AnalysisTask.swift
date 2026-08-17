@@ -19,6 +19,9 @@ nonisolated struct AnalysisTask: Identifiable, Equatable, Sendable {
     let lastFailure: AnalysisFailureSnapshot?
     /// The most useful partial result on disk, independent of `state`.
     let recovery: AnalysisRecoveryStage
+    /// Checkpoint recency, carried so tier-4 ordering is total without
+    /// re-reading the projection input. `nil` when no checkpoint exists.
+    let checkpointLastUpdated: Date?
     /// Present whenever a generated session exists, including during re-analysis.
     let ready: AnalysisReadySnapshot?
 }
