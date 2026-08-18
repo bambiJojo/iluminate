@@ -143,14 +143,10 @@ nonisolated struct AudioAnalysisEnricher: Sendable {
             phases: hypnosisMetadata?.phases
         )
 
-        let enrichedAnalysis = AnalysisResult(
-            mood: analysis.mood,
-            energyLevel: analysis.energyLevel,
-            suggestedFrequencyRange: analysis.suggestedFrequencyRange,
-            suggestedIntensity: analysis.suggestedIntensity,
-            suggestedColorTemperature: analysis.suggestedColorTemperature,
-            keyMoments: analysis.keyMoments,
-            aiSummary: analysis.aiSummary,
+        // Copy rather than reconstruct: a field-by-field rebuild here silently
+        // dropped `aiFallbackKind`, which made every rate-limited file clear
+        // its checkpoint instead of deferring for a retry.
+        let enrichedAnalysis = analysis.with(
             recommendedPreset: recommendedPreset(
                 original: analysis.recommendedPreset,
                 originalContentType: analysis.contentType,
@@ -158,13 +154,10 @@ nonisolated struct AudioAnalysisEnricher: Sendable {
             ),
             contentType: contentType,
             hypnosisMetadata: hypnosisMetadata,
-            temporalAnalysis: analysis.temporalAnalysis,
             voiceCharacteristics: voiceCharacteristics,
-            classificationConfidence: analysis.classificationConfidence,
             prosodicProfile: resolvedProsody,
             techniqueDetection: techniqueDetection,
-            transcriptAnalysis: transcriptAnalysis,
-            discoveredMetadata: analysis.discoveredMetadata
+            transcriptAnalysis: transcriptAnalysis
         )
 
         let expertAnalysis = ExpertAnalysisBuilder().build(
@@ -176,26 +169,7 @@ nonisolated struct AudioAnalysisEnricher: Sendable {
             transcriptAnalysis: transcriptAnalysis
         )
 
-        return AnalysisResult(
-            mood: enrichedAnalysis.mood,
-            energyLevel: enrichedAnalysis.energyLevel,
-            suggestedFrequencyRange: enrichedAnalysis.suggestedFrequencyRange,
-            suggestedIntensity: enrichedAnalysis.suggestedIntensity,
-            suggestedColorTemperature: enrichedAnalysis.suggestedColorTemperature,
-            keyMoments: enrichedAnalysis.keyMoments,
-            aiSummary: enrichedAnalysis.aiSummary,
-            recommendedPreset: enrichedAnalysis.recommendedPreset,
-            contentType: enrichedAnalysis.contentType,
-            hypnosisMetadata: enrichedAnalysis.hypnosisMetadata,
-            temporalAnalysis: enrichedAnalysis.temporalAnalysis,
-            voiceCharacteristics: enrichedAnalysis.voiceCharacteristics,
-            classificationConfidence: enrichedAnalysis.classificationConfidence,
-            expertAnalysis: expertAnalysis,
-            prosodicProfile: enrichedAnalysis.prosodicProfile,
-            techniqueDetection: enrichedAnalysis.techniqueDetection,
-            transcriptAnalysis: enrichedAnalysis.transcriptAnalysis,
-            discoveredMetadata: enrichedAnalysis.discoveredMetadata
-        )
+        return enrichedAnalysis.with(expertAnalysis: expertAnalysis)
     }
 
     /// Convenience for callers that do not need to overlap prosody extraction

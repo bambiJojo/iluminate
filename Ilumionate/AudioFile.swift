@@ -741,3 +741,52 @@ nonisolated struct ClassificationConfidence: Codable, Sendable {
     let alternativeInterpretations: [String]
     let detectionCriteria: [String] // what led to classification
 }
+
+extension AnalysisResult {
+    /// Returns a copy with the named fields replaced.
+    ///
+    /// `AnalysisResult` is reconstructed field-by-field in five files, and every
+    /// one of those sites silently drops any field it does not name.
+    /// `aiFallbackKind` was lost that way twice within a day — the second time
+    /// in `AudioAnalysisEnricher`, which runs on every analysis and so made
+    /// every rate-limited file clear its checkpoint instead of deferring.
+    ///
+    /// Rebuild sites should call this rather than `init`, so a new field is
+    /// carried by default instead of being dropped by default. Doubly-optional
+    /// parameters distinguish "leave alone" (`nil`) from "set to nothing"
+    /// (`.some(nil)`).
+    func with(
+        recommendedPreset: String? = nil,
+        contentType: ContentType? = nil,
+        hypnosisMetadata: HypnosisMetadata?? = nil,
+        voiceCharacteristics: VoiceCharacteristics?? = nil,
+        classificationConfidence: ClassificationConfidence?? = nil,
+        expertAnalysis: ExpertAnalysis?? = nil,
+        prosodicProfile: ProsodicProfile?? = nil,
+        techniqueDetection: TechniqueDetectionResult?? = nil,
+        transcriptAnalysis: TranscriptAnalysis?? = nil,
+        discoveredMetadata: AudioTrackMetadata?? = nil
+    ) -> AnalysisResult {
+        AnalysisResult(
+            mood: mood,
+            energyLevel: energyLevel,
+            suggestedFrequencyRange: suggestedFrequencyRange,
+            suggestedIntensity: suggestedIntensity,
+            suggestedColorTemperature: suggestedColorTemperature,
+            keyMoments: keyMoments,
+            aiSummary: aiSummary,
+            recommendedPreset: recommendedPreset ?? self.recommendedPreset,
+            contentType: contentType ?? self.contentType,
+            hypnosisMetadata: hypnosisMetadata ?? self.hypnosisMetadata,
+            temporalAnalysis: temporalAnalysis,
+            voiceCharacteristics: voiceCharacteristics ?? self.voiceCharacteristics,
+            classificationConfidence: classificationConfidence ?? self.classificationConfidence,
+            expertAnalysis: expertAnalysis ?? self.expertAnalysis,
+            prosodicProfile: prosodicProfile ?? self.prosodicProfile,
+            techniqueDetection: techniqueDetection ?? self.techniqueDetection,
+            transcriptAnalysis: transcriptAnalysis ?? self.transcriptAnalysis,
+            discoveredMetadata: discoveredMetadata ?? self.discoveredMetadata,
+            aiFallbackKind: aiFallbackKind
+        )
+    }
+}

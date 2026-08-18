@@ -163,15 +163,20 @@ struct AnalysisResultProvenanceTests {
     }
 }
 
-// MARK: - Coverage note
+// MARK: - Rebuild hazard, resolved
 //
-// `makeKeywordFallbackResult` rebuilds its result field-by-field to attach
-// expert analysis, so a field omitted from that rebuild is dropped silently —
-// which is exactly what happened to `aiFallbackKind` while writing this, and
-// would have turned every retryable file into a settled one.
+// `AnalysisResult` is reconstructed field-by-field in five files, and every one
+// of those sites drops any field it does not name. `aiFallbackKind` was lost
+// that way twice in a day: once in `makeKeywordFallbackResult`, caught by
+// reading the code, and once in `AudioAnalysisEnricher` — which runs on every
+// analysis, so it reached the device and made every rate-limited file clear its
+// checkpoint instead of deferring.
 //
-// It is not covered here. The function lives in a `private extension`, and
-// widening that would expose ten unrelated helpers to test one. The guard is
-// the comment at the rebuild site plus the round-trip tests above; if a third
-// field is ever lost this way, moving the function to the internal extension
-// is the fix rather than another comment.
+// `AnalysisResult.with(...)` now exists for this: it copies by default and
+// overrides only what it is given. `AudioAnalysisEnricher` uses it, and
+// `AnalysisResultCopyTests` covers both the helper and that path.
+//
+// `makeKeywordFallbackResult` still calls `init` and names the field by hand,
+// as do KnownAudioCatalog, PlaylistWholeSessionAnalyzer, and
+// ConcurrencyOptimizations. Those four carry the same hazard for the next field
+// added, and converting them is the obvious follow-up.
