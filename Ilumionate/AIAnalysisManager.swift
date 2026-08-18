@@ -180,6 +180,18 @@ actor AIAnalysisManager {
                 let diagnosis = AIGenerationDiagnosis.classify(error)
                 Log.analysis.info("⚠️ AI attempt 1 failed (\(diagnosis.rawValue)). Reason: \(String(describing: error))")
 
+                // Recorded against the session that was actually refused, so
+                // the attachment carries the offending prompt. A guardrail
+                // refusal cannot be retried or configured away, so this file is
+                // the only remaining evidence of why a given track downgraded.
+                if diagnosis == .guardrail {
+                    GuardrailFeedbackRecorder.record(
+                        session: session,
+                        filename: audioFile.filename,
+                        explanation: "Analysing a user-supplied audio transcript for pacing and structure; refused as unsafe content."
+                    )
+                }
+
                 // A refusal, a missing model, or a safety host that cannot be
                 // queried will fail identically in a fresh session. A context
                 // overflow can improve only when there is an addendum to drop.
