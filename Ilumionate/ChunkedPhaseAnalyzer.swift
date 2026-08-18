@@ -640,6 +640,12 @@ extension ChunkedPhaseAnalyzer {
         HypnosisMetadata.Phase.orderedHypnosisPhases.firstIndex(of: phase) ?? .max
     }
 
+    /// How many chunks may come back unclassified in a row before the pass
+    /// gives up. Set generously: the cost of tripping late is wasted time, and
+    /// the cost of tripping early is a keyword fallback that a refusing pass
+    /// would have reached anyway.
+    static let consecutiveUnusableChunkLimit = 12
+
     nonisolated static func runPass(
         jobs: [ChunkJob],
         previousResults: [HypnosisMetadata.Phase?]?,
@@ -704,8 +710,34 @@ extension ChunkedPhaseAnalyzer {
             }
 
             var pairs: [(Int, [TimedClassification])] = []
+            var consecutiveUnusable = 0
             while let pair = try await group.next() {
                 pairs.append(pair)
+
+                // A guardrail refusal is about the content, so a transcript the
+                // model refused whole is refused chunk by chunk too. Each one is
+                // a real round-trip, and grinding through hundreds of them buys
+                // nothing while consuming the entire background window — on
+                // device that left the Dynamic Island reading "Analyzing audio ·
+                // Task failed" with the pass still running.
+                //
+                // Results arrive in completion order, not job order, so "run" is
+                // approximate. That is fine for a circuit breaker: the cost of
+                // tripping early is the keyword phase fallback, which is exactly
+                // where an all-refusing pass ends up anyway.
+                if pair.1.isEmpty {
+                    consecutiveUnusable += 1
+                    if consecutiveUnusable >= Self.consecutiveUnusableChunkLimit {
+                        Log.analysis.info(
+                            "⚠️ ChunkedPhaseAnalyzer: stopping after \(consecutiveUnusable) unclassified chunks in a row (\(pairs.count) of \(jobs.count) processed)"
+                        )
+                        group.cancelAll()
+                        break
+                    }
+                } else {
+                    consecutiveUnusable = 0
+                }
+
                 if let onCompletedJob {
                     await onCompletedJob()
                 }
