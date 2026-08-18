@@ -113,6 +113,31 @@ struct DeferredAIRetryStoreTests {
         #expect(await store.allPending().count == 1)
     }
 
+    /// The retry was inert on device (2026-08-18): three files re-queued,
+    /// logged "⏭️ Skipping AI analysis (checkpoint found)", regenerated the
+    /// identical session, and re-deferred without ever reaching the model.
+    ///
+    /// The saved analysis on a deferred checkpoint *is* the keyword fallback
+    /// the retry exists to replace, so requeueing must drop it. The transcript
+    /// must not go with it — reusing that is what makes the retry cheap.
+    @Test("Requeueing a deferred file drops the fallback analysis but keeps the transcript")
+    func queueingDeferredFileEvictsTheFallbackAnalysis() async throws {
+        let url = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let file = makeAudioFile()
+        let store = AnalysisProgressStore(storeURL: url)
+
+        await store.saveTranscription(AnalysisFixtures.basicTranscription, for: file)
+        await store.saveAnalysis(AnalysisFixtures.hypnosisAnalysis, for: file)
+        _ = await store.markAwaitingAIRetry(for: file, kind: .systemBusy)
+
+        await store.saveQueued(file)
+
+        let checkpoint = await store.checkpoint(for: file)
+        #expect(checkpoint?.analysis == nil)
+        #expect(checkpoint?.transcription != nil)
+    }
+
     @Test("Deferring a file with no checkpoint does nothing")
     func deferringWithoutACheckpointIsRejected() async throws {
         let url = temporaryStoreURL()

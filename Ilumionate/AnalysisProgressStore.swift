@@ -158,6 +158,17 @@ actor AnalysisProgressStore {
     func saveQueued(_ audioFile: AudioFile) {
         if var checkpoint = checkpoints[audioFile.id] {
             guard checkpoint.manualRecovery != nil || checkpoint.deferredAIRetry != nil else { return }
+            // A deferred file's saved analysis *is* the keyword fallback the
+            // retry exists to replace. Left in place, the resume path finds it,
+            // logs "⏭️ Skipping AI analysis (checkpoint found)", regenerates the
+            // same session and re-defers — spending the attempt budget without
+            // ever reaching the model. Observed on device 2026-08-18.
+            //
+            // The transcript deliberately survives: reusing it is what makes a
+            // retry cost one model call instead of a WhisperKit pass.
+            if checkpoint.deferredAIRetry != nil {
+                checkpoint.analysis = nil
+            }
             checkpoint.manualRecovery = nil
             checkpoint.deferredAIRetry = nil
             checkpoint.attemptCount = 0
