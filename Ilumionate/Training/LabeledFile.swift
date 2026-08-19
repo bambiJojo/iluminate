@@ -286,6 +286,12 @@ nonisolated struct AnalyzerTrainingExample: Codable, Sendable {
         let phaseOrder: [TrancePhase]
         let phasePoints: [PhasePoint]
         let phaseSegments: [PhaseSegment]
+        /// One label per second, for training a per-second classifier.
+        ///
+        /// Lossy by construction for structure: adjacent phases sharing a label
+        /// merge into one run, so a boundary between them disappears. Use
+        /// `AnalyzerTrainingExample.boundarySeconds(from:)` over `phaseSegments`
+        /// when what is wanted is where the structure changes.
         let denseTimeline: [TimelineBucket]
         let techniques: [TechniqueSegment]
     }
@@ -304,6 +310,27 @@ nonisolated struct AnalyzerTrainingExample: Codable, Sendable {
         let endTime: TimeInterval
         let durationSeconds: TimeInterval
         let notes: String?
+    }
+
+    /// The times at which the labeller marked a change, derived from
+    /// `phaseSegments`.
+    ///
+    /// Read boundaries from here, not by walking `denseTimeline` for label
+    /// changes. A per-second label array cannot represent a boundary between two
+    /// identically-labelled phases, and the corpus contains them — DFTC.mp3 is
+    /// labelled with three consecutive `deepening` segments. Deriving boundaries
+    /// from the dense timeline silently under-reports: BF.mp3 yields four that
+    /// way against the six its labeller marked.
+    ///
+    /// Derived rather than stored, so it cannot drift from the segments it
+    /// describes.
+    nonisolated static func boundarySeconds(
+        from segments: [PhaseSegment]
+    ) -> [TimeInterval] {
+        segments
+            .sorted { $0.startTime < $1.startTime }
+            .dropFirst()
+            .map(\.startTime)
     }
 
     struct TimelineBucket: Codable, Sendable {

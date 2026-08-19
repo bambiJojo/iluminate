@@ -320,10 +320,6 @@ nonisolated struct ProsodyAnalyzer: Sendable {
     }
 }
 
-// MARK: - Protocol Conformance
-
-extension ProsodyAnalyzer: ProsodyAnalyzingService {}
-
 // MARK: - AnalyzerConfig Bridge
 
 nonisolated extension ProsodyAnalyzer.Config {

@@ -59,3 +59,11 @@ nonisolated protocol ProsodyAnalyzingService: Sendable {
         config: ProsodyAnalyzer.Config
     ) throws -> ProsodicProfile
 }
+
+// MARK: - Prosody
+
+/// Declared here rather than beside `ProsodyAnalyzer` so the analyser stays a
+/// leaf: LumeLabel and the corpus tools need prosody without the pipeline
+/// abstractions, and a conformance in the other direction forces this whole file
+/// into every target that wants a speech-rate curve.
+extension ProsodyAnalyzer: ProsodyAnalyzingService {}
