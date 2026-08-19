@@ -10,6 +10,31 @@
 //  labeller says is active at each segment's midpoint — so the only variable is
 //  where the boundaries fall. Mislabelling is a separate question.
 //
+//  Measured 2026-08-19, frequency deviation as a share of the generator's 8.8 Hz
+//  range:
+//
+//                        BF    DFTC   Mind Melt   Tick Tock   mean
+//      detector           4%     4%       4%          4%       4.0%   perfect labels
+//      AS SHIPPED        28%    18%       8%         32%      21.5%
+//      END-TO-END        14%    15%      20%         18%      16.8%   no truth at all
+//
+//  The replacement beats what ships on three files and loses badly on the fourth.
+//  Per-file differences are -14, -3, +12, -14: a mean of -4.8 points with a 95%
+//  interval of -16.8 to +7.3. THE IMPROVEMENT IS NOT ESTABLISHED. On four files
+//  this is a hint, and a one-in-four regression is not good enough to replace a
+//  shipping path.
+//
+//  Two things it does establish. Boundaries are nearly free once labels are
+//  right — feeding the detector prosody took it to a flat 4% while *raising* its
+//  boundary count to 10-21 against a labelled 6-11. And naming carries the whole
+//  remaining gap: 4% with correct labels against 16.8% with the namer.
+//
+//  Mind Melt hints at why. It draws the most segments (18) and is the only
+//  regression, which points at over-segmentation hurting indirectly — every
+//  extra segment is another chance to select a wrong behaviour. Merging was
+//  worthless for boundary F1, but reducing the number of naming decisions is a
+//  different objective and is unmeasured.
+//
 //  Runs only when TEST_RUNNER_LUMESYNC_CORPUS points at a LumeLabel corpus.
 //  Reports through a Swift Testing attachment; see IncumbentBaselineTests for
 //  why neither stdout nor a file works from the sandboxed test host.
