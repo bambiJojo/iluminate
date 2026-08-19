@@ -69,6 +69,16 @@ nonisolated enum StructuralSegmenter {
     /// checked against a whole library, but not yet against anybody's ears.
     static let defaultMinimumNovelty: Double = 0.25
 
+    /// How far a peak must rise above the surrounding curve to count.
+    ///
+    /// Height alone is a poor test: `isLocalMaximum` admits any bump that merely
+    /// equals its two neighbours, so a gently undulating plateau contributes a
+    /// dozen "peaks" that are not boundaries. Prominence — height above the
+    /// deeper of the two valleys flanking it — is what separates a real edge
+    /// from ripple, and against the labelled corpus it is precision, not recall,
+    /// that limits the detector.
+    static let defaultMinimumProminence: Double = 0.04
+
     /// Peaks are ranked, so this only has to be high enough that a counted
     /// passage outranks any ordinary novelty peak competing for the same slot.
     private static let countingAnchorScore = Double.greatestFiniteMagnitude
@@ -80,6 +90,7 @@ nonisolated enum StructuralSegmenter {
         frameDuration: TimeInterval = StructuralFrames.defaultFrameDuration,
         minimumSegmentDuration: TimeInterval = StructuralSegmenter.minimumSegmentDuration,
         minimumNovelty: Double = defaultMinimumNovelty,
+        minimumProminence: Double = defaultMinimumProminence,
         kernelSize: Int = StructuralNovelty.defaultKernelSize
     ) -> StructuralSegmentation {
         let frames = StructuralFrames.build(
@@ -101,7 +112,8 @@ nonisolated enum StructuralSegmenter {
             frameCount: frames.count,
             frameDuration: frameDuration,
             minimumSegmentDuration: minimumSegmentDuration,
-            minimumNovelty: minimumNovelty
+            minimumNovelty: minimumNovelty,
+            minimumProminence: minimumProminence
         )
 
         return StructuralSegmentation(
@@ -122,7 +134,8 @@ nonisolated enum StructuralSegmenter {
         frameCount: Int,
         frameDuration: TimeInterval,
         minimumSegmentDuration: TimeInterval = StructuralSegmenter.minimumSegmentDuration,
-        minimumNovelty: Double
+        minimumNovelty: Double,
+        minimumProminence: Double = defaultMinimumProminence
     ) -> [Int] {
         let spacing = max(1, Int(ceil(minimumSegmentDuration / frameDuration)))
         // A boundary must leave a full segment on *both* sides, or the last
@@ -142,7 +155,11 @@ nonisolated enum StructuralSegmenter {
         let threshold = max(minimumNovelty, adaptiveThreshold(novelty))
         for index in admissible where isLocalMaximum(novelty, at: index) {
             guard novelty[index] >= threshold else { continue }
-            candidates.append((index, novelty[index]))
+            guard prominence(of: novelty, at: index, window: spacing) >= minimumProminence else { continue }
+            // Ranked by prominence, not raw height: a modest peak standing clear
+            // of flat surroundings is better evidence than a tall one sitting on
+            // an already-high plateau.
+            candidates.append((index, prominence(of: novelty, at: index, window: spacing)))
         }
 
         var accepted: [Int] = []
@@ -162,6 +179,18 @@ nonisolated enum StructuralSegmenter {
         let mean = novelty.reduce(0, +) / Double(novelty.count)
         let variance = novelty.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(novelty.count)
         return mean + variance.squareRoot()
+    }
+
+    /// Height above the deeper of the two valleys flanking the peak, measured
+    /// within one minimum-segment either side — beyond that the comparison stops
+    /// being local and every peak in a long file looks prominent.
+    static func prominence(of novelty: [Double], at index: Int, window: Int) -> Double {
+        let lower = max(0, index - window)
+        let upper = min(novelty.count - 1, index + window)
+        guard lower < index, index < upper else { return 0 }
+        let leftValley = novelty[lower..<index].min() ?? 0
+        let rightValley = novelty[(index + 1)...upper].min() ?? 0
+        return novelty[index] - max(leftValley, rightValley)
     }
 
     private static func isLocalMaximum(_ novelty: [Double], at index: Int) -> Bool {

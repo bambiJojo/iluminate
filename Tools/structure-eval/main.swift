@@ -14,6 +14,19 @@ guard arguments.count > 1 else {
 let root = URL(fileURLWithPath: arguments[1])
 let tolerance = arguments.count > 2 ? Double(arguments[2]) ?? 30 : 30
 
+// Optional: profiles produced by Tools/structure-prosody, keyed by audio hash.
+// Without them the evaluation is lexical-only, which tests half the design.
+var prosodyBySHA: [String: ProsodicProfile] = [:]
+if arguments.count > 3 {
+    let directory = URL(fileURLWithPath: arguments[3])
+    for file in (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] {
+        guard file.pathExtension == "json",
+              let data = try? Data(contentsOf: file),
+              let profile = try? JSONDecoder().decode(ProsodicProfile.self, from: data) else { continue }
+        prosodyBySHA[file.deletingPathExtension().lastPathComponent] = profile
+    }
+}
+
 // MARK: - Load transcripts
 
 /// Whisper emits control tokens like `<|startoftranscript|>` into the word
@@ -100,26 +113,27 @@ func match(predicted: [Double], truth: [Double], tolerance: Double) -> (hits: In
 
 // MARK: - Sweep
 
-print("Evaluating \(evaluable.count) labelled file(s), tolerance ±\(Int(tolerance))s\n")
-print("novelty  minSeg  kernel   recall   precision      F1   medianErr")
+let withProsody = evaluable.keys.filter { prosodyBySHA[$0] != nil }.count
+print("Evaluating \(evaluable.count) labelled file(s), \(withProsody) with prosody, tolerance ±\(Int(tolerance))s\n")
+print("novelty  minSeg   prom   recall   precision      F1   medianErr")
 print(String(repeating: "─", count: 60))
 
-var best: (score: Double, novelty: Double, segment: Double, kernel: Int)?
+var best: (score: Double, novelty: Double, segment: Double, prominence: Double)?
 
 for novelty in [0.05, 0.10, 0.15, 0.20, 0.30] {
     for minimumSegment in [30.0, 60.0, 120.0] {
-      for kernel in [10, 20, 30, 40, 60] {
+      for prominence in [0.0, 0.02, 0.04, 0.06, 0.10] {
         var totalHits = 0, totalTrue = 0, totalPredicted = 0
         var allErrors: [Double] = []
 
         for (sha, truth) in evaluable {
             let segmentation = StructuralSegmenter.segment(
                 words: wordsBySHA[sha] ?? [],
-                prosody: nil,
+                prosody: prosodyBySHA[sha],
                 duration: truth.duration,
                 minimumSegmentDuration: minimumSegment,
                 minimumNovelty: novelty,
-                kernelSize: kernel
+                minimumProminence: prominence
             )
             // The first segment opens because the file does, not at a boundary.
             let predicted = segmentation.segments.dropFirst().map(\.startTime)
@@ -135,16 +149,16 @@ for novelty in [0.05, 0.10, 0.15, 0.20, 0.30] {
         let f1 = (recall + precision) > 0 ? 2 * recall * precision / (recall + precision) : 0
         let median = allErrors.isEmpty ? Double.nan : allErrors.sorted()[allErrors.count / 2]
 
-        if best == nil || f1 > best!.score { best = (f1, novelty, minimumSegment, kernel) }
+        if best == nil || f1 > best!.score { best = (f1, novelty, minimumSegment, prominence) }
 
         let medianText = median.isNaN ? "    –" : "\(Int(median))s"
-        print("   \(novelty)     \(Int(minimumSegment))s     \(kernel)    \(Int(recall * 100))%        \(Int(precision * 100))%     \(Int(f1 * 100))%      \(medianText)")
+        print("   \(novelty)     \(Int(minimumSegment))s   \(prominence)    \(Int(recall * 100))%        \(Int(precision * 100))%     \(Int(f1 * 100))%      \(medianText)")
       }
     }
 }
 
 if let best {
-    print("\nBest F1 \(Int(best.score * 100))% at novelty \(best.novelty), minSegment \(Int(best.segment))s, kernel \(best.kernel)")
+    print("\nBest F1 \(Int(best.score * 100))% at novelty \(best.novelty), minSegment \(Int(best.segment))s, prominence \(best.prominence)")
 }
 
 // MARK: - Per-file detail at the best setting
@@ -154,11 +168,11 @@ if let best {
     for (sha, truth) in evaluable.sorted(by: { $0.value.name < $1.value.name }) {
         let segmentation = StructuralSegmenter.segment(
             words: wordsBySHA[sha] ?? [],
-            prosody: nil,
+            prosody: prosodyBySHA[sha],
             duration: truth.duration,
             minimumSegmentDuration: best.segment,
             minimumNovelty: best.novelty,
-            kernelSize: best.kernel
+            minimumProminence: best.prominence
         )
         let predicted = segmentation.segments.dropFirst().map(\.startTime)
         let result = match(predicted: predicted, truth: truth.boundaries, tolerance: tolerance)
