@@ -115,14 +115,14 @@ func match(predicted: [Double], truth: [Double], tolerance: Double) -> (hits: In
 
 let withProsody = evaluable.keys.filter { prosodyBySHA[$0] != nil }.count
 print("Evaluating \(evaluable.count) labelled file(s), \(withProsody) with prosody, tolerance ±\(Int(tolerance))s\n")
-print("novelty  minSeg   prom   recall   precision      F1   medianErr")
+print("novelty  minSeg  cliff   recall   precision      F1   medianErr")
 print(String(repeating: "─", count: 60))
 
-var best: (score: Double, novelty: Double, segment: Double, prominence: Double)?
+var best: (score: Double, novelty: Double, segment: Double, cliff: Double)?
 
 for novelty in [0.05, 0.10, 0.15, 0.20, 0.30] {
     for minimumSegment in [30.0, 60.0, 120.0] {
-      for prominence in [0.0, 0.02, 0.04, 0.06, 0.10] {
+      for cliff in [-1.0, 0.10, 0.20, 0.30, 0.40, 0.55] {
         var totalHits = 0, totalTrue = 0, totalPredicted = 0
         var allErrors: [Double] = []
 
@@ -132,11 +132,15 @@ for novelty in [0.05, 0.10, 0.15, 0.20, 0.30] {
                 prosody: prosodyBySHA[sha],
                 duration: truth.duration,
                 minimumSegmentDuration: minimumSegment,
-                minimumNovelty: novelty,
-                minimumProminence: prominence
+                minimumNovelty: novelty
             )
+            // cliff < 0 means "do not merge", so the sweep shows what merging is
+            // worth rather than assuming it helps.
+            let finished = cliff < 0
+                ? segmentation
+                : StructuralMerger.merge(segmentation, minimumCliff: cliff)
             // The first segment opens because the file does, not at a boundary.
-            let predicted = segmentation.segments.dropFirst().map(\.startTime)
+            let predicted = finished.segments.dropFirst().map(\.startTime)
             let result = match(predicted: predicted, truth: truth.boundaries, tolerance: tolerance)
             totalHits += result.hits
             totalTrue += truth.boundaries.count
@@ -149,16 +153,16 @@ for novelty in [0.05, 0.10, 0.15, 0.20, 0.30] {
         let f1 = (recall + precision) > 0 ? 2 * recall * precision / (recall + precision) : 0
         let median = allErrors.isEmpty ? Double.nan : allErrors.sorted()[allErrors.count / 2]
 
-        if best == nil || f1 > best!.score { best = (f1, novelty, minimumSegment, prominence) }
+        if best == nil || f1 > best!.score { best = (f1, novelty, minimumSegment, cliff) }
 
         let medianText = median.isNaN ? "    –" : "\(Int(median))s"
-        print("   \(novelty)     \(Int(minimumSegment))s   \(prominence)    \(Int(recall * 100))%        \(Int(precision * 100))%     \(Int(f1 * 100))%      \(medianText)")
+        print("   \(novelty)     \(Int(minimumSegment))s   \(cliff)    \(Int(recall * 100))%        \(Int(precision * 100))%     \(Int(f1 * 100))%      \(medianText)")
       }
     }
 }
 
 if let best {
-    print("\nBest F1 \(Int(best.score * 100))% at novelty \(best.novelty), minSegment \(Int(best.segment))s, prominence \(best.prominence)")
+    print("\nBest F1 \(Int(best.score * 100))% at novelty \(best.novelty), minSegment \(Int(best.segment))s, cliff \(best.cliff)")
 }
 
 // MARK: - Per-file detail at the best setting
@@ -171,10 +175,12 @@ if let best {
             prosody: prosodyBySHA[sha],
             duration: truth.duration,
             minimumSegmentDuration: best.segment,
-            minimumNovelty: best.novelty,
-            minimumProminence: best.prominence
+            minimumNovelty: best.novelty
         )
-        let predicted = segmentation.segments.dropFirst().map(\.startTime)
+        let finished = best.cliff < 0
+            ? segmentation
+            : StructuralMerger.merge(segmentation, minimumCliff: best.cliff)
+        let predicted = finished.segments.dropFirst().map(\.startTime)
         let result = match(predicted: predicted, truth: truth.boundaries, tolerance: tolerance)
         print("  \(truth.name) — \(result.hits)/\(truth.boundaries.count) found, \(predicted.count) predicted")
         print("     true:      \(truth.boundaries.map { StructuralReport.clock($0) }.joined(separator: " "))")

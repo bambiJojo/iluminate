@@ -76,7 +76,10 @@ nonisolated enum StructuralNovelty {
         return matrix
     }
 
-    private static func similarity(_ lhs: StructuralFrame, _ rhs: StructuralFrame) -> Double {
+    /// Shared with `StructuralMerger`, which compares whole segments collapsed
+    /// into one frame-shaped summary — the comparison must be the same one the
+    /// novelty curve used, or the two stages disagree about what "similar" means.
+    static func similarity(_ lhs: StructuralFrame, _ rhs: StructuralFrame) -> Double {
         var parts: [Double] = []
         if lhs.prosody.isEmpty == false, lhs.prosody.count == rhs.prosody.count {
             parts.append(cosine(lhs.prosody, rhs.prosody))
