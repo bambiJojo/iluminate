@@ -50,40 +50,35 @@ public enum TrancePhase: String, Codable, Sendable, CaseIterable {
         }
     }
 
+    /// Decodes the phase that was actually labelled.
+    ///
+    /// This used to remap `pre_talk` to `.induction`, `fractionation`/`confusion`
+    /// to `.deepening` and the suggestion variants to `.suggestions`. That made
+    /// the five-bucket projection a property of storage rather than of use, with
+    /// two measured consequences: loading a label file and saving it rewrote the
+    /// labels on disk, and `SessionGenerator.intensityContour`'s distinct
+    /// `.fractionation` contour became unreachable for any persisted analysis.
+    ///
+    /// The projection is still wanted — it is what chooses light — and lives in
+    /// `labelingPhase`, applied at the point of use as the rest of the codebase
+    /// already does.
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let rawValue = try container.decode(String.self)
-        switch rawValue {
-        case Self.preTalk.rawValue:
-            self = .induction
-        case Self.fractionation.rawValue, Self.confusion.rawValue:
-            self = .deepening
-        case Self.therapy.rawValue, Self.eroticSuggestions.rawValue, Self.conditioning.rawValue:
-            self = .suggestions
-        default:
-            guard let phase = Self(rawValue: rawValue) else {
-                throw DecodingError.dataCorruptedError(
-                    in: container,
-                    debugDescription: "Unknown trance phase: \(rawValue)"
-                )
-            }
-            self = phase
+        guard let phase = Self(rawValue: rawValue) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown trance phase: \(rawValue)"
+            )
         }
+        self = phase
     }
 
+    /// Writes back the phase that was labelled, so a load/save round trip is
+    /// lossless. See `init(from:)` for why this previously collapsed.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-        let encodedPhase: TrancePhase = switch self {
-        case .preTalk:
-            .induction
-        case .fractionation, .confusion:
-            .deepening
-        case .therapy, .eroticSuggestions, .conditioning:
-            .suggestions
-        default:
-            self
-        }
-        try container.encode(encodedPhase.rawValue)
+        try container.encode(rawValue)
     }
 
     public var displayName: String {

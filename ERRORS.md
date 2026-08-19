@@ -1373,3 +1373,40 @@ full suite shows only the ERR-001 flaky set.
 
 **Not yet verified on device.** The migration path has only been exercised against synthetic
 `UserDefaults` fixtures; the real 97-file library has not been migrated yet.
+
+## ERR-018 — AnalyzerImprover target has drifted out of sync with the app sources
+
+**Date discovered:** 2026-08-19
+**Status:** identified
+
+**Symptom.** `AnalyzerImprover` does not build.
+
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme AnalyzerImprover -destination 'platform=macOS,arch=arm64' build
+```
+
+```
+Ilumionate/AnalyzerConfig/AnalyzerConfigLoader.swift:16: cannot find 'PrivateStorageMigration' in scope
+Ilumionate/AnalyzerConfig/AnalyzerConfigLoader.swift:18: cannot find 'AppStoragePaths' in scope
+```
+
+**Root cause.** The project uses file-system synchronized groups, so each secondary
+target names the app sources it includes in a `membershipExceptions` list. Files added
+to `Ilumionate/` since that list was last curated are absent from it. `AnalyzerConfigLoader`
+is in the list and now references `AppStoragePaths` and `PrivateStorageMigration`, which
+are not.
+
+**Not a regression from the phase-codec work.** Verified by stashing: the same two errors
+occur at HEAD.
+
+**Proposed fix, and why it was not applied here.** Adding `AppStoragePaths.swift` and
+`PrivateStorageMigration.swift` clears those two errors and reveals a further cascade —
+`AudioStorageLocation`, `RemoteAudioSource`, then `AudioFile` failing `Decodable`
+conformance — which pulls a widening slice of the app into a tool that only needs the
+analyzer. The membership list wants curating deliberately, or `AnalyzerConfigLoader`
+wants splitting so the tool can take its config loading without the app's storage layer.
+Half-applying it was reverted rather than left in place.
+
+**Risk.** The tool is unusable until fixed. `LumeLabel` had the identical fault and was
+fixed in the same session by adding `AppStoragePaths.swift`, `PrivateStorageMigration.swift`
+and `PerformanceTrace.swift` to its list — it does not cascade further, so that one is done.

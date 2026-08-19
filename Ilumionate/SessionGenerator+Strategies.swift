@@ -460,16 +460,23 @@ extension SessionGenerator {
     }
 
     func intensityContour(for phase: HypnosisMetadata.Phase, progress: Double) -> Double {
+        // Exhaustive by design. Storage used to collapse ten phases into five,
+        // so `.preTalk` and `.eroticSuggestions` could only ever arrive here
+        // disguised as `.induction` and `.suggestions`. Now that a persisted
+        // analysis carries the phase that was labelled, a `default:` would
+        // silently hand them a flat contour and change the light for existing
+        // sessions — so each is grouped with the case it used to reach through
+        // the collapse, and the compiler is left to catch the next addition.
         switch phase {
-        case .induction, .deepening, .confusion:
+        case .preTalk, .induction, .deepening, .confusion:
             return 1.0 - progress * 0.08
-        case .therapy, .suggestions, .conditioning, .brainwashing:
+        case .therapy, .suggestions, .eroticSuggestions, .conditioning, .brainwashing:
             return 0.96 + sin(progress * .pi * 2.0) * 0.04
         case .fractionation:
             return 0.95 + sin(progress * .pi * 3.0) * 0.08
         case .emergence:
             return 0.95 + progress * 0.10
-        default:
+        case .transitional:
             return 1.0
         }
     }

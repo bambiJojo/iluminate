@@ -136,6 +136,9 @@
 		79999FF72F7C46C700DC1F2D /* Exceptions for "Ilumionate" folder in "LumeLabel" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				AppStoragePaths.swift,
+				PerformanceTrace.swift,
+				PrivateStorageMigration.swift,
 				AnalyzerConfig/AnalyzerConfig.swift,
 				AnalyzerConfig/AnalyzerConfigLoader.swift,
 				AudioAnalyzer.swift,
