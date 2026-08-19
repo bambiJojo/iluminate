@@ -111,6 +111,30 @@ struct StructuralSegmenterTests {
         }
     }
 
+    /// Found against real audio: "Umm....m4a" counts down at 13:56 of 14:44 and
+    /// the boundary was discarded, because a counting anchor was held to the
+    /// same distance-from-the-end rule as a noisy novelty peak. A closing
+    /// awakening is routinely shorter than a full phase, and a count is
+    /// deterministic evidence — it should not be suppressed by a heuristic that
+    /// exists to tame guesswork.
+    @Test("A counting anchor near the end still places a boundary")
+    func closingCountIsNotDiscarded() {
+        var words = repeated("deeper and deeper down you drift", from: 0, to: 600)
+        words += ["one", "two", "three", "four", "five"].enumerated().map { index, word in
+            WordTimestamp(word: word, startTime: 560 + Double(index) * 2, duration: 0.5)
+        }
+
+        let result = StructuralSegmenter.segment(
+            words: words.sorted { $0.startTime < $1.startTime },
+            prosody: nil,
+            duration: 600,
+            minimumSegmentDuration: 120
+        )
+
+        #expect(result.segments.count == 2)
+        #expect(abs((result.segments.last?.startTime ?? 0) - 560) <= StructuralFrames.defaultFrameDuration)
+    }
+
     @Test("An empty transcript yields no segments rather than a crash")
     func emptyInputIsEmpty() {
         let result = StructuralSegmenter.segment(words: [], prosody: nil, duration: 0)

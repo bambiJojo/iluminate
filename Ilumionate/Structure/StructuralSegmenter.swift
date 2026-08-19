@@ -40,7 +40,19 @@ nonisolated enum StructuralSegmenter {
 
     /// No structural phase in this material is credibly shorter than this, and
     /// it keeps a noisy novelty curve from shredding a file into fragments.
-    static let minimumSegmentDuration: TimeInterval = 45
+    ///
+    /// Raised from 45s after running the detector over 143 real analyses: at 45s
+    /// files were routinely cut into 13–27 pieces, with segments as short as
+    /// 48 seconds sitting inside what is obviously one passage.
+    static let minimumSegmentDuration: TimeInterval = 120
+
+    /// The same rule, relaxed, for boundaries a counted passage places.
+    ///
+    /// A count is deterministic evidence and a closing awakening is routinely
+    /// shorter than a full phase — "Umm....m4a" counts down at 13:56 of 14:44.
+    /// Holding that to the 120-second rule discarded the one boundary in the
+    /// file the detector was most certain about.
+    static let minimumAnchoredSegmentDuration: TimeInterval = 30
 
     /// **Unvalidated.** Novelty is scaled absolutely — roughly 0 for a
     /// homogeneous stretch and roughly 0.5 for a clean seam — so a fixed floor
@@ -48,9 +60,14 @@ nonisolated enum StructuralSegmenter {
     /// known yet. It is a parameter, not a constant, precisely so the offline
     /// harness can sweep it against files whose structure the user recognises.
     ///
+    /// Raised from 0.08 to 0.25 after the sweep over 143 real analyses: below
+    /// 0.25 the adaptive threshold dominates and the floor never binds, which
+    /// left files cut into as many as 27 pieces.
+    ///
     /// Stated plainly because the number it replaces — the collapser's 3.5% —
-    /// was chosen the same way and never revisited.
-    static let defaultMinimumNovelty: Double = 0.08
+    /// was chosen the same way and never revisited. This one has now been
+    /// checked against a whole library, but not yet against anybody's ears.
+    static let defaultMinimumNovelty: Double = 0.25
 
     /// Peaks are ranked, so this only has to be high enough that a counted
     /// passage outranks any ordinary novelty peak competing for the same slot.
@@ -61,6 +78,7 @@ nonisolated enum StructuralSegmenter {
         prosody: ProsodicProfile?,
         duration: TimeInterval,
         frameDuration: TimeInterval = StructuralFrames.defaultFrameDuration,
+        minimumSegmentDuration: TimeInterval = StructuralSegmenter.minimumSegmentDuration,
         minimumNovelty: Double = defaultMinimumNovelty
     ) -> StructuralSegmentation {
         let frames = StructuralFrames.build(
@@ -81,6 +99,7 @@ nonisolated enum StructuralSegmenter {
             countingRuns: runs,
             frameCount: frames.count,
             frameDuration: frameDuration,
+            minimumSegmentDuration: minimumSegmentDuration,
             minimumNovelty: minimumNovelty
         )
 
@@ -101,19 +120,21 @@ nonisolated enum StructuralSegmenter {
         countingRuns: [CountingRun],
         frameCount: Int,
         frameDuration: TimeInterval,
+        minimumSegmentDuration: TimeInterval = StructuralSegmenter.minimumSegmentDuration,
         minimumNovelty: Double
     ) -> [Int] {
         let spacing = max(1, Int(ceil(minimumSegmentDuration / frameDuration)))
         // A boundary must leave a full segment on *both* sides, or the last
         // segment ends up shorter than the minimum it was meant to guarantee.
         let admissible = spacing..<max(spacing, frameCount - spacing + 1)
-        guard admissible.isEmpty == false else { return [] }
 
         var candidates: [(index: Int, score: Double)] = []
 
+        let anchorSpacing = max(1, Int(ceil(minimumAnchoredSegmentDuration / frameDuration)))
+        let anchorAdmissible = anchorSpacing..<max(anchorSpacing, frameCount - anchorSpacing + 1)
         for run in countingRuns {
             let index = Int(run.startTime / frameDuration)
-            guard admissible.contains(index) else { continue }
+            guard anchorAdmissible.contains(index) else { continue }
             candidates.append((index, countingAnchorScore))
         }
 
