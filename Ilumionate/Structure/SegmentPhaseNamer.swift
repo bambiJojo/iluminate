@@ -35,6 +35,22 @@ nonisolated enum SegmentPhaseNamer {
     /// A count is near-deterministic evidence, so it outweighs every prior.
     private static let countingWeight = 4.0
 
+    /// Where a labelled emergence can begin, as a share of the file.
+    ///
+    /// Measured, not guessed: across the labelled corpus emergences start at
+    /// 91.9%, 96.0%, 98.0% and 99.1% and run for 0.9% to 8.1% of the duration.
+    /// The first version of this namer began favouring emergence at 82% and
+    /// consequently claimed the last 5.5 minutes of Mind Melt.mp3 — whose real
+    /// emergence is 21 seconds — putting a rising light over five and a half
+    /// minutes of post-hypnotic conditioning.
+    private static let emergenceBegins = 0.88
+
+    /// Counting up only argues for an emergence near the end. BF.mp3 counts up
+    /// at 47% and DFTC at 34%, and neither is an emergence — counting up mid-file
+    /// belongs to fractionation. Treating those as emergences inverts the light
+    /// for everything after them.
+    private static let emergenceCountWindow = 0.85
+
     /// Going backwards is not impossible, only very unlikely — a hard block
     /// would make one bad segment unrecoverable for the rest of the file.
     private static let backwardsPenalty = -6.0
@@ -70,14 +86,16 @@ nonisolated enum SegmentPhaseNamer {
         var score = positionPrior(for: phase, at: midpoint / span)
 
         for run in countingRuns where run.startTime >= segment.startTime && run.startTime < segment.endTime {
+            let late = (run.startTime / span) >= emergenceCountWindow
             switch (run.direction, phase) {
             case (.descending, .deepening): score += countingWeight
-            case (.ascending, .emergence): score += countingWeight
             // A count down inside a segment argues against that segment being
-            // the emergence, and vice versa — the pair the light engine treats
-            // most differently.
+            // the emergence — the pair the light engine treats most differently.
             case (.descending, .emergence): score -= countingWeight
-            case (.ascending, .deepening): score -= countingWeight
+            case (.ascending, .emergence): score += late ? countingWeight : 0
+            // A mid-file count up is left neutral rather than penalised: it is
+            // ambiguous, not evidence of the opposite.
+            case (.ascending, .deepening): score -= late ? countingWeight : 0
             default: break
             }
         }
@@ -95,7 +113,7 @@ nonisolated enum SegmentPhaseNamer {
         case .induction:   return 2.0 * max(0, 1 - position * 3.5)
         case .deepening:   return 1.0 - abs(position - 0.35) * 1.5
         case .suggestions: return 1.0 - abs(position - 0.70) * 1.5
-        case .emergence:   return 2.5 * max(0, (position - 0.82) / 0.18)
+        case .emergence:   return 3.0 * max(0, (position - emergenceBegins) / (1 - emergenceBegins))
         default:           return 0
         }
     }

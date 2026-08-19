@@ -16,13 +16,16 @@
 //                        BF    DFTC   Mind Melt   Tick Tock   mean
 //      detector           4%     4%       4%          4%       4.0%   perfect labels
 //      AS SHIPPED        28%    18%       8%         32%      21.5%
-//      END-TO-END        14%    15%      20%         18%      16.8%   no truth at all
+//      END-TO-END        10%    11%      16%         18%      13.8%   no truth at all
 //
-//  The replacement beats what ships on three files and loses badly on the fourth.
-//  Per-file differences are -14, -3, +12, -14: a mean of -4.8 points with a 95%
-//  interval of -16.8 to +7.3. THE IMPROVEMENT IS NOT ESTABLISHED. On four files
-//  this is a hint, and a one-in-four regression is not good enough to replace a
-//  shipping path.
+//  (END-TO-END was 14/15/20/18, mean 16.8%, before the emergence priors were
+//  corrected against the corpus — see SegmentPhaseNamer.)
+//
+//  The replacement beats what ships on three files and loses on the fourth.
+//  Per-file differences are -18, -7, +8, -14: a mean of -7.8 points with a 95%
+//  interval of -19.0 to +3.5. STILL NOT ESTABLISHED — the interval crosses zero
+//  — but closer than the -4.8 it started at, and Mind Melt's regression narrowed
+//  from +12 to +8. Four files cannot settle this either way.
 //
 //  Two things it does establish. Boundaries are nearly free once labels are
 //  right — feeding the detector prosody took it to a flat 4% while *raising* its
@@ -226,7 +229,93 @@ private func meanAbsoluteDifference(_ lhs: [Double], _ rhs: [Double]) -> Double 
         .reduce(0.0) { $0 + abs($1.0 - $1.1) } / Double(count)
 }
 
+/// Which of `intensityContour`'s four behaviours a phase selects. Two phases in
+/// the same group produce identical light, so a naming mismatch between them
+/// costs nothing — only a mismatch across groups moves the output.
+private func lightBehaviour(_ phase: TrancePhase) -> String {
+    switch phase.labelingPhaseForLight {
+    case .emergence: return "RISE"
+    case .fractionation: return "FAST-OSC"
+    case .suggestions: return "OSC"
+    default: return "DECAY"
+    }
+}
+
+private extension TrancePhase {
+    /// Groups exactly as `SessionGenerator.intensityContour` switches.
+    var labelingPhaseForLight: TrancePhase {
+        switch self {
+        case .preTalk, .induction, .deepening, .confusion: return .induction
+        case .therapy, .suggestions, .eroticSuggestions, .conditioning, .brainwashing: return .suggestions
+        case .fractionation: return .fractionation
+        case .emergence: return .emergence
+        case .transitional: return .transitional
+        }
+    }
+}
+
 struct LightImpactOfBoundariesTests {
+
+    /// Per-segment detail for one file, to find *which* naming decision costs
+    /// the light rather than guessing from an aggregate.
+    @Test(
+        "Diagnose naming decisions segment by segment",
+        .enabled(if: corpusRoot() != nil)
+    )
+    func diagnoseNaming() throws {
+        let root = try #require(corpusRoot())
+        let subjects = loadSubjects(from: root)
+        try #require(subjects.isEmpty == false)
+
+        var lines: [String] = []
+        for subject in subjects {
+            let detected = StructuralSegmenter.segment(
+                words: subject.words,
+                prosody: subject.prosody,
+                duration: subject.duration,
+                minimumSegmentDuration: 60,
+                minimumNovelty: 0.15
+            )
+            let names = SegmentPhaseNamer.name(
+                segments: detected.segments,
+                countingRuns: detected.countingRuns,
+                prosody: subject.prosody,
+                duration: subject.duration
+            )
+
+            var mismatched = 0
+            var mismatchedSeconds = 0.0
+            lines.append("")
+            lines.append("=== \(subject.name) — \(detected.segments.count) segments, \(detected.countingRuns.count) counting run(s)")
+            lines.append("    counts: " + detected.countingRuns.map {
+                "\($0.direction == .descending ? "↓" : "↑")\(Int($0.startTime))s"
+            }.joined(separator: " "))
+            for (segment, predicted) in zip(detected.segments, names) {
+                let midpoint = segment.startTime + (segment.endTime - segment.startTime) / 2
+                let actual = phase(at: midpoint, in: subject.phases)
+                let predictedLight = lightBehaviour(predicted)
+                let actualLight = lightBehaviour(actual)
+                let flag = predictedLight == actualLight ? "   " : " ✗ "
+                if predictedLight != actualLight {
+                    mismatched += 1
+                    mismatchedSeconds += segment.endTime - segment.startTime
+                }
+                lines.append(
+                    "\(flag)\(Int(segment.startTime))-\(Int(segment.endTime))s  "
+                        + "predicted \(predicted.rawValue) [\(predictedLight)]  "
+                        + "labelled \(actual.rawValue) [\(actualLight)]"
+                )
+            }
+            let share = subject.duration > 0 ? mismatchedSeconds / subject.duration * 100 : 0
+            lines.append(
+                "    → \(mismatched) of \(names.count) segments in the wrong light behaviour, "
+                    + "\(Int(share))% of the file's duration"
+            )
+        }
+
+        Attachment.record(lines.joined(separator: "\n"), named: "naming-diagnosis.txt")
+        #expect(subjects.isEmpty == false)
+    }
 
     @Test(
         "Compare generated light from detector and incumbent boundaries against truth",

@@ -45,16 +45,52 @@ struct SegmentPhaseNamerTests {
 
     /// The most expensive confusion in the whole system: emergence rises,
     /// deepening decays. Getting these the wrong way round inverts the light.
-    @Test("An ascending count near the end marks the emergence")
+    ///
+    /// The count sits at 98% of the file, which is where the corpus actually puts
+    /// them — labelled emergences begin at 92-99% and run for 0.9-8.1% of the
+    /// duration. An earlier version of this test placed it at 76% and passed,
+    /// encoding a guess the labels contradict.
+    @Test("An ascending count at the very end marks the emergence")
     func ascendingCountNamesEmergence() {
         let names = SegmentPhaseNamer.name(
-            segments: [segment(0, 300), segment(300, 900), segment(900, 1200)],
-            countingRuns: [countingRun(.ascending, at: 910)],
+            segments: [segment(0, 300), segment(300, 1140), segment(1140, 1200)],
+            countingRuns: [countingRun(.ascending, at: 1176)],
             prosody: nil,
             duration: 1200
         )
 
         #expect(names.last == .emergence)
+    }
+
+    /// Mind Melt.mp3 has no counts at all, and the namer claimed its last 5.5
+    /// minutes as emergence on position alone. The real emergence is 21 seconds.
+    @Test("Emergence is not claimed for the last fifth of a file")
+    func emergenceIsConfinedToTheEnd() {
+        let segments = [
+            segment(0, 1200), segment(1200, 2100),
+            segment(2100, 2232), segment(2232, 2328), segment(2328, 2434)
+        ]
+        let names = SegmentPhaseNamer.name(
+            segments: segments, countingRuns: [], prosody: nil, duration: 2434
+        )
+
+        // 2100-2232s is 86-92% of the file, and is labelled conditioning.
+        #expect(names[2] != .emergence)
+    }
+
+    /// BF.mp3 counts up at 47% and DFTC at 34%; neither is an emergence. Counting
+    /// up mid-file happens in fractionation, and treating it as an emergence
+    /// inverts the light for the rest of the session.
+    @Test("An ascending count mid-file is not an emergence")
+    func midFileAscendingCountIsNotEmergence() {
+        let names = SegmentPhaseNamer.name(
+            segments: [segment(0, 400), segment(400, 800), segment(800, 1200)],
+            countingRuns: [countingRun(.ascending, at: 560)],
+            prosody: nil,
+            duration: 1200
+        )
+
+        #expect(names[1] != .emergence)
     }
 
     @Test("A file opens with an induction")
