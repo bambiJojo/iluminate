@@ -136,14 +136,10 @@
 		79999FF72F7C46C700DC1F2D /* Exceptions for "Ilumionate" folder in "LumeLabel" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				ProsodicProfile.swift,
-				ProsodyAnalyzer.swift,
-				"ProsodyAnalyzer+PauseDetection.swift",
-				AppStoragePaths.swift,
-				PerformanceTrace.swift,
-				PrivateStorageMigration.swift,
+				AudioTranscriptionResult.swift,
 				AnalyzerConfig/AnalyzerConfig.swift,
 				AnalyzerConfig/AnalyzerConfigLoader.swift,
+				AppStoragePaths.swift,
 				AudioAnalyzer.swift,
 				AudioContentType.swift,
 				BundledAudioTranscriptCatalog.swift,
@@ -155,6 +151,11 @@
 				HypnosisPhraseLexicons.swift,
 				KnownAudioCatalog.json,
 				Logging.swift,
+				PerformanceTrace.swift,
+				PrivateStorageMigration.swift,
+				ProsodicProfile.swift,
+				ProsodyAnalyzer.swift,
+				"ProsodyAnalyzer+PauseDetection.swift",
 				TimestampedTranscriptBuilder.swift,
 				Training/AnalyzerOptimizer/AnalyzerEvaluationEngine.swift,
 				Training/AnalyzerOptimizer/AnalyzerMetrics.swift,
