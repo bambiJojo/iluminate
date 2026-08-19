@@ -47,8 +47,26 @@ private func stripControlTokens(_ text: String) -> String {
         .joined(separator: " ")
 }
 
+private func loadProsody() -> [String: ProsodicProfile] {
+    let environment = ProcessInfo.processInfo.environment
+    guard let path = environment["LUMESYNC_PROSODY"] ?? environment["TEST_RUNNER_LUMESYNC_PROSODY"] else {
+        return [:]
+    }
+    var profiles: [String: ProsodicProfile] = [:]
+    for file in (try? FileManager.default.contentsOfDirectory(
+        at: URL(filePath: path), includingPropertiesForKeys: nil
+    )) ?? [] {
+        guard file.pathExtension == "json",
+              let data = try? Data(contentsOf: file),
+              let profile = try? JSONDecoder().decode(ProsodicProfile.self, from: data) else { continue }
+        profiles[file.deletingPathExtension().lastPathComponent] = profile
+    }
+    return profiles
+}
+
 private func loadSubjects(from root: URL) -> [Subject] {
     let manager = FileManager.default
+    let prosodyBySHA = loadProsody()
     var segmentsBySHA: [String: [AudioTranscriptionSegment]] = [:]
 
     for file in (try? manager.contentsOfDirectory(
@@ -100,7 +118,7 @@ private func loadSubjects(from root: URL) -> [Subject] {
                 phases: phases,
                 segments: segments,
                 words: HypnosisPhaseAnalyzer.approximateWordTimestamps(from: segments),
-                prosody: nil
+                prosody: prosodyBySHA[sha]
             )
         )
     }
@@ -258,6 +276,38 @@ struct LightImpactOfBoundariesTests {
                 )
             )
 
+            // The full replacement pipeline, using no truth at all: detected
+            // boundaries, named by SegmentPhaseNamer. This is the row that has to
+            // beat AS SHIPPED for any of the work to be worth landing.
+            let namedPhases = SegmentPhaseNamer.name(
+                segments: detected.segments,
+                countingRuns: detected.countingRuns,
+                prosody: subject.prosody,
+                duration: subject.duration
+            )
+            let namedSegments = zip(detected.segments, namedPhases).map { segment, phase in
+                PhaseSegment(
+                    phase: phase,
+                    startTime: segment.startTime,
+                    endTime: segment.endTime,
+                    characteristics: phase.displayName,
+                    tranceDepthEstimate: phase.tranceDepthEstimate
+                )
+            }
+            let endToEnd = generator.generateSession(
+                from: audioFile,
+                analysis: AnalysisFixtures.hypnosisAnalysis.with(
+                    hypnosisMetadata: HypnosisMetadata(
+                        phases: namedSegments,
+                        inductionStyle: .permissive,
+                        estimatedTranceDeph: .medium,
+                        suggestionDensity: 0.5,
+                        languagePatterns: [],
+                        detectedTechniques: []
+                    )
+                )
+            )
+
             let reference = sample(session(truthBoundaries), duration: subject.duration)
             let detector = sample(session(detectorBoundaries), duration: subject.duration)
             let incumbent = sample(session(incumbentBoundaries), duration: subject.duration)
@@ -282,6 +332,13 @@ struct LightImpactOfBoundariesTests {
                     sample(asShipped, duration: subject.duration),
                     incumbentPhases.count - 1
                 ) + "   ← own labels too"
+            )
+            lines.append(
+                describe(
+                    "END-TO-END",
+                    sample(endToEnd, duration: subject.duration),
+                    namedSegments.count - 1
+                ) + "   ← detector + namer, no truth"
             )
         }
 
