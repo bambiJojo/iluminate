@@ -33,6 +33,29 @@
 //  here: adjacent phases sit between 82 and 97 wpm, and hypnosis vocabulary is
 //  shared across induction, deepening and suggestion alike.
 //
+//  MEASURED A SECOND TIME, AGAINST A DIFFERENT OBJECTIVE, AND IT FAILED AGAIN.
+//  The first measurement asked whether merging improves boundary F1; it does
+//  not. The second asked whether it improves the *light*, on the theory that
+//  fewer segments means fewer chances for the namer to pick a wrong behaviour.
+//  Frequency deviation from the labeller's own boundaries:
+//
+//                     BF    DFTC   Mind Melt   Tick Tock
+//      no merge      14%     15%      20%         18%
+//      cliff 0.10    43%     15%      20%         21%
+//      cliff 0.25    49%     15%      22%         21%
+//      cliff 0.40    49%     15%      22%         29%
+//
+//  Never better, usually worse, and on BF catastrophic: 21 boundaries collapse
+//  to 5 and then to 1, and a 54-minute file cannot express an arc across two
+//  segments. Mind Melt merges to a single segment for 40 minutes containing nine
+//  labelled transitions.
+//
+//  The inversion is worth keeping. Over-segmentation is not the problem it
+//  appeared to be — it is protective. With 21 boundaries the namer has the
+//  resolution to place an emergence in the right two minutes; with 5 it does
+//  not. So Mind Melt's regression in the end-to-end run is a naming error, not
+//  a consequence of too many segments, and the fix belongs in the namer.
+//
 //  Kept, tested and deliberately not wired into anything — as the record of an
 //  experiment worth not repeating, and because the mechanism is sound if a
 //  better cost function ever arrives. `Tools/structure-eval` sweeps it with a

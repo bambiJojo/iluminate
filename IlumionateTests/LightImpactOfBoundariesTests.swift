@@ -333,6 +333,45 @@ struct LightImpactOfBoundariesTests {
                 )
             )
 
+            // Merge before naming. Merging was worthless for boundary F1, but the
+            // objective here is different: fewer segments means fewer chances to
+            // select a wrong light behaviour, and naming carries most of the
+            // remaining error.
+            func mergedThenNamed(cliff: Double) -> (session: LightSession, count: Int) {
+                let merged = StructuralMerger.merge(detected, minimumCliff: cliff)
+                let phases = SegmentPhaseNamer.name(
+                    segments: merged.segments,
+                    countingRuns: merged.countingRuns,
+                    prosody: subject.prosody,
+                    duration: subject.duration
+                )
+                let segments = zip(merged.segments, phases).map { segment, phase in
+                    PhaseSegment(
+                        phase: phase,
+                        startTime: segment.startTime,
+                        endTime: segment.endTime,
+                        characteristics: phase.displayName,
+                        tranceDepthEstimate: phase.tranceDepthEstimate
+                    )
+                }
+                return (
+                    generator.generateSession(
+                        from: audioFile,
+                        analysis: AnalysisFixtures.hypnosisAnalysis.with(
+                            hypnosisMetadata: HypnosisMetadata(
+                                phases: segments,
+                                inductionStyle: .permissive,
+                                estimatedTranceDeph: .medium,
+                                suggestionDensity: 0.5,
+                                languagePatterns: [],
+                                detectedTechniques: []
+                            )
+                        )
+                    ),
+                    segments.count
+                )
+            }
+
             let reference = sample(session(truthBoundaries), duration: subject.duration)
             let detector = sample(session(detectorBoundaries), duration: subject.duration)
             let incumbent = sample(session(incumbentBoundaries), duration: subject.duration)
@@ -365,6 +404,16 @@ struct LightImpactOfBoundariesTests {
                     namedSegments.count - 1
                 ) + "   ← detector + namer, no truth"
             )
+            for cliff in [0.10, 0.25, 0.40] {
+                let outcome = mergedThenNamed(cliff: cliff)
+                lines.append(
+                    describe(
+                        "  merge \(cliff.formatted(.number.precision(.fractionLength(2))))",
+                        sample(outcome.session, duration: subject.duration),
+                        outcome.count - 1
+                    )
+                )
+            }
         }
 
         Attachment.record(lines.joined(separator: "\n"), named: "light-impact.txt")
