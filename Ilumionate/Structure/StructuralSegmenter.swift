@@ -79,7 +79,8 @@ nonisolated enum StructuralSegmenter {
         duration: TimeInterval,
         frameDuration: TimeInterval = StructuralFrames.defaultFrameDuration,
         minimumSegmentDuration: TimeInterval = StructuralSegmenter.minimumSegmentDuration,
-        minimumNovelty: Double = defaultMinimumNovelty
+        minimumNovelty: Double = defaultMinimumNovelty,
+        kernelSize: Int = StructuralNovelty.defaultKernelSize
     ) -> StructuralSegmentation {
         let frames = StructuralFrames.build(
             words: words,
@@ -91,7 +92,7 @@ nonisolated enum StructuralSegmenter {
             return StructuralSegmentation(segments: [], frames: [], novelty: [], countingRuns: [])
         }
 
-        let novelty = StructuralNovelty.curve(frames: frames)
+        let novelty = StructuralNovelty.curve(frames: frames, kernelSize: kernelSize)
         let runs = CountingRunDetector.runs(in: words)
 
         let boundaries = selectBoundaries(
