@@ -1,0 +1,291 @@
+//
+//  LightImpactOfBoundariesTests.swift
+//  IlumionateTests
+//
+//  F1 is a proxy. The product question is whether wrongly-placed boundaries
+//  produce materially different light, and it is answerable directly: generate a
+//  session from each segmentation and compare the trajectories.
+//
+//  Every segmentation is given the *best possible* labelling — the phase the
+//  labeller says is active at each segment's midpoint — so the only variable is
+//  where the boundaries fall. Mislabelling is a separate question.
+//
+//  Runs only when TEST_RUNNER_LUMESYNC_CORPUS points at a LumeLabel corpus.
+//  Reports through a Swift Testing attachment; see IncumbentBaselineTests for
+//  why neither stdout nor a file works from the sandboxed test host.
+//
+
+import Testing
+import Foundation
+import CorpusKit
+@testable import Ilumionate
+
+private func corpusRoot() -> URL? {
+    let environment = ProcessInfo.processInfo.environment
+    let path = environment["LUMESYNC_CORPUS"] ?? environment["TEST_RUNNER_LUMESYNC_CORPUS"]
+    return path.map { URL(filePath: $0) }
+}
+
+private struct LabelledPhase {
+    let phase: TrancePhase
+    let startTime: TimeInterval
+    let endTime: TimeInterval
+}
+
+private struct Subject {
+    let name: String
+    let duration: TimeInterval
+    let phases: [LabelledPhase]
+    let segments: [AudioTranscriptionSegment]
+    let words: [WordTimestamp]
+    let prosody: ProsodicProfile?
+}
+
+private func stripControlTokens(_ text: String) -> String {
+    text.components(separatedBy: .whitespacesAndNewlines)
+        .filter { $0.isEmpty == false && $0.contains("<|") == false }
+        .joined(separator: " ")
+}
+
+private func loadSubjects(from root: URL) -> [Subject] {
+    let manager = FileManager.default
+    var segmentsBySHA: [String: [AudioTranscriptionSegment]] = [:]
+
+    for file in (try? manager.contentsOfDirectory(
+        at: root.appending(path: "AnalyzerDataset/cache/transcripts"),
+        includingPropertiesForKeys: nil
+    )) ?? [] {
+        guard file.pathExtension == "json",
+              let data = try? Data(contentsOf: file),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let sha = object["audioSHA256"] as? String,
+              let transcription = object["transcription"] as? [String: Any],
+              let raw = transcription["segments"] as? [[String: Any]] else { continue }
+
+        segmentsBySHA[sha] = raw.compactMap { segment in
+            guard let text = segment["text"] as? String,
+                  let timestamp = segment["timestamp"] as? Double,
+                  let duration = segment["duration"] as? Double else { return nil }
+            let cleaned = stripControlTokens(text)
+            guard cleaned.isEmpty == false else { return nil }
+            return AudioTranscriptionSegment(
+                text: cleaned, timestamp: timestamp, duration: duration, confidence: 0
+            )
+        }
+    }
+
+    var subjects: [Subject] = []
+    for file in (try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [] {
+        guard file.pathExtension == "json",
+              let data = try? Data(contentsOf: file),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let sha = object["audioSHA256"] as? String,
+              let rawPhases = object["phases"] as? [[String: Any]],
+              rawPhases.count > 1,
+              let segments = segmentsBySHA[sha], segments.isEmpty == false else { continue }
+
+        let phases = rawPhases.compactMap { entry -> LabelledPhase? in
+            guard let raw = entry["phase"] as? String,
+                  let phase = TrancePhase(rawValue: raw),
+                  let start = entry["startTime"] as? Double,
+                  let end = entry["endTime"] as? Double else { return nil }
+            return LabelledPhase(phase: phase, startTime: start, endTime: end)
+        }.sorted { $0.startTime < $1.startTime }
+        guard phases.count > 1 else { continue }
+
+        subjects.append(
+            Subject(
+                name: (object["audioFilename"] as? String) ?? sha,
+                duration: (object["audioDuration"] as? Double) ?? 0,
+                phases: phases,
+                segments: segments,
+                words: HypnosisPhaseAnalyzer.approximateWordTimestamps(from: segments),
+                prosody: nil
+            )
+        )
+    }
+    return subjects.sorted { $0.name < $1.name }
+}
+
+/// The label the corpus assigns at a given moment.
+private func phase(at time: TimeInterval, in phases: [LabelledPhase]) -> TrancePhase {
+    phases.last { $0.startTime <= time }?.phase ?? phases.first?.phase ?? .induction
+}
+
+/// Builds an analysis whose phases have the given boundaries, each labelled with
+/// the truth at its midpoint — the best labelling that segmentation could get.
+private func analysis(
+    boundaries: [TimeInterval],
+    truth: [LabelledPhase],
+    duration: TimeInterval
+) -> AnalysisResult {
+    let starts = ([0] + boundaries).sorted()
+    let segments = starts.enumerated().map { index, start -> PhaseSegment in
+        let end = index + 1 < starts.count ? starts[index + 1] : duration
+        let midpoint = start + (end - start) / 2
+        let assigned = phase(at: midpoint, in: truth)
+        return PhaseSegment(
+            phase: assigned,
+            startTime: start,
+            endTime: end,
+            characteristics: assigned.displayName,
+            tranceDepthEstimate: assigned.tranceDepthEstimate
+        )
+    }
+    let metadata = HypnosisMetadata(
+        phases: segments,
+        inductionStyle: .permissive,
+        estimatedTranceDeph: .medium,
+        suggestionDensity: 0.5,
+        languagePatterns: [],
+        detectedTechniques: []
+    )
+    return AnalysisFixtures.hypnosisAnalysis.with(hypnosisMetadata: metadata)
+}
+
+/// Samples a generated session at a fixed cadence. Control points are sparse and
+/// time-ordered, so linear interpolation between them models what a player does
+/// closely enough to compare two sessions against each other.
+private func sample(
+    _ session: LightSession,
+    duration: TimeInterval,
+    interval: TimeInterval = 1
+) -> (frequency: [Double], intensity: [Double]) {
+    let moments = session.light_score.sorted { $0.time < $1.time }
+    guard moments.isEmpty == false else { return ([], []) }
+
+    var frequency: [Double] = []
+    var intensity: [Double] = []
+    var index = 0
+    var time = 0.0
+    while time <= duration {
+        while index + 1 < moments.count, moments[index + 1].time <= time { index += 1 }
+        let current = moments[index]
+        if index + 1 < moments.count {
+            let next = moments[index + 1]
+            let span = next.time - current.time
+            let ratio = span > 0 ? (time - current.time) / span : 0
+            frequency.append(current.frequency + (next.frequency - current.frequency) * ratio)
+            intensity.append(current.intensity + (next.intensity - current.intensity) * ratio)
+        } else {
+            frequency.append(current.frequency)
+            intensity.append(current.intensity)
+        }
+        time += interval
+    }
+    return (frequency, intensity)
+}
+
+private func meanAbsoluteDifference(_ lhs: [Double], _ rhs: [Double]) -> Double {
+    let count = min(lhs.count, rhs.count)
+    guard count > 0 else { return 0 }
+    return zip(lhs.prefix(count), rhs.prefix(count))
+        .reduce(0.0) { $0 + abs($1.0 - $1.1) } / Double(count)
+}
+
+struct LightImpactOfBoundariesTests {
+
+    @Test(
+        "Compare generated light from detector and incumbent boundaries against truth",
+        .enabled(if: corpusRoot() != nil)
+    )
+    func boundaryErrorMeasuredInLight() throws {
+        let root = try #require(corpusRoot())
+        let subjects = loadSubjects(from: root)
+        try #require(subjects.isEmpty == false)
+
+        let generator = SessionGenerator()
+        let keyword = HypnosisPhaseAnalyzer()
+        var lines = [
+            "Light impact of boundary error — mean absolute difference from the",
+            "session generated by the labeller's own boundaries.",
+            "",
+            "Every segmentation is labelled with the truth at each segment's",
+            "midpoint, so only boundary placement varies.",
+            ""
+        ]
+
+        for subject in subjects {
+            let audioFile = AudioFile(
+                filename: subject.name,
+                duration: subject.duration,
+                fileSize: 0,
+                createdDate: Date(timeIntervalSince1970: 0)
+            )
+
+            let truthBoundaries = Array(subject.phases.map(\.startTime).dropFirst())
+            let detected = StructuralSegmenter.segment(
+                words: subject.words,
+                prosody: subject.prosody,
+                duration: subject.duration,
+                minimumSegmentDuration: 60,
+                minimumNovelty: 0.15
+            )
+            let detectorBoundaries = Array(detected.segments.map(\.startTime).dropFirst())
+            let incumbentBoundaries = Array(
+                keyword.analyze(segments: subject.segments, duration: subject.duration)
+                    .map(\.startTime).sorted().dropFirst()
+            )
+
+            func session(_ boundaries: [TimeInterval]) -> LightSession {
+                generator.generateSession(
+                    from: audioFile,
+                    analysis: analysis(
+                        boundaries: boundaries,
+                        truth: subject.phases,
+                        duration: subject.duration
+                    )
+                )
+            }
+
+            // What the shipping pipeline actually delivers: its own boundaries
+            // *and* its own labels. The comparisons above hand every
+            // segmentation the correct labels to isolate boundary error; this
+            // one does not, because a wrong label selects a different light
+            // behaviour entirely — decay, oscillation, or rise.
+            let incumbentPhases = keyword.analyze(segments: subject.segments, duration: subject.duration)
+            let asShipped = generator.generateSession(
+                from: audioFile,
+                analysis: AnalysisFixtures.hypnosisAnalysis.with(
+                    hypnosisMetadata: HypnosisMetadata(
+                        phases: incumbentPhases,
+                        inductionStyle: .permissive,
+                        estimatedTranceDeph: .medium,
+                        suggestionDensity: 0.5,
+                        languagePatterns: [],
+                        detectedTechniques: []
+                    )
+                )
+            )
+
+            let reference = sample(session(truthBoundaries), duration: subject.duration)
+            let detector = sample(session(detectorBoundaries), duration: subject.duration)
+            let incumbent = sample(session(incumbentBoundaries), duration: subject.duration)
+
+            let frequencyRange = (reference.frequency.max() ?? 1) - (reference.frequency.min() ?? 0)
+            func describe(_ label: String, _ other: (frequency: [Double], intensity: [Double]), _ count: Int) -> String {
+                let hz = meanAbsoluteDifference(reference.frequency, other.frequency)
+                let brightness = meanAbsoluteDifference(reference.intensity, other.intensity)
+                let share = frequencyRange > 0 ? hz / frequencyRange * 100 : 0
+                return "     \(label): \(count) boundaries, "
+                    + "Δfreq \(hz.formatted(.number.precision(.fractionLength(3)))) Hz "
+                    + "(\(Int(share))% of the \(frequencyRange.formatted(.number.precision(.fractionLength(1)))) Hz range), "
+                    + "Δintensity \(brightness.formatted(.number.precision(.fractionLength(4))))"
+            }
+
+            lines.append("  \(subject.name) — truth has \(truthBoundaries.count) boundaries")
+            lines.append(describe("detector ", detector, detectorBoundaries.count))
+            lines.append(describe("incumbent", incumbent, incumbentBoundaries.count))
+            lines.append(
+                describe(
+                    "AS SHIPPED",
+                    sample(asShipped, duration: subject.duration),
+                    incumbentPhases.count - 1
+                ) + "   ← own labels too"
+            )
+        }
+
+        Attachment.record(lines.joined(separator: "\n"), named: "light-impact.txt")
+        #expect(subjects.isEmpty == false)
+    }
+}
