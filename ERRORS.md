@@ -1410,3 +1410,49 @@ Half-applying it was reverted rather than left in place.
 **Risk.** The tool is unusable until fixed. `LumeLabel` had the identical fault and was
 fixed in the same session by adding `AppStoragePaths.swift`, `PrivateStorageMigration.swift`
 and `PerformanceTrace.swift` to its list — it does not cascade further, so that one is done.
+
+## ERR-019 — Two LumeLabelTests fail for reasons unrelated to the phase codec
+
+**Date discovered:** 2026-08-20
+**Status:** identified
+
+**Symptom.**
+
+```bash
+Scripts/run-tests.sh -scheme LumeLabel -destination 'platform=macOS,arch=arm64' -only-testing:LumeLabelTests
+```
+
+```
+LumeLabelTests/saveWritesAnalyzerDatasetWithAudioAndTimeline()
+    Expectation failed: example.labels.denseTimeline.contains { $0.phase == .preTalk }
+TrainingWorkflowControllerTests/datasetSnapshotSeparatesSilverLabelsAndPhaseCoverage()
+    Expectation failed: (snapshot.coveredPhaseCount → 2) == 3
+```
+
+**Context.** `LumeLabel` did not build at all until 2026-08-19 (see ERR-018 for the
+same fault still open on `AnalyzerImprover`), so `LumeLabelTests` has been
+unrunnable and these failures are not new. Four tests failed when the target was
+first made buildable; two asserted the phase-codec collapse that was deliberately
+removed in 952fe80 and have been rewritten. These two are separate.
+
+**What is known.** The dense-timeline case is not explained by the codec change.
+`LabeledFile.phase(at:from:)` returns the raw labelled phase with no projection,
+the fixture is 2 seconds (16,000 samples at 8 kHz) giving two 1-second buckets,
+and the first bucket samples at 0.5 s where `pre_talk` spans [0, 1.0). It should
+be present. A plausible cause not yet checked is `audioDuration` arriving as 0
+from the synthetic WAV import, which makes `denseTimeline` return empty via its
+`guard audioDuration > 0`.
+
+**Root cause.** Unknown for both. Not investigated further because the immediate
+task was elsewhere; guessing at a fix without reproducing would be worse than
+recording it.
+
+**Proposed fix.** Reproduce by printing the decoded `denseTimeline` and the
+imported `audioDuration` for that fixture. For the coverage count, check whether
+`coveredPhaseCount` counts distinct raw phases or distinct `labelingPhase`
+projections — the expectation of 3 may predate the taxonomy work.
+
+**Risk.** `LumeLabelTests` is not in the `Ilumionate` scheme, so a normal
+`Scripts/run-tests.sh` run reports success without executing any of it. Any work
+on LumeLabel needs the `-scheme LumeLabel` run as well, and the target should be
+added to the shared test plan so this cannot recur.

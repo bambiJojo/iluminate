@@ -242,30 +242,40 @@ struct LumeLabelTests {
     }
 
     @Test
-    func legacyContentSpecificPhasesDecodeAsSuggestions() throws {
+    /// See `techniquePhasesSurviveStorageAndProjectToDeepening`. Losing these
+    /// three on save is what cost the training corpus roughly 40% of its phase
+    /// identities, including every `pre_talk → induction` transition.
+    func contentSpecificPhasesSurviveStorageAndProjectToSuggestions() throws {
         let decoder = JSONDecoder()
         let encoder = JSONEncoder()
 
         for rawValue in ["therapeutic_work", "erotic_suggestions", "post_hypnotic_conditioning"] {
             let decoded = try decoder.decode(TrancePhase.self, from: Data("\"\(rawValue)\"".utf8))
-            #expect(decoded == .suggestions)
+            #expect(decoded.rawValue == rawValue)
+            #expect(decoded.labelingPhase == .suggestions)
 
-            let encoded = try String(data: encoder.encode(TrancePhase(rawValue: rawValue) ?? .suggestions), encoding: .utf8)
-            #expect(encoded == "\"suggestions\"")
+            let encoded = try String(data: encoder.encode(decoded), encoding: .utf8)
+            #expect(encoded == "\"\(rawValue)\"")
         }
     }
 
     @Test
-    func legacyTechniquePhasesDecodeAsDeepening() throws {
+    /// Rewritten when the collapse moved out of the codec. Storage now keeps the
+    /// phase that was labelled, and `labelingPhase` projects to the five-bucket
+    /// view where light is chosen. The old version asserted that decoding
+    /// "fractionation" produced `.deepening`, which is exactly the behaviour that
+    /// made SessionGenerator's fractionation contour unreachable.
+    func techniquePhasesSurviveStorageAndProjectToDeepening() throws {
         let decoder = JSONDecoder()
         let encoder = JSONEncoder()
 
         for rawValue in ["fractionation", "confusion"] {
             let decoded = try decoder.decode(TrancePhase.self, from: Data("\"\(rawValue)\"".utf8))
-            #expect(decoded == .deepening)
+            #expect(decoded.rawValue == rawValue)
+            #expect(decoded.labelingPhase == .deepening)
 
-            let encoded = try String(data: encoder.encode(TrancePhase(rawValue: rawValue) ?? .deepening), encoding: .utf8)
-            #expect(encoded == "\"deepening\"")
+            let encoded = try String(data: encoder.encode(decoded), encoding: .utf8)
+            #expect(encoded == "\"\(rawValue)\"")
         }
     }
 

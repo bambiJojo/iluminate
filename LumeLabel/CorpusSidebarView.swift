@@ -35,6 +35,17 @@ struct CorpusSidebarView: View {
     @State private var alertTitle = "Corpus Error"
     @State private var alertMessage: String?
     @State private var workflow = TrainingWorkflowController()
+    @State private var bulkTranscription = BulkTranscriptionController()
+    @State private var sortOrder: CorpusSortOrder = .name
+
+    /// Recomputed rather than observed: the cache is written by a background run
+    /// and by the detail editor, so the filesystem is the only source that is
+    /// always right. Refreshed when the corpus changes or a bulk run advances.
+    @State private var transcribedHashes: Set<String> = []
+
+    private var sortedFiles: [LabeledFile] {
+        TranscriptInventory.sorted(corpus.labeledFiles, by: sortOrder, transcribed: transcribedHashes)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,8 +55,15 @@ struct CorpusSidebarView: View {
                 workflow: workflow
             )
 
-            List(corpus.labeledFiles, selection: $selectedFileID) { file in
-                CorpusFileRow(file: file)
+            if bulkTranscription.isRunning || bulkTranscription.statusMessage != nil {
+                BulkTranscriptionBanner(controller: bulkTranscription)
+            }
+
+            List(sortedFiles, selection: $selectedFileID) { file in
+                CorpusFileRow(
+                    file: file,
+                    hasTranscript: transcribedHashes.contains(file.audioSHA256)
+                )
                     .tag(file.id)
                     .contextMenu {
                         Button("Delete", role: .destructive) {
@@ -54,6 +72,8 @@ struct CorpusSidebarView: View {
                     }
             }
         }
+        .task(id: corpus.labeledFiles.count) { refreshTranscribedHashes() }
+        .onChange(of: bulkTranscription.completed) { refreshTranscribedHashes() }
         .navigationTitle("Corpus")
         .navigationSubtitle(subtitleText)
         .toolbar {
@@ -67,6 +87,29 @@ struct CorpusSidebarView: View {
                     workflow.startOptimize()
                 }
                 .disabled(workflow.isRunning || workflow.datasetSnapshot.validExampleCount == 0)
+            }
+
+            ToolbarItem(placement: .automatic) {
+                Picker("Sort", selection: $sortOrder) {
+                    ForEach(CorpusSortOrder.allCases, id: \.rawValue) { order in
+                        Text(order.label).tag(order)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            ToolbarItem(placement: .automatic) {
+                if bulkTranscription.isRunning {
+                    Button("Stop", systemImage: "stop.fill") {
+                        bulkTranscription.cancel()
+                        refreshTranscribedHashes()
+                    }
+                } else {
+                    Button("Transcribe All", systemImage: "waveform.badge.plus") {
+                        bulkTranscription.start(corpus: corpus)
+                    }
+                    .disabled(corpus.labeledFiles.isEmpty)
+                }
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -116,6 +159,10 @@ struct CorpusSidebarView: View {
         .task(id: workflowRefreshKey) {
             await workflow.refreshSnapshot()
         }
+    }
+
+    private func refreshTranscribedHashes() {
+        transcribedHashes = TranscriptInventory.availableHashes(in: corpus.analyzerDatasetDirectory)
     }
 
     private var subtitleText: String {
@@ -216,8 +263,43 @@ struct CorpusSidebarView: View {
 
 // MARK: - File Row
 
+struct BulkTranscriptionBanner: View {
+    let controller: BulkTranscriptionController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if controller.isRunning {
+                ProgressView(value: controller.progress)
+                Text(controller.currentFilename ?? "Starting…")
+                    .lineLimit(1)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("\(controller.completed) of \(controller.total)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else if let statusMessage = controller.statusMessage {
+                Text(statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(controller.failures.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
+            }
+
+            // Named rather than counted: after an unattended run the useful
+            // question is which files still have no transcript.
+            ForEach(controller.failures.prefix(3), id: \.filename) { failure in
+                Text("\(failure.filename): \(failure.reason)")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
+    }
+}
+
 struct CorpusFileRow: View {
     let file: LabeledFile
+    let hasTranscript: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -233,6 +315,12 @@ struct CorpusFileRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
+            Spacer()
+            // Filled versus outline, not two shades of the same glyph: the list
+            // is scanned to find what still needs work.
+            Image(systemName: hasTranscript ? "text.bubble.fill" : "text.bubble")
+                .foregroundStyle(hasTranscript ? Color.accentColor : Color.secondary.opacity(0.4))
+                .help(hasTranscript ? "Transcript cached" : "No transcript yet")
         }
         .padding(.vertical, 2)
     }
