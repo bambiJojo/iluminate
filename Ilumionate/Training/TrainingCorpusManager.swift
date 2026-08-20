@@ -145,14 +145,22 @@ actor TrainingCorpusStore {
         analyzerDatasetManifestURL = analyzerDatasetDirectory.appending(path: "dataset_manifest.json")
     }
 
+    /// Every file in this corpus is hypnosis, so the content type is forced.
+    ///
+    /// Phases are deliberately **not** projected here. This used to rewrite each
+    /// one through `labelingPhase` on save, which meant labelling a `pre_talk`,
+    /// a `fractionation` or an `erotic_suggestions` and pressing save silently
+    /// stored something else — the ten phases the labeller can choose collapsed
+    /// to five on the way to disk, taking every `pre_talk → induction` boundary
+    /// with them.
+    ///
+    /// The five-bucket view is still what selects light, and `labelingPhase`
+    /// supplies it at the point of use. Removing the codec's copy of this
+    /// collapse (952fe80) was not enough on its own: this path runs on every
+    /// save regardless of how the value encodes.
     private func normalizedForHypnosisCorpus(_ file: LabeledFile) -> LabeledFile {
         var normalized = file
         normalized.expectedContentType = .hypnosis
-        normalized.phases = normalized.phases.map { phase in
-            var canonical = phase
-            canonical.phase = phase.phase.labelingPhase
-            return canonical
-        }
         return normalized
     }
 

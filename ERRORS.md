@@ -1443,14 +1443,44 @@ be present. A plausible cause not yet checked is `audioDuration` arriving as 0
 from the synthetic WAV import, which makes `denseTimeline` return empty via its
 `guard audioDuration > 0`.
 
-**Root cause.** Unknown for both. Not investigated further because the immediate
-task was elsewhere; guessing at a fix without reproducing would be worse than
-recording it.
+**Root cause — found 2026-08-20.** The dense-timeline case is not a fixture
+problem. A diagnostic printed `duration 2.0, buckets 2, phases ["suggestions",
+"induction"]`: the `pre_talk` the test labels is stored as `induction`. Removing
+the collapse from `TrancePhase`'s codec in 952fe80 was not sufficient, because
+**three further sites apply `labelingPhase` independently**:
 
-**Proposed fix.** Reproduce by printing the decoded `denseTimeline` and the
-imported `audioDuration` for that fixture. For the coverage count, check whether
-`coveredPhaseCount` counts distinct raw phases or distinct `labelingPhase`
-projections — the expectation of 3 may predate the taxonomy work.
+1. `TrainingCorpusManager.normalizedForHypnosisCorpus` — rewrote every phase on
+   **every save**. Labelling a `pre_talk` and pressing save silently stored an
+   `induction`. **Fixed**; this one destroys the source of truth on disk.
+2. `LabeledFile.analyzerTrainingExample` — projects on export. Left in place: it
+   is specified by `saveCanonicalizesLegacyContentPhasesInAnalyzerDataset`, so it
+   appears deliberate rather than accidental.
+3. `ScriptPhaseCorpus` and `ScriptCorpusExtractor` — several sites, unexamined.
+
+**The blocking contradiction.** Two tests in `LumeLabelTests.swift` specify
+opposite behaviour for the same export path and cannot both pass:
+
+- line 307 `saveCanonicalizesLegacyContentPhasesInAnalyzerDataset` expects
+  `[.induction, .deepening, .suggestions, .brainwashing]` — canonicalised.
+- line 353 `saveWritesAnalyzerDatasetWithAudioAndTimeline` expects the dense
+  timeline to contain `.preTalk` — not canonicalised.
+
+One of these has been failing for as long as the target has been unbuildable.
+
+**The decision needed.** Should the exported training dataset carry the phase the
+labeller chose, or the five-bucket projection? Exporting raw was tried and
+cascades: `AnalyzerOptimizerTests/datasetLoaderWarnsAboutSparseLongExamplesAndRarePhaseCoverage`
+and `splitDistributesRarePhasesAcrossAvailableBuckets` both fail, because the
+optimizer's coverage and split logic look for `.deepening` and now find
+`.fractionation` and `.confusion`. The fix is to apply `labelingPhase` at those
+consumers — projection at the point of use, as the app already does for light —
+but it is a change to training behaviour and wants deciding, not assuming.
+
+**Second failure.** `coveredPhaseCount` is `phaseBreakdown.filter { $0.segmentCount > 0 }.count`
+against `orderedHypnosisPhases` (five, excluding `pre_talk`). The fixture labels
+`pre_talk`, `induction` and `deepening`, which projects to two covered buckets.
+The expectation of 3 looks simply wrong, but it is left failing rather than
+edited while the question above is open.
 
 **Risk.** `LumeLabelTests` is not in the `Ilumionate` scheme, so a normal
 `Scripts/run-tests.sh` run reports success without executing any of it. Any work

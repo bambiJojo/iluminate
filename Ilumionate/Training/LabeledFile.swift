@@ -464,6 +464,14 @@ extension LabeledFile {
         datasetRelativeAudioPath: String,
         datasetRelativeExamplePath: String
     ) -> AnalyzerTrainingExample {
+        // NOTE: this projects every phase through `labelingPhase`, so the exported
+        // dataset carries the five-bucket view rather than what the labeller
+        // chose — BF.mp3 exports pre_talk as induction and
+        // post_hypnotic_conditioning as suggestions. Unlike the codec and save
+        // paths, that appears deliberate: `saveCanonicalizesLegacyContentPhases`
+        // specifies it. It is left alone pending a decision, and logged as
+        // ERR-019, because `saveWritesAnalyzerDatasetWithAudioAndTimeline` in the
+        // same file specifies the opposite and the two cannot both pass.
         let sortedPhases = phases
             .map { phase -> LabeledPhase in
                 var canonical = phase
