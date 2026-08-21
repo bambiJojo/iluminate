@@ -17,6 +17,23 @@
 //      detector           4%     4%       4%          4%       4.0%   perfect labels
 //      AS SHIPPED        28%    18%       8%         32%      21.5%
 //      END-TO-END         8%    11%      17%         19%      13.8%   no truth at all
+//      TEMPLATE          15%     11%      15%         13%      13.5%   no detection at all
+//
+//  THE TEMPLATE MATCHES THE PIPELINE. A fixed positional arc — induction to 15%,
+//  deepening to 60%, suggestions to 85%, conditioning to 96%, emergence after —
+//  using no audio, no transcript and no detection, scores 13.5% against the
+//  pipeline's 13.8%, and is more consistent doing it (11-15% against 8-19%).
+//
+//  Per file the pipeline is -7, 0, +2, +6 against the template: it wins on BF
+//  and loses on Tick Tock. Mean difference +0.25 points, in the template's
+//  favour.
+//
+//  This is consistent with the feature correlations. Against the 32 labelled
+//  segments with prosody, trance depth correlates r = +0.09 with speech rate,
+//  -0.01 with pitch, +0.01 with volume, +0.38 with speech/silence ratio — and
+//  +0.40 with position in the file. Lexical markers do no better: +0.14 for
+//  deepening words, -0.23 for awakening words. Position is the strongest signal
+//  anyone has measured here, and a template is position used directly.
 //
 //  Measured again after the seven-phase target and a namer that emits
 //  conditioning. AS SHIPPED improved on its own — 21.5% to 19.8% — because the
@@ -466,6 +483,42 @@ struct LightImpactOfBoundariesTests {
                 )
             }
 
+            // The control this whole branch needs: a fixed positional template,
+            // using no detection and no evidence at all. Trance depth's strongest
+            // measured predictor is position in the file (r = 0.40, against
+            // r ≈ 0.0 for speech rate, pitch and volume and r ≈ 0.2 for lexical
+            // markers), so if the detector and namer cannot beat a template they
+            // are not earning their complexity.
+            let templateSpans: [(TrancePhase, Double, Double)] = [
+                (.induction, 0.00, 0.15),
+                (.deepening, 0.15, 0.60),
+                (.suggestions, 0.60, 0.85),
+                (.conditioning, 0.85, 0.96),
+                (.emergence, 0.96, 1.00)
+            ]
+            let templateSegments = templateSpans.map { phase, from, to in
+                PhaseSegment(
+                    phase: phase,
+                    startTime: subject.duration * from,
+                    endTime: subject.duration * to,
+                    characteristics: phase.displayName,
+                    tranceDepthEstimate: phase.tranceDepthEstimate
+                )
+            }
+            let templateSession = generator.generateSession(
+                from: audioFile,
+                analysis: AnalysisFixtures.hypnosisAnalysis.with(
+                    hypnosisMetadata: HypnosisMetadata(
+                        phases: templateSegments,
+                        inductionStyle: .permissive,
+                        estimatedTranceDeph: .medium,
+                        suggestionDensity: 0.5,
+                        languagePatterns: [],
+                        detectedTechniques: []
+                    )
+                )
+            )
+
             let reference = sample(session(truthBoundaries), duration: subject.duration)
             let detector = sample(session(detectorBoundaries), duration: subject.duration)
             let incumbent = sample(session(incumbentBoundaries), duration: subject.duration)
@@ -497,6 +550,13 @@ struct LightImpactOfBoundariesTests {
                     sample(endToEnd, duration: subject.duration),
                     namedSegments.count - 1
                 ) + "   ← detector + namer, no truth"
+            )
+            lines.append(
+                describe(
+                    "TEMPLATE  ",
+                    sample(templateSession, duration: subject.duration),
+                    templateSegments.count - 1
+                ) + "   ← fixed positional arc, no detection"
             )
             for cliff in [0.10, 0.25, 0.40] {
                 let outcome = mergedThenNamed(cliff: cliff)
