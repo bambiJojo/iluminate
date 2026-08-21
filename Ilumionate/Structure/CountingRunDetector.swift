@@ -105,6 +105,59 @@ nonisolated enum CountingRunDetector {
         return found
     }
 
+    // MARK: - Fractionation
+
+    /// How close two opposite-direction counts must be to read as one bout.
+    ///
+    /// Fractionation cycles are minutes, not seconds — the subject is taken down,
+    /// brought up and taken down again — but a deepener at the start of a session
+    /// and the closing awakener half an hour later are not a cycle. This is the
+    /// line between the two, and it is a judgement rather than a measurement:
+    /// the corpus has no file with fractionation labelled *within* it.
+    static let maximumFractionationGap: TimeInterval = 420
+
+    /// Stretches where counting alternates direction in quick succession.
+    ///
+    /// Fractionation is induction applied repeatedly — down, up, down, each pass
+    /// landing deeper — so it is identifiable from the *shape* of the counting
+    /// rather than from where it sits in the file. That matters: nothing in the
+    /// corpus shows where fractionation occurs within a file, so a positional
+    /// prior could not be checked, while this follows from what the technique is.
+    static func fractionationWindows(
+        in runs: [CountingRun]
+    ) -> [(start: TimeInterval, end: TimeInterval)] {
+        let ordered = runs.sorted { $0.startTime < $1.startTime }
+        guard ordered.count > 1 else { return [] }
+
+        var windows: [(start: TimeInterval, end: TimeInterval)] = []
+        var current: [CountingRun] = []
+
+        func flush() {
+            if current.count > 1, let first = current.first, let last = current.last {
+                windows.append((first.startTime, last.endTime))
+            }
+            current = []
+        }
+
+        for run in ordered {
+            guard let previous = current.last else {
+                current = [run]
+                continue
+            }
+            let alternates = previous.direction != run.direction
+            let close = run.startTime - previous.endTime <= maximumFractionationGap
+            if alternates, close {
+                current.append(run)
+            } else {
+                flush()
+                current = [run]
+            }
+        }
+        flush()
+
+        return windows
+    }
+
     // MARK: - Numerals
 
     /// Counts in this material stay inside one to twenty; a "thirty" is far more

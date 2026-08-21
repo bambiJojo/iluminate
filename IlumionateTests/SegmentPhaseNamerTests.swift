@@ -196,15 +196,39 @@ struct SegmentPhaseNamerTests {
         #expect(names.prefix(3).contains(.conditioning) == false)
     }
 
-    /// Fractionation is a target phase but is deliberately not named.
-    ///
-    /// All four corpus files containing it carry a single whole-file label, so
-    /// nothing shows *where* within a file it occurs. A positional prior for it
-    /// could not be checked against anything — which is how the emergence prior
-    /// came to claim a fifth of Mind Melt.
-    @Test("Fractionation is not guessed at without evidence")
-    func fractionationIsNotNamed() {
+    /// Fractionation is induction applied repeatedly — down, up, down, each pass
+    /// landing deeper — so it is named from the *shape* of the counting rather
+    /// than from where it falls. That distinction matters: no corpus file shows
+    /// where fractionation occurs within a file, so a positional prior could not
+    /// be checked, while alternating counts follow from what the technique is.
+    @Test("Fractionation is detectable but not named, pending one labelled example")
+    func fractionationIsNotNamedYet() {
+        let names = SegmentPhaseNamer.name(
+            segments: [segment(0, 200), segment(200, 700), segment(700, 1600), segment(1600, 2000)],
+            countingRuns: [
+                countingRun(.descending, at: 250),
+                countingRun(.ascending, at: 400),
+                countingRun(.descending, at: 550)
+            ],
+            prosody: nil,
+            duration: 2000
+        )
+
         #expect(SegmentPhaseNamer.namedPhases.contains(.fractionation) == false)
+        #expect(names.contains(.fractionation) == false)
+    }
+
+    /// A lone deepener is not fractionation, however early it falls.
+    @Test("A single count down is a deepening, not a fractionation")
+    func loneDescendingCountIsNotFractionation() {
+        let names = SegmentPhaseNamer.name(
+            segments: [segment(0, 300), segment(300, 900), segment(900, 1200)],
+            countingRuns: [countingRun(.descending, at: 350)],
+            prosody: nil,
+            duration: 1200
+        )
+
+        #expect(names[1] == .deepening)
     }
 
     /// Each named phase must land in a distinct light behaviour, or naming

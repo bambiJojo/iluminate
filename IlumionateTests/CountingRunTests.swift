@@ -113,3 +113,74 @@ struct CountingRunTests {
         #expect(CountingRunDetector.runs(in: []).isEmpty)
     }
 }
+
+// MARK: - Fractionation
+
+/// Fractionation is induction applied repeatedly: the subject is taken down,
+/// brought up, and taken down again, landing deeper each time. It therefore
+/// shows up as counting runs that *alternate direction* in quick succession,
+/// which is a mechanical signature rather than a positional guess.
+struct FractionationWindowTests {
+
+    private func run(
+        _ direction: CountingRun.Direction,
+        at start: TimeInterval
+    ) -> CountingRun {
+        CountingRun(direction: direction, startTime: start, endTime: start + 15, length: 5)
+    }
+
+    @Test("Down, up, down in quick succession is a fractionation window")
+    func alternatingRunsFormAWindow() {
+        let windows = CountingRunDetector.fractionationWindows(
+            in: [run(.descending, at: 100), run(.ascending, at: 220), run(.descending, at: 340)]
+        )
+
+        #expect(windows.count == 1)
+        #expect(windows.first?.start == 100)
+        #expect(windows.first?.end == 355)
+    }
+
+    /// A single deepener followed much later by the closing awakener is the
+    /// ordinary shape of a session, not fractionation.
+    @Test("A count down and a much later count up is not fractionation")
+    func distantAlternationIsNotAWindow() {
+        let windows = CountingRunDetector.fractionationWindows(
+            in: [run(.descending, at: 100), run(.ascending, at: 2000)]
+        )
+
+        #expect(windows.isEmpty)
+    }
+
+    @Test("Runs in the same direction are not an alternation")
+    func repeatedDirectionIsNotAWindow() {
+        let windows = CountingRunDetector.fractionationWindows(
+            in: [run(.descending, at: 100), run(.descending, at: 200), run(.descending, at: 300)]
+        )
+
+        #expect(windows.isEmpty)
+    }
+
+    /// Two separate bouts of fractionation in one file must not merge into one
+    /// window spanning the quiet stretch between them.
+    @Test("Separate bouts stay separate windows")
+    func separateBoutsDoNotMerge() {
+        let windows = CountingRunDetector.fractionationWindows(
+            in: [
+                run(.descending, at: 100), run(.ascending, at: 200),
+                run(.descending, at: 1500), run(.ascending, at: 1600)
+            ]
+        )
+
+        #expect(windows.count == 2)
+    }
+
+    @Test("A single run cannot alternate with anything")
+    func oneRunIsNotAWindow() {
+        #expect(CountingRunDetector.fractionationWindows(in: [run(.descending, at: 100)]).isEmpty)
+    }
+
+    @Test("No runs, no windows")
+    func emptyInputIsEmpty() {
+        #expect(CountingRunDetector.fractionationWindows(in: []).isEmpty)
+    }
+}

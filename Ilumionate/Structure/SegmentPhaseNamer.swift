@@ -29,12 +29,23 @@ nonisolated enum SegmentPhaseNamer {
     /// suggestions — 0.58 against 0.72 — so calling it suggestions lights the
     /// close of a session deeper than the hypnotist intended.
     ///
-    /// `fractionation` is a target phase but is deliberately absent. All four
-    /// corpus files containing it carry a single whole-file label, so nothing
-    /// shows where within a file it occurs, and a positional prior for it could
-    /// not be checked against anything. `brainwashing` is absent for a weaker
-    /// version of the same reason: its one distinguishing signal so far is a
-    /// pitch outlier (224 Hz against ~180) measured on three segments.
+    /// `fractionation` is detectable but **not named**, and the measurement is
+    /// why. It is induction applied repeatedly — down, up, down, each pass
+    /// landing deeper — so it shows as counts alternating direction in quick
+    /// succession, which `CountingRunDetector.fractionationWindows` finds. That
+    /// signature fires on exactly one labelled file, DFTC.mp3 (↓462s ↑757s
+    /// ↓955s), and naming it there took that file from 11% to 18% frequency
+    /// deviation, because the labeller marked those stretches deepening and
+    /// erotic_suggestions. Nothing else improved.
+    ///
+    /// So either DFTC contains fractionation that was not labelled, or the
+    /// alternation rule over-fires. One labelled example would settle it; until
+    /// then naming it costs seven points on the only file that exercises it.
+    /// The detector is kept and tested — the mechanism looks right and the
+    /// light mapping already suits it, an oscillating contour at depth 0.42.
+    ///
+    /// `brainwashing` is absent for a weaker reason: its one distinguishing
+    /// signal so far is a pitch outlier (224 Hz against ~180) on three segments.
     ///
     /// Naming finer than the evidence supports is how the emergence prior came
     /// to claim the last five and a half minutes of a file whose real emergence
@@ -96,7 +107,27 @@ nonisolated enum SegmentPhaseNamer {
         let midpoint = segment.startTime + (segment.endTime - segment.startTime) / 2
         var score = positionPrior(for: phase, at: midpoint / span)
 
-        for run in countingRuns where run.startTime >= segment.startTime && run.startTime < segment.endTime {
+        // A count means different things depending on whether it alternates.
+        // Inside a fractionation window it is one pass of an in-and-out cycle;
+        // on its own it is a deepener or an awakener. Crediting both from the
+        // same run let three alternating counts outscore the window they formed.
+        let windows = CountingRunDetector.fractionationWindows(in: countingRuns)
+        func isFractionating(_ run: CountingRun) -> Bool {
+            windows.contains { $0.start <= run.startTime && run.startTime <= $0.end }
+        }
+
+        if phase == .fractionation {
+            let overlapping = windows.contains {
+                $0.start < segment.endTime && $0.end > segment.startTime
+            }
+            // The only real evidence for fractionation, so without it the phase
+            // must not be reachable on position alone.
+            score += overlapping ? countingWeight : -countingWeight
+        }
+
+        for run in countingRuns
+        where run.startTime >= segment.startTime && run.startTime < segment.endTime {
+            guard isFractionating(run) == false else { continue }
             let late = (run.startTime / span) >= emergenceCountWindow
             switch (run.direction, phase) {
             case (.descending, .deepening): score += countingWeight
@@ -122,6 +153,9 @@ nonisolated enum SegmentPhaseNamer {
     private static func positionPrior(for phase: TrancePhase, at position: Double) -> Double {
         switch phase {
         case .induction:   return 2.0 * max(0, 1 - position * 3.5)
+        // An induction technique, so early — but position never decides it; the
+        // alternating-count evidence does.
+        case .fractionation: return 1.0 - abs(position - 0.25) * 1.5
         case .deepening:   return 1.0 - abs(position - 0.35) * 1.5
         case .suggestions: return 1.0 - abs(position - 0.65) * 1.5
         // Spans 66.7% to 99.1% across the labelled files, always ending where the
@@ -164,6 +198,7 @@ nonisolated enum SegmentPhaseNamer {
         // Measured at 94.7 wpm against suggestions' 97.1 — too close to separate
         // on pace, so this contributes nothing and says so rather than guessing.
         case .conditioning: return 0
+        case .fractionation: return -relative * 1.5
         default:           return 0
         }
     }
