@@ -20,6 +20,7 @@ import os
 struct SessionView: View {
 
     var engine: LightEngine
+    var outputMultiplier: Double = 1
 
     var body: some View {
         ZStack {
@@ -46,7 +47,7 @@ struct SessionView: View {
     // MARK: - Mono
 
     private var monoView: some View {
-        Color(white: engine.brightness)
+        Color(white: engine.brightness * clampedOutputMultiplier)
             .colorMultiply(colorForTemperature(engine.colorTemperature))
             .ignoresSafeArea()
     }
@@ -55,15 +56,19 @@ struct SessionView: View {
 
     private var bilateralView: some View {
         HStack(spacing: 0) {
-            Color(white: engine.brightnessLeft)
+            Color(white: engine.brightnessLeft * clampedOutputMultiplier)
                 .colorMultiply(colorForTemperature(engine.colorTemperature))
-            Color(white: engine.brightnessRight)
+            Color(white: engine.brightnessRight * clampedOutputMultiplier)
                 .colorMultiply(colorForTemperature(engine.colorTemperature))
         }
         .ignoresSafeArea()
     }
 
     // MARK: - Color Temperature
+
+    private var clampedOutputMultiplier: Double {
+        max(0, min(1, outputMultiplier))
+    }
 
     /// Pre-computed color temperature lookup table for performance
     /// Eliminates expensive pow() and log() operations during real-time rendering

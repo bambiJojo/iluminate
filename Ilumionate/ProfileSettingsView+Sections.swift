@@ -159,6 +159,28 @@ extension ProfileSettingsView {
                     icon: "sun.max",
                     color: .bwAlpha
                 )
+                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                    HStack(spacing: TranceSpacing.list) {
+                        Image(systemName: "hourglass")
+                            .font(.body)
+                            .foregroundStyle(Color.bwTheta)
+                            .frame(width: 24)
+                        Text("Maximum Light Time")
+                            .font(TranceTypography.body)
+                            .foregroundStyle(Color.textPrimary)
+                        Spacer()
+                        Picker("Maximum Light Time", selection: $maximumLightTimeMinutes) {
+                            ForEach(LightExposureLimit.allCases) { limit in
+                                Text(limit.displayName).tag(limit.rawValue)
+                            }
+                        }
+                        .tint(.textSecondary)
+                    }
+
+                    Text("Lights fade out at your limit. When audio is playing, it keeps going. Stop sooner if you feel discomfort.")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
                 Button {
                     TranceHaptics.shared.light()
                     showingFlashTintSheet = true

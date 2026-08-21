@@ -33,6 +33,8 @@ struct ProfileSettingsView: View {
     // Session Defaults
     @AppStorage("userFrequencyMultiplier") var userFrequencyMultiplier = 1.0
     @AppStorage("countdownDuration") var countdownDuration = 3
+    @AppStorage("maximumLightTimeMinutes") var maximumLightTimeMinutes =
+        LightExposureLimit.recommended.rawValue
     @AppStorage("steadyLightEnabled") var steadyLightEnabled = false
     @State var flashTint: FlashTint = .default
     @State var showingFlashTintSheet = false

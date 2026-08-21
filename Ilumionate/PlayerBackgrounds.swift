@@ -40,6 +40,7 @@ struct SessionPlayerBackground: View {
 struct FlashGridBackground: View {
     let controller: FlashController
     let colorTemperature: Int
+    let outputMultiplier: Double
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("steadyLightEnabled") private var steadyLightEnabled = false
@@ -65,8 +66,9 @@ struct FlashGridBackground: View {
             userPrefersSteadyLight: steadyLightEnabled,
             systemReduceMotion: reduceMotion
         )
-        let leftOpacity = holdsSteady ? controller.intensity : controller.leftOpacity
-        let rightOpacity = holdsSteady ? controller.intensity : controller.rightOpacity
+        let multiplier = max(0, min(1, outputMultiplier))
+        let leftOpacity = (holdsSteady ? controller.intensity : controller.leftOpacity) * multiplier
+        let rightOpacity = (holdsSteady ? controller.intensity : controller.rightOpacity) * multiplier
         HStack(spacing: 0) {
             Rectangle()
                 .fill(baseColor)
@@ -89,6 +91,7 @@ struct FlashGridBackground: View {
 struct ColorPulseBackground: View {
     let frequency: Double
     let intensity: Double
+    let outputMultiplier: Double
     let isPaused: Bool
 
     var body: some View {
@@ -96,7 +99,8 @@ struct ColorPulseBackground: View {
             let elapsed = timeline.date.timeIntervalSinceReferenceDate
             let hue = (elapsed * 0.05).truncatingRemainder(dividingBy: 1.0)
             let raw = (sin(elapsed * frequency * 2 * .pi) + 1) / 2
-            let pulseBrightness = isPaused ? 0.0 : raw * intensity
+            let multiplier = max(0, min(1, outputMultiplier))
+            let pulseBrightness = isPaused ? 0.0 : raw * intensity * multiplier
 
             Color(hue: hue, saturation: 0.85, brightness: pulseBrightness)
                 .ignoresSafeArea()
@@ -113,10 +117,11 @@ struct ColorPulseBackground: View {
 struct EntrainmentBackground: View {
     let engine: LightEngine
     let isActive: Bool
+    let outputMultiplier: Double
 
     var body: some View {
         if isActive {
-            SessionView(engine: engine)
+            SessionView(engine: engine, outputMultiplier: outputMultiplier)
         } else {
             Color.bgPrimary.ignoresSafeArea()
         }

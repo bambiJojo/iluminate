@@ -55,7 +55,9 @@ struct PlayerControlTray: View {
         // still comes only from the mode, so the tray does not reflow — only
         // its state changes.
         let state: PlayerControlTile.State =
-            (slot == .volume && viewModel.audioUnavailable)
+            viewModel.didReachLightExposureLimit && isLightControl(slot)
+                ? .disabled
+                : (slot == .volume && viewModel.audioUnavailable)
                 ? .disabled
                 : slot.state(lightsAreOn: lightsAreOn)
 
@@ -90,7 +92,11 @@ struct PlayerControlTray: View {
         for slot: PlayerControlSlot,
         state: PlayerControlTile.State
     ) -> String? {
-        if state == .disabled { return "Unavailable while the mind machine is off" }
+        if state == .disabled {
+            return viewModel.didReachLightExposureLimit && isLightControl(slot)
+                ? "Maximum light time reached"
+                : "Unavailable while the mind machine is off"
+        }
         guard let value = value(for: slot) else {
             return state == .active ? "On" : nil
         }
@@ -98,6 +104,10 @@ struct PlayerControlTray: View {
     }
 
     // MARK: - Actions
+
+    private func isLightControl(_ slot: PlayerControlSlot) -> Bool {
+        slot == .mindMachine || slot == .lightSync || slot == .brightness
+    }
 
     /// Reaching for brightness with the lights off means you want the lights.
     private func tapForDisabledValueTile(

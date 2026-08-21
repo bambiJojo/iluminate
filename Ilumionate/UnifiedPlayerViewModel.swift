@@ -55,6 +55,8 @@ final class UnifiedPlayerViewModel {
     private(set) var thresholdController: ThresholdController?
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
+    private(set) var lightOutputMultiplier: Double = 1
+    private(set) var didReachLightExposureLimit = false
     var showingControls = true
     var showingSafetyWarning = false
     var showingLightSyncWarning = false
@@ -74,6 +76,7 @@ final class UnifiedPlayerViewModel {
     private var lightScorePlayer: LightScorePlayer?
     private var audioSync: AudioSyncController?
     private var playbackRuntime: (any PlaybackRuntime)?
+    private var lightExposureBudget = LightExposureBudget(limit: .recommended)
     var currentPhase = "Induction Phase"
 
     // MARK: - Flash Mode State
@@ -197,6 +200,9 @@ final class UnifiedPlayerViewModel {
         self.savedSessionStore = savedSessionStore ?? .shared
         self.userDefaults = userDefaults
         self.lightSession = initialLightSession
+        self.lightExposureBudget = LightExposureBudget(
+            limit: AppSettingsManager.maximumLightTime(defaults: userDefaults)
+        )
 
         if case .flashMode(let freq, _, let colorTemp, _, _, _, _, _) = mode {
             flashFrequency = freq
@@ -417,6 +423,7 @@ final class UnifiedPlayerViewModel {
     // MARK: - Light Sync (Audio Mode)
 
     func toggleLightSync() {
+        guard didReachLightExposureLimit == false else { return }
         haptics.medium()
 
         switch lightSyncStatus {
@@ -446,6 +453,7 @@ final class UnifiedPlayerViewModel {
     }
 
     func enableLightSync(session: LightSession) {
+        guard didReachLightExposureLimit == false else { return }
         hasSeenLightSyncWarning = true
         withAnimation(.easeInOut(duration: 0.4)) { lightSyncEnabled = true }
         audioLightSyncPlayer?.enableLightSync(lightSession: session)
@@ -492,6 +500,7 @@ final class UnifiedPlayerViewModel {
     }
 
     func toggleMindMachine() {
+        guard didReachLightExposureLimit == false else { return }
         haptics.medium()
         mindMachineEnabled.toggle()
     }
@@ -516,6 +525,10 @@ final class UnifiedPlayerViewModel {
     /// (notably `.audioLight`, which has its own Light Sync control) must get
     /// an ungated engine so their own toggle still works.
     private func applyStoredMindMachinePreference() {
+        guard didReachLightExposureLimit == false else {
+            engine.mindMachineEnabled = false
+            return
+        }
         engine.mindMachineEnabled = mode.hasMindMachineToggle
             ? AppSettingsManager.isMindMachineEnabled(defaults: userDefaults)
             : true
@@ -580,6 +593,56 @@ final class UnifiedPlayerViewModel {
 
     var isPlaying: Bool { playbackState == .playing }
 
+    var lightExposureLimit: LightExposureLimit {
+        lightExposureBudget.limit
+    }
+
+    var lightExposureRemaining: TimeInterval {
+        switch mode {
+        case .flashMode, .colorPulse:
+            return max(0, duration - currentTime)
+        case .session, .audioLight:
+            guard duration > 0 else { return lightExposureBudget.remaining }
+            return min(lightExposureBudget.remaining, max(0, duration - currentTime))
+        case .playlist:
+            return lightExposureBudget.remaining
+        case .visualField:
+            return 0
+        }
+    }
+
+    var showsLightExposureStatus: Bool {
+        switch mode {
+        case .session, .flashMode, .colorPulse, .audioLight, .playlist:
+            true
+        case .visualField:
+            false
+        }
+    }
+
+    var lightExposureStatusText: String {
+        if didReachLightExposureLimit {
+            return hasContinuingAudioAfterLightLimit
+                ? "Light limit reached · audio continuing"
+                : "Light limit reached"
+        }
+
+        let remaining = Duration.seconds(lightExposureRemaining.rounded(.up))
+            .formatted(.time(pattern: .minuteSecond))
+        return "Lights · \(remaining) remaining"
+    }
+
+    private var hasContinuingAudioAfterLightLimit: Bool {
+        switch mode {
+        case .session(_, let audioFile):
+            audioFile != nil
+        case .audioLight, .playlist:
+            true
+        case .flashMode, .colorPulse, .visualField:
+            false
+        }
+    }
+
     /// Flash mode left/right opacity (used by background)
     var leftOpacity: Double { flashController?.leftOpacity ?? 0 }
     var rightOpacity: Double { flashController?.rightOpacity ?? 0 }
@@ -612,7 +675,10 @@ final class UnifiedPlayerViewModel {
         case .flashMode(let frequency, let intensity, _, let pattern, let binauralEnabled, let binauralCarrier, let binauralVolume, let goalDuration):
             setupFlashMode(frequency: frequency, intensity: intensity, pattern: pattern,
                           binauralEnabled: binauralEnabled, binauralCarrier: binauralCarrier, binauralVolume: binauralVolume)
-            duration = goalDuration ?? 0
+            duration = min(
+                goalDuration ?? lightExposureBudget.limit.duration,
+                lightExposureBudget.limit.duration
+            )
             if let flashController {
                 playbackRuntime = FlashPlaybackRuntime(
                     controller: flashController,
@@ -625,7 +691,7 @@ final class UnifiedPlayerViewModel {
 
         case .colorPulse:
             // No controller needed — TimelineView handles rendering
-            duration = 0 // infinite
+            duration = lightExposureBudget.limit.duration
             playbackRuntime = ManualPlaybackRuntime(duration: duration, volume: volume)
 
         case .visualField(let settings, let audioFile, let binaural):
@@ -661,14 +727,16 @@ final class UnifiedPlayerViewModel {
     private func setupSessionMode(session: LightSession, audioFile: AudioFile?) {
         let player = LightScorePlayer(session: session)
         lightScorePlayer = player
-        duration = session.duration_sec
+        duration = audioFile == nil
+            ? min(session.duration_sec, lightExposureBudget.limit.duration)
+            : session.duration_sec
 
         engine.attachSession(player: player)
         if !engine.isRunning { engine.start() }
         engine.pause()
         let resumeDecision = PlaybackResumeDecision(
             sessionID: session.id.uuidString,
-            duration: session.duration_sec,
+            duration: duration,
             storedSessionID: storedResumeID(for: session.id.uuidString),
             storedProgress: storedResumeProgress(for: session.id.uuidString)
         )
@@ -805,6 +873,7 @@ final class UnifiedPlayerViewModel {
 
     private func startCountdownAndPlay() {
         PerformanceTrace.event("Playback Countdown Start")
+        resetLightExposureForNewAttempt()
         analyticsLifecycle.prepareForNewAttempt()
         hasRecordedHistoryForAttempt = false
         hasReportedCreateOutcome = false
@@ -1137,6 +1206,7 @@ final class UnifiedPlayerViewModel {
         currentTime = snapshot.currentTime
         duration = snapshot.duration
         volume = snapshot.volume
+        updateLightExposure(elapsed: elapsed)
 
         switch mode {
         case .session:
@@ -1174,6 +1244,88 @@ final class UnifiedPlayerViewModel {
         // Keep mini-player in sync
         nowPlaying.updateProgress(progress)
         nowPlaying.updatePlaybackState(playbackState)
+    }
+
+    private func resetLightExposureForNewAttempt() {
+        lightExposureBudget = LightExposureBudget(limit: lightExposureBudget.limit)
+        lightOutputMultiplier = 1
+
+        guard didReachLightExposureLimit else { return }
+        didReachLightExposureLimit = false
+        switch mode {
+        case .session, .playlist:
+            engine.mindMachineEnabled = mode.hasMindMachineToggle
+                ? AppSettingsManager.isMindMachineEnabled(defaults: userDefaults)
+                : true
+        case .flashMode, .colorPulse, .audioLight, .visualField:
+            break
+        }
+    }
+
+    private func updateLightExposure(elapsed: TimeInterval) {
+        switch mode {
+        case .session, .audioLight, .playlist:
+            let reachedLimit = lightExposureBudget.advance(
+                by: elapsed,
+                whileEmitting: isLightOutputActive
+            )
+            lightOutputMultiplier = lightExposureBudget.outputMultiplier
+            if reachedLimit {
+                disableLightOutputAtExposureLimit()
+            }
+
+        case .flashMode, .colorPulse:
+            lightOutputMultiplier = LightExposureBudget.outputMultiplier(
+                remaining: max(0, lightExposureBudget.limit.duration - currentTime)
+            )
+
+        case .visualField:
+            lightOutputMultiplier = 1
+        }
+    }
+
+    private var isLightOutputActive: Bool {
+        switch mode {
+        case .session, .playlist:
+            engine.mindMachineEnabled
+                && engine.isDrivingOutput
+                && engine.isOutputSuspended == false
+        case .audioLight:
+            lightSyncEnabled
+                && engine.isDrivingOutput
+                && engine.isOutputSuspended == false
+        case .flashMode:
+            flashController?.isFlashing == true && flashController?.isPaused == false
+        case .colorPulse:
+            playbackState == .playing
+        case .visualField:
+            false
+        }
+    }
+
+    private func disableLightOutputAtExposureLimit() {
+        guard didReachLightExposureLimit == false else { return }
+        didReachLightExposureLimit = true
+        lightOutputMultiplier = 0
+
+        switch mode {
+        case .session:
+            // Do not use the persisted preference setter: this cutoff lasts only
+            // for the current playback attempt.
+            engine.mindMachineEnabled = false
+        case .playlist:
+            // Do not use the persisted preference setter: this cutoff lasts only
+            // for the current playback attempt.
+            engine.mindMachineEnabled = false
+        case .audioLight:
+            lightSyncEnabled = false
+            audioLightSyncPlayer?.disableLightSync()
+        case .flashMode, .colorPulse, .visualField:
+            break
+        }
+
+        PlatformApplication.screenBrightness = savedBrightness
+        PlatformApplication.keepsScreenAwake = false
     }
 
     // MARK: - Private: Phase Detection (Session Mode)

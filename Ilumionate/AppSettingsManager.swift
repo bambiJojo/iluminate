@@ -18,6 +18,7 @@ enum AppSettingsManager {
         static let autoLockEnabled = "autoLockEnabled"
         static let userFrequencyMultiplier = "userFrequencyMultiplier"
         static let countdownDuration = "countdownDuration"
+        static let maximumLightTimeMinutes = "maximumLightTimeMinutes"
         static let steadyLightEnabled = "steadyLightEnabled"
         static let flashTint = "flashTint"
         static let focusSpotsEnabled = "focusSpotsEnabled"
@@ -68,6 +69,7 @@ enum AppSettingsManager {
         let keepScreenAwakeDuringSessions: Bool
         let userFrequencyMultiplier: Double
         let countdownDuration: Int
+        let maximumLightTimeMinutes: Int
         let listeningHistoryEnabled: Bool
         let mindMachineEnabled: Bool
     }
@@ -110,6 +112,12 @@ enum AppSettingsManager {
         return [3, 7, 10].contains(value) ? value : 3
     }
 
+    static func maximumLightTime(defaults: UserDefaults = .standard) -> LightExposureLimit {
+        let value = defaults.object(forKey: Key.maximumLightTimeMinutes) as? Int
+            ?? LightExposureLimit.recommended.rawValue
+        return LightExposureLimit(storedMinutes: value)
+    }
+
     static func isMindMachineEnabled(defaults: UserDefaults = .standard) -> Bool {
         bool(forKey: Key.mindMachineEnabled, default: true, defaults: defaults)
     }
@@ -134,6 +142,7 @@ enum AppSettingsManager {
                 keepScreenAwakeDuringSessions: keepsScreenAwakeDuringSessions(defaults: defaults),
                 userFrequencyMultiplier: userFrequencyMultiplier(defaults: defaults),
                 countdownDuration: countdownDuration(defaults: defaults),
+                maximumLightTimeMinutes: maximumLightTime(defaults: defaults).rawValue,
                 listeningHistoryEnabled: bool(
                     forKey: Key.listeningHistoryEnabled,
                     default: false,
@@ -173,6 +182,10 @@ enum AppSettingsManager {
         defaults.set(true, forKey: Key.autoLockEnabled)
         defaults.set(1.0, forKey: Key.userFrequencyMultiplier)
         defaults.set(3, forKey: Key.countdownDuration)
+        defaults.set(
+            LightExposureLimit.recommended.rawValue,
+            forKey: Key.maximumLightTimeMinutes
+        )
         defaults.set(false, forKey: Key.steadyLightEnabled)
         defaults.removeObject(forKey: Key.flashTint)
         defaults.set(false, forKey: Key.focusSpotsEnabled)

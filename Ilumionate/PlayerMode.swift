@@ -224,17 +224,14 @@ enum PlayerMode: Identifiable {
         }
     }
 
-    /// Whether this mode has a finite duration (vs infinite like flash/color pulse)
+    /// Whether this mode has a finite runtime. Light-producing modes are bounded
+    /// by the user's comfort limit even when their authored content is untimed.
     var hasFiniteDuration: Bool {
         switch self {
-        case .session, .audioLight, .playlist:
+        case .session, .flashMode, .colorPulse, .audioLight, .playlist:
             return true
-        case .flashMode(_, _, _, _, _, _, _, let goalDuration):
-            return goalDuration != nil
         case .visualField(let settings, _, _):
             return settings.duration != nil
-        case .colorPulse:
-            return false
         }
     }
 

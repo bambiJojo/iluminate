@@ -25,7 +25,7 @@ struct PlaybackRetentionTests {
         #expect(mode.hasFiniteDuration)
     }
 
-    @Test func untimedMindMachineSessionRemainsOpenEnded() {
+    @Test func untimedMindMachineSessionIsBoundedByTheComfortLimit() {
         let mode = PlayerMode.flashMode(
             frequency: 10,
             intensity: 0.75,
@@ -37,7 +37,7 @@ struct PlaybackRetentionTests {
         )
 
         #expect(mode.goalDuration == nil)
-        #expect(mode.hasFiniteDuration == false)
+        #expect(mode.hasFiniteDuration)
     }
 
     @Test(arguments: [

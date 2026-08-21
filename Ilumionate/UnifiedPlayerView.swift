@@ -230,12 +230,17 @@ struct UnifiedPlayerView: View {
         case .session:
             EntrainmentBackground(
                 engine: viewModel.engine,
-                isActive: viewModel.mindMachineEnabled
+                isActive: viewModel.mindMachineEnabled,
+                outputMultiplier: viewModel.lightOutputMultiplier
             )
 
         case .flashMode(_, _, let colorTemp, _, _, _, _, _):
             if let controller = viewModel.flashController {
-                FlashGridBackground(controller: controller, colorTemperature: colorTemp)
+                FlashGridBackground(
+                    controller: controller,
+                    colorTemperature: colorTemp,
+                    outputMultiplier: viewModel.lightOutputMultiplier
+                )
             } else {
                 Color.black.ignoresSafeArea()
             }
@@ -244,6 +249,7 @@ struct UnifiedPlayerView: View {
             ColorPulseBackground(
                 frequency: frequency,
                 intensity: intensity,
+                outputMultiplier: viewModel.lightOutputMultiplier,
                 isPaused: viewModel.playbackState == .paused
             )
 
@@ -259,13 +265,15 @@ struct UnifiedPlayerView: View {
         case .audioLight:
             EntrainmentBackground(
                 engine: viewModel.engine,
-                isActive: viewModel.lightSyncEnabled
+                isActive: viewModel.lightSyncEnabled,
+                outputMultiplier: viewModel.lightOutputMultiplier
             )
 
         case .playlist:
             EntrainmentBackground(
                 engine: viewModel.engine,
-                isActive: viewModel.mindMachineEnabled
+                isActive: viewModel.mindMachineEnabled,
+                outputMultiplier: viewModel.lightOutputMultiplier
             )
         }
     }
@@ -416,6 +424,13 @@ struct UnifiedPlayerView: View {
 
     private var bottomControls: some View {
         VStack(spacing: TranceSpacing.cardMargin) {
+            if viewModel.showsLightExposureStatus {
+                PlayerLightExposureStatus(
+                    text: viewModel.lightExposureStatusText,
+                    limitReached: viewModel.didReachLightExposureLimit
+                )
+            }
+
             PlayerTransportSection(
                 viewModel: viewModel,
                 onInteraction: controlsVisibility.registerInteraction
