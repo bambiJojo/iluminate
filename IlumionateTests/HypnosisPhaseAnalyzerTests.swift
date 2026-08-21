@@ -693,7 +693,11 @@ struct TranscriptConfidenceEnrichmentTests {
 
         let adaptedPhases = adapted.map(\.phase)
         #expect(Set(adaptedPhases).count >= 3)
-        #expect(adaptedPhases.contains(.suggestions))
+        // Any of the suggestion-family targets. post_hypnotic_conditioning is
+        // now a phase in its own right rather than folding into suggestions, so
+        // naming one of them specifically over-specifies what this is checking:
+        // that adaptation reaches the later part of a session at all.
+        #expect(adaptedPhases.contains { [.suggestions, .conditioning, .brainwashing].contains($0) })
         #expect(adaptedPhases.last == .emergence)
     }
 
@@ -746,7 +750,7 @@ struct TranscriptConfidenceEnrichmentTests {
         #expect(baseline.count == 1)
         #expect(baseline.first?.phase == .induction)
         #expect(techniqueAware.count >= 2)
-        #expect(techniqueAware.last?.phase == .suggestions)
+        #expect(techniqueAware.last?.phase == .conditioning)
     }
 }
 
@@ -883,7 +887,7 @@ struct ChunkedStructuredOutputTests {
         #expect(ChunkPhaseLabel.therapy.normalizedPhase == .suggestions)
         #expect(ChunkPhaseLabel.suggestions.normalizedPhase == .suggestions)
         #expect(ChunkPhaseLabel.eroticSuggestions.normalizedPhase == .suggestions)
-        #expect(ChunkPhaseLabel.postHypnoticConditioning.normalizedPhase == .suggestions)
+        #expect(ChunkPhaseLabel.postHypnoticConditioning.normalizedPhase == .conditioning)
         #expect(ChunkPhaseLabel.brainwashing.normalizedPhase == .brainwashing)
         #expect(ChunkPhaseLabel.emergence.normalizedPhase == .emergence)
     }
@@ -895,6 +899,6 @@ struct ChunkedStructuredOutputTests {
             rationale: "trigger installation and future pacing"
         )
 
-        #expect(classification.normalizedPhase == .suggestions)
+        #expect(classification.normalizedPhase == .conditioning)
     }
 }

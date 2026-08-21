@@ -65,11 +65,19 @@ struct TrainingWorkflowControllerTests {
         #expect(snapshot.readyTranscriptCount == 1)
         #expect(snapshot.handLabeledExampleCount == 1)
         #expect(snapshot.silverLabeledExampleCount == 1)
-        #expect(snapshot.coveredPhaseCount == 3)
+        // Two, not three: the fixture labels pre_talk, induction and deepening, and
+        // pre_talk projects onto induction because their light is identical. The
+        // expectation of three predates pre_talk being folded away.
+        #expect(snapshot.coveredPhaseCount == 2)
         #expect(snapshot.phaseBreakdown.first { $0.phase == .induction }?.segmentCount == 1)
         #expect(snapshot.phaseBreakdown.first { $0.phase == .deepening }?.durationSeconds == 45)
         #expect(snapshot.qualityWarning == nil)
-        #expect(snapshot.compactPhaseCoverageText.contains("Pre-Talk 1"))
+        // Pre-talk is reported as induction. The coverage panel exists to show
+        // which *target* phases the corpus covers, and pre_talk is not one — it
+        // produces light identical to induction, so counting it separately would
+        // suggest coverage the analyzer is never asked to produce.
+        #expect(snapshot.compactPhaseCoverageText.contains("Induction 1"))
+        #expect(snapshot.compactPhaseCoverageText.contains("Pre-Talk") == false)
     }
 
     @Test

@@ -1414,7 +1414,7 @@ and `PerformanceTrace.swift` to its list — it does not cascade further, so tha
 ## ERR-019 — Two LumeLabelTests fail for reasons unrelated to the phase codec
 
 **Date discovered:** 2026-08-20
-**Status:** identified
+**Status:** completed 2026-08-20
 
 **Symptom.**
 
@@ -1486,3 +1486,30 @@ edited while the question above is open.
 `Scripts/run-tests.sh` run reports success without executing any of it. Any work
 on LumeLabel needs the `-scheme LumeLabel` run as well, and the target should be
 added to the shared test plan so this cannot recur.
+
+**Resolution — 2026-08-20.** The contradiction was settled by a product decision:
+the analyzer should be trained only on the vocabulary it is meant to emit, so the
+export carries the target phases and the corpus file keeps what the labeller
+chose. Both tests were updated to that rule — `pre_talk` arrives in the export as
+`induction`, `fractionation` survives.
+
+The target itself was widened from five phases to seven after checking what the
+light engine actually distinguishes. A phase changes light only through its
+`intensityContour` branch and its `tranceDepthEstimate`, and by that measure the
+old five-phase target was discarding information the generator would have used:
+`fractionation` lost a unique contour and moved depth 0.42 → 0.62, and
+`conditioning` is *shallower* than `suggestions` (0.58 against 0.72), so folding
+it in made the light deeper than the hypnotist intended across long closing
+sections. Both are now targets. `pre_talk` and `confusion` are still folded away
+because their light is identical to `induction` and `deepening`;
+`therapeutic_work` and `erotic_suggestions` fold into `suggestions` at 0.12 and
+0.06 depth, the smallest losses available.
+
+`TrainingCorpusManager.normalizedForHypnosisCorpus` no longer collapses on save.
+Nine tests across both schemes encoded the old five-phase target and were
+migrated. `GoldenDatasetTests` now derives its canonical order from
+`orderedHypnosisPhases` rather than restating it, so the two cannot drift again.
+
+Still open: `ScriptPhaseCorpus` and `ScriptCorpusExtractor` apply `labelingPhase`
+at several sites that were not examined. They are consumers rather than storage,
+so projecting there is probably correct, but it has not been checked.

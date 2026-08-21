@@ -27,21 +27,55 @@ public enum TrancePhase: String, Codable, Sendable, CaseIterable {
 
     case transitional // Used when phases blend
 
+    /// The phases the analyzer is trained to emit, in the order a session moves
+    /// through them.
+    ///
+    /// Chosen to match what the light engine actually distinguishes. A phase
+    /// changes light through exactly two things — which `intensityContour`
+    /// branch it takes and its `tranceDepthEstimate` — and by that measure most
+    /// of the vocabulary is not redundant:
+    ///
+    ///     induction      decay     0.22
+    ///     fractionation  fast-osc  0.42
+    ///     deepening      decay     0.62
+    ///     suggestions    osc       0.72
+    ///     brainwashing   osc       0.82
+    ///     conditioning   osc       0.58
+    ///     emergence      rise      0.24
+    ///
+    /// `fractionation` and `conditioning` were added because collapsing them
+    /// was the most expensive part of the old five-phase target: fractionation
+    /// lost a unique contour *and* moved depth 0.42 → 0.62, and conditioning is
+    /// *shallower* than suggestions, so folding it in made the light deeper than
+    /// the hypnotist intended across long closing sections.
+    ///
+    /// `pre_talk` and `confusion` are still folded away because they are exactly
+    /// identical in light to `induction` and `deepening` — nothing is lost.
+    /// `therapeutic_work` and `erotic_suggestions` fold into `suggestions` at a
+    /// cost of 0.12 and 0.06 depth, the smallest losses available, to keep the
+    /// class count down where classification is already the dominant error.
     public static let orderedHypnosisPhases: [TrancePhase] = [
-        .induction, .deepening, .suggestions, .brainwashing, .emergence,
+        .induction, .fractionation, .deepening, .suggestions,
+        .brainwashing, .conditioning, .emergence,
     ]
 
     public var isLabelingPhase: Bool {
         Self.orderedHypnosisPhases.contains(self)
     }
 
+    /// Projects a labelled phase onto the vocabulary the analyzer is trained to
+    /// emit. Applied where training data is exported and where light is chosen —
+    /// never in storage, which keeps the phase the labeller actually chose.
     public var labelingPhase: TrancePhase {
         switch self {
+        // Identical light to their targets; folding them costs nothing.
         case .preTalk:
             return .induction
-        case .fractionation, .confusion:
+        case .confusion:
             return .deepening
-        case .therapy, .eroticSuggestions, .conditioning:
+        // Nearest target by trance depth: 0.84 and 0.78 against suggestions'
+        // 0.72, the smallest losses in the vocabulary.
+        case .therapy, .eroticSuggestions:
             return .suggestions
         case .transitional:
             return .deepening

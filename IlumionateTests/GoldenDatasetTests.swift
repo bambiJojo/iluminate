@@ -174,15 +174,16 @@ struct GoldenDatasetTests {
     /// This fixture's ground-truth arc is forward-only, even though the analyzer
     /// permits sustained returns to earlier phases in other session structures.
     @Test func classicHypnosisPhasesAreStrictlyForwardOrdered() {
-        let canonical: [HypnosisMetadata.Phase] = [
-            .preTalk, .induction, .deepening, .therapy, .suggestions, .conditioning, .emergence
-        ]
+        // Derived from the taxonomy rather than restated, so the two cannot
+        // drift. Phases outside the target vocabulary are projected onto it,
+        // which is what the analyzer is trained to emit.
+        let canonical = HypnosisMetadata.Phase.orderedHypnosisPhases
         let segments = analyzer.analyze(segments: classicHypnosis, duration: 1800)
         let phases = segments.map(\.phase)
 
         var lastIndex = -1
         for phase in phases {
-            if let idx = canonical.firstIndex(of: phase) {
+            if let idx = canonical.firstIndex(of: phase.labelingPhase) {
                 #expect(idx >= lastIndex,
                     "Phase '\(phase.rawValue)' appeared out of canonical order")
                 lastIndex = idx

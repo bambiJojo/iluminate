@@ -222,23 +222,23 @@ struct LumeLabelTests {
     @Test
     func trancePhaseExpansionHasStableOrderAndNames() {
         #expect(TrancePhase.orderedHypnosisPhases == [
-            .induction,
-            .deepening,
-            .suggestions,
-            .brainwashing,
-            .emergence
+            .induction, .fractionation, .deepening, .suggestions,
+            .brainwashing, .conditioning, .emergence
         ])
 
         #expect(TrancePhase.fractionation.displayName == "Fractionation")
         #expect(TrancePhase.confusion.displayName == "Confusion")
         #expect(TrancePhase.suggestions.displayName == "Suggestions")
         #expect(TrancePhase.brainwashing.displayName == "Brainwashing")
+        // Folded away only where the light is identical or near-identical.
         #expect(TrancePhase.preTalk.labelingPhase == .induction)
-        #expect(TrancePhase.fractionation.labelingPhase == .deepening)
         #expect(TrancePhase.confusion.labelingPhase == .deepening)
         #expect(TrancePhase.therapy.labelingPhase == .suggestions)
         #expect(TrancePhase.eroticSuggestions.labelingPhase == .suggestions)
-        #expect(TrancePhase.conditioning.labelingPhase == .suggestions)
+
+        // Target phases in their own right — their light differs materially.
+        #expect(TrancePhase.fractionation.labelingPhase == .fractionation)
+        #expect(TrancePhase.conditioning.labelingPhase == .conditioning)
     }
 
     @Test
@@ -252,7 +252,9 @@ struct LumeLabelTests {
         for rawValue in ["therapeutic_work", "erotic_suggestions", "post_hypnotic_conditioning"] {
             let decoded = try decoder.decode(TrancePhase.self, from: Data("\"\(rawValue)\"".utf8))
             #expect(decoded.rawValue == rawValue)
-            #expect(decoded.labelingPhase == .suggestions)
+            // conditioning is now a target phase; therapy and erotic still fold
+            // into suggestions, the nearest target by trance depth.
+            #expect(decoded.labelingPhase == (decoded == .conditioning ? .conditioning : .suggestions))
 
             let encoded = try String(data: encoder.encode(decoded), encoding: .utf8)
             #expect(encoded == "\"\(rawValue)\"")
@@ -272,7 +274,9 @@ struct LumeLabelTests {
         for rawValue in ["fractionation", "confusion"] {
             let decoded = try decoder.decode(TrancePhase.self, from: Data("\"\(rawValue)\"".utf8))
             #expect(decoded.rawValue == rawValue)
-            #expect(decoded.labelingPhase == .deepening)
+            // fractionation is now a target phase in its own right; confusion
+            // still folds into deepening because their light is identical.
+            #expect(decoded.labelingPhase == (decoded == .fractionation ? .fractionation : .deepening))
 
             let encoded = try String(data: encoder.encode(decoded), encoding: .utf8)
             #expect(encoded == "\"\(rawValue)\"")
@@ -304,7 +308,10 @@ struct LumeLabelTests {
         let dataset = try AnalyzerOptimizationDataset.load(from: baseDirectory)
         let phases = dataset.examples.first?.example.labels.phaseSegments.map(\.phase) ?? []
 
-        #expect(phases == [.induction, .deepening, .suggestions, .brainwashing])
+        // fractionation now survives the projection — collapsing it lost a
+        // unique light contour and moved trance depth 0.42 → 0.62. erotic
+        // suggestions still folds into suggestions, a 0.06 depth difference.
+        #expect(phases == [.induction, .fractionation, .suggestions, .brainwashing])
     }
 
     @Test
@@ -360,7 +367,13 @@ struct LumeLabelTests {
         #expect(example.labels.phaseSegments.count == 2)
         #expect(example.labels.hasCompletePhaseCoverage)
         #expect(example.labels.labelerNotes == "Ground truth export")
-        #expect(example.labels.denseTimeline.contains { $0.phase == .preTalk })
+        // The export carries the vocabulary the analyzer is trained to emit, so
+        // pre_talk arrives as induction — their light is identical, and training
+        // on a label the analyzer is never asked to produce would teach it
+        // something to unteach later. The labeller's own choice is preserved in
+        // the corpus file, not here.
+        #expect(example.labels.denseTimeline.contains { $0.phase == .induction })
+        #expect(example.labels.denseTimeline.contains { $0.phase == .preTalk } == false)
         #expect(example.labels.denseTimeline.contains { $0.phase == .suggestions })
         #expect(manifest.exampleCount == 1)
         #expect(manifest.exampleFiles == ["examples/\(saved.id.uuidString).json"])

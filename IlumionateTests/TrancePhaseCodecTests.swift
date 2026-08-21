@@ -67,15 +67,35 @@ struct TrancePhaseCodecTests {
         }
     }
 
-    /// The projection itself is unchanged — this is what light generation uses.
-    @Test("The five-bucket projection still collapses as before")
-    func projectionIsUnchanged() {
+    /// The projection onto the seven phases the analyzer is trained to emit.
+    ///
+    /// `fractionation` and `conditioning` now pass through: collapsing them was
+    /// the most expensive part of the old five-phase target. Fractionation lost
+    /// a unique contour and moved depth 0.42 → 0.62; conditioning is *shallower*
+    /// than suggestions (0.58 against 0.72), so folding it in made the light
+    /// deeper than intended across long closing sections.
+    @Test("Only phases with identical or near-identical light are folded away")
+    func projectionKeepsWhatChangesTheLight() {
+        // Identical light to their targets.
         #expect(TrancePhase.preTalk.labelingPhase == .induction)
-        #expect(TrancePhase.fractionation.labelingPhase == .deepening)
         #expect(TrancePhase.confusion.labelingPhase == .deepening)
+
+        // Distinct light, and therefore targets in their own right.
+        #expect(TrancePhase.fractionation.labelingPhase == .fractionation)
+        #expect(TrancePhase.conditioning.labelingPhase == .conditioning)
+
+        // Nearest target by depth, at the smallest losses available.
         #expect(TrancePhase.eroticSuggestions.labelingPhase == .suggestions)
-        #expect(TrancePhase.conditioning.labelingPhase == .suggestions)
         #expect(TrancePhase.therapy.labelingPhase == .suggestions)
+    }
+
+    /// A target phase must project to itself, or training data would carry a
+    /// label the analyzer is never asked to emit.
+    @Test("Every target phase is its own projection")
+    func targetPhasesAreFixedPoints() {
+        for phase in TrancePhase.orderedHypnosisPhases {
+            #expect(phase.labelingPhase == phase)
+        }
     }
 }
 
