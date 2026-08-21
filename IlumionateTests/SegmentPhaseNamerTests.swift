@@ -166,6 +166,47 @@ struct SegmentPhaseNamerTests {
         )
     }
 
+    /// Conditioning sits immediately before the emergence in every labelled
+    /// file — 66.7-91.9%, 88.2-99.1%, 90.4-96.0% and 95.0-98.0% — and is
+    /// *shallower* than suggestions (0.58 against 0.72), so naming it as
+    /// suggestions lights the close of a session deeper than intended.
+    @Test("The run-up to an emergence is named conditioning")
+    func lateSegmentBeforeEmergenceIsConditioning() {
+        let names = SegmentPhaseNamer.name(
+            segments: [
+                segment(0, 600), segment(600, 1500),
+                segment(1500, 1900), segment(1900, 2000)
+            ],
+            countingRuns: [countingRun(.ascending, at: 1960)],
+            prosody: nil,
+            duration: 2000
+        )
+
+        #expect(names.last == .emergence)
+        #expect(names[2] == .conditioning)
+    }
+
+    @Test("Conditioning is not named early in a file")
+    func conditioningIsNotNamedEarly() {
+        let segments = (0..<6).map { segment(Double($0) * 200, Double($0 + 1) * 200) }
+        let names = SegmentPhaseNamer.name(
+            segments: segments, countingRuns: [], prosody: nil, duration: 1200
+        )
+
+        #expect(names.prefix(3).contains(.conditioning) == false)
+    }
+
+    /// Fractionation is a target phase but is deliberately not named.
+    ///
+    /// All four corpus files containing it carry a single whole-file label, so
+    /// nothing shows *where* within a file it occurs. A positional prior for it
+    /// could not be checked against anything — which is how the emergence prior
+    /// came to claim a fifth of Mind Melt.
+    @Test("Fractionation is not guessed at without evidence")
+    func fractionationIsNotNamed() {
+        #expect(SegmentPhaseNamer.namedPhases.contains(.fractionation) == false)
+    }
+
     /// Each named phase must land in a distinct light behaviour, or naming
     /// cannot express the difference that was measured to matter.
     ///

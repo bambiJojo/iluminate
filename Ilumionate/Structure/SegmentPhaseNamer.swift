@@ -21,16 +21,27 @@ import Foundation
 
 nonisolated enum SegmentPhaseNamer {
 
-    /// Deliberately four names, not the full twelve.
+    /// Five of the seven target phases, in session order.
     ///
-    /// `SessionGenerator.intensityContour` has four behaviours, and these select
-    /// three of them: decay for induction and deepening, gentle oscillation for
-    /// suggestions, a rise for emergence. Naming finer than the light engine can
-    /// act on would add error without adding fidelity — `pre_talk` and
-    /// `induction` produce identical light, so distinguishing them here could
-    /// only ever be wrong, never useful. Fractionation's faster oscillation is
-    /// omitted because nothing measured so far separates it reliably.
-    static let namedPhases: [TrancePhase] = [.induction, .deepening, .suggestions, .emergence]
+    /// `conditioning` is named because it is both detectable and expensive to
+    /// miss: it sits immediately before the emergence in every labelled file
+    /// (66.7-91.9%, 88.2-99.1%, 90.4-96.0%, 95.0-98.0%) and is *shallower* than
+    /// suggestions — 0.58 against 0.72 — so calling it suggestions lights the
+    /// close of a session deeper than the hypnotist intended.
+    ///
+    /// `fractionation` is a target phase but is deliberately absent. All four
+    /// corpus files containing it carry a single whole-file label, so nothing
+    /// shows where within a file it occurs, and a positional prior for it could
+    /// not be checked against anything. `brainwashing` is absent for a weaker
+    /// version of the same reason: its one distinguishing signal so far is a
+    /// pitch outlier (224 Hz against ~180) measured on three segments.
+    ///
+    /// Naming finer than the evidence supports is how the emergence prior came
+    /// to claim the last five and a half minutes of a file whose real emergence
+    /// is twenty-one seconds.
+    static let namedPhases: [TrancePhase] = [
+        .induction, .deepening, .suggestions, .conditioning, .emergence
+    ]
 
     /// A count is near-deterministic evidence, so it outweighs every prior.
     private static let countingWeight = 4.0
@@ -112,7 +123,11 @@ nonisolated enum SegmentPhaseNamer {
         switch phase {
         case .induction:   return 2.0 * max(0, 1 - position * 3.5)
         case .deepening:   return 1.0 - abs(position - 0.35) * 1.5
-        case .suggestions: return 1.0 - abs(position - 0.70) * 1.5
+        case .suggestions: return 1.0 - abs(position - 0.65) * 1.5
+        // Spans 66.7% to 99.1% across the labelled files, always ending where the
+        // emergence starts. Broad on purpose: the ordering constraint does most
+        // of the work by keeping it between suggestions and emergence.
+        case .conditioning: return 1.2 - abs(position - 0.86) * 3.0
         case .emergence:   return 3.0 * max(0, (position - emergenceBegins) / (1 - emergenceBegins))
         default:           return 0
         }
@@ -146,6 +161,9 @@ nonisolated enum SegmentPhaseNamer {
         case .emergence:   return relative * 2.5
         case .induction:   return -relative * 1.0
         case .suggestions: return relative * 1.0
+        // Measured at 94.7 wpm against suggestions' 97.1 — too close to separate
+        // on pace, so this contributes nothing and says so rather than guessing.
+        case .conditioning: return 0
         default:           return 0
         }
     }

@@ -16,16 +16,21 @@
 //                        BF    DFTC   Mind Melt   Tick Tock   mean
 //      detector           4%     4%       4%          4%       4.0%   perfect labels
 //      AS SHIPPED        28%    18%       8%         32%      21.5%
-//      END-TO-END        10%    11%      16%         18%      13.8%   no truth at all
+//      END-TO-END         8%    11%      17%         19%      13.8%   no truth at all
+//
+//  Measured again after the seven-phase target and a namer that emits
+//  conditioning. AS SHIPPED improved on its own — 21.5% to 19.8% — because the
+//  incumbent also stops folding conditioning into suggestions. Adding
+//  conditioning to the namer was a wash on this sample: BF gained two points,
+//  Mind Melt and Tick Tock each lost one, mean unchanged at 13.8%.
 //
 //  (END-TO-END was 14/15/20/18, mean 16.8%, before the emergence priors were
 //  corrected against the corpus — see SegmentPhaseNamer.)
 //
-//  The replacement beats what ships on three files and loses on the fourth.
-//  Per-file differences are -18, -7, +8, -14: a mean of -7.8 points with a 95%
-//  interval of -19.0 to +3.5. STILL NOT ESTABLISHED — the interval crosses zero
-//  — but closer than the -4.8 it started at, and Mind Melt's regression narrowed
-//  from +12 to +8. Four files cannot settle this either way.
+//  Against the improved baseline the per-file differences are -20, -10, +10, -4:
+//  a mean of -6.0 points, 95% interval -18.3 to +6.3. STILL NOT ESTABLISHED, and
+//  four files cannot settle it. Mind Melt remains the only regression and is now
+//  the only file where the incumbent is better.
 //
 //  Two things it does establish. Boundaries are nearly free once labels are
 //  right — feeding the detector prosody took it to a flat 4% while *raising* its
