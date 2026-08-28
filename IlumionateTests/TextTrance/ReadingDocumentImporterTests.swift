@@ -253,6 +253,20 @@ struct ReadingDocumentImporterTests {
         #expect(extracted.text.contains("**stars**"))
     }
 
+    @Test func refusesOversizedPlainText() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appending(path: "Huge.txt")
+        let sentence = "the quiet settles over everything around you now and again "
+        let repeats = (ReadingDocumentImporter.maximumPlainTextByteCount / sentence.utf8.count) + 2
+        try Data(String(repeating: sentence, count: repeats).utf8).write(to: url)
+
+        #expect(throws: ReadingDocumentImportError.textFileTooLarge) {
+            try ReadingDocumentImporter.extract(from: url)
+        }
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "reading-document-importer-\(UUID().uuidString)", directoryHint: .isDirectory)

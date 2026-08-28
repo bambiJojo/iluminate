@@ -18,6 +18,7 @@ enum ReadingDocumentImportError: LocalizedError, Equatable {
     case unreadablePDF
     case unreadableEPUB
     case noReadableText
+    case textFileTooLarge
     case unsupportedZipEntry(String)
     case corruptZipArchive
 
@@ -31,6 +32,8 @@ enum ReadingDocumentImportError: LocalizedError, Equatable {
             return "This ePub could not be opened."
         case .noReadableText:
             return "No readable text was found in this document."
+        case .textFileTooLarge:
+            return "This text file is too large to import."
         case .unsupportedZipEntry(let filename):
             return "\(filename) uses an unsupported ePub compression method."
         case .corruptZipArchive:
@@ -45,6 +48,11 @@ enum ReadingDocumentImporter {
     nonisolated static let supportedFileExtensions: Set<String> = [
         "txt", "md", "markdown", "pdf", "epub"
     ]
+
+    /// Roughly 1.3 million words — far past any plausible reader session, and
+    /// the point at which the full-string regex passes in extraction become a
+    /// memory concern rather than a cost.
+    nonisolated static let maximumPlainTextByteCount = 8 * 1024 * 1024
 
     nonisolated static var supportedContentTypes: [UTType] {
         var types: [UTType] = [.pdf, .plainText]
@@ -75,6 +83,11 @@ enum ReadingDocumentImporter {
     }
 
     private nonisolated static func extractPlainText(from url: URL) throws -> ExtractedReadingDocument {
+        let fileSize = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        if let fileSize, fileSize > maximumPlainTextByteCount {
+            throw ReadingDocumentImportError.textFileTooLarge
+        }
+
         let data = try Data(contentsOf: url)
         guard let raw = decodeText(data) else {
             throw ReadingDocumentImportError.noReadableText
