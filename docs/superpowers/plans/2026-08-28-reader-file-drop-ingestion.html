@@ -539,8 +539,12 @@ git mv IlumionateTests/CableAudioImportModelTests.swift IlumionateTests/CableFil
 <pre><code>Scripts/run-tests.sh -destination &#x27;platform=macOS,arch=arm64&#x27; -only-testing:IlumionateTests/CableFileImportTests -only-testing:IlumionateTests/CableFileRootInboxTests -only-testing:IlumionateTests/CableFileImportModelTests</code></pre>
 <p>Expected: PASS, with the same test count as Step 1.</p>
 <ul><li>[ ] <strong>Step 6: Commit</strong></li></ul>
-<pre><code>git add -A
+<p>Stage explicit paths — never <code>git add -A</code>. This branch routinely carries unrelated in-flight work, and a blanket stage sweeps it into this commit.</p>
+<pre><code>git add Ilumionate/CableFileImportService.swift Ilumionate/CableFileImportResult.swift Ilumionate/CableFileImportModel.swift \
+        IlumionateTests/CableFileImportTests.swift IlumionateTests/CableFileRootInboxTests.swift IlumionateTests/CableFileImportModelTests.swift \
+        Ilumionate/ContentView.swift Ilumionate.xcodeproj/project.pbxproj
 git commit -m &quot;refactor: rename cable audio intake to cable file intake&quot;</code></pre>
+<p><code>git mv</code> already staged the deletions of the six old paths, so they are included without a blanket stage.</p>
 <h2 id="task-6-storage-paths-for-the-text-inbox-and-the-imported-archive">Task 6: Storage paths for the text inbox and the imported archive</h2>
 <p><strong>Files:</strong></p>
 <ul><li>Modify: <code>Ilumionate/AppStoragePaths.swift</code></li><li>Modify: <code>Ilumionate/CableFileImportService.swift</code> (<code>excludedRootDirectoryNames</code>)</li><li>Test: <code>IlumionateTests/CableFileRootInboxTests.swift</code></li></ul>

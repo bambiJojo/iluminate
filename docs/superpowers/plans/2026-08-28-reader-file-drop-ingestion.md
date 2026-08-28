@@ -720,10 +720,18 @@ Expected: PASS, with the same test count as Step 1.
 
 - [ ] **Step 6: Commit**
 
+Stage explicit paths — never `git add -A`. This branch routinely carries
+unrelated in-flight work, and a blanket stage sweeps it into this commit.
+
 ```bash
-git add -A
+git add Ilumionate/CableFileImportService.swift Ilumionate/CableFileImportResult.swift Ilumionate/CableFileImportModel.swift \
+        IlumionateTests/CableFileImportTests.swift IlumionateTests/CableFileRootInboxTests.swift IlumionateTests/CableFileImportModelTests.swift \
+        Ilumionate/ContentView.swift Ilumionate.xcodeproj/project.pbxproj
 git commit -m "refactor: rename cable audio intake to cable file intake"
 ```
+
+`git mv` already staged the deletions of the six old paths, so they are included
+without a blanket stage.
 
 ---
 
