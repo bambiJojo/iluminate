@@ -3,6 +3,7 @@
 //  IlumionateTests
 //
 
+import Foundation
 import Testing
 @testable import Ilumionate
 
@@ -50,7 +51,7 @@ struct CableFileImportModelTests {
         await model.scan(manual: true)
 
         #expect(model.presentedResult != nil)
-        #expect(model.presentedResult?.title == "No New Audio Found")
+        #expect(model.presentedResult?.title == "No New Files Found")
     }
 
     @Test("Choosing analysis consumes exactly the imported batch")
@@ -70,6 +71,41 @@ struct CableFileImportModelTests {
         #expect(selected.map(\.id) == imported.map(\.id))
         #expect(model.presentedResult == nil)
         #expect(model.consumeImportedForAnalysis().isEmpty)
+    }
+
+    @Test("Documents count toward the session without refreshing audio")
+    func documentsCountTowardSessionWithoutAudioRefresh() async {
+        let document = ReadingDocument(
+            id: UUID().uuidString,
+            title: "Script",
+            kind: .text,
+            originalFilename: "Script.txt",
+            importedAt: .now,
+            wordCount: 12,
+            characterCount: 60,
+            contentHash: "hash-script",
+            textFilename: "Script.txt"
+        )
+        let counter = ScanCounter()
+        var refreshCount = 0
+        let model = CableFileImportModel(
+            scan: {
+                var result = CableFileImportResult()
+                if counter.increment() == 1 {
+                    result.importedDocuments = [document]
+                }
+                return result
+            },
+            refreshLibrary: {
+                refreshCount += 1
+            }
+        )
+
+        await model.scan(manual: true)
+        await model.scan(manual: true)
+
+        #expect(model.presentedResult?.priorImportCount == 1)
+        #expect(refreshCount == 0)
     }
 }
 
@@ -208,7 +244,7 @@ struct CableAudioEmptyResultCopyTests {
     func emptyResultWithoutPriorImportsExplainsTransfer() {
         let result = CableFileImportResult()
 
-        #expect(result.message.contains("drag audio onto LumeSync"))
+        #expect(result.message.contains("drag audio or documents onto LumeSync"))
     }
 
     @Test("A scan carries forward what earlier passes imported")
@@ -241,14 +277,14 @@ struct CableAudioEmptyResultCopyTests {
 @MainActor
 struct CableFileImportTitleTests {
 
-    /// "No New Audio Found" over a body explaining that five files just landed
+    /// "No New Files Found" over a body explaining that five files just landed
     /// reads as failure — the title is what a user acts on.
     @Test("An empty scan after imports is titled as success, not absence")
     func emptyResultAfterImportsIsTitledAsSuccess() {
         var result = CableFileImportResult()
         result.priorImportCount = 5
 
-        #expect(result.title == "5 Audio Files Added")
+        #expect(result.title == "5 Files Added")
     }
 
     @Test("A single earlier import reads in the singular")
@@ -256,12 +292,12 @@ struct CableFileImportTitleTests {
         var result = CableFileImportResult()
         result.priorImportCount = 1
 
-        #expect(result.title == "1 Audio File Added")
+        #expect(result.title == "1 File Added")
     }
 
     @Test("A genuinely empty inbox still says nothing was found")
     func trulyEmptyResultKeepsTheAbsenceTitle() {
-        #expect(CableFileImportResult().title == "No New Audio Found")
+        #expect(CableFileImportResult().title == "No New Files Found")
     }
 
     @Test("Files admitted by this very scan are counted in the title")
@@ -273,5 +309,41 @@ struct CableFileImportTitleTests {
         ]
 
         #expect(result.title == "2 Audio Files Added")
+    }
+
+    @Test("A mixed transfer names both kinds")
+    func mixedTransferNamesBothKinds() {
+        var result = CableFileImportResult()
+        result.imported = [
+            AudioFile(filename: "One.mp3", duration: 1, fileSize: 1),
+            AudioFile(filename: "Two.mp3", duration: 1, fileSize: 1)
+        ]
+        result.importedDocuments = [makeDocument("Script")]
+
+        #expect(result.title == "2 Audio Files, 1 Document Added")
+        #expect(result.message.contains("1 document is ready in your Reader."))
+    }
+
+    @Test("A documents-only transfer never mentions audio")
+    func documentOnlyTransferNeverMentionsAudio() {
+        var result = CableFileImportResult()
+        result.importedDocuments = [makeDocument("One"), makeDocument("Two")]
+
+        #expect(result.title == "2 Documents Added")
+        #expect(result.message.contains("Audio") == false)
+    }
+
+    private func makeDocument(_ name: String) -> ReadingDocument {
+        ReadingDocument(
+            id: UUID().uuidString,
+            title: name,
+            kind: .text,
+            originalFilename: "\(name).txt",
+            importedAt: .now,
+            wordCount: 12,
+            characterCount: 60,
+            contentHash: "hash-\(name)",
+            textFilename: "\(name).txt"
+        )
     }
 }

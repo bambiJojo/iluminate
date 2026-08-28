@@ -12,6 +12,7 @@ nonisolated struct CableFileImportFailure: Sendable, Equatable {
 
 nonisolated struct CableFileImportResult: Sendable {
     var imported: [AudioFile] = []
+    var importedDocuments: [ReadingDocument] = []
     var duplicates: [String] = []
     var rejected: [String] = []
     var pending: [String] = []
@@ -27,6 +28,7 @@ nonisolated struct CableFileImportResult: Sendable {
     /// copying, so a file that has since landed must stop being listed.
     mutating func merge(_ other: CableFileImportResult) {
         imported.append(contentsOf: other.imported)
+        importedDocuments.append(contentsOf: other.importedDocuments)
         duplicates.append(contentsOf: other.duplicates)
         rejected.append(contentsOf: other.rejected)
         failures.append(contentsOf: other.failures)
@@ -35,6 +37,7 @@ nonisolated struct CableFileImportResult: Sendable {
 
     var hasActivity: Bool {
         imported.isEmpty == false
+            || importedDocuments.isEmpty == false
             || duplicates.isEmpty == false
             || rejected.isEmpty == false
             || pending.isEmpty == false
@@ -45,25 +48,49 @@ nonisolated struct CableFileImportResult: Sendable {
     /// an earlier one in the same session. The watcher usually gets there
     /// first, so a user who taps Check afterwards is asking about the same
     /// batch and should be told it succeeded.
-    private var addedCount: Int { imported.count + priorImportCount }
+    private var addedCount: Int {
+        imported.count + importedDocuments.count + priorImportCount
+    }
 
     var title: String {
-        // The title is what a user acts on. "No New Audio Found" above a body
+        // The title is what a user acts on. "No New Files Found" above a body
         // explaining that five files just landed reads as failure.
         if addedCount > 0, failures.isEmpty {
-            let subject = noun(addedCount, singular: "Audio File", plural: "Audio Files")
-            return "\(addedCount) \(subject) Added"
+            var parts: [String] = []
+            if imported.isEmpty == false {
+                let subject = noun(
+                    imported.count,
+                    singular: "Audio File",
+                    plural: "Audio Files"
+                )
+                parts.append("\(imported.count) \(subject)")
+            }
+            if importedDocuments.isEmpty == false {
+                let subject = noun(
+                    importedDocuments.count,
+                    singular: "Document",
+                    plural: "Documents"
+                )
+                parts.append("\(importedDocuments.count) \(subject)")
+            }
+            // Only an earlier scan contributed, and it cannot be asked which
+            // kind it admitted — so the wording generalises rather than guesses.
+            if parts.isEmpty {
+                let subject = noun(priorImportCount, singular: "File", plural: "Files")
+                parts.append("\(priorImportCount) \(subject)")
+            }
+            return "\(parts.joined(separator: ", ")) Added"
         }
         if failures.isEmpty == false {
-            return "Audio Transfer Failed"
+            return "File Transfer Failed"
         }
         if duplicates.isEmpty == false || rejected.isEmpty == false {
-            return "Audio Transfer Needs Review"
+            return "File Transfer Needs Review"
         }
         if pending.isEmpty == false {
-            return "Audio Transfer in Progress"
+            return "File Transfer in Progress"
         }
-        return "No New Audio Found"
+        return "No New Files Found"
     }
 
     var message: String {
@@ -72,6 +99,14 @@ nonisolated struct CableFileImportResult: Sendable {
         if imported.isEmpty == false {
             let subject = noun(imported.count, singular: "file is", plural: "files are")
             lines.append("\(imported.count) \(subject) ready in your Library.")
+        }
+        if importedDocuments.isEmpty == false {
+            let subject = noun(
+                importedDocuments.count,
+                singular: "document is",
+                plural: "documents are"
+            )
+            lines.append("\(importedDocuments.count) \(subject) ready in your Reader.")
         }
         if duplicates.isEmpty == false {
             let subject = noun(
@@ -105,7 +140,7 @@ nonisolated struct CableFileImportResult: Sendable {
                     "Nothing new to import. \(priorImportCount) transferred \(subject) already in your Library."
                 )
             } else {
-                lines.append("Connect your iPhone, open Finder, select it, and drag audio onto LumeSync in the Files tab. Then check again.")
+                lines.append("Connect your iPhone, open Finder, select it, and drag audio or documents onto LumeSync in the Files tab. Then check again.")
             }
         }
 

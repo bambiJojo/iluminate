@@ -88,8 +88,10 @@ final class CableFileImportModel {
             guard !Task.isCancelled else { break }
         }
 
-        importsThisSession += aggregate.imported.count
-        aggregate.priorImportCount = importsThisSession - aggregate.imported.count
+        importsThisSession += aggregate.imported.count + aggregate.importedDocuments.count
+        aggregate.priorImportCount = importsThisSession
+            - aggregate.imported.count
+            - aggregate.importedDocuments.count
 
         if aggregate.imported.isEmpty == false {
             await refreshLibrary()
