@@ -181,10 +181,18 @@ way; the service reports it as a duplicate and files the original under
 
 ## Testing
 
-The existing 819 lines across `CableAudioImportTests`,
-`CableAudioRootInboxTests`, and `CableAudioImportModelTests` are the regression
-net. They get a mechanical rename; **no behavioral assertion changes.** If audio
-intake still passes, routing inside the existing service cost nothing.
+The 542 lines of *service* tests across `CableAudioImportTests` and
+`CableAudioRootInboxTests` are the regression net. They get a mechanical rename;
+**no behavioral assertion changes.** If audio intake still passes, routing inside
+the existing service cost nothing.
+
+`CableAudioImportModelTests` is the exception. Four assertions in
+`CableAudioImportTitleTests` pin exact alert copy — `"5 Audio Files Added"`,
+`"1 Audio File Added"`, `"No New Audio Found"` — and that copy deliberately
+generalizes, because the alert now reports both kinds. The prior-import path
+cannot know which kind an earlier scan admitted, so it reads "N Files Added";
+`"No New Audio Found"` becomes `"No New Files Found"`. A scan that admitted only
+audio still reads `"2 Audio Files Added"`, so the common case is unchanged.
 
 New service tests:
 - Mixed batch (audio + `.txt` + `.pdf` + junk) admitted in one pass.
