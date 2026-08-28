@@ -1,5 +1,5 @@
 //
-//  CableAudioImportTests.swift
+//  CableFileImportTests.swift
 //  IlumionateTests
 //
 
@@ -7,7 +7,7 @@ import Foundation
 import Testing
 @testable import Ilumionate
 
-struct CableAudioImportTests {
+struct CableFileImportTests {
     @Test("A stable audio drop is admitted to private storage and the library")
     func importsStableAudioDrop() async throws {
         let fixture = try CableImportFixture()
@@ -122,7 +122,7 @@ struct CableAudioImportTests {
             fileURL: blocker.appending(path: "library.json"),
             legacyDefaults: nil
         )
-        let service = CableAudioImportService(
+        let service = CableFileImportService(
             rootInboxURL: fixture.rootIntakeURL,
             dedicatedInboxURL: fixture.inboxURL,
             reviewURL: fixture.inboxURL.appending(
@@ -187,7 +187,7 @@ private struct CableImportFixture {
 
     init() throws {
         rootURL = URL.temporaryDirectory.appending(
-            path: "CableAudioImportTests-\(UUID().uuidString)",
+            path: "CableFileImportTests-\(UUID().uuidString)",
             directoryHint: .isDirectory
         )
         rootIntakeURL = rootURL.appending(path: "Root Intake", directoryHint: .isDirectory)
@@ -218,8 +218,8 @@ private struct CableImportFixture {
 
     func makeService(
         wait: @escaping CableImportWait = { _ in }
-    ) -> CableAudioImportService {
-        CableAudioImportService(
+    ) -> CableFileImportService {
+        CableFileImportService(
             rootInboxURL: rootIntakeURL,
             dedicatedInboxURL: inboxURL,
             reviewURL: inboxURL.appending(path: "_Needs Review", directoryHint: .isDirectory),

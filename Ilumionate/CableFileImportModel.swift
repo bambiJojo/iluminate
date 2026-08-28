@@ -1,23 +1,23 @@
 //
-//  CableAudioImportModel.swift
+//  CableFileImportModel.swift
 //  Ilumionate
 //
 
 import Observation
 
-typealias CableAudioScan = @MainActor @Sendable () async -> CableAudioImportResult
+typealias CableFileScan = @MainActor @Sendable () async -> CableFileImportResult
 typealias CableLibraryRefresh = @MainActor @Sendable () async -> Void
 
 /// Main-actor presentation state for the Finder cable inbox. File-system work
-/// remains serialized inside `CableAudioImportService`; this model only decides
+/// remains serialized inside `CableFileImportService`; this model only decides
 /// when a result deserves UI and refreshes the app's existing library snapshot.
 @MainActor
 @Observable
-final class CableAudioImportModel {
+final class CableFileImportModel {
     private(set) var isScanning = false
-    var presentedResult: CableAudioImportResult?
+    var presentedResult: CableFileImportResult?
 
-    private let scanOperation: CableAudioScan
+    private let scanOperation: CableFileScan
     private let refreshLibrary: CableLibraryRefresh
     private let pendingRecheckDelay: Duration
 
@@ -27,13 +27,13 @@ final class CableAudioImportModel {
     /// number of times.
     private static let maximumPendingRechecks = 3
 
-    private var inFlight: Task<CableAudioImportResult, Never>?
+    private var inFlight: Task<CableFileImportResult, Never>?
     /// Remembered across scans so a later empty result can distinguish "nothing
     /// new" from "nothing ever arrived".
     private var importsThisSession = 0
 
     init(
-        service: CableAudioImportService = CableAudioImportService(),
+        service: CableFileImportService = CableFileImportService(),
         refreshLibrary: @escaping CableLibraryRefresh = {
             await AudioLibraryCache.shared.refresh()
         },
@@ -45,7 +45,7 @@ final class CableAudioImportModel {
     }
 
     init(
-        scan: @escaping CableAudioScan,
+        scan: @escaping CableFileScan,
         refreshLibrary: @escaping CableLibraryRefresh,
         pendingRecheckDelay: Duration = .seconds(3)
     ) {
@@ -73,7 +73,7 @@ final class CableAudioImportModel {
             inFlight = nil
         }
 
-        var aggregate = CableAudioImportResult()
+        var aggregate = CableFileImportResult()
         var passes = 0
 
         while true {

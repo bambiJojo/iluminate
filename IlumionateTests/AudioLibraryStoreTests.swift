@@ -19,7 +19,7 @@ struct AudioLibraryStoreTests {
     // deterministically by `AudioLibraryStorageTests.oversizedLibraryRoundTrips`.
     // See ERRORS.md ERR-001.
 
-    /// Retired deliberately. This path and `CableAudioImportService` both
+    /// Retired deliberately. This path and `CableFileImportService` both
     /// scanned the Documents root, so whichever ran first won — and this one had
     /// no stability check, so it could register a file Finder was still
     /// copying. Root intake now belongs to the cable service, which runs the

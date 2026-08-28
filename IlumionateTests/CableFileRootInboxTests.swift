@@ -1,5 +1,5 @@
 //
-//  CableAudioRootInboxTests.swift
+//  CableFileRootInboxTests.swift
 //  IlumionateTests
 //
 //  Finder's device Files tab drops onto the app row, which lands in the
@@ -13,7 +13,7 @@ import Foundation
 import Testing
 @testable import Ilumionate
 
-struct CableAudioRootInboxTests {
+struct CableFileRootInboxTests {
 
     @Test("A drop at the Documents root is admitted")
     func importsDropAtDocumentsRoot() async throws {
@@ -294,8 +294,8 @@ private struct RootInboxFixture {
         try? FileManager.default.removeItem(at: containerURL)
     }
 
-    func makeService(minimumSettleAge: Duration = .zero) -> CableAudioImportService {
-        CableAudioImportService(
+    func makeService(minimumSettleAge: Duration = .zero) -> CableFileImportService {
+        CableFileImportService(
             rootInboxURL: rootInboxURL,
             dedicatedInboxURL: dedicatedInboxURL,
             reviewURL: reviewURL,

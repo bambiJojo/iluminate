@@ -1,21 +1,21 @@
 //
-//  CableAudioImportResult.swift
+//  CableFileImportResult.swift
 //  Ilumionate
 //
 
 import Foundation
 
-nonisolated struct CableAudioImportFailure: Sendable, Equatable {
+nonisolated struct CableFileImportFailure: Sendable, Equatable {
     let filename: String
     let message: String
 }
 
-nonisolated struct CableAudioImportResult: Sendable {
+nonisolated struct CableFileImportResult: Sendable {
     var imported: [AudioFile] = []
     var duplicates: [String] = []
     var rejected: [String] = []
     var pending: [String] = []
-    var failures: [CableAudioImportFailure] = []
+    var failures: [CableFileImportFailure] = []
     /// Files admitted by an earlier scan in this session. The watcher imports
     /// automatically, so a later manual check often finds nothing *new* — and
     /// saying "connect Finder" then reads as failure when the transfer in fact
@@ -25,7 +25,7 @@ nonisolated struct CableAudioImportResult: Sendable {
     /// Folds a recheck pass into the running total. Outcomes accumulate, but
     /// `pending` is replaced rather than appended: it describes what is *still*
     /// copying, so a file that has since landed must stop being listed.
-    mutating func merge(_ other: CableAudioImportResult) {
+    mutating func merge(_ other: CableFileImportResult) {
         imported.append(contentsOf: other.imported)
         duplicates.append(contentsOf: other.duplicates)
         rejected.append(contentsOf: other.rejected)

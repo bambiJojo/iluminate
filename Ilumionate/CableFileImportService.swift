@@ -1,5 +1,5 @@
 //
-//  CableAudioImportService.swift
+//  CableFileImportService.swift
 //  Ilumionate
 //
 
@@ -10,7 +10,7 @@ typealias CableImportWait = @Sendable (Duration) async throws -> Void
 /// Admits files copied into the Finder-visible inbox. The actor serializes
 /// scans so launch, foreground, and a manual refresh cannot import one drop
 /// more than once.
-actor CableAudioImportService {
+actor CableFileImportService {
     /// Where a file was found. The root is shared with other subsystems, so an
     /// unrecognised file there belongs to somebody else; in the dedicated inbox
     /// the same file is a failed import worth surfacing.
@@ -59,8 +59,8 @@ actor CableAudioImportService {
         self.wait = wait
     }
 
-    func importAvailableFiles() async -> CableAudioImportResult {
-        var result = CableAudioImportResult()
+    func importAvailableFiles() async -> CableFileImportResult {
+        var result = CableFileImportResult()
 
         do {
             try prepareDirectories()
@@ -155,7 +155,7 @@ actor CableAudioImportService {
                             storage: libraryStorage
                         ) else {
                             rollback(audioFile, to: snapshot.url)
-                            result.failures.append(CableAudioImportFailure(
+                            result.failures.append(CableFileImportFailure(
                                 filename: snapshot.url.lastPathComponent,
                                 message: "The library could not be saved. The file was left where it was found."
                             ))
@@ -165,7 +165,7 @@ actor CableAudioImportService {
                         result.imported.append(audioFile)
                     }
                 } catch {
-                    result.failures.append(CableAudioImportFailure(
+                    result.failures.append(CableFileImportFailure(
                         filename: snapshot.url.lastPathComponent,
                         message: error.localizedDescription
                     ))
@@ -174,7 +174,7 @@ actor CableAudioImportService {
         } catch is CancellationError {
             return result
         } catch {
-            result.failures.append(CableAudioImportFailure(
+            result.failures.append(CableFileImportFailure(
                 filename: rootInboxURL.lastPathComponent,
                 message: error.localizedDescription
             ))
@@ -311,13 +311,13 @@ actor CableAudioImportService {
     private func recordRejection(
         _ sourceURL: URL,
         category: String,
-        result: inout CableAudioImportResult
+        result: inout CableFileImportResult
     ) {
         do {
             try preserveForReview(sourceURL, category: category)
             result.rejected.append(sourceURL.lastPathComponent)
         } catch {
-            result.failures.append(CableAudioImportFailure(
+            result.failures.append(CableFileImportFailure(
                 filename: sourceURL.lastPathComponent,
                 message: "Could not move the rejected file into Needs Review: \(error.localizedDescription)"
             ))
@@ -356,7 +356,7 @@ actor CableAudioImportService {
 
 private nonisolated struct CableFileSnapshot: Sendable, Equatable {
     let url: URL
-    let source: CableAudioImportService.Source
+    let source: CableFileImportService.Source
     let byteCount: Int64
     let modificationDate: Date?
 }

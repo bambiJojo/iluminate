@@ -1,5 +1,5 @@
 //
-//  CableAudioImportModelTests.swift
+//  CableFileImportModelTests.swift
 //  IlumionateTests
 //
 
@@ -7,14 +7,14 @@ import Testing
 @testable import Ilumionate
 
 @MainActor
-struct CableAudioImportModelTests {
+struct CableFileImportModelTests {
     @Test("An automatic scan refreshes the library and presents a completed batch")
     func automaticScanPublishesImportedBatch() async {
         let imported = AnalysisFixtures.audioFile(filename: "Cable Session.mp3")
         var refreshCount = 0
-        let model = CableAudioImportModel(
+        let model = CableFileImportModel(
             scan: {
-                CableAudioImportResult(imported: [imported])
+                CableFileImportResult(imported: [imported])
             },
             refreshLibrary: {
                 refreshCount += 1
@@ -30,8 +30,8 @@ struct CableAudioImportModelTests {
 
     @Test("An automatic scan stays quiet when there is nothing to report")
     func automaticEmptyScanStaysQuiet() async {
-        let model = CableAudioImportModel(
-            scan: { CableAudioImportResult() },
+        let model = CableFileImportModel(
+            scan: { CableFileImportResult() },
             refreshLibrary: {}
         )
 
@@ -42,8 +42,8 @@ struct CableAudioImportModelTests {
 
     @Test("A manual empty scan reports that the inbox is clear")
     func manualEmptyScanReportsResult() async {
-        let model = CableAudioImportModel(
-            scan: { CableAudioImportResult() },
+        let model = CableFileImportModel(
+            scan: { CableFileImportResult() },
             refreshLibrary: {}
         )
 
@@ -59,8 +59,8 @@ struct CableAudioImportModelTests {
             AnalysisFixtures.audioFile(filename: "One.mp3"),
             AnalysisFixtures.audioFile(filename: "Two.mp3")
         ]
-        let model = CableAudioImportModel(
-            scan: { CableAudioImportResult(imported: imported) },
+        let model = CableFileImportModel(
+            scan: { CableFileImportResult(imported: imported) },
             refreshLibrary: {}
         )
         await model.scan()
@@ -103,7 +103,7 @@ private actor ScanGate {
 }
 
 @MainActor
-struct CableAudioScanSchedulingTests {
+struct CableFileScanSchedulingTests {
 
     /// The button promises a result. Dropping the tap because an automatic
     /// foreground scan happens to be running is what made a 20-file transfer
@@ -115,14 +115,14 @@ struct CableAudioScanSchedulingTests {
         // first scan has begun, so a bare yield made this a coin flip.
         let started = ScanGate()
         let release = ScanGate()
-        let model = CableAudioImportModel(
+        let model = CableFileImportModel(
             scan: {
                 let call = counter.increment()
                 if call == 1 {
                     await started.open()
                     await release.wait()
                 }
-                return CableAudioImportResult()
+                return CableFileImportResult()
             },
             refreshLibrary: {}
         )
@@ -142,9 +142,9 @@ struct CableAudioScanSchedulingTests {
     @Test("Files still copying are rechecked without another tap")
     func rechecksPendingFiles() async {
         let counter = ScanCounter()
-        let model = CableAudioImportModel(
+        let model = CableFileImportModel(
             scan: {
-                var result = CableAudioImportResult()
+                var result = CableFileImportResult()
                 if counter.increment() == 1 {
                     result.pending = ["Big Session.mp3"]
                 } else {
@@ -171,10 +171,10 @@ struct CableAudioScanSchedulingTests {
     @Test("Recheck gives up rather than looping forever")
     func pendingRecheckIsBounded() async {
         let counter = ScanCounter()
-        let model = CableAudioImportModel(
+        let model = CableFileImportModel(
             scan: {
                 _ = counter.increment()
-                var result = CableAudioImportResult()
+                var result = CableFileImportResult()
                 result.pending = ["Never Settles.mp3"]
                 return result
             },
@@ -197,7 +197,7 @@ struct CableAudioEmptyResultCopyTests {
     /// as failure when the transfer in fact succeeded moments earlier.
     @Test("An empty scan after a successful one says nothing new, not nothing happened")
     func emptyResultAcknowledgesEarlierImports() {
-        var result = CableAudioImportResult()
+        var result = CableFileImportResult()
         result.priorImportCount = 5
 
         #expect(result.message.contains("already in your Library"))
@@ -206,7 +206,7 @@ struct CableAudioEmptyResultCopyTests {
 
     @Test("An empty scan with no prior imports still explains how to transfer")
     func emptyResultWithoutPriorImportsExplainsTransfer() {
-        let result = CableAudioImportResult()
+        let result = CableFileImportResult()
 
         #expect(result.message.contains("drag audio onto LumeSync"))
     }
@@ -214,9 +214,9 @@ struct CableAudioEmptyResultCopyTests {
     @Test("A scan carries forward what earlier passes imported")
     func modelReportsPriorImportsOnALaterEmptyScan() async {
         let counter = ScanCounter()
-        let model = CableAudioImportModel(
+        let model = CableFileImportModel(
             scan: {
-                var result = CableAudioImportResult()
+                var result = CableFileImportResult()
                 if counter.increment() == 1 {
                     result.imported = [AudioFile(
                         filename: "One.mp3",
@@ -239,13 +239,13 @@ struct CableAudioEmptyResultCopyTests {
 }
 
 @MainActor
-struct CableAudioImportTitleTests {
+struct CableFileImportTitleTests {
 
     /// "No New Audio Found" over a body explaining that five files just landed
     /// reads as failure — the title is what a user acts on.
     @Test("An empty scan after imports is titled as success, not absence")
     func emptyResultAfterImportsIsTitledAsSuccess() {
-        var result = CableAudioImportResult()
+        var result = CableFileImportResult()
         result.priorImportCount = 5
 
         #expect(result.title == "5 Audio Files Added")
@@ -253,7 +253,7 @@ struct CableAudioImportTitleTests {
 
     @Test("A single earlier import reads in the singular")
     func singleEarlierImportIsSingular() {
-        var result = CableAudioImportResult()
+        var result = CableFileImportResult()
         result.priorImportCount = 1
 
         #expect(result.title == "1 Audio File Added")
@@ -261,12 +261,12 @@ struct CableAudioImportTitleTests {
 
     @Test("A genuinely empty inbox still says nothing was found")
     func trulyEmptyResultKeepsTheAbsenceTitle() {
-        #expect(CableAudioImportResult().title == "No New Audio Found")
+        #expect(CableFileImportResult().title == "No New Audio Found")
     }
 
     @Test("Files admitted by this very scan are counted in the title")
     func freshImportsAreCountedInTheTitle() {
-        var result = CableAudioImportResult()
+        var result = CableFileImportResult()
         result.imported = [
             AudioFile(filename: "One.mp3", duration: 1, fileSize: 1),
             AudioFile(filename: "Two.mp3", duration: 1, fileSize: 1)

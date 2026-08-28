@@ -404,7 +404,7 @@ nonisolated enum AudioLibraryStore {
         // Discovery of unregistered Documents-root audio was retired when the
         // cable inbox landed. Both scanned the same directory, so whichever ran
         // first won — and this one had no stability check, so it could register
-        // a file Finder was still copying. `CableAudioImportService` now owns
+        // a file Finder was still copying. `CableFileImportService` now owns
         // root intake and routes it through the full import pipeline.
         //
         // The fingerprint repair above is unrelated and still required.

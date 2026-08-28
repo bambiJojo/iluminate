@@ -38,7 +38,7 @@ struct ContentView: View {
     @State private var createRequestedKind: CreateSessionKind?
     @State private var nowPlaying = NowPlayingState.shared
     @State private var analysisManager = AnalysisStateManager.shared
-    @State private var cableImport = CableAudioImportModel()
+    @State private var cableImport = CableFileImportModel()
     /// Finder writes while the app is running. Without this, a transfer that
     /// finishes after the app foregrounds is invisible until something else
     /// happens to trigger a scan.
