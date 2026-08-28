@@ -267,6 +267,26 @@ struct ReadingDocumentImporterTests {
         }
     }
 
+    @MainActor
+    @Test func reportsWhenAnImportReplacesAnExistingDocument() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ReadingDocumentStore(
+            directoryURL: directory.appending(path: "Documents", directoryHint: .isDirectory)
+        )
+        let url = directory.appending(path: "Script.txt")
+        try Data("Let your shoulders drop and your breathing slow right down now.".utf8)
+            .write(to: url)
+
+        let first = try await store.importDocumentReportingReplacement(from: url)
+        #expect(first.replacedExisting == false)
+
+        let second = try await store.importDocumentReportingReplacement(from: url)
+        #expect(second.replacedExisting)
+        #expect(store.documents.count == 1)
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "reading-document-importer-\(UUID().uuidString)", directoryHint: .isDirectory)

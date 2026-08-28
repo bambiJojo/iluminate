@@ -20,6 +20,13 @@ enum ReadingDocumentStoreError: LocalizedError {
     }
 }
 
+struct ReadingDocumentImportOutcome: Sendable {
+    let document: ReadingDocument
+    /// True when this import superseded a document already in the library,
+    /// matched by content hash or original filename.
+    let replacedExisting: Bool
+}
+
 @MainActor
 @Observable
 final class ReadingDocumentStore {
@@ -42,6 +49,16 @@ final class ReadingDocumentStore {
     }
 
     func importDocument(from url: URL, originalFilename: String? = nil) async throws -> ReadingDocument {
+        try await importDocumentReportingReplacement(
+            from: url,
+            originalFilename: originalFilename
+        ).document
+    }
+
+    func importDocumentReportingReplacement(
+        from url: URL,
+        originalFilename: String? = nil
+    ) async throws -> ReadingDocumentImportOutcome {
         let isScoped = url.startAccessingSecurityScopedResource()
         defer {
             if isScoped { url.stopAccessingSecurityScopedResource() }
@@ -57,7 +74,10 @@ final class ReadingDocumentStore {
         documents.insert(prepared.document, at: 0)
         documents.sort { $0.importedAt > $1.importedAt }
         try persist()
-        return prepared.document
+        return ReadingDocumentImportOutcome(
+            document: prepared.document,
+            replacedExisting: prepared.replacedDocumentIDs.isEmpty == false
+        )
     }
 
     func script(for document: ReadingDocument) throws -> TranceScript {
