@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reader File-Drop Ingestion — Design</title>
+<style>
+:root {
+  --bg:#0e0b12; --panel:#161119; --line:#2b2333; --text:#ece6f2;
+  --muted:#9a8fa6; --accent:#e9b7ba; --accent2:#be96ff; --code:#120e17;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg:#faf7fb; --panel:#fff; --line:#e6dfe9; --text:#1d1721;
+    --muted:#6b6274; --accent:#a35c63; --accent2:#6b3fa0; --code:#f3eff5; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+.wrap { display:grid; grid-template-columns:250px minmax(0,1fr); gap:44px;
+  max-width:1180px; margin:0 auto; padding:56px 28px 120px; }
+nav { position:sticky; top:36px; align-self:start; font-size:13px; }
+nav .navtitle { text-transform:uppercase; letter-spacing:.12em; font-size:10px;
+  color:var(--muted); margin-bottom:12px; }
+nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 0;
+  border-left:2px solid transparent; padding-left:12px; }
+nav a:hover { color:var(--accent); border-left-color:var(--accent); }
+main { min-width:0; }
+h1 { font-size:2rem; line-height:1.2; margin:0 0 .6rem; letter-spacing:-.02em; }
+h2 { font-size:1.3rem; margin:2.6rem 0 .8rem; padding-bottom:.4rem;
+  border-bottom:1px solid var(--line); letter-spacing:-.01em; }
+h3 { font-size:1.05rem; margin:1.8rem 0 .5rem; color:var(--accent); }
+h4 { font-size:.95rem; margin:1.3rem 0 .4rem; color:var(--muted); }
+p { margin:.75rem 0; }
+a { color:var(--accent2); }
+code { background:var(--code); border:1px solid var(--line); border-radius:4px;
+  padding:.1em .35em; font-size:.86em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-radius:10px;
+  padding:16px 18px; overflow-x:auto; margin:1rem 0; }
+pre code { background:none; border:none; padding:0; font-size:.85em; line-height:1.55; }
+.tablewrap { overflow-x:auto; margin:1rem 0; }
+table { border-collapse:collapse; width:100%; font-size:.9rem; }
+th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+th { color:var(--muted); font-weight:600; font-size:.75rem;
+  text-transform:uppercase; letter-spacing:.07em; }
+tbody tr:hover { background:var(--panel); }
+blockquote { margin:1.1rem 0; padding:12px 18px; background:var(--panel);
+  border-left:3px solid var(--accent); border-radius:0 8px 8px 0; color:var(--muted); }
+ul,ol { margin:.75rem 0; padding-left:1.4rem; }
+li { margin:.35rem 0; }
+li::marker { color:var(--accent); }
+@media (max-width:900px) {
+  .wrap { grid-template-columns:1fr; gap:0; padding:32px 20px 80px; }
+  nav { position:static; margin-bottom:32px; }
+}
+</style></head><body>
+<div class="wrap">
+<nav><div class="navtitle">Contents</div><a href="#problem">Problem</a><a href="#goals">Goals</a><a href="#non-goals">Non-goals</a><a href="#decisions">Decisions</a><a href="#architecture">Architecture</a><a href="#data-flow">Data flow</a><a href="#error-handling">Error handling</a><a href="#ui">UI</a><a href="#testing">Testing</a><a href="#ios-18-compatibility">iOS 18 compatibility</a><a href="#known-issues-not-fixed-here">Known issues, not fixed here</a></nav>
+<main>
+<h1>Reader file-drop ingestion</h1>
+<p><strong>Date:</strong> 2026-08-28 <strong>Status:</strong> Design approved, awaiting implementation plan</p>
+<p>Extend the Finder/Files cable-drop intake so it admits reader documents (<code>.txt</code>, <code>.md</code>, <code>.pdf</code>, <code>.epub</code>) alongside audio, routing them into the TextTrance reader library.</p>
+<h2 id="problem">Problem</h2>
+<p><code>UIFileSharingEnabled</code> exposes the app&#x27;s Documents root. <code>CableAudioImportService</code> walks it, waits for files to settle, and admits audio into <code>AudioLibraryStore</code>. Anything else is either ignored (at the root) or filed under <code>_Needs Review/Unsupported Files</code> (in <code>Incoming Audio/</code>).</p>
+<p>The reader can already read PDFs and ePubs — <code>ReadingDocumentImporter</code> extracts both, and <code>TextTranceRootView</code> presents a <code>fileImporter</code> for them. But that path is reachable only through the in-app picker and the share extension. A user who drags a book onto LumeSync in Finder gets it rejected as &quot;unsupported&quot;, despite the app being able to read it.</p>
+<p>Plain text is worse: <code>.txt</code> and <code>.md</code> are not importable <strong>anywhere</strong> today. <code>ReadingDocumentKind</code> is <code>pdf | epub</code>, so no surface accepts them.</p>
+<h2 id="goals">Goals</h2>
+<ul><li>A dropped <code>.txt</code>, <code>.md</code>, <code>.pdf</code>, or <code>.epub</code> reaches the reader library.</li><li>Audio intake behavior is unchanged, and provably so.</li><li>One scan over one batch, so mixed drops cannot race.</li><li>Nothing the user hands the app is destroyed.</li></ul>
+<h2 id="non-goals">Non-goals</h2>
+<ul><li><code>.rtf</code>, <code>.docx</code>, or any format needing a new extractor.</li><li>Cloud import sources (explicitly out of scope in <code>plan.md</code>).</li><li>Capping the existing unbounded ePub read (see Known issues).</li><li>Changing the in-app picker or share-extension paths beyond what the new <code>ReadingDocumentKind.text</code> case requires.</li></ul>
+<h2 id="decisions">Decisions</h2>
+<div class='tablewrap'><table><thead><tr><th>Question</th><th>Decision</th></tr></thead><tbody><tr><td>Which types</td><td><code>.txt</code>, <code>.md</code> via a new plain-text extractor; <code>.pdf</code>, <code>.epub</code> via the existing <code>ReadingDocumentImporter</code></td></tr><tr><td>Where dropped</td><td>Documents root routes by type; new <code>Incoming Text/</code> beside <code>Incoming Audio/</code>; <strong>both dedicated inboxes accept either kind</strong></td></tr><tr><td>Result reporting</td><td>One scan, one combined alert with counts for both kinds</td></tr><tr><td>Source file fate</td><td>Moves to a visible <code>_Imported/</code> folder in Documents</td></tr></tbody></table></div>
+<h3 id="why-one-service-rather-than-two">Why one service rather than two</h3>
+<p>The settle heuristic holds the <em>entire</em> batch until nothing in the directory has changed for 5 seconds. This exists because Finder copies a batch one file at a time, and moving an early file mid-batch makes the whole drag fail with &quot;required file cannot be found.&quot;</p>
+<p>A separate text service would walk the same directories and apply that directory-wide heuristic to a batch it can only half see. Routing inside one service means a <code>.txt</code> that landed instantly waits alongside the 60 MB M4A still copying — which is the correct behavior and comes for free.</p>
+<h2 id="architecture">Architecture</h2>
+<h3 id="new-files">New files</h3>
+<div class='tablewrap'><table><thead><tr><th>File</th><th>Purpose</th></tr></thead><tbody><tr><td><code>Ilumionate/CableInboxFileKind.swift</code></td><td>Classifies a settled file into <code>.audio</code>, <code>.readerDocument</code>, <code>.unrecognized</code> — by extension, then by content prefix. The single place deciding what a dropped file is.</td></tr><tr><td><code>Ilumionate/ReaderInboxAdmission.swift</code></td><td>Admits one classified reader document; reports <code>.imported(ReadingDocument)</code> or <code>.replacedExisting</code>. Mirrors the audio branch&#x27;s shape.</td></tr></tbody></table></div>
+<h3 id="modified-files">Modified files</h3>
+<p><strong><code>CableAudioImportService.swift</code> → <code>CableFileImportService.swift</code></strong></p>
+<p>The walk, two-snapshot settle, batch-age check, <code>_Needs Review</code> filing, unique naming, and rollback are kind-agnostic and stay as they are. The only change is the admission gate: the</p>
+<pre><code>guard AudioDownloadValidation.audioExtensions.contains(...)</code></pre>
+<p>check becomes a <code>switch</code> over <code>CableInboxFileKind</code> dispatching to the audio branch or <code>ReaderInboxAdmission</code>.</p>
+<p><code>excludedRootDirectoryNames</code> gains <code>Incoming Text</code> and <code>_Imported</code>. <strong>Omitting <code>_Imported</code> makes the recursive root walk re-scan its own output on every pass.</strong></p>
+<p>The stale doc comment on <code>AppStoragePaths.cableRootInbox</code> claiming the root &quot;is scanned non-recursively&quot; is corrected — the code uses a recursive <code>FileManager.enumerator</code> with name-based exclusion, as <code>appOwnedDirectoryNames</code> already describes.</p>
+<p><strong><code>CableAudioImportResult.swift</code> → <code>CableFileImportResult.swift</code></strong></p>
+<p>Gains <code>importedDocuments: [ReadingDocument]</code>; <code>merge</code> accumulates it like the other outcome arrays. <code>title</code> and <code>message</code> count both kinds. Audio-only wording is preserved exactly, so an audio-only drop reads as it does today.</p>
+<p><strong><code>ReadingDocumentKind</code></strong> gains <code>.text</code>, covering both <code>.txt</code> and <code>.md</code>: <code>displayName</code> &quot;Text&quot;, <code>systemImage</code> <code>doc.text</code>. <code>init?(fileExtension:)</code> accepts <code>txt</code> and <code>md</code>.</p>
+<p><strong><code>ReadingDocumentImporter</code></strong> gains:</p>
+<ul><li><code>extractPlainText(from:)</code> — decode UTF-8, fall back to <code>.isoLatin1</code>, normalize via the existing <code>normalizeText</code>, require ≥ 8 words, and reject sources larger than 8 MB (roughly 1.3 million words — far past any plausible reader session, and the point where the full-string regex passes become a memory concern).</li><li><code>supportedFileExtensions: Set&lt;String&gt;</code> — one source of truth for the classifier and <code>supportedContentTypes</code>.</li><li>Markdown cleanup applied to <code>.md</code> only: ATX heading markers, emphasis markers, list bullets, and <code><a href="url">text</a></code> → <code>text</code>. The ORP reader displays one word at a time, so a literal <code>##</code> or <code><strong>word</strong></code> in the word stream is visible garbage. <code>.txt</code> passes through untouched.</li></ul>
+<p><strong><code>ReadingDocumentStore.importDocument</code></strong> returns whether it replaced an existing document, so the caller can report a duplicate rather than announce a fresh import.</p>
+<p><strong><code>AppStoragePaths</code></strong> gains <code>cableTextInbox</code> (<code>Incoming Text/</code>) and <code>cableImported</code> (<code>_Imported/</code>).</p>
+<h3 id="concurrency">Concurrency</h3>
+<p><code>CableFileImportService</code> is an actor; <code>ReadingDocumentStore</code> is <code>@MainActor</code>. <code>ReaderInboxAdmission</code> takes an injected <code>@MainActor @Sendable</code> import closure defaulting to <code>ReadingDocumentStore.shared</code> — the pattern <code>CableAudioImportModel</code> already uses for <code>refreshLibrary</code>. Extraction stays on the existing <code>@concurrent</code> <code>ReadingDocumentImportWorker</code>, off the main actor.</p>
+<h2 id="data-flow">Data flow</h2>
+<p>Per settled file:</p>
+<ol><li>Classify.</li><li><code>.unrecognized</code> at root → left alone (someone else&#x27;s file). In either dedicated inbox → <code>_Needs Review/Unsupported Files</code>.</li><li><code>.audio</code> → existing branch, unchanged.</li><li><code>.readerDocument</code> → extract, store, <strong>then</strong> move the original to <code>_Imported/</code>.</li></ol>
+<p>Step 4&#x27;s ordering is load-bearing. If the move fails after a successful store, the document is already in the reader and the original is still in the inbox: the next scan re-extracts, the content hash matches, the replace is idempotent, and the move is retried. The failure self-heals rather than stranding a file.</p>
+<p>The audio path&#x27;s <code>registeredURLs</code> guard — which prevents moving a file a library row still points at — has no reader analogue and is not needed. Reader documents store extracted text in Application Support and never reference an inbox URL.</p>
+<h2 id="error-handling">Error handling</h2>
+<div class='tablewrap'><table><thead><tr><th>Condition</th><th>Outcome</th></tr></thead><tbody><tr><td>Extension claims document, content prefix is binary</td><td><code>_Needs Review/Invalid Documents</code> (new category, parallel to <code>Invalid Audio</code>)</td></tr><tr><td>Extraction yields &lt; 8 words (<code>noReadableText</code>)</td><td><code>_Needs Review/Invalid Documents</code> — rescanning every pass would be pointless</td></tr><tr><td>Content hash or filename matches an existing document</td><td><code>_Needs Review/Duplicates</code>, reported as a duplicate</td></tr><tr><td>Plain text file exceeds 8 MB</td><td><code>_Needs Review/Invalid Documents</code></td></tr><tr><td>Store write or disk error</td><td><code>failures</code>; file left where found, retried next scan</td></tr></tbody></table></div>
+<h3 id="duplicate-semantics-differ-from-audio-deliberately">Duplicate semantics differ from audio, deliberately</h3>
+<p><code>ReadingDocumentImportWorker.prepare</code> replaces any document matching content hash <strong>or</strong> original filename, and has no &quot;already in library&quot; signal — the hash is not knowable until after extraction. So a re-dropped file is always re-extracted. The replace is idempotent (same text, same hash), so the store ends up correct either way; the service reports it as a duplicate and files the original under <code>_Needs Review/Duplicates</code>, matching audio&#x27;s user-visible behavior.</p>
+<h2 id="ui">UI</h2>
+<ul><li>Alert title counts both kinds: <code>&quot;2 Audio Files, 3 Documents Added&quot;</code>.</li><li>Message keeps its existing per-outcome lines, with a document line added.</li><li>Buttons: <strong>Analyze</strong> when audio was imported (existing behavior), <strong>Open Reader</strong> when documents were (sets <code>selectedTab = .read</code>), <strong>OK</strong> otherwise.</li><li><code>LibraryAddMenu</code>: &quot;Check Incoming Audio&quot; → &quot;Check Incoming Files&quot;; <code>isCheckingIncomingAudio</code> → <code>isCheckingIncomingFiles</code>.</li><li>The empty-inbox guidance stops saying &quot;drag audio&quot;.</li><li>No refresh plumbing for the reader: <code>ReadingDocumentStore</code> is <code>@MainActor @Observable</code> and mutated directly, so the Read tab updates itself. Audio still needs <code>AudioLibraryCache.refresh()</code>.</li></ul>
+<h2 id="testing">Testing</h2>
+<p>The existing 819 lines across <code>CableAudioImportTests</code>, <code>CableAudioRootInboxTests</code>, and <code>CableAudioImportModelTests</code> are the regression net. They get a mechanical rename; <strong>no behavioral assertion changes.</strong> If audio intake still passes, routing inside the existing service cost nothing.</p>
+<p>New service tests:</p>
+<ul><li>Mixed batch (audio + <code>.txt</code> + <code>.pdf</code> + junk) admitted in one pass.</li><li><code>.txt</code> at root routes to the reader.</li><li><code>.txt</code> in <code>Incoming Audio/</code> still imports (the forgiving rule).</li><li><code>.pdf</code> in <code>Incoming Text/</code> imports.</li><li>Unrecognized file in either dedicated inbox → <code>_Needs Review/Unsupported Files</code>.</li><li>Re-dropped document → duplicate, filed under <code>_Needs Review/Duplicates</code>.</li><li>Successful document → original present in <code>_Imported/</code>.</li><li><strong><code>_Imported/</code> and <code>Incoming Text/</code> are excluded from the walk</strong> — direct regression test for the infinite-rescan bug.</li></ul>
+<p>New importer tests: <code>.txt</code> extraction, <code>.md</code> cleanup, Latin-1 fallback, under-8-words rejection, oversize rejection.</p>
+<p>New result tests: combined counts in <code>title</code>/<code>message</code>; audio-only wording unchanged.</p>
+<p>Run on both destinations via <code>Scripts/run-tests.sh</code>, which fails when zero cases run (see ERRORS.md ERR-002).</p>
+<h2 id="ios-18-compatibility">iOS 18 compatibility</h2>
+<p>Nothing here touches <code>FoundationModels</code>. PDFKit, Compression, and CryptoKit are all available at the 18.0 floor, and <code>doc.text</code> predates it, so no <code>@available</code> gates are needed. Verified by building against the iPhone 16 Pro / OS 18.5 runtime rather than by inspection — a too-new SF Symbol renders blank with no build error.</p>
+<h2 id="known-issues-not-fixed-here">Known issues, not fixed here</h2>
+<p><code>ReadingDocumentImporter.extractEPUB</code> reads the whole file via <code>Data(contentsOf: url)</code> with no size cap, and <code>EPUBArchive</code> inflates entries into memory. This predates this work and capping it is a separate behavioral decision. To be logged in <code>ERRORS.md</code> during implementation, status <code>identified</code>.</p>
+</main>
+</div>
+</body></html>
