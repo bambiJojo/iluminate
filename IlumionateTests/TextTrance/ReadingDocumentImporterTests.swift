@@ -219,6 +219,40 @@ struct ReadingDocumentImporterTests {
         }
     }
 
+    @Test func cleansMarkdownSyntaxOnImport() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appending(path: "Session.md")
+        try Data("""
+        # Deep Rest
+
+        You feel **calm** and _steady_ as the whole room grows quiet.
+        """.utf8).write(to: url)
+
+        let extracted = try ReadingDocumentImporter.extract(from: url)
+
+        #expect(extracted.kind == .text)
+        #expect(extracted.text.contains("**") == false)
+        #expect(extracted.text.contains("#") == false)
+        #expect(extracted.text.contains("You feel calm and steady as the whole room grows quiet."))
+    }
+
+    /// `.txt` is passed through untouched — an asterisk in a plain text file is
+    /// an asterisk, not emphasis.
+    @Test func leavesPlainTextSyntaxUntouched() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appending(path: "Literal.txt")
+        try Data("Multiply 2 * 3 and note the **stars** stay exactly where they are.".utf8)
+            .write(to: url)
+
+        let extracted = try ReadingDocumentImporter.extract(from: url)
+
+        #expect(extracted.text.contains("**stars**"))
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "reading-document-importer-\(UUID().uuidString)", directoryHint: .isDirectory)

@@ -80,7 +80,12 @@ enum ReadingDocumentImporter {
             throw ReadingDocumentImportError.noReadableText
         }
 
-        let text = ReaderDocumentHTMLExtractor.normalizeText(raw)
+        // `.txt` is passed through untouched: an asterisk in a plain text file
+        // is an asterisk, not emphasis.
+        let isMarkdown = ["md", "markdown"].contains(url.pathExtension.lowercased())
+        let cleaned = isMarkdown ? MarkdownTextCleaner.plainText(from: raw) : raw
+
+        let text = ReaderDocumentHTMLExtractor.normalizeText(cleaned)
         guard wordCount(in: text) >= 8 else {
             throw ReadingDocumentImportError.noReadableText
         }
