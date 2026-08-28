@@ -178,6 +178,8 @@ private struct CableImportFixture {
     /// `rootURL` so fixture scaffolding is never treated as intake.
     let rootIntakeURL: URL
     let inboxURL: URL
+    let textInboxURL: URL
+    let importedURL: URL
     let managedAudioURL: URL
     let libraryStorage: AudioLibraryStorage
 
@@ -192,6 +194,8 @@ private struct CableImportFixture {
         )
         rootIntakeURL = rootURL.appending(path: "Root Intake", directoryHint: .isDirectory)
         inboxURL = rootURL.appending(path: "Incoming Audio", directoryHint: .isDirectory)
+        textInboxURL = rootURL.appending(path: "Incoming Text", directoryHint: .isDirectory)
+        importedURL = rootIntakeURL.appending(path: "_Imported", directoryHint: .isDirectory)
         managedAudioURL = rootURL.appending(path: "Managed Audio", directoryHint: .isDirectory)
         libraryStorage = AudioLibraryStorage(
             fileURL: rootURL.appending(path: "library.json"),
@@ -204,6 +208,10 @@ private struct CableImportFixture {
         )
         try FileManager.default.createDirectory(
             at: inboxURL,
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: textInboxURL,
             withIntermediateDirectories: true
         )
         try FileManager.default.createDirectory(
@@ -222,7 +230,9 @@ private struct CableImportFixture {
         CableFileImportService(
             rootInboxURL: rootIntakeURL,
             dedicatedInboxURL: inboxURL,
+            textInboxURL: textInboxURL,
             reviewURL: inboxURL.appending(path: "_Needs Review", directoryHint: .isDirectory),
+            importedURL: importedURL,
             managedAudioURL: managedAudioURL,
             libraryStorage: libraryStorage,
             stabilityDelay: .zero,

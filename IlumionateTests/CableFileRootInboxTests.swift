@@ -242,6 +242,53 @@ struct CableFileRootInboxTests {
         #expect(result.imported.isEmpty)
         #expect(FileManager.default.fileExists(atPath: parkedAudio.path))
     }
+
+    @Test("App-owned output directories are never descended into")
+    func skipsOwnOutputDirectories() async throws {
+        let fixture = try RootInboxFixture()
+        defer { fixture.remove() }
+
+        for directory in ["_Imported", "_Needs Review"] {
+            let nested = fixture.rootInboxURL.appending(path: directory, directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+            try fixture.validMP3Data.write(to: nested.appending(path: "Already Handled.mp3"))
+        }
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.imported.isEmpty)
+        #expect(result.duplicates.isEmpty)
+        #expect(result.rejected.isEmpty)
+        for directory in ["_Imported", "_Needs Review"] {
+            #expect(FileManager.default.fileExists(
+                atPath: fixture.rootInboxURL
+                    .appending(path: "\(directory)/Already Handled.mp3")
+                    .path
+            ))
+        }
+    }
+
+    /// `Incoming Text` is excluded from the root walk, then scanned separately
+    /// with dedicated-inbox policy. If the root walk reaches it first, this
+    /// unsupported file is incorrectly left alone instead of being surfaced.
+    @Test("The text inbox is walked as dedicated intake")
+    func textInboxUsesDedicatedPolicy() async throws {
+        let fixture = try RootInboxFixture()
+        defer { fixture.remove() }
+
+        let sourceURL = fixture.textInboxURL.appending(path: "notes.rtf")
+        try Data("Not a supported cable import.".utf8).write(to: sourceURL)
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.rejected == ["notes.rtf"])
+        #expect(FileManager.default.fileExists(atPath: sourceURL.path) == false)
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.reviewURL
+                .appending(path: "Unsupported Files/notes.rtf")
+                .path
+        ))
+    }
 }
 
 private extension String {
@@ -257,6 +304,8 @@ private struct RootInboxFixture {
     /// Stands in for Documents root.
     let rootInboxURL: URL
     let dedicatedInboxURL: URL
+    let textInboxURL: URL
+    let importedURL: URL
     let reviewURL: URL
     let managedAudioURL: URL
     let libraryStorage: AudioLibraryStorage
@@ -278,6 +327,8 @@ private struct RootInboxFixture {
         )
         rootInboxURL = containerURL.appending(path: "Documents", directoryHint: .isDirectory)
         dedicatedInboxURL = rootInboxURL.appending(path: "Incoming Audio", directoryHint: .isDirectory)
+        textInboxURL = rootInboxURL.appending(path: "Incoming Text", directoryHint: .isDirectory)
+        importedURL = rootInboxURL.appending(path: "_Imported", directoryHint: .isDirectory)
         reviewURL = rootInboxURL.appending(path: "_Needs Review", directoryHint: .isDirectory)
         managedAudioURL = containerURL.appending(path: "Managed Audio", directoryHint: .isDirectory)
         libraryStorage = AudioLibraryStorage(
@@ -285,7 +336,7 @@ private struct RootInboxFixture {
             legacyDefaults: nil
         )
 
-        for url in [rootInboxURL, dedicatedInboxURL, managedAudioURL] {
+        for url in [rootInboxURL, dedicatedInboxURL, textInboxURL, managedAudioURL] {
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         }
     }
@@ -298,7 +349,9 @@ private struct RootInboxFixture {
         CableFileImportService(
             rootInboxURL: rootInboxURL,
             dedicatedInboxURL: dedicatedInboxURL,
+            textInboxURL: textInboxURL,
             reviewURL: reviewURL,
+            importedURL: importedURL,
             managedAudioURL: managedAudioURL,
             libraryStorage: libraryStorage,
             stabilityDelay: .zero,

@@ -33,15 +33,33 @@ nonisolated enum AppStoragePaths {
     /// deliver into a subfolder. Anything watching only a subfolder watches a
     /// directory the primary transport cannot write to.
     ///
-    /// The root is shared space: `TrainingCorpus/`, `TrainingOutput/`, and the
-    /// review folder all live here, so it is scanned non-recursively and
-    /// unrecognised files are left untouched.
+    /// The root is shared space: `TrainingCorpus/`, `TrainingOutput/`, the
+    /// review folder and the imported archive all live here. It is walked
+    /// recursively — dragging twenty files usually means dragging the folder
+    /// holding them — with app-owned directories excluded by name, and
+    /// unrecognised files left untouched.
     static let cableRootInbox = URL.documentsDirectory
 
     /// Optional second source. Finder cannot reach it, but the iOS Files app
     /// can, and there an unrecognised file genuinely is a failed import.
     static let cableDedicatedInbox = URL.documentsDirectory
         .appending(path: "Incoming Audio", directoryHint: .isDirectory)
+
+    /// Text and document counterpart to `cableDedicatedInbox`. Both dedicated
+    /// inboxes accept either kind — classification is by file, not by folder —
+    /// so a misfiled drop still imports. The second folder exists to make the
+    /// capability discoverable in the Files app, not to partition it.
+    static let cableTextInbox = URL.documentsDirectory
+        .appending(path: "Incoming Text", directoryHint: .isDirectory)
+
+    /// Where a successfully imported document's source file is kept.
+    ///
+    /// The reader stores only extracted text, so the dropped file is the user's
+    /// only copy. Audio can be moved into private managed storage because the
+    /// library still addresses it; a document has nothing addressing it, so it
+    /// stays visible and recoverable here instead.
+    static let cableImported = URL.documentsDirectory
+        .appending(path: "_Imported", directoryHint: .isDirectory)
 
     /// Kept beside the intake rather than inside it, so rejected files stay
     /// visible and recoverable in Finder without being rescanned.

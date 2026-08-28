@@ -21,7 +21,9 @@ actor CableFileImportService {
 
     private let rootInboxURL: URL
     private let dedicatedInboxURL: URL?
+    private let textInboxURL: URL?
     private let reviewURL: URL
+    private let importedURL: URL
     private let managedAudioURL: URL
     private let libraryStorage: AudioLibraryStorage
     private let stabilityDelay: Duration
@@ -38,7 +40,9 @@ actor CableFileImportService {
     init(
         rootInboxURL: URL = AppStoragePaths.cableRootInbox,
         dedicatedInboxURL: URL? = AppStoragePaths.cableDedicatedInbox,
+        textInboxURL: URL? = AppStoragePaths.cableTextInbox,
         reviewURL: URL = AppStoragePaths.cableReview,
+        importedURL: URL = AppStoragePaths.cableImported,
         managedAudioURL: URL = AppStoragePaths.managedAudio,
         libraryStorage: AudioLibraryStorage = .standard,
         stabilityDelay: Duration = .seconds(1),
@@ -50,7 +54,9 @@ actor CableFileImportService {
     ) {
         self.rootInboxURL = rootInboxURL
         self.dedicatedInboxURL = dedicatedInboxURL
+        self.textInboxURL = textInboxURL
         self.reviewURL = reviewURL
+        self.importedURL = importedURL
         self.managedAudioURL = managedAudioURL
         self.libraryStorage = libraryStorage
         self.stabilityDelay = stabilityDelay
@@ -194,6 +200,12 @@ actor CableFileImportService {
                 withIntermediateDirectories: true
             )
         }
+        if let textInboxURL {
+            try FileManager.default.createDirectory(
+                at: textInboxURL,
+                withIntermediateDirectories: true
+            )
+        }
         try FileManager.default.createDirectory(
             at: managedAudioURL,
             withIntermediateDirectories: true
@@ -208,16 +220,21 @@ actor CableFileImportService {
         "TrainingCorpus",
         "TrainingOutput",
         "GeneratedSessions",
-        "Inbox"             // iOS places externally-opened documents here
+        "Inbox",            // iOS places externally-opened documents here
+        "_Imported"         // this service's own output; descending re-imports it forever
     ]
 
     private var excludedRootDirectoryNames: Set<String> {
         var names = Self.appOwnedDirectoryNames
         names.insert(reviewURL.lastPathComponent)
-        // The dedicated inbox is walked as its own source, with its own
-        // rejection policy. Descending into it from the root would relabel it.
+        names.insert(importedURL.lastPathComponent)
+        // Each dedicated inbox is walked as its own source, with its own
+        // rejection policy. Descending into one from the root would relabel it.
         if let dedicatedInboxURL {
             names.insert(dedicatedInboxURL.lastPathComponent)
+        }
+        if let textInboxURL {
+            names.insert(textInboxURL.lastPathComponent)
         }
         return names
     }
@@ -228,11 +245,11 @@ actor CableFileImportService {
             source: .root,
             excluding: excludedRootDirectoryNames
         )
-        if let dedicatedInboxURL {
+        for inbox in [dedicatedInboxURL, textInboxURL].compactMap({ $0 }) {
             let nested = try snapshots(
-                in: dedicatedInboxURL,
+                in: inbox,
                 source: .dedicated,
-                excluding: [reviewURL.lastPathComponent]
+                excluding: [reviewURL.lastPathComponent, importedURL.lastPathComponent]
             )
             found.merge(nested) { current, _ in current }
         }
