@@ -1,7 +1,7 @@
 //  ReadingDocumentImporter.swift
 //  Ilumionate
 //
-//  Extracts plain reader text from imported PDFs and ePub files.
+//  Extracts plain reader text from imported text, PDF, and ePub files.
 
 import Compression
 import Foundation
@@ -24,7 +24,7 @@ enum ReadingDocumentImportError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unsupportedFileType:
-            return "Import a PDF or ePub file."
+            return "Import a text, Markdown, PDF, or ePub file."
         case .unreadablePDF:
             return "This PDF could not be opened."
         case .unreadableEPUB:
@@ -40,12 +40,21 @@ enum ReadingDocumentImportError: LocalizedError, Equatable {
 }
 
 enum ReadingDocumentImporter {
+    /// One source of truth for what the reader can ingest, shared with the
+    /// cable inbox classifier so the two cannot disagree about a file.
+    nonisolated static let supportedFileExtensions: Set<String> = [
+        "txt", "md", "markdown", "pdf", "epub"
+    ]
+
     nonisolated static var supportedContentTypes: [UTType] {
-        var types: [UTType] = [.pdf]
+        var types: [UTType] = [.pdf, .plainText]
         if let epub = UTType(filenameExtension: "epub") {
             types.append(epub)
         } else if let epub = UTType("org.idpf.epub-container") {
             types.append(epub)
+        }
+        if let markdown = UTType(filenameExtension: "md") {
+            types.append(markdown)
         }
         return types
     }
@@ -60,7 +69,36 @@ enum ReadingDocumentImporter {
             return try extractPDF(from: url)
         case .epub:
             return try extractEPUB(from: url)
+        case .text:
+            return try extractPlainText(from: url)
         }
+    }
+
+    private nonisolated static func extractPlainText(from url: URL) throws -> ExtractedReadingDocument {
+        let data = try Data(contentsOf: url)
+        guard let raw = decodeText(data) else {
+            throw ReadingDocumentImportError.noReadableText
+        }
+
+        let text = ReaderDocumentHTMLExtractor.normalizeText(raw)
+        guard wordCount(in: text) >= 8 else {
+            throw ReadingDocumentImportError.noReadableText
+        }
+
+        return ExtractedReadingDocument(
+            title: documentTitle(preferred: nil, fallbackURL: url),
+            kind: .text,
+            originalFilename: url.lastPathComponent,
+            text: text
+        )
+    }
+
+    /// UTF-8 first, Latin-1 as a fallback. A file that decodes as neither is
+    /// binary wearing a text extension, and is refused rather than rendered as
+    /// a column of replacement characters in the reader.
+    private nonisolated static func decodeText(_ data: Data) -> String? {
+        if let text = String(data: data, encoding: .utf8) { return text }
+        return String(data: data, encoding: .isoLatin1)
     }
 
     private nonisolated static func extractPDF(from url: URL) throws -> ExtractedReadingDocument {

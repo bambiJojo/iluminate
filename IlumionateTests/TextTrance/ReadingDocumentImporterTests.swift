@@ -191,6 +191,34 @@ struct ReadingDocumentImporterTests {
         #expect(ReadingDocumentImporter.wordCount(in: extracted.text) >= 100)
     }
 
+    @Test func extractsPlainTextFile() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appending(path: "Evening Script.txt")
+        try Data("Let your shoulders drop and your breathing slow right down now.".utf8)
+            .write(to: url)
+
+        let extracted = try ReadingDocumentImporter.extract(from: url)
+
+        #expect(extracted.kind == .text)
+        #expect(extracted.title == "Evening Script")
+        #expect(extracted.originalFilename == "Evening Script.txt")
+        #expect(extracted.text == "Let your shoulders drop and your breathing slow right down now.")
+    }
+
+    @Test func rejectsPlainTextWithTooFewWords() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appending(path: "Stub.txt")
+        try Data("Too short.".utf8).write(to: url)
+
+        #expect(throws: ReadingDocumentImportError.noReadableText) {
+            try ReadingDocumentImporter.extract(from: url)
+        }
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "reading-document-importer-\(UUID().uuidString)", directoryHint: .isDirectory)

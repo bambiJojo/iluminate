@@ -1,7 +1,7 @@
 //  ReadingDocument.swift
 //  Ilumionate
 //
-//  Local document metadata for PDF/ePub reader imports. The extracted text is
+//  Local document metadata for text, PDF, and ePub reader imports. The extracted text is
 //  stored separately so the library can stay light and fast to decode.
 
 import Foundation
@@ -9,6 +9,9 @@ import Foundation
 enum ReadingDocumentKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case pdf
     case epub
+    // Added last so the raw values of the cases above are untouched and a
+    // previously persisted documents.json still decodes.
+    case text
 
     nonisolated var id: String { rawValue }
 
@@ -16,6 +19,7 @@ enum ReadingDocumentKind: String, Codable, CaseIterable, Identifiable, Sendable 
         switch self {
         case .pdf:  return "PDF"
         case .epub: return "ePub"
+        case .text: return "Text"
         }
     }
 
@@ -23,6 +27,7 @@ enum ReadingDocumentKind: String, Codable, CaseIterable, Identifiable, Sendable 
         switch self {
         case .pdf:  return "doc.richtext.fill"
         case .epub: return "book.closed.fill"
+        case .text: return "doc.text.fill"
         }
     }
 
@@ -30,6 +35,7 @@ enum ReadingDocumentKind: String, Codable, CaseIterable, Identifiable, Sendable 
         switch fileExtension.lowercased() {
         case "pdf":  self = .pdf
         case "epub": self = .epub
+        case "txt", "md", "markdown": self = .text
         default: return nil
         }
     }
