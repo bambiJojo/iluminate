@@ -10,7 +10,7 @@ import Foundation
 
 @MainActor
 enum AppSettingsManager {
-    enum Key {
+    nonisolated enum Key {
         static let profileName = "profileName"
         static let profileGoal = "profileGoal"
         static let appearanceMode = "appearanceMode"

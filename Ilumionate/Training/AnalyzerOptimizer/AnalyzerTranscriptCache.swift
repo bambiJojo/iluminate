@@ -9,7 +9,7 @@ import Foundation
 import os
 
 private extension URL {
-    var isReadableFile: Bool { FileManager.default.isReadableFile(atPath: path()) }
+    nonisolated var isReadableFile: Bool { FileManager.default.isReadableFile(atPath: path()) }
 }
 
 actor AnalyzerTranscriptCache {

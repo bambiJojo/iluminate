@@ -41,7 +41,7 @@ enum ReadingDocumentKind: String, Codable, CaseIterable, Identifiable, Sendable 
     }
 }
 
-struct ReadingDocument: Identifiable, Codable, Hashable, Sendable {
+nonisolated struct ReadingDocument: Identifiable, Codable, Hashable, Sendable {
     let id: String
     var title: String
     var kind: ReadingDocumentKind

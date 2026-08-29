@@ -17,7 +17,7 @@ extension PlayerMode {
     ///
     /// The visual field opts out: it is a composed shader scene rather than a
     /// driven light field, and two black holes would fight its composition.
-    var supportsFocusSpots: Bool {
+    nonisolated var supportsFocusSpots: Bool {
         switch self {
         case .visualField:
             return false

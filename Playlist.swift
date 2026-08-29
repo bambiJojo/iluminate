@@ -74,7 +74,7 @@ struct Playlist: Identifiable, Codable {
 }
 
 /// A single item in a playlist, referencing an audio file by ID
-struct PlaylistItem: Identifiable, Codable {
+nonisolated struct PlaylistItem: Identifiable, Codable, Sendable {
     let id: UUID
     let audioFileId: UUID
     let filename: String
