@@ -10,7 +10,7 @@ import Foundation
 /// Pure math waveform functions.
 /// Each function takes a normalized phase in [0, 1) and returns
 /// a normalized amplitude in [0, 1].
-enum Waveform: String, CaseIterable, Identifiable {
+nonisolated enum Waveform: String, CaseIterable, Identifiable {
     case sine
     case triangle
     case square

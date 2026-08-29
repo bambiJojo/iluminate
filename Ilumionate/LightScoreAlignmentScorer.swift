@@ -9,7 +9,7 @@
 
 import Foundation
 
-struct LightScoreAlignmentReport: Codable, Sendable {
+nonisolated struct LightScoreAlignmentReport: Codable, Sendable {
     static let productionTarget = 0.90
 
     let overallScore: Double
