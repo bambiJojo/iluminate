@@ -94,7 +94,7 @@ enum ColorTempMode: String, CaseIterable, Codable, Sendable {
 
     var description: String {
         switch self {
-        case .auto:    "AI selects the best temperature"
+        case .auto:    "Analysis selects the best temperature"
         case .warm:    "Relaxing, ideal for sleep & deep trance"
         case .neutral: "Balanced for general use"
         case .cool:    "Alerting, ideal for focus & energy"

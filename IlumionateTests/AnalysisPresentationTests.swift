@@ -74,6 +74,11 @@ struct AnalysisPresentationTests {
         )
     }
 
+    @Test("Automatic color temperature describes both analysis engines")
+    func automaticColorTemperatureDescriptionIsSourceNeutral() {
+        #expect(ColorTempMode.auto.description == "Analysis selects the best temperature")
+    }
+
     private func makeResult(summary: String) -> AnalysisResult {
         AnalysisResult(
             mood: .relaxing,
