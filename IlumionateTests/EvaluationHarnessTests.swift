@@ -13,6 +13,19 @@ import Testing
 import Foundation
 @testable import Ilumionate
 
+/// The timeline benchmark is calibrated against generated/private corpus rows
+/// that are intentionally ignored by git. A clean checkout has only the two
+/// public truth-bearing fixtures, so it must skip this benchmark rather than
+/// fail because developer-only inputs are absent.
+private nonisolated func hasCompleteTimelineEvaluationCorpus() -> Bool {
+    let cases = try? (
+        CorpusLoader.load(subdirectory: "fixtures")
+            + CorpusLoader.load(subdirectory: "synthetic")
+            + CorpusLoader.load(subdirectory: "real")
+    )
+    return (cases?.filter { !$0.truth.isEmpty }.count ?? 0) >= 8
+}
+
 // MARK: - Keyword Pipeline Tests (deterministic, CI-safe)
 
 @MainActor
@@ -30,7 +43,10 @@ struct KeywordPipelineEvaluationTests {
         phases.map { PhaseTruthSpan(phase: $0.phase, start: $0.startTime, end: $0.endTime) }
     }
 
-    @Test("Timeline metrics run over the file corpus and meet thresholds")
+    @Test(
+        "Timeline metrics run over the file corpus and meet thresholds",
+        .enabled(if: hasCompleteTimelineEvaluationCorpus())
+    )
     func timelineMetricsOverCorpus() async throws {
         let eval = timelineEvaluator
 
