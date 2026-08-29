@@ -125,6 +125,7 @@ nonisolated enum AVESystemPrompt {
 
 // MARK: - AI Response Structures
 
+@available(iOS 26.0, macOS 26.0, *)
 @Generable(description: "Analysis of audio content for light therapy session generation")
 struct AIAnalysisResponse {
 
@@ -204,7 +205,6 @@ struct AIAnalysisResponse {
 /// Structured light action enum for key moments.
 /// Using `@Generable` on the enum eliminates fragile string matching in session generation —
 /// the model can only output one of these six canonical values.
-@Generable
 enum LightAction: String, Codable, Sendable {
     /// Guide the brain deeper into trance / lower-frequency entrainment.
     case deepen
@@ -220,6 +220,31 @@ enum LightAction: String, Codable, Sendable {
     case reduceIntensity = "reduce_intensity"
 }
 
+/// Foundation Models representation of ``LightAction``. Keeping the model-only
+/// conformance separate lets persisted analysis results remain available on iOS 18.
+@available(iOS 26.0, macOS 26.0, *)
+@Generable
+enum AILightAction: String, Codable, Sendable {
+    case deepen
+    case energize
+    case warm
+    case cool
+    case increaseIntensity = "increase_intensity"
+    case reduceIntensity = "reduce_intensity"
+
+    var lightAction: LightAction {
+        switch self {
+        case .deepen: .deepen
+        case .energize: .energize
+        case .warm: .warm
+        case .cool: .cool
+        case .increaseIntensity: .increaseIntensity
+        case .reduceIntensity: .reduceIntensity
+        }
+    }
+}
+
+@available(iOS 26.0, macOS 26.0, *)
 @Generable(description: "A significant moment in the audio where light parameters should shift")
 struct AIKeyMoment {
 
@@ -238,9 +263,10 @@ struct AIKeyMoment {
         increase_intensity: brighten for active suggestion delivery.
         reduce_intensity: dim for passive trance or therapy phase.
         """)
-    var action: LightAction
+    var action: AILightAction
 }
 
+@available(iOS 26.0, macOS 26.0, *)
 @Generable(description: "A structural phase segment in a hypnosis session")
 struct AIPhaseSegment {
 

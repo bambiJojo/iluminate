@@ -7,7 +7,18 @@ Thank you for joining the Ilumionate beta! This guide will help you get the most
 ### 1. Installation
 - Download from TestFlight (link provided via email)
 - Install on your primary iPhone or iPad
-- Ensure you have iOS 18+ (app currently requires iOS 26 beta)
+- Ensure you have iOS 18 or later
+
+> **On iOS 18–25 vs iOS 26.** The core workflow works on iOS 18: importing audio, transcription,
+> playback, light-session generation, visuals, playlists, and saved sessions. What needs
+> iOS 26 is the Apple Intelligence layer. On iOS 18 the app analyses your audio with
+> keyword, metadata, and audio heuristics instead, so phase detection and the extras it
+> derives — titles, creator, themes, summaries, key moments, trance-depth curves — are
+> coarser or absent, sessions are labelled "Keyword Analysis" rather than "AI Analyzed",
+> and analysis may pause when you leave the app instead of continuing in the background.
+> Older hardware will also transcribe more slowly. If you are on iOS 18, that is expected
+> behaviour — please don't file it as a bug, but do tell us if a *generated session* feels
+> wrong.
 
 ### 2. First Launch
 - Complete the 6-step onboarding flow

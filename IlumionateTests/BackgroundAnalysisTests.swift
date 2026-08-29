@@ -47,6 +47,7 @@ struct BackgroundAnalysisTests {
 
     #if os(iOS) && !targetEnvironment(macCatalyst)
     @Test func continuedProcessingUsesConcreteRegisteredIdentifier() {
+        guard #available(iOS 26.0, *) else { return }
         let identifier = BackgroundAnalysisScheduler.makeContinuedIdentifier()
 
         #expect(identifier.hasPrefix(BackgroundAnalysisScheduler.continuedIdentifierPrefix))
@@ -56,6 +57,7 @@ struct BackgroundAnalysisTests {
 
     @Test("Continued processing UI is never left queued after foreground analysis")
     func continuedProcessingRequiresImmediateLaunch() {
+        guard #available(iOS 26.0, *) else { return }
         #expect(
             BackgroundAnalysisScheduler.continuedSubmissionStrategy == .fail,
             "Analysis starts immediately in-app, so its system progress UI must also launch immediately or fail."

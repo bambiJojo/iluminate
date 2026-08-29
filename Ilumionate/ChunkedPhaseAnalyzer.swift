@@ -16,6 +16,7 @@ import FoundationModels
 
 // MARK: - Structured Chunk Classification
 
+@available(iOS 26.0, macOS 26.0, *)
 @Generable(description: "Structured hypnosis phase classification for one transcript chunk.")
 struct ChunkPhaseClassification {
 
@@ -37,6 +38,7 @@ struct ChunkPhaseClassification {
     }
 }
 
+@available(iOS 26.0, macOS 26.0, *)
 @Generable
 enum ChunkPhaseLabel: String, Codable, Sendable {
     case preTalk = "pre_talk"
@@ -73,6 +75,7 @@ enum ChunkPhaseLabel: String, Codable, Sendable {
     }
 }
 
+@available(iOS 26.0, macOS 26.0, *)
 @Generable
 enum ChunkPhaseConfidence: String, Codable, Sendable {
     case high
@@ -104,6 +107,7 @@ nonisolated struct ChunkedPhaseAnalyzer {
 
     // MARK: - Availability
 
+    @available(iOS 26.0, macOS 26.0, *)
     static var isAvailable: Bool {
         SystemLanguageModel.default.availability == .available
     }
@@ -124,6 +128,7 @@ nonisolated struct ChunkedPhaseAnalyzer {
     /// Analyzes word timestamps using the on-device language model.
     /// Returns `nil` when Apple Intelligence is unavailable or produces
     /// fewer than two distinct phases (triggering keyword-based fallback).
+    @available(iOS 26.0, macOS 26.0, *)
     func analyze(
         wordTimestamps: [WordTimestamp],
         duration: Double,
@@ -165,6 +170,7 @@ nonisolated struct ChunkedPhaseAnalyzer {
     }
 
     /// Static convenience that creates a default-config instance.
+    @available(iOS 26.0, macOS 26.0, *)
     static func analyze(
         wordTimestamps: [WordTimestamp],
         duration: Double,
@@ -212,6 +218,7 @@ nonisolated struct ChunkedPhaseAnalyzer {
         let fewShotExamples: [AnalyzerConfig.ChunkedAnalyzer.FewShotExample]
     }
 
+    @available(iOS 26.0, macOS 26.0, *)
     typealias ChunkClassifier = @Sendable (
         ChunkRequest,
         HypnosisMetadata.Phase?,
@@ -223,6 +230,7 @@ nonisolated struct ChunkedPhaseAnalyzer {
 
 extension ChunkedPhaseAnalyzer {
 
+    @available(iOS 26.0, macOS 26.0, *)
     func classifyChunks(
         wordTimestamps: [WordTimestamp],
         duration: Double,
@@ -646,6 +654,7 @@ extension ChunkedPhaseAnalyzer {
     /// would have reached anyway.
     static let consecutiveUnusableChunkLimit = 12
 
+    @available(iOS 26.0, macOS 26.0, *)
     nonisolated static func runPass(
         jobs: [ChunkJob],
         previousResults: [HypnosisMetadata.Phase?]?,
@@ -762,6 +771,7 @@ extension ChunkedPhaseAnalyzer {
     }
 
     /// Classifies a single chunk; splits in half recursively on context-window overflow.
+    @available(iOS 26.0, macOS 26.0, *)
     static func classifySingleChunk(
         request: ChunkRequest,
         previousPhase: HypnosisMetadata.Phase?,
@@ -806,6 +816,7 @@ extension ChunkedPhaseAnalyzer {
         }
     }
 
+    @available(iOS 26.0, macOS 26.0, *)
     static func splitAndClassify(
         request: ChunkRequest,
         previousPhase: HypnosisMetadata.Phase?,

@@ -14,7 +14,8 @@ struct PlayerTrackListSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(viewModel.playlistItems.enumerated(), id: \.element.id) { index, item in
+                // EnumeratedSequence only conforms to RandomAccessCollection on iOS 26.
+                ForEach(Array(viewModel.playlistItems.enumerated()), id: \.element.id) { index, item in
                     Button {
                         dismiss()
                         Task { await viewModel.jumpToTrack(at: index) }

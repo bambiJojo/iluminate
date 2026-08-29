@@ -12,6 +12,7 @@ import Foundation
 
 extension AIAnalysisManager {
 
+    @available(iOS 26.0, macOS 26.0, *)
     func buildHypnosisMetadata(
         contentType: AnalysisResult.ContentType,
         phases: [AIPhaseSegment]

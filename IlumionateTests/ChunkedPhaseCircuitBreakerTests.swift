@@ -39,6 +39,7 @@ struct ChunkedPhaseCircuitBreakerTests {
     @MainActor
     @Test("A run of refusals stops the pass instead of grinding through every chunk")
     func refusalsAbortThePass() async throws {
+        guard #available(iOS 26.0, macOS 26.0, *) else { return }
         let counter = ClassifyCounter()
         let total = 400
 
@@ -67,6 +68,7 @@ struct ChunkedPhaseCircuitBreakerTests {
     @MainActor
     @Test("A pass that keeps classifying runs to completion")
     func usefulResultsDoNotTripTheBreaker() async throws {
+        guard #available(iOS 26.0, macOS 26.0, *) else { return }
         let counter = ClassifyCounter()
         let total = 40
 
@@ -97,6 +99,7 @@ struct ChunkedPhaseCircuitBreakerTests {
     @MainActor
     @Test("An unusable stretch that recovers does not abort the pass")
     func recoveringStretchDoesNotAbort() async throws {
+        guard #available(iOS 26.0, macOS 26.0, *) else { return }
         let counter = ClassifyCounter()
         let total = 60
         let quiet = ChunkedPhaseAnalyzer.consecutiveUnusableChunkLimit - 2

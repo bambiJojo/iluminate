@@ -79,7 +79,8 @@ final class BackgroundAnalysisScheduler {
     static let continuedIdentifierPrefix = "\(identifierRoot).continued."
     static let continuedIdentifierPattern = "\(continuedIdentifierPrefix)*"
     #if !targetEnvironment(macCatalyst)
-    static let continuedSubmissionStrategy: BGContinuedProcessingTaskRequest.SubmissionStrategy = .fail
+    @available(iOS 26.0, *)
+    static var continuedSubmissionStrategy: BGContinuedProcessingTaskRequest.SubmissionStrategy { .fail }
     #endif
 
     private var hasActiveContinuedRequest = false
@@ -118,36 +119,38 @@ final class BackgroundAnalysisScheduler {
         scheduleDeferredProcessing()
 
         #if !targetEnvironment(macCatalyst)
-        guard source.presentsContinuedProcessingUI else { return }
-        guard UIApplication.shared.applicationState == .active else { return }
-        guard !hasActiveContinuedRequest else { return }
+        if #available(iOS 26.0, *) {
+            guard source.presentsContinuedProcessingUI else { return }
+            guard UIApplication.shared.applicationState == .active else { return }
+            guard !hasActiveContinuedRequest else { return }
 
-        let identifier = Self.makeContinuedIdentifier()
-        guard registerContinuedHandler(for: identifier) else {
-            // Never submit an unregistered request. BackgroundTasks raises an
-            // Objective-C exception for this programmer error, so it cannot be
-            // recovered from with Swift's do/catch.
-            Log.analysis.error("Continued background analysis handler could not be registered")
-            return
-        }
+            let identifier = Self.makeContinuedIdentifier()
+            guard registerContinuedHandler(for: identifier) else {
+                // Never submit an unregistered request. BackgroundTasks raises an
+                // Objective-C exception for this programmer error, so it cannot be
+                // recovered from with Swift's do/catch.
+                Log.analysis.error("Continued background analysis handler could not be registered")
+                return
+            }
 
-        let count = max(audioFiles.count, 1)
-        let request = BGContinuedProcessingTaskRequest(
-            identifier: identifier,
-            title: "Analyzing audio",
-            subtitle: count == 1 ? "Preparing your light session" : "Processing \(count) audio files"
-        )
-        request.strategy = Self.continuedSubmissionStrategy
+            let count = max(audioFiles.count, 1)
+            let request = BGContinuedProcessingTaskRequest(
+                identifier: identifier,
+                title: "Analyzing audio",
+                subtitle: count == 1 ? "Preparing your light session" : "Processing \(count) audio files"
+            )
+            request.strategy = Self.continuedSubmissionStrategy
 
-        do {
-            try BGTaskScheduler.shared.submit(request)
-            hasActiveContinuedRequest = true
-            continuedRequestIdentifier = identifier
-            Log.analysis.info("Scheduled continued background analysis")
-        } catch {
-            // Deferred processing remains scheduled when immediate continuation
-            // is unavailable because of current system load or user settings.
-            Log.analysis.info("Continued background analysis unavailable: \(error.localizedDescription)")
+            do {
+                try BGTaskScheduler.shared.submit(request)
+                hasActiveContinuedRequest = true
+                continuedRequestIdentifier = identifier
+                Log.analysis.info("Scheduled continued background analysis")
+            } catch {
+                // Deferred processing remains scheduled when immediate continuation
+                // is unavailable because of current system load or user settings.
+                Log.analysis.info("Continued background analysis unavailable: \(error.localizedDescription)")
+            }
         }
         #endif
     }
@@ -212,6 +215,7 @@ final class BackgroundAnalysisScheduler {
     }
 
     #if !targetEnvironment(macCatalyst)
+    @available(iOS 26.0, *)
     private func handle(_ task: BGContinuedProcessingTask) {
         hasActiveContinuedRequest = true
         continuedRequestIdentifier = task.identifier
@@ -255,6 +259,7 @@ final class BackgroundAnalysisScheduler {
     /// identifier. The wildcard belongs only in Info.plist; registering the
     /// wildcard itself is rejected by BackgroundTasks on iOS 26.
     @discardableResult
+    @available(iOS 26.0, *)
     func registerContinuedHandler(for identifier: String) -> Bool {
         guard identifier.hasPrefix(Self.continuedIdentifierPrefix),
               !identifier.contains("*") else {

@@ -17,6 +17,30 @@ import AppKit
 
 extension ProfileSettingsView {
 
+    // MARK: - Foundation Models Availability
+
+    /// Whether this OS can run the Foundation Models path at all.
+    ///
+    /// This is the *build* floor, not the runtime one: it stays true on iOS 26
+    /// even when `SystemLanguageModel` is unavailable for some other reason
+    /// (Game Mode, a busy device — see ERR-006). Those are transient and get
+    /// explained after the fact by `AIGenerationDiagnosis`. A too-old OS is
+    /// permanent, so it is the only case worth disabling a control for.
+    var isFoundationModelsSupported: Bool {
+        if #available(iOS 26.0, macOS 26.0, *) { true } else { false }
+    }
+
+    /// Names the OS the user is actually running, not the one this file's
+    /// availability check happens to mention first — Mac Catalyst builds against
+    /// the iOS deployment target but runs on a Mac.
+    static var aiUnavailableNote: String {
+        #if targetEnvironment(macCatalyst)
+        "On-device AI needs macOS 26. These two settings only shape the AI prompt, so they have no effect here — analyses use built-in keyword detection instead."
+        #else
+        "On-device AI needs iOS 26. These two settings only shape the AI prompt, so they have no effect here — analyses use built-in keyword detection instead."
+        #endif
+    }
+
     // MARK: - Reusable Setting Rows
 
     func settingsToggle(

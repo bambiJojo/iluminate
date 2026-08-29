@@ -20,7 +20,6 @@
 		79D5483B2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */; };
 		79D5483D2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */; };
 		79D548412F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */; };
-		79E9C7102FE2000000C0DEC0 /* ScriptCorpus in Resources */ = {isa = PBXBuildFile; fileRef = 79E9C70F2FE2000000C0DEC0 /* ScriptCorpus */; };
 		A1B2C3022FF1000000000002 /* IlumionateShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C3012FF1000000000001 /* IlumionateShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B3DBB1014D277A17D1ADB4CD /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = B3DBB1024D277A17D1ADB4CD /* CorpusKit */; };
 /* End PBXBuildFile section */
@@ -635,7 +634,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				79D548412F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md in Resources */,
-				79E9C7102FE2000000C0DEC0 /* ScriptCorpus in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -838,7 +836,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -896,7 +894,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -926,7 +924,7 @@
 				INFOPLIST_FILE = Ilumionate/Info.plist;
 				"INFOPLIST_FILE[sdk=macosx*]" = "Ilumionate/Info-macOS.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -974,7 +972,7 @@
 				INFOPLIST_FILE = Ilumionate/Info.plist;
 				"INFOPLIST_FILE[sdk=macosx*]" = "Ilumionate/Info-macOS.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1010,7 +1008,7 @@
 				CURRENT_PROJECT_VERSION = 1001;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.IlumionateTests;
@@ -1037,7 +1035,7 @@
 				CURRENT_PROJECT_VERSION = 1001;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.IlumionateTests;
@@ -1063,7 +1061,7 @@
 				CURRENT_PROJECT_VERSION = 1001;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.IlumionateUITests;
@@ -1089,7 +1087,7 @@
 				CURRENT_PROJECT_VERSION = 1001;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.IlumionateUITests;
@@ -1282,7 +1280,7 @@
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1317,7 +1315,7 @@
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

@@ -51,6 +51,8 @@ nonisolated enum AIGenerationDiagnosis {
         /// recording, but unlike it, an immediate retry actively hurts:
         /// the second request lands inside the same limit.
         case rateLimited
+        /// Foundation Models is not part of the installed operating system.
+        case unsupportedOS
         case other
 
         /// Only a context overflow is plausibly fixed by the shorter prompt.
@@ -58,7 +60,8 @@ nonisolated enum AIGenerationDiagnosis {
         var isRetryable: Bool {
             switch self {
             case .contextWindow, .other: return true
-            case .safetyHostUnavailable, .guardrail, .assetsUnavailable, .systemBusy: return false
+            case .safetyHostUnavailable, .guardrail, .assetsUnavailable, .systemBusy,
+                 .unsupportedOS: return false
             // Retrying into an active rate limit cannot succeed and adds to
             // the request count that caused it.
             case .rateLimited: return false
@@ -74,7 +77,8 @@ nonisolated enum AIGenerationDiagnosis {
         var isTransient: Bool {
             switch self {
             case .systemBusy, .rateLimited: return true
-            case .safetyHostUnavailable, .guardrail, .contextWindow, .assetsUnavailable, .other:
+            case .safetyHostUnavailable, .guardrail, .contextWindow, .assetsUnavailable,
+                 .unsupportedOS, .other:
                 return false
             }
         }
@@ -94,6 +98,15 @@ nonisolated enum AIGenerationDiagnosis {
                 return "The device was busy, so keyword analysis was used. Analysing again later should give a fuller result."
             case .rateLimited:
                 return "On-device AI was asked for too much at once, so keyword analysis was used. Analysing again later should give a fuller result."
+            case .unsupportedOS:
+                // Says "keyword analysis" like every other case, and names the OS
+                // the reader is actually on — Mac Catalyst builds against the iOS
+                // deployment target but runs on a Mac, so it can reach this line.
+                #if targetEnvironment(macCatalyst)
+                return "On-device AI requires macOS 26, so keyword analysis was used."
+                #else
+                return "On-device AI requires iOS 26, so keyword analysis was used."
+                #endif
             case .other:
                 return "On-device AI didn't complete, so keyword analysis was used."
             }
@@ -177,14 +190,14 @@ extension AnalysisResult {
     /// it did not do.
     /// Prefix, not equality: results written before the reason was recorded
     /// carry the bare marker and must keep reading as fallbacks.
-    var usedKeywordFallback: Bool {
+    nonisolated var usedKeywordFallback: Bool {
         aiSummary.hasPrefix(AIGenerationDiagnosis.keywordFallbackSummary)
     }
 
     /// Why the on-device model did not produce this result, when that was
     /// recorded. `nil` for an AI result, and for a fallback stored before
     /// reasons were kept.
-    var keywordFallbackReason: String? {
+    nonisolated var keywordFallbackReason: String? {
         guard usedKeywordFallback else { return nil }
         let reason = aiSummary
             .dropFirst(AIGenerationDiagnosis.keywordFallbackSummary.count)

@@ -8,9 +8,14 @@ same feature code.
 
 | Platform | Status | Navigation |
 | --- | --- | --- |
-| iOS 26+ | First class | Four-tab compact interface |
+| iOS 18+ | First class | Four-tab compact interface |
 | macOS 26+ | First class, native AppKit/SwiftUI destination | Resizable window with a native sidebar and Settings scene |
 | Mac Catalyst | Compatibility destination | Compact interface in a desktop window |
+
+iOS 18 runs the complete app. On-device AI analysis needs iOS 26 (Foundation
+Models); below that, audio is analysed with keyword, metadata, and audio
+heuristics and background analysis is deferred rather than continued. See the
+[beta tester guide](BETA_TESTER_GUIDE.md) for the user-visible differences.
 
 The native Mac app is not a separate copy of the product. The `Ilumionate`
 scheme compiles the same models, stores, analysis pipeline, player, and feature

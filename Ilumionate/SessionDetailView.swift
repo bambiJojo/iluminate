@@ -408,7 +408,7 @@ struct SessionDetailView: View {
         LiminalCard(
             label: hasReviewedGoldScore
                 ? "Gold Review"
-                : (catalogEntry == nil ? "AI Insights" : "Catalog Review")
+                : (catalogEntry == nil ? analysisInsightsLabel : "Catalog Review")
         ) {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 if let summary = analysis?.aiSummary, !summary.isEmpty {
@@ -444,7 +444,13 @@ struct SessionDetailView: View {
     private var analysisProvenanceLabel: String {
         if hasReviewedGoldScore { return "Gold Standard" }
         if catalogEntry != nil { return "Catalog Template" }
-        return analysis?.usedKeywordFallback == true ? "Keyword Analysis" : "AI Analyzed"
+        guard let analysis else { return "Analyzed" }
+        return AnalysisResultPresentation.sourceLabel(for: analysis)
+    }
+
+    private var analysisInsightsLabel: String {
+        guard let analysis else { return "Analysis Insights" }
+        return AnalysisResultPresentation.insightsLabel(for: analysis)
     }
 
     private var analyzeNowSection: some View {
@@ -454,7 +460,7 @@ struct SessionDetailView: View {
                     .font(.system(size: 40, weight: .light))
                     .foregroundStyle(Color.roseGold)
 
-                Text("Analyze this file to unlock phase timeline, transcript, and AI-generated light sessions.")
+                Text("Analyze this file to unlock phase timeline, transcript, and a custom light session.")
                     .font(TranceTypography.body)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)

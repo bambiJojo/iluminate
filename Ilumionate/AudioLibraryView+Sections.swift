@@ -40,12 +40,12 @@ extension AudioLibraryView {
                 // Import options surfaced inline
                 importOptionsSection
 
-                // AI hint
+                // Analysis hint
                 HStack(spacing: TranceSpacing.icon) {
                     Image(systemName: "sparkles")
                         .font(.caption)
                         .foregroundStyle(Color.roseGold)
-                    Text("AI will analyze your audio to create custom light sessions")
+                    Text("On-device analysis will turn your audio into custom light sessions")
                         .font(TranceTypography.caption)
                         .foregroundStyle(Color.textLight)
                         .multilineTextAlignment(.center)

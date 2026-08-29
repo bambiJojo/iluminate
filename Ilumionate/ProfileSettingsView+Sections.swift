@@ -284,6 +284,20 @@ extension ProfileSettingsView {
                         .foregroundStyle(Color.textPrimary)
                 }
 
+                // Content Hint and Custom Instructions reach analysis only
+                // through `AnalysisPreferences.aiSystemAddendum`, which is read
+                // in the Foundation Models path alone. Below iOS 26 that path
+                // never runs, so both controls would silently do nothing. Say so
+                // rather than letting them look effective. Corpus Profile is
+                // deliberately left enabled — it also feeds AnalyzerConfig, so it
+                // still changes keyword analysis on every OS.
+                if !isFoundationModelsSupported {
+                    Text(Self.aiUnavailableNote)
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 Picker("Content Hint", selection: $prefs.contentHint) {
                     ForEach(ContentHint.allCases, id: \.self) { hint in
                         Label(hint.displayName, systemImage: hint.sfSymbol).tag(hint)
@@ -291,6 +305,7 @@ extension ProfileSettingsView {
                 }
                 .pickerStyle(.menu)
                 .tint(Color.roseGold)
+                .disabled(!isFoundationModelsSupported)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Content Hint")
@@ -300,6 +315,7 @@ extension ProfileSettingsView {
                         .font(TranceTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
+                .opacity(isFoundationModelsSupported ? 1 : 0.5)
 
                 Divider()
 
@@ -337,7 +353,9 @@ extension ProfileSettingsView {
                     )
                     .lineLimit(3...5)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!isFoundationModelsSupported)
                 }
+                .opacity(isFoundationModelsSupported ? 1 : 0.5)
 
                 Divider()
 
@@ -408,7 +426,7 @@ extension ProfileSettingsView {
                         Text("Auto-Analyze on Import")
                             .font(TranceTypography.body)
                             .foregroundStyle(Color.textPrimary)
-                        Text("Queue new files for AI analysis automatically")
+                        Text("Queue new files for analysis automatically")
                             .font(TranceTypography.caption)
                             .foregroundStyle(Color.textSecondary)
                     }

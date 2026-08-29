@@ -6,7 +6,11 @@
 //
 
 import Foundation
-import FoundationModels
+
+enum AIModelAvailability: Sendable, Equatable {
+    case available
+    case unavailable
+}
 
 /// Uses Apple's on-device AI to analyze audio content with modern Swift concurrency
 @MainActor @Observable
@@ -17,7 +21,7 @@ final class AIContentAnalyzer {
     var isAnalyzing = false
     var progress: Double = 0.0
     var statusMessage: String = ""
-    var modelAvailability: SystemLanguageModel.Availability = .unavailable(.modelNotReady)
+    var modelAvailability: AIModelAvailability = .unavailable
 
     // MARK: - Actor-Isolated Components
 
@@ -42,10 +46,7 @@ final class AIContentAnalyzer {
     }
 
     var isModelAvailable: Bool {
-        if case .available = modelAvailability {
-            return true
-        }
-        return false
+        modelAvailability == .available
     }
 
     // MARK: - Content Analysis
@@ -108,17 +109,15 @@ final class AIContentAnalyzer {
         let trace = PerformanceTrace.begin("Content Analysis No Transcript")
         defer { PerformanceTrace.end(trace) }
 
-        guard isModelAvailable else {
-            throw AIAnalyzerError.modelUnavailable
-        }
-
         currentTask?.cancel()
         analysisGeneration += 1
         let generation = analysisGeneration
 
         isAnalyzing = true
         progress = 0.0
-        statusMessage = "Analyzing audio characteristics..."
+        statusMessage = isModelAvailable
+            ? "Analyzing audio characteristics..."
+            : "Using built-in audio analysis..."
 
         let task = Task {
             var completed = false

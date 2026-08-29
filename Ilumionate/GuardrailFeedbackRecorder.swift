@@ -35,6 +35,7 @@ nonisolated enum GuardrailFeedbackRecorder {
     /// that session's transcript, so recording against a fresh session would
     /// produce an attachment describing a prompt that never failed.
     @discardableResult
+    @available(iOS 26.0, macOS 26.0, *)
     static func record(
         session: LanguageModelSession,
         filename: String,

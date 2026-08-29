@@ -101,6 +101,7 @@ struct EvenOddIndicesTests {
     }
 
     @Test func runPassBoundsConcurrentClassificationsAndReportsEachChunk() async throws {
+        guard #available(iOS 26.0, macOS 26.0, *) else { return }
         let jobs = (0..<6).map { index in
             ChunkedPhaseAnalyzer.ChunkJob(
                 index: index,

@@ -881,6 +881,7 @@ struct ChunkedPromptCalibrationTests {
 struct ChunkedStructuredOutputTests {
 
     @Test func typedLabelsNormalizeToRuntimePhaseTaxonomy() {
+        guard #available(iOS 26.0, macOS 26.0, *) else { return }
         #expect(ChunkPhaseLabel.preTalk.normalizedPhase == .induction)
         #expect(ChunkPhaseLabel.induction.normalizedPhase == .induction)
         #expect(ChunkPhaseLabel.deepening.normalizedPhase == .deepening)
@@ -893,6 +894,7 @@ struct ChunkedStructuredOutputTests {
     }
 
     @Test func structuredClassificationUsesNormalizedPhase() {
+        guard #available(iOS 26.0, macOS 26.0, *) else { return }
         let classification = ChunkPhaseClassification(
             phase: .postHypnoticConditioning,
             confidence: .high,

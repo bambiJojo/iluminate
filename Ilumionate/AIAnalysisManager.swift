@@ -19,9 +19,9 @@ actor AIAnalysisManager {
 
     // MARK: - State
 
-    private let model = SystemLanguageModel.default
-    private var session: LanguageModelSession?
-    private var currentTask: Task<AIAnalysisResponse, Error>?
+    /// Type-erased cancellation keeps Foundation Models types out of storage,
+    /// so the actor itself can exist on iOS 18 while its AI work remains iOS 26-only.
+    private var cancelCurrentTask: (@Sendable () -> Void)?
 
     // MARK: - Progress Info
 
@@ -32,20 +32,45 @@ actor AIAnalysisManager {
 
     // MARK: - Model Availability
 
-    func checkModelAvailability() async -> SystemLanguageModel.Availability {
-        let availability = model.availability
+    func checkModelAvailability() async -> AIModelAvailability {
+        guard #available(iOS 26.0, macOS 26.0, *) else {
+            Log.analysis.info("Foundation Models unavailable before iOS 26")
+            return .unavailable
+        }
+        let availability = SystemLanguageModel.default.availability
         switch availability {
         case .available:
             Log.analysis.info("✅ Foundation Models available")
+            return .available
         case .unavailable(let reason):
             Log.analysis.info("❌ Foundation Models unavailable: \(String(describing: reason))")
+            return .unavailable
         }
-        return availability
     }
 
     // MARK: - Analysis Methods
 
     func analyzeContent(
+        transcription: AudioTranscriptionResult,
+        audioFile: AudioFile,
+        onProgress: @Sendable @escaping (ProgressInfo) async -> Void
+    ) async throws -> AnalysisResult {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            return try await analyzeContentWithFoundationModels(
+                transcription: transcription,
+                audioFile: audioFile,
+                onProgress: onProgress
+            )
+        }
+        return try await analyzeContentWithBuiltInModels(
+            transcription: transcription,
+            audioFile: audioFile,
+            onProgress: onProgress
+        )
+    }
+
+    @available(iOS 26.0, macOS 26.0, *)
+    private func analyzeContentWithFoundationModels(
         transcription: AudioTranscriptionResult,
         audioFile: AudioFile,
         onProgress: @Sendable @escaping (ProgressInfo) async -> Void
@@ -62,7 +87,6 @@ actor AIAnalysisManager {
             : AVESystemPrompt.minimalInstructions + "\n\n" + addendum
 
         let lmSession = LanguageModelSession(instructions: finalInstructions)
-        session = lmSession
 
         await onProgress(ProgressInfo(progress: 0.15, message: "Building analysis prompt..."))
 
@@ -141,6 +165,7 @@ actor AIAnalysisManager {
     /// The reason used to be logged and dropped, so the keyword fallback that
     /// followed could say only *that* it had run, never *why* — which matters
     /// most when the cause is a passing one worth trying again.
+    @available(iOS 26.0, macOS 26.0, *)
     enum AIResponseOutcome {
         case generated(AIAnalysisResponse)
         case unavailable(AIGenerationDiagnosis.Kind)
@@ -157,7 +182,8 @@ actor AIAnalysisManager {
     /// session can plausibly help. A context overflow is retried only when that
     /// retry can remove custom instructions; repeating the same compact request
     /// would spend another model round-trip on the same deterministic failure.
-    /// Sets `currentTask` so cancellation remains supported.
+    /// Stores a type-erased cancellation closure so cancellation remains supported.
+    @available(iOS 26.0, macOS 26.0, *)
     private func fetchAIResponse(
         session: LanguageModelSession,
         prompt: String,
@@ -216,14 +242,14 @@ actor AIAnalysisManager {
                 to: shortPrompt, generating: AIAnalysisResponse.self
             ).content
         }
-        currentTask = task
+        cancelCurrentTask = { task.cancel() }
         // Captured before awaiting the result: by the time a long request
         // returns the app may have changed state, and the question is what the
         // state was when the model was *asked*.
         let activationState = await MainActor.run { PlatformApplication.activationState }
         do {
             let response = try await task.value
-            currentTask = nil
+            cancelCurrentTask = nil
             await AIAttemptLog.shared.record(AIAttemptRecord(
                 filename: audioFile.filename,
                 activationState: activationState,
@@ -232,7 +258,7 @@ actor AIAnalysisManager {
             ))
             return .generated(response)
         } catch is CancellationError {
-            currentTask = nil
+            cancelCurrentTask = nil
             throw CancellationError()
         } catch {
             let diagnosis = AIGenerationDiagnosis.classify(error)
@@ -247,7 +273,7 @@ actor AIAnalysisManager {
                 Log.analysis.info("↺ Transient — analysing this file again later should succeed")
             }
             await UsageAnalytics.shared.aiGenerationFallback(reason: diagnosis)
-            currentTask = nil
+            cancelCurrentTask = nil
             return .unavailable(diagnosis)
         }
     }
@@ -296,10 +322,34 @@ actor AIAnalysisManager {
         audioFeatures: AudioFeatures,
         onProgress: @Sendable @escaping (ProgressInfo) async -> Void
     ) async throws -> AnalysisResult {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            return try await analyzeWithoutTranscriptionWithFoundationModels(
+                audioFile: audioFile,
+                audioFeatures: audioFeatures,
+                onProgress: onProgress
+            )
+        }
+
+        await onProgress(ProgressInfo(progress: 0.5, message: "Using built-in audio analysis..."))
+        await recordUnsupportedOSFallback()
+        let result = makeKeywordFallbackResult(
+            audioFile: audioFile,
+            detectedPhases: nil,
+            diagnosis: .unsupportedOS
+        )
+        await onProgress(ProgressInfo(progress: 1, message: "Analysis complete"))
+        return result
+    }
+
+    @available(iOS 26.0, macOS 26.0, *)
+    private func analyzeWithoutTranscriptionWithFoundationModels(
+        audioFile: AudioFile,
+        audioFeatures: AudioFeatures,
+        onProgress: @Sendable @escaping (ProgressInfo) async -> Void
+    ) async throws -> AnalysisResult {
         await onProgress(ProgressInfo(progress: 0.1, message: "Setting up audio analysis..."))
 
         let lmSession = LanguageModelSession(instructions: AVESystemPrompt.instructions)
-        session = lmSession
 
         let energyPercent = (audioFeatures.averageEnergy * 100).formatted(.number.precision(.fractionLength(1)))
         let durationStr = formatDuration(audioFile.duration)
@@ -335,18 +385,18 @@ actor AIAnalysisManager {
                 return response.content
             }
         }
-        currentTask = task
+        cancelCurrentTask = { task.cancel() }
 
         let aiResponse = try await task.value
-        currentTask = nil
+        cancelCurrentTask = nil
 
         let result = convertToAnalysisResult(aiResponse: aiResponse, audioFile: audioFile)
         return result
     }
 
     func cancelAnalysis() async {
-        currentTask?.cancel()
-        currentTask = nil
+        cancelCurrentTask?()
+        cancelCurrentTask = nil
     }
 
     // MARK: - Phase Analysis
@@ -387,31 +437,33 @@ actor AIAnalysisManager {
             techniqueDetection: textTechniqueEvidence
         )
 
-        if let aiPhases = await ChunkedPhaseAnalyzer.analyze(
-            wordTimestamps: wordTimestamps,
-            duration: transcription.duration,
-            onProgress: chunkProgressHandler
-        ), !aiPhases.isEmpty {
-            try Task.checkCancellation()
-            await onProgress(ProgressInfo(progress: 0.65, message: "Comparing phase models…"))
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if let aiPhases = await ChunkedPhaseAnalyzer.analyze(
+                wordTimestamps: wordTimestamps,
+                duration: transcription.duration,
+                onProgress: chunkProgressHandler
+            ), !aiPhases.isEmpty {
+                try Task.checkCancellation()
+                await onProgress(ProgressInfo(progress: 0.65, message: "Comparing phase models…"))
 
-            let keywordPhases = await keywordPhasesAsync
-            let selection = keywordAnalyzer.selectPreferredPhases(
-                keywordPhases: keywordPhases,
-                chunkedPhases: aiPhases,
-                transcription: transcription,
-                techniqueDetection: textTechniqueEvidence
-            )
+                let keywordPhases = await keywordPhasesAsync
+                let selection = keywordAnalyzer.selectPreferredPhases(
+                    keywordPhases: keywordPhases,
+                    chunkedPhases: aiPhases,
+                    transcription: transcription,
+                    techniqueDetection: textTechniqueEvidence
+                )
 
-            if selection.usedChunkedAnalyzer {
-                Log.analysis.info("🧠 ChunkedPhaseAnalyzer selected: \(selection.phases.count) phase segments")
-            } else {
-                Log.analysis.info("🔑 Keyword analyzer selected over chunked output: \(selection.phases.count) phase segments")
+                if selection.usedChunkedAnalyzer {
+                    Log.analysis.info("🧠 ChunkedPhaseAnalyzer selected: \(selection.phases.count) phase segments")
+                } else {
+                    Log.analysis.info("🔑 Keyword analyzer selected over chunked output: \(selection.phases.count) phase segments")
+                }
+                return keywordAnalyzer.attachLinguisticMarkers(
+                    selection.phases,
+                    markers: textTechniqueEvidence.markers
+                )
             }
-            return keywordAnalyzer.attachLinguisticMarkers(
-                selection.phases,
-                markers: textTechniqueEvidence.markers
-            )
         }
 
         // Keyword fallback is instant — jump straight to the end of phase detection.
@@ -429,6 +481,50 @@ actor AIAnalysisManager {
         }
 
         return nil
+    }
+
+    private func analyzeContentWithBuiltInModels(
+        transcription: AudioTranscriptionResult,
+        audioFile: AudioFile,
+        onProgress: @Sendable @escaping (ProgressInfo) async -> Void
+    ) async throws -> AnalysisResult {
+        await onProgress(ProgressInfo(progress: 0.10, message: "Preparing built-in analysis..."))
+        await recordUnsupportedOSFallback()
+        let phaseTranscription = phaseReadyTranscription(transcription)
+        let wordTimestamps = HypnosisPhaseAnalyzer()
+            .approximateWordTimestamps(from: phaseTranscription.segments)
+        let detectedPhases = try await runPhaseAnalysis(
+            wordTimestamps: wordTimestamps,
+            transcription: phaseTranscription,
+            onProgress: onProgress
+        )
+        let bundledMetadata = KnownAudioCatalog.shared.verifiedMetadata(for: audioFile)
+        let introductionMetadata = AudioIntroductionMetadataExtractor.metadata(
+            from: transcription.fullText,
+            filename: audioFile.filename
+        )
+        let verifiedMetadata = bundledMetadata ?? introductionMetadata
+        let result = makeKeywordFallbackResult(
+            audioFile: audioFile,
+            detectedPhases: detectedPhases,
+            verifiedMetadata: verifiedMetadata,
+            diagnosis: .unsupportedOS
+        )
+        await onProgress(ProgressInfo(progress: 1, message: "Analysis complete"))
+        return result
+    }
+
+    /// Report the one fallback that never produces an AI attempt to fail.
+    ///
+    /// Every other keyword fallback is emitted from the generation `catch`,
+    /// because something was tried and refused. Below iOS 26 nothing is tried,
+    /// so that catch is never reached and this fallback was invisible in
+    /// telemetry — the exact blind spot `aiGenerationFallback` exists to close.
+    /// Without it the funnel cannot separate "AI broke" from "AI was never
+    /// available on this OS", which is now the larger population.
+    private func recordUnsupportedOSFallback() async {
+        Log.analysis.info("⌁ Foundation Models needs iOS 26 — using built-in analysis")
+        await UsageAnalytics.shared.aiGenerationFallback(reason: .unsupportedOS)
     }
 }
 
@@ -482,6 +578,7 @@ private extension AIAnalysisManager {
     /// - Parameter detectedPhases: Phase segments from `ChunkedPhaseAnalyzer` or the
     ///   keyword pipeline. When non-nil, these high-resolution segments are preferred
     ///   over `aiResponse.phases` for building `HypnosisMetadata`.
+    @available(iOS 26.0, macOS 26.0, *)
     func convertToAnalysisResult(
         aiResponse: AIAnalysisResponse,
         audioFile: AudioFile,
@@ -509,7 +606,7 @@ private extension AIAnalysisManager {
             KeyMoment(
                 time: moment.timestamp,
                 description: moment.description,
-                action: moment.action
+                action: moment.action.lightAction
             )
         }
 
@@ -687,6 +784,7 @@ private extension AIAnalysisManager {
 
     /// Chooses the hypnosis metadata source: high-resolution pipeline phases take
     /// priority over the AI's coarse per-session estimate.
+    @available(iOS 26.0, macOS 26.0, *)
     func resolveHypnosisMetadata(
         contentType: AnalysisResult.ContentType,
         aiPhases: [AIPhaseSegment],
