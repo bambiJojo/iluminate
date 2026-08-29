@@ -14,8 +14,9 @@ Thank you for joining the Ilumionate beta! This guide will help you get the most
 > iOS 26 is the Apple Intelligence layer. On iOS 18 the app analyses your audio with
 > keyword, metadata, and audio heuristics instead, so phase detection and the extras it
 > derives — titles, creator, themes, summaries, key moments, trance-depth curves — are
-> coarser or absent, sessions are labelled "Keyword Analysis" rather than "AI Analyzed",
-> and analysis may pause when you leave the app instead of continuing in the background.
+> coarser or absent. Results show "Keyword Analysis" rather than "AI Analyzed", and
+> generated sessions are named "Built-In Light Session" rather than "AI Light Session".
+> Analysis may pause when you leave the app instead of continuing in the background.
 > Older hardware will also transcribe more slowly. If you are on iOS 18, that is expected
 > behaviour — please don't file it as a bug, but do tell us if a *generated session* feels
 > wrong.
@@ -66,7 +67,7 @@ Thank you for joining the Ilumionate beta! This guide will help you get the most
 ### C. Audio Integration (Priority: MEDIUM)
 **Test Steps:**
 1. Import an audio file (.m4a or .mp3)
-2. Wait for AI analysis to complete
+2. Wait for analysis to complete (built-in on iOS 18–25, on-device AI on iOS 26)
 3. Generate a custom session
 4. Play the generated session with your audio
 
@@ -254,5 +255,5 @@ Your participation makes Ilumionate better for everyone. Every bug you find, eve
 
 ---
 
-*Last Updated: March 5, 2026*
-*Guide Version: 1.0*
+*Last Updated: August 30, 2026*
+*Guide Version: 1.1*
