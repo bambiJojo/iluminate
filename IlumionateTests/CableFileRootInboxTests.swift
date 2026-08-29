@@ -13,6 +13,7 @@ import Foundation
 import Testing
 @testable import Ilumionate
 
+@MainActor
 struct CableFileRootInboxTests {
 
     @Test("A drop at the Documents root is admitted")
@@ -46,6 +47,7 @@ struct CableFileRootInboxTests {
 
         #expect(result.rejected.isEmpty)
         #expect(result.imported.isEmpty)
+        #expect(result.importedDocuments.isEmpty)
         #expect(FileManager.default.fileExists(atPath: strayURL.path))
     }
 
@@ -203,8 +205,8 @@ struct CableFileRootInboxTests {
     }
 
     /// The dedicated subfolder is still reachable from the iOS Files app, and
-    /// there an unrecognised file *is* a failed import.
-    @Test("The dedicated inbox still routes unsupported files to Needs Review")
+    /// there an invalid recognized document is a failed import.
+    @Test("The dedicated inbox routes invalid documents to Needs Review")
     func dedicatedInboxStillRejectsToNeedsReview() async throws {
         let fixture = try RootInboxFixture()
         defer { fixture.remove() }
@@ -218,7 +220,7 @@ struct CableFileRootInboxTests {
         #expect(FileManager.default.fileExists(atPath: strayURL.path) == false)
         #expect(FileManager.default.fileExists(
             atPath: fixture.reviewURL
-                .appending(path: "Unsupported Files")
+                .appending(path: "Invalid Documents")
                 .appending(path: "notes.txt")
                 .path
         ))
@@ -289,6 +291,25 @@ struct CableFileRootInboxTests {
                 .path
         ))
     }
+
+    @Test("A text file dropped at the Documents root reaches the reader")
+    func admitsTextFromTheDocumentsRoot() async throws {
+        let fixture = try RootInboxFixture()
+        defer { fixture.remove() }
+
+        let sourceURL = fixture.rootInboxURL.appending(path: "Root Script.txt")
+        try Data("Let your shoulders drop and your breathing slow right down now.".utf8)
+            .write(to: sourceURL)
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.importedDocuments.count == 1)
+        #expect(result.rejected.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: sourceURL.path) == false)
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.importedURL.appending(path: "Root Script.txt").path
+        ))
+    }
 }
 
 private extension String {
@@ -309,6 +330,7 @@ private struct RootInboxFixture {
     let reviewURL: URL
     let managedAudioURL: URL
     let libraryStorage: AudioLibraryStorage
+    let documentStore: ReadingDocumentStore
 
     let validMP3Data = Data([
         0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
@@ -320,6 +342,7 @@ private struct RootInboxFixture {
         validMP3Data + Data(repeating: marker, count: 16)
     }
 
+    @MainActor
     init() throws {
         containerURL = URL.temporaryDirectory.appending(
             path: "CableRootInboxTests-\(UUID().uuidString)",
@@ -334,6 +357,9 @@ private struct RootInboxFixture {
         libraryStorage = AudioLibraryStorage(
             fileURL: containerURL.appending(path: "library.json"),
             legacyDefaults: nil
+        )
+        documentStore = ReadingDocumentStore(
+            directoryURL: containerURL.appending(path: "Reader", directoryHint: .isDirectory)
         )
 
         for url in [rootInboxURL, dedicatedInboxURL, textInboxURL, managedAudioURL] {
@@ -353,6 +379,12 @@ private struct RootInboxFixture {
             reviewURL: reviewURL,
             importedURL: importedURL,
             managedAudioURL: managedAudioURL,
+            readerAdmission: ReaderInboxAdmission { [documentStore] url, originalFilename in
+                try await documentStore.importDocumentReportingReplacement(
+                    from: url,
+                    originalFilename: originalFilename
+                )
+            },
             libraryStorage: libraryStorage,
             stabilityDelay: .zero,
             minimumSettleAge: minimumSettleAge,

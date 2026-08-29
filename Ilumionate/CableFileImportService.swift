@@ -25,6 +25,7 @@ actor CableFileImportService {
     private let reviewURL: URL
     private let importedURL: URL
     private let managedAudioURL: URL
+    private let readerAdmission: ReaderInboxAdmission
     private let libraryStorage: AudioLibraryStorage
     private let stabilityDelay: Duration
     /// How long a file must have sat untouched before it may be moved.
@@ -44,6 +45,7 @@ actor CableFileImportService {
         reviewURL: URL = AppStoragePaths.cableReview,
         importedURL: URL = AppStoragePaths.cableImported,
         managedAudioURL: URL = AppStoragePaths.managedAudio,
+        readerAdmission: ReaderInboxAdmission = ReaderInboxAdmission(),
         libraryStorage: AudioLibraryStorage = .standard,
         stabilityDelay: Duration = .seconds(1),
         minimumSettleAge: Duration = .seconds(5),
@@ -58,6 +60,7 @@ actor CableFileImportService {
         self.reviewURL = reviewURL
         self.importedURL = importedURL
         self.managedAudioURL = managedAudioURL
+        self.readerAdmission = readerAdmission
         self.libraryStorage = libraryStorage
         self.stabilityDelay = stabilityDelay
         self.minimumSettleAge = minimumSettleAge
@@ -112,13 +115,8 @@ actor CableFileImportService {
                     continue
                 }
 
-                guard !registeredURLs.contains(snapshot.url.standardizedFileURL) else {
-                    continue
-                }
-
-                guard AudioDownloadValidation.audioExtensions.contains(
-                    snapshot.url.pathExtension.lowercased()
-                ) else {
+                switch CableInboxFileKind(url: snapshot.url) {
+                case .unrecognized:
                     // At the root this is somebody else's file, not a failed
                     // import. Moving it would be the bug.
                     if snapshot.source == .dedicated {
@@ -129,6 +127,42 @@ actor CableFileImportService {
                         )
                     }
                     continue
+
+                case .readerDocument:
+                    let outcome = await admitReaderDocument(at: snapshot.url)
+                    if let document = outcome.document {
+                        result.importedDocuments.append(document)
+                    }
+                    if let failure = outcome.failure {
+                        result.failures.append(failure)
+                    }
+                    if outcome.rejected {
+                        recordRejection(
+                            snapshot.url,
+                            category: "Invalid Documents",
+                            result: &result
+                        )
+                    }
+                    if outcome.duplicate {
+                        do {
+                            try preserveForReview(snapshot.url, category: "Duplicates")
+                            result.duplicates.append(snapshot.url.lastPathComponent)
+                        } catch {
+                            result.failures.append(CableFileImportFailure(
+                                filename: snapshot.url.lastPathComponent,
+                                message: error.localizedDescription
+                            ))
+                        }
+                    }
+                    continue
+
+                case .audio:
+                    // Reader documents copy extracted text into their own store
+                    // and never address the inbox URL. This ownership guard is
+                    // therefore audio-only.
+                    guard !registeredURLs.contains(snapshot.url.standardizedFileURL) else {
+                        continue
+                    }
                 }
 
                 guard looksLikeAudio(at: snapshot.url) else {
@@ -310,6 +344,47 @@ actor CableFileImportService {
         defer { try? handle.close() }
         guard let prefix = try? handle.read(upToCount: 12) else { return false }
         return AudioDownloadValidation.looksLikeAudio(prefix)
+    }
+
+    /// Moves a successfully imported document's source out of the inbox and
+    /// into the visible archive. Called *after* the store has the text, so a
+    /// failure here leaves a file the next scan re-imports idempotently rather
+    /// than one that is lost.
+    private func archiveImported(_ sourceURL: URL) throws {
+        try FileManager.default.createDirectory(
+            at: importedURL,
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.moveItem(
+            at: sourceURL,
+            to: uniqueURL(for: sourceURL.lastPathComponent, in: importedURL)
+        )
+    }
+
+    private func admitReaderDocument(
+        at sourceURL: URL
+    ) async -> (document: ReadingDocument?, failure: CableFileImportFailure?, rejected: Bool, duplicate: Bool) {
+        switch await readerAdmission.admit(sourceURL) {
+        case .imported(let document):
+            do {
+                try archiveImported(sourceURL)
+                return (document, nil, false, false)
+            } catch {
+                return (document, CableFileImportFailure(
+                    filename: sourceURL.lastPathComponent,
+                    message: "Imported, but the file could not be moved to _Imported: \(error.localizedDescription)"
+                ), false, false)
+            }
+        case .duplicate:
+            return (nil, nil, false, true)
+        case .rejected:
+            return (nil, nil, true, false)
+        case .failed(let message):
+            return (nil, CableFileImportFailure(
+                filename: sourceURL.lastPathComponent,
+                message: message
+            ), false, false)
+        }
     }
 
     private func preserveForReview(_ sourceURL: URL, category: String) throws {

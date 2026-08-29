@@ -7,6 +7,7 @@ import Foundation
 import Testing
 @testable import Ilumionate
 
+@MainActor
 struct CableFileImportTests {
     @Test("A stable audio drop is admitted to private storage and the library")
     func importsStableAudioDrop() async throws {
@@ -59,7 +60,7 @@ struct CableFileImportTests {
         ))
     }
 
-    @Test("Invalid and unsupported drops are separated for Finder review")
+    @Test("Invalid audio and documents are separated for Finder review")
     func preservesRejectedFilesByReason() async throws {
         let fixture = try CableImportFixture()
         defer { fixture.remove() }
@@ -82,7 +83,7 @@ struct CableFileImportTests {
         ))
         #expect(FileManager.default.fileExists(
             atPath: fixture.inboxURL
-                .appending(path: "_Needs Review/Unsupported Files/Notes.txt")
+                .appending(path: "_Needs Review/Invalid Documents/Notes.txt")
                 .path
         ))
     }
@@ -170,6 +171,109 @@ struct CableFileImportTests {
                 .path
         ))
     }
+
+    @Test("A dropped text file is admitted to the reader and its source archived")
+    func importsTextDropIntoTheReader() async throws {
+        let fixture = try CableImportFixture()
+        defer { fixture.remove() }
+
+        let sourceURL = fixture.inboxURL.appending(path: "Evening Script.txt")
+        try Data("Let your shoulders drop and your breathing slow right down now.".utf8)
+            .write(to: sourceURL)
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.importedDocuments.count == 1)
+        #expect(result.imported.isEmpty)
+        #expect(result.failures.isEmpty)
+        #expect(result.importedDocuments.first?.originalFilename == "Evening Script.txt")
+        #expect(FileManager.default.fileExists(atPath: sourceURL.path) == false)
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.importedURL.appending(path: "Evening Script.txt").path
+        ))
+    }
+
+    @Test("Audio and text in one drop are admitted in a single scan")
+    func importsMixedDropInOnePass() async throws {
+        let fixture = try CableImportFixture()
+        defer { fixture.remove() }
+
+        try fixture.validMP3Data.write(to: fixture.inboxURL.appending(path: "Session.mp3"))
+        try Data("Let your shoulders drop and your breathing slow right down now.".utf8)
+            .write(to: fixture.inboxURL.appending(path: "Script.txt"))
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.imported.count == 1)
+        #expect(result.importedDocuments.count == 1)
+        #expect(result.failures.isEmpty)
+    }
+
+    /// Both dedicated inboxes accept either kind — classification is by file,
+    /// not by folder — so a misfiled drop still imports.
+    @Test("Text dropped in the audio inbox still imports")
+    func admitsTextFromTheAudioInbox() async throws {
+        let fixture = try CableImportFixture()
+        defer { fixture.remove() }
+
+        try Data("Let your shoulders drop and your breathing slow right down now.".utf8)
+            .write(to: fixture.inboxURL.appending(path: "Misfiled.txt"))
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.importedDocuments.count == 1)
+        #expect(result.rejected.isEmpty)
+    }
+
+    @Test("Audio dropped in the text inbox still imports")
+    func admitsAudioFromTheTextInbox() async throws {
+        let fixture = try CableImportFixture()
+        defer { fixture.remove() }
+
+        try fixture.validMP3Data.write(to: fixture.textInboxURL.appending(path: "Misfiled.mp3"))
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.imported.count == 1)
+        #expect(result.rejected.isEmpty)
+    }
+
+    @Test("A re-dropped document is filed as a duplicate, not announced again")
+    func filesRedroppedDocumentAsDuplicate() async throws {
+        let fixture = try CableImportFixture()
+        defer { fixture.remove() }
+
+        let text = Data("Let your shoulders drop and your breathing slow right down now.".utf8)
+        let sourceURL = fixture.inboxURL.appending(path: "Script.txt")
+        try text.write(to: sourceURL)
+        let service = fixture.makeService()
+        _ = await service.importAvailableFiles()
+
+        try text.write(to: sourceURL)
+        let second = await service.importAvailableFiles()
+
+        #expect(second.importedDocuments.isEmpty)
+        #expect(second.duplicates == ["Script.txt"])
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.inboxURL.appending(path: "_Needs Review/Duplicates/Script.txt").path
+        ))
+    }
+
+    @Test("A text file with nothing readable in it is filed as invalid")
+    func filesUnreadableDocumentAsInvalid() async throws {
+        let fixture = try CableImportFixture()
+        defer { fixture.remove() }
+
+        try Data("Too short.".utf8).write(to: fixture.inboxURL.appending(path: "Stub.txt"))
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.importedDocuments.isEmpty)
+        #expect(result.rejected == ["Stub.txt"])
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.inboxURL.appending(path: "_Needs Review/Invalid Documents/Stub.txt").path
+        ))
+    }
 }
 
 private struct CableImportFixture {
@@ -182,11 +286,13 @@ private struct CableImportFixture {
     let importedURL: URL
     let managedAudioURL: URL
     let libraryStorage: AudioLibraryStorage
+    let documentStore: ReadingDocumentStore
 
     let validMP3Data = Data([
         0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     ])
 
+    @MainActor
     init() throws {
         rootURL = URL.temporaryDirectory.appending(
             path: "CableFileImportTests-\(UUID().uuidString)",
@@ -200,6 +306,9 @@ private struct CableImportFixture {
         libraryStorage = AudioLibraryStorage(
             fileURL: rootURL.appending(path: "library.json"),
             legacyDefaults: nil
+        )
+        documentStore = ReadingDocumentStore(
+            directoryURL: rootURL.appending(path: "Reader", directoryHint: .isDirectory)
         )
 
         try FileManager.default.createDirectory(
@@ -234,6 +343,12 @@ private struct CableImportFixture {
             reviewURL: inboxURL.appending(path: "_Needs Review", directoryHint: .isDirectory),
             importedURL: importedURL,
             managedAudioURL: managedAudioURL,
+            readerAdmission: ReaderInboxAdmission { [documentStore] url, originalFilename in
+                try await documentStore.importDocumentReportingReplacement(
+                    from: url,
+                    originalFilename: originalFilename
+                )
+            },
             libraryStorage: libraryStorage,
             stabilityDelay: .zero,
             minimumSettleAge: .zero,
