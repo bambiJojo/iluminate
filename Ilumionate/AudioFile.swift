@@ -641,7 +641,7 @@ extension AnalysisResult {
     /// carried by default instead of being dropped by default. Doubly-optional
     /// parameters distinguish "leave alone" (`nil`) from "set to nothing"
     /// (`.some(nil)`).
-    func with(
+    nonisolated func with(
         recommendedPreset: String? = nil,
         contentType: ContentType? = nil,
         hypnosisMetadata: HypnosisMetadata?? = nil,
