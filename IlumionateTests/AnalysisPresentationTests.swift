@@ -28,6 +28,30 @@ struct AnalysisPresentationTests {
         #expect(AnalysisResultPresentation.insightsLabel(for: result) == "AI Insights")
     }
 
+    @Test("Settings name the built-in analysis path on older systems")
+    func builtInSettingsLabels() {
+        #expect(
+            AnalysisAvailabilityPresentation.cardLabel(supportsFoundationModels: false)
+                == "Light Sync Analysis"
+        )
+        #expect(
+            AnalysisAvailabilityPresentation.sectionTitle(supportsFoundationModels: false)
+                == "Built-In Analysis"
+        )
+    }
+
+    @Test("Settings retain their AI labels when Foundation Models is supported")
+    func aiSettingsLabels() {
+        #expect(
+            AnalysisAvailabilityPresentation.cardLabel(supportsFoundationModels: true)
+                == "Light Sync AI"
+        )
+        #expect(
+            AnalysisAvailabilityPresentation.sectionTitle(supportsFoundationModels: true)
+                == "AI Analysis"
+        )
+    }
+
     private func makeResult(summary: String) -> AnalysisResult {
         AnalysisResult(
             mood: .relaxing,

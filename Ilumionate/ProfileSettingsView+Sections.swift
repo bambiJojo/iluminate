@@ -273,13 +273,17 @@ extension ProfileSettingsView {
     // MARK: - Light Sync Preferences (from Analyzer)
 
     var lightSyncPreferencesSection: some View {
-        GlassCard(label: "Light Sync AI") {
+        GlassCard(label: AnalysisAvailabilityPresentation.cardLabel(
+            supportsFoundationModels: isFoundationModelsSupported
+        )) {
             VStack(alignment: .leading, spacing: TranceSpacing.list) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
                         .font(.subheadline)
                         .foregroundStyle(Color.roseGold)
-                    Text("AI Analysis")
+                    Text(AnalysisAvailabilityPresentation.sectionTitle(
+                        supportsFoundationModels: isFoundationModelsSupported
+                    ))
                         .font(TranceTypography.sectionTitle)
                         .foregroundStyle(Color.textPrimary)
                 }
