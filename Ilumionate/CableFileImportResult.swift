@@ -44,18 +44,21 @@ nonisolated struct CableFileImportResult: Sendable {
             || failures.isEmpty == false
     }
 
-    /// Counts what this transfer produced, whether admitted by this scan or by
-    /// an earlier one in the same session. The watcher usually gets there
-    /// first, so a user who taps Check afterwards is asking about the same
-    /// batch and should be told it succeeded.
-    private var addedCount: Int {
-        imported.count + importedDocuments.count + priorImportCount
+    /// Counts only what this scan admitted. Earlier success must not mask new
+    /// review work such as a duplicate or rejected file.
+    private var importedCount: Int {
+        imported.count + importedDocuments.count
     }
 
     var title: String {
+        if hasActivity == false, priorImportCount > 0 {
+            let subject = noun(priorImportCount, singular: "File", plural: "Files")
+            return "\(priorImportCount) \(subject) Already Added"
+        }
+
         // The title is what a user acts on. "No New Files Found" above a body
         // explaining that five files just landed reads as failure.
-        if addedCount > 0, failures.isEmpty {
+        if importedCount > 0, failures.isEmpty {
             var parts: [String] = []
             if imported.isEmpty == false {
                 let subject = noun(
@@ -72,12 +75,6 @@ nonisolated struct CableFileImportResult: Sendable {
                     plural: "Documents"
                 )
                 parts.append("\(importedDocuments.count) \(subject)")
-            }
-            // Only an earlier scan contributed, and it cannot be asked which
-            // kind it admitted — so the wording generalises rather than guesses.
-            if parts.isEmpty {
-                let subject = noun(priorImportCount, singular: "File", plural: "Files")
-                parts.append("\(priorImportCount) \(subject)")
             }
             return "\(parts.joined(separator: ", ")) Added"
         }
@@ -137,7 +134,7 @@ nonisolated struct CableFileImportResult: Sendable {
             if priorImportCount > 0 {
                 let subject = noun(priorImportCount, singular: "file is", plural: "files are")
                 lines.append(
-                    "Nothing new to import. \(priorImportCount) transferred \(subject) already in your Library."
+                    "Nothing new to import. \(priorImportCount) transferred \(subject) already in LumeSync."
                 )
             } else {
                 lines.append("Connect your iPhone, open Finder, select it, and drag audio or documents onto LumeSync in the Files tab. Then check again.")

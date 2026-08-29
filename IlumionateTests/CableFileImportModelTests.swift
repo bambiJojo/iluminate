@@ -236,7 +236,7 @@ struct CableAudioEmptyResultCopyTests {
         var result = CableFileImportResult()
         result.priorImportCount = 5
 
-        #expect(result.message.contains("already in your Library"))
+        #expect(result.message == "Nothing new to import. 5 transferred files are already in LumeSync.")
         #expect(result.message.contains("Connect your iPhone") == false)
     }
 
@@ -284,7 +284,7 @@ struct CableFileImportTitleTests {
         var result = CableFileImportResult()
         result.priorImportCount = 5
 
-        #expect(result.title == "5 Files Added")
+        #expect(result.title == "5 Files Already Added")
     }
 
     @Test("A single earlier import reads in the singular")
@@ -292,7 +292,16 @@ struct CableFileImportTitleTests {
         var result = CableFileImportResult()
         result.priorImportCount = 1
 
-        #expect(result.title == "1 File Added")
+        #expect(result.title == "1 File Already Added")
+    }
+
+    @Test("Earlier imports do not hide files that now need review")
+    func priorImportsDoNotHideReviewWork() {
+        var result = CableFileImportResult()
+        result.priorImportCount = 4
+        result.duplicates = ["Repeated.mp3"]
+
+        #expect(result.title == "File Transfer Needs Review")
     }
 
     @Test("A genuinely empty inbox still says nothing was found")
