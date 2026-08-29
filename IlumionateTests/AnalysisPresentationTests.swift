@@ -28,6 +28,28 @@ struct AnalysisPresentationTests {
         #expect(AnalysisResultPresentation.insightsLabel(for: result) == "AI Insights")
     }
 
+    @Test("Built-in results do not produce an AI-named light session")
+    func builtInSessionName() {
+        let result = makeResult(
+            summary: AIGenerationDiagnosis.fallbackSummary(for: .unsupportedOS)
+        )
+
+        #expect(
+            AnalysisResultPresentation.sessionName(audioTitle: "Evening Calm", result: result)
+                == "Evening Calm — Built-In Light Session"
+        )
+    }
+
+    @Test("Foundation Models results retain the AI light-session name")
+    func aiSessionName() {
+        let result = makeResult(summary: "A model-generated summary.")
+
+        #expect(
+            AnalysisResultPresentation.sessionName(audioTitle: "Evening Calm", result: result)
+                == "Evening Calm — AI Light Session"
+        )
+    }
+
     @Test("Settings name the built-in analysis path on older systems")
     func builtInSettingsLabels() {
         #expect(

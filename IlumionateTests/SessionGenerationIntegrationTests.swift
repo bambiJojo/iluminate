@@ -69,6 +69,25 @@ struct SessionGenerationIntegrationTests {
         #expect(session.light_score.isEmpty == false)
     }
 
+    @Test func builtInAnalysisProducesBuiltInSessionName() {
+        let analysis = AnalysisResult(
+            mood: .neutral,
+            energyLevel: 0.3,
+            suggestedFrequencyRange: 6...10,
+            suggestedIntensity: 0.5,
+            keyMoments: [],
+            aiSummary: AIGenerationDiagnosis.fallbackSummary(for: .unsupportedOS),
+            recommendedPreset: "Fixture"
+        )
+
+        let session = generator.generateSession(
+            from: AnalysisFixtures.audioFile(filename: "Evening Calm.m4a"),
+            analysis: analysis
+        )
+
+        #expect(session.session_name == "Evening Calm — Built-In Light Session")
+    }
+
     // MARK: - Unknown Content Type
 
     @Test func unknownType_doesNotCrash() {

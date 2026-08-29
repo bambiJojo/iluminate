@@ -95,7 +95,10 @@ class SessionGenerator {
         )
         let session = LightSession(
             id: UUID(),
-            session_name: "\(audioFile.displayName) — AI Light Session",
+            session_name: AnalysisResultPresentation.sessionName(
+                audioTitle: audioFile.displayName,
+                result: analysis
+            ),
             duration_sec: audioFile.duration,
             light_score: optimized.moments,
             alignment_report: optimized.report

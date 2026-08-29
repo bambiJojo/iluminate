@@ -17,4 +17,9 @@ enum AnalysisResultPresentation {
     static func insightsLabel(for result: AnalysisResult) -> String {
         result.usedKeywordFallback ? "Built-In Insights" : "AI Insights"
     }
+
+    static func sessionName(audioTitle: String, result: AnalysisResult) -> String {
+        let source = result.usedKeywordFallback ? "Built-In" : "AI"
+        return "\(audioTitle) — \(source) Light Session"
+    }
 }
