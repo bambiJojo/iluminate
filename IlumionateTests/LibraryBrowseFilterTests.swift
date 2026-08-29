@@ -260,4 +260,10 @@ struct LibraryBrowseFilterTests {
         #expect(PlaylistSortOption.trackCount.sorted(playlists).map(\.name) == ["Zeta", "Alpha"])
         #expect(PlaylistSortOption.duration.sorted(playlists).map(\.name) == ["Zeta", "Alpha"])
     }
+
+    @MainActor
+    @Test("The legacy audio-library sorter does not claim built-in confidence is AI")
+    func audioLibraryConfidenceLabelIsSourceNeutral() {
+        #expect(AudioLibraryView.SortOption.confidence.rawValue == "Analysis Confidence")
+    }
 }

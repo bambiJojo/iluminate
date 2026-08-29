@@ -18,7 +18,7 @@ struct AudioLibraryView: View {
         case duration = "Duration"
         case analyzed = "Analysis Complete"
         case tranceDepth = "Trance Depth"
-        case confidence = "AI Confidence"
+        case confidence = "Analysis Confidence"
         case lastPlayed = "Recently Played"
     }
 
