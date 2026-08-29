@@ -159,6 +159,14 @@ struct ContentView: View {
                 Button("Analyze All") {
                     analyzeCableImports()
                 }
+            } else if cableImport.presentedResult?.importedDocuments.isEmpty == false {
+                Button("Not Now", role: .cancel) {
+                    cableImport.dismissResult()
+                }
+                Button("Open Reader") {
+                    cableImport.dismissResult()
+                    selectedTab = .read
+                }
             } else {
                 Button("OK", role: .cancel) {
                     cableImport.dismissResult()
@@ -237,8 +245,8 @@ struct ContentView: View {
                 LibraryView(
                     engine: engine,
                     builtInSessions: sessions,
-                    isCheckingIncomingAudio: cableImport.isScanning,
-                    onCheckIncomingAudio: {
+                    isCheckingIncomingFiles: cableImport.isScanning,
+                    onCheckIncomingFiles: {
                         Task { await scanCableInbox(manual: true) }
                     }
                 )
@@ -333,7 +341,7 @@ struct ContentView: View {
     }
 
     private var cableImportAlertTitle: String {
-        cableImport.presentedResult?.title ?? "Audio Transfer"
+        cableImport.presentedResult?.title ?? "File Transfer"
     }
 
     private var showingCableImportResult: Binding<Bool> {

@@ -30,8 +30,8 @@ struct LibraryView: View {
     /// which meant a synchronous JSON decode on the main actor every single
     /// time the Library tab was tapped.
     let builtInSessions: [LightSession]
-    let isCheckingIncomingAudio: Bool
-    let onCheckIncomingAudio: () -> Void
+    let isCheckingIncomingFiles: Bool
+    let onCheckIncomingFiles: () -> Void
 
     @State private var audioFiles: [AudioFile] = []
     @State private var audioLibraryCache = AudioLibraryCache.shared
@@ -126,8 +126,8 @@ struct LibraryView: View {
                                 onNewPlaylist: { editingPlaylist = Playlist(name: "") },
                                 onImportPlaylistLink: { playlistImportRequest = PlaylistImportRequest(audioFiles: audioFiles) },
                                 onBrowseForPlaylist: { showingPlaylistLinkBrowser = true },
-                                isCheckingIncomingAudio: isCheckingIncomingAudio,
-                                onCheckIncomingAudio: onCheckIncomingAudio,
+                                isCheckingIncomingFiles: isCheckingIncomingFiles,
+                                onCheckIncomingFiles: onCheckIncomingFiles,
                                 onManageAudio: { showingSessionsManager = true }
                             )
                         }
