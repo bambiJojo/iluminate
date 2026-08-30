@@ -168,9 +168,233 @@ Analysis Task Center's Phase 2b watchdog are concerned with.
 Still unmeasured. The instrument guidance above (Memory Graph Debugger at peak, rather than a
 full Allocations trace) remains the cheapest next step.
 
+**Static confirmation of the library-decode suspicion** _(2026-08-30)_ — not a
+measurement, and deliberately not a fix.
+
+The "Where" section above listed the audio library as a candidate on the reasoning
+that "every `AudioFile` carries its full transcript and `AnalysisResult`". That part
+is now confirmed by reading the code rather than guessed:
+
+- `Ilumionate/AudioFile.swift:46-47` — `var transcription: String?` and
+  `var analysisResult: AnalysisResult?` are **stored properties on the value type**,
+  so they are resident for every entry in the library, not loaded on demand.
+- `AudioLibraryStore.load(storage:)` (`AudioLibraryStore.swift:59`) decodes the
+  whole `[AudioFile]` in one pass. With the 108 cached results noted above, every
+  call materialises 108 transcripts.
+
+**Better news than the entry assumed:** `load()` has only **three** call sites, in
+two files (`AnalysisStateManager.swift`, `CableFileImportService.swift`). The
+"Risks / blockers" note above — "called from many places … changes the shape of the
+type every consumer sees" — overstates the blast radius. Splitting the heavy fields
+out is a smaller change than this entry feared.
+
+**Deliberately not fixed here.** This entry's own instruction is "Measure before
+changing anything," and that still stands: knowing the transcripts are resident does
+not establish that they are the 628 MB, and WhisperKit model initialisation remains
+the prime suspect from the log ordering. Doing the refactor blind would risk a
+non-trivial type change for an unmeasured benefit. The Memory Graph Debugger capture
+at peak is still step one; this note only means step two is cheaper than recorded.
+
 ---
 
 ## Resolved
+
+### ERR-020 — SoundCloud client secret and access token are stored in UserDefaults, not the Keychain
+
+- **Date discovered:** 2026-08-26
+- **Status:** completed 2026-08-30
+- **Severity:** medium
+- **Area:** settings, credentials
+
+**Symptom**
+The SoundCloud client ID, client secret, and OAuth access token are persisted in
+`UserDefaults` under the keys `SoundCloud_ClientId`, `SoundCloud_Secret`, and
+`SoundCloud_AccessToken`. `UserDefaults` is a plist in the app container with no encryption
+at rest beyond the file-protection class, and it is included in device backups. There is no
+Keychain usage anywhere in the app — `grep -rn "Keychain\|kSecClass" --include="*.swift"
+Ilumionate` returns nothing.
+
+**Where**
+`Ilumionate/AppSettingsManager.swift:38-40` — key definitions.
+`Ilumionate/AppSettingsManager.swift:157-159` — read via `defaults.string(forKey:)` to derive
+`soundCloudConfigured` / `soundCloudAuthenticated`.
+`Ilumionate/AppSettingsManager.swift:244-246` — cleared on reset.
+
+**Reproduction**
+```
+grep -rn "soundCloudClientId\|soundCloudSecret\|soundCloudAccessToken" --include="*.swift" Ilumionate
+grep -rln "Keychain\|kSecClass" --include="*.swift" Ilumionate   # returns nothing
+```
+
+**Root cause**
+Carried over from the original settings design, which put every persisted value through one
+`UserDefaults`-backed manager without distinguishing secrets from preferences. Flagged in the
+2026-04-04 `remediation_plan.md` (§1.2, "Secrets handling") and never actioned before that
+plan was retired on 2026-08-26; the item was folded into `plan.md` under SECURITY / HYGIENE.
+
+**Proposed fix**
+Decide first whether the SoundCloud integration is still live. No code path currently
+*writes* these three keys — only reads them for the two boolean status flags and clears them
+on reset — so the feature looks vestigial. Either:
+(a) delete the three keys and the two derived flags outright, or
+(b) if SoundCloud import is coming back, move the secret and token behind a small
+    Keychain-backed store (`kSecClassGenericPassword`, `kSecAttrAccessibleAfterFirstUnlock`),
+    leave the non-sensitive client ID wherever is convenient, and add a one-time migration
+    that copies then removes any existing `UserDefaults` values.
+
+**Risks / blockers**
+`IlumionateTests/AppSettingsManagerTests.swift:27` seeds `soundCloudClientId` directly into a
+test `UserDefaults`; it will need updating under either option. Option (a) is a product
+decision, not a mechanical one — confirm the integration is dead before deleting.
+
+**Resolution** _(2026-08-30)_ — option (a). The integration is dead, confirmed rather than
+assumed: the whole streaming feature was deleted in `e9cb0f1` ("refactor: remove unreachable
+streaming feature"). `SoundCloudService.swift`, `StreamingManager.swift` and
+`StreamingBrowserView.swift` no longer exist, and after excluding `.claude/worktrees/` copies
+the three key names survive only as constants in `AppSettingsManager`:
+
+```bash
+grep -rn "SoundCloud_ClientId\|SoundCloud_Secret\|SoundCloud_AccessToken" --include="*.swift" Ilumionate/ | grep -v "^Ilumionate/.claude"
+```
+
+**Deleting the code was not enough, and that was the substance of the fix.** Removing what
+*reads* a credential does not remove the credential — any device that authenticated before
+`e9cb0f1` still holds the client secret and OAuth token in its `UserDefaults` plist. Changes:
+
+- `AppSettingsManager.purgeRetiredStreamingCredentials(defaults:)`, called from
+  `IlumionateApp.init()`, deletes all three keys on every launch. Nothing writes them again,
+  so it is a no-op after the first pass.
+- `ExportStreaming` and the `streaming` field on `ExportSnapshot` are gone, along with the two
+  derived `soundCloudConfigured` / `soundCloudAuthenticated` flags — the last code that read
+  the secret, and it copied its status into an exported JSON file. Safe to remove: the export
+  is never decoded by the app, only round-tripped in `AppSettingsManagerTests`.
+- The three `Key` constants are retained and commented as retired, because the purge and the
+  existing reset list both need them to delete by name.
+
+**Verified.** New `RetiredStreamingCredentialTests` covers a populated purge and the
+no-credentials no-op; the export test was updated to stop seeding them.
+
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' \
+    -only-testing:IlumionateTests/RetiredStreamingCredentialTests \
+    -only-testing:IlumionateTests/AppSettingsManagerTests
+# ** TEST SUCCEEDED **, Executed 10 test case(s)
+```
+
+**Still outstanding.** No Keychain use was introduced, because after option (a) the app stores
+no secrets at all — `grep -rln "Keychain\|kSecClass"` still returns nothing, and that is now
+correct rather than a gap. If any credentialled integration is added later, it needs a
+Keychain-backed store from the start; do not re-open this pattern.
+
+The purge is also **write-only-verified**: it is proven to delete the keys from a test
+`UserDefaults`, but nobody has confirmed on a real device that previously authenticated that
+the values are gone after one launch. Any device already wiped or reinstalled is unaffected
+either way.
+
+---
+
+### ERR-021 — `stalledTranscriptionIsTerminalizedExactlyOnce` hangs to its time limit on every iOS simulator
+
+- **Date discovered:** 2026-08-27
+- **Status:** completed
+- **Severity:** high
+- **Area:** analysis pipeline, tests, concurrency
+
+**Symptom** _(as observed before the fix)_
+`AnalysisInactivityWatchdogTests/stalledTranscriptionIsTerminalizedExactlyOnce()` never
+completed on an iOS Simulator. It sat until its `.timeLimit(.minutes(1))` trait fired and was
+reported as `failed … (60.000 seconds)`. The same test passed on macOS in ~0.2 s.
+
+It took the whole iOS suite down with it. The hang usually aborted the run rather than failing
+one case: three full-suite attempts on iOS 18.5 executed 63, 68, and 1799 of ~1799 cases
+depending on when the hung test got scheduled, and `xcodebuild` exited both 0 and 65 for the
+same hang. A green-looking iOS run could therefore have skipped a thousand tests.
+
+This was **not** an iOS 18 regression. It was found while validating the `compat/ios-18`
+deployment-target drop, but reproduced identically on iOS 26.5, so the platform-support change
+did not cause it.
+
+| Destination | Before the fix |
+|---|---|
+| `platform=macOS,arch=arm64` | passed (0.200 s / 0.402 s across two runs) |
+| iOS Simulator, iPhone 16 Pro, iOS 18.5 | **failed — 60.000 s** |
+| iOS Simulator, iPhone 17 Pro, iOS 26.5 | **failed — 60.000 s** |
+
+Its sibling `stalledContentAnalysisIsTerminalized()` passed on all three.
+
+> **Note for the reader:** `Scripts/run-tests.sh` guards against *zero* tests running, not a
+> truncated run, so it could not catch this. That gap is unchanged — it simply has no known
+> trigger now. If an iOS run ever looks green with an implausibly low case count again, compare
+> it against the macOS count (1799 as of 2026-08-28) before trusting it.
+
+**Where**
+`IlumionateTests/AnalysisInactivityWatchdogTests.swift:63` — the test.
+`IlumionateTests/AnalysisInactivityWatchdogTests.swift:94-98` — the spin loop and the join
+that never returns:
+```swift
+let processing = Task { await manager.queueForAnalysis([audioFile, nextFile]) }
+while !transcriber.hasStarted { await Task.yield() }
+await processing.value
+```
+`IlumionateTests/AnalysisInactivityWatchdogTests.swift:172` — `UncooperativeAudioTranscriber`,
+which is **not** `@MainActor`. Contrast `UncooperativeContentAnalyzer` at line 202-203, which
+**is** `@MainActor` and whose test passes everywhere.
+`IlumionateTests/AnalysisInactivityWatchdogTests.swift:10` — the suite is `@MainActor`, so the
+spin loop runs on the main actor.
+
+**Reproduction**
+```
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+    -only-testing:IlumionateTests/AnalysisInactivityWatchdogTests
+```
+Fails in isolation; does not need the full suite. Passes with
+`-destination 'platform=macOS,arch=arm64'`.
+
+**Root cause**
+**QoS throttling, not a hang.** The queue was being drained at `.background` priority, which
+iOS throttles aggressively and macOS barely throttles at all. Instrumentation showed the work
+was progressing the whole time, just far too slowly to finish inside the test's one-minute
+limit:
+
+```
+[10ms]     cur=nil                              calls=1  done=0 fail=1
+[960ms]    cur=after-stall.m4a:starting:p0.0    calls=1  done=0 fail=1
+[13680ms]  cur=after-stall.m4a:transcribing     calls=2  done=0 fail=1
+[16320ms]  cur=after-stall.m4a:transcribing:p0.4 calls=2 done=0 fail=1
+```
+
+macOS ran the identical path in 0.2 s. Both hypotheses recorded when this was first logged
+were wrong: `UncooperativeAudioTranscriber` *is* `@MainActor` (line 171), and
+`queueForAnalysis` *did* return correctly with the stall terminalized (failures=1). The stall
+contract itself was never broken.
+
+Two things combined:
+
+1. **Product** — `endAnalysisResourceQuarantine` resumed the queue with
+   `await startAutomaticProcessing()`, taking the parameter default `.background` instead of
+   the priority the queue was actually running at. Any run started at a higher priority was
+   silently demoted for its whole remainder after the first stall. Invisible on macOS;
+   on iOS it turned the rest of the queue into a crawl.
+2. **Test** — `while !condition { await Task.yield() }` has no exit. Slow progress became a
+   60-second hang, and on iOS that aborted the remainder of the suite.
+
+**Resolution** _(2026-08-28)_
+1. `AnalysisStateManager` now tracks `activeProcessingPriority`, set in
+   `startAutomaticProcessing(priority:)`, and `endAnalysisResourceQuarantine` resumes with it
+   rather than the default. A user-initiated analysis that hits a stall now finishes the queue
+   at the priority it started with.
+2. The two unbounded yield loops in `AnalysisInactivityWatchdogTests` were replaced with a
+   bounded `waitUntil(_:polls:interval:)` helper that sleeps (letting the queue's task run)
+   and throws `WaitTimedOut` naming what it waited for, so a future regression fails fast
+   instead of taking the suite with it.
+3. Both watchdog tests now drive the queue at `.userInitiated`, with a comment explaining why.
+
+Verified: `AnalysisInactivityWatchdogTests` 12/12 on iOS 18.5 — the stalled-transcription test
+went from a 60 s hang to 0.05 s, and `stalledContentAnalysisIsTerminalized` from 17.6 s to
+0.06 s. Full `IlumionateTests` on iOS 18.5: **1800 cases, 0 failures, TEST SUCCEEDED** — the
+first complete green iOS run.
+
+
 
 ### ERR-017 — Session Complete prints raw Swift source to the user
 
@@ -1377,7 +1601,7 @@ full suite shows only the ERR-001 flaky set.
 ## ERR-018 — AnalyzerImprover target has drifted out of sync with the app sources
 
 **Date discovered:** 2026-08-19
-**Status:** identified
+**Status:** completed 2026-08-30
 
 **Symptom.** `AnalyzerImprover` does not build.
 
@@ -1410,6 +1634,49 @@ Half-applying it was reverted rather than left in place.
 **Risk.** The tool is unusable until fixed. `LumeLabel` had the identical fault and was
 fixed in the same session by adding `AppStoragePaths.swift`, `PrivateStorageMigration.swift`
 and `PerformanceTrace.swift` to its list — it does not cascade further, so that one is done.
+
+**Resolution** _(2026-08-30)_
+
+The cascade does terminate; it was followed to the end. Nine files were added to the
+`AnalyzerImprover` membership exception list in `Ilumionate.xcodeproj/project.pbxproj`:
+
+```
+AIGenerationDiagnosis.swift      AppStoragePaths.swift
+AudioStorageLocation.swift       AudioTranscriptionResult.swift
+BundledAudioTranscriptCatalog.swift
+LibraryDedupe/RemoteAudioSource.swift
+PrivateStorageMigration.swift    ProsodicProfile.swift
+ProsodyAnalyzer.swift            "ProsodyAnalyzer+PauseDetection.swift"
+TimestampedTranscriptBuilder.swift
+```
+
+Note the errors had *moved* since this entry was filed: the build first failed on
+`ProsodicProfile` in `TechniqueDetector.swift`, and only reached the documented
+`AnalyzerConfigLoader` errors once prosody was satisfied.
+
+The last step was not a membership change. Adding `AudioTranscriptionResult.swift`
+collided with `AnalyzerImprover/TranscriptionTypes.swift`, which carried its own
+copies of `AudioTranscriptionResult` and `AudioTranscriptionSegment`
+(`'AudioTranscriptionSegment' is ambiguous for type lookup`). Those copies were
+stale duplicates: `Ilumionate/AudioTranscriptionResult.swift` says in its own header
+that it was extracted from `AudioAnalyzer` precisely so tools reading cached
+transcripts could share it without linking a speech recogniser. The duplicates had
+also drifted — the shared type sanitizes text and drops empty segments; these did
+not. They were deleted, leaving `AnalyzerError` (genuinely tool-specific) in that
+file.
+
+**Verified.** All three affected targets build clean on macOS:
+
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme AnalyzerImprover -destination 'platform=macOS,arch=arm64' build   # ** BUILD SUCCEEDED **
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate       -destination 'platform=macOS,arch=arm64' build   # ** BUILD SUCCEEDED **
+xcodebuild -project Ilumionate.xcodeproj -scheme LumeLabel        -destination 'platform=macOS,arch=arm64' build   # ** BUILD SUCCEEDED **
+```
+
+**Still outstanding.** Only that the tool now compiles — it was not *run*, so whether
+the optimizer produces correct output is unverified. The underlying fragility is
+also untouched: nothing prevents the next file added to `Ilumionate/` from breaking
+this target again, because the membership list is maintained by hand.
 
 ## ERR-019 — Two LumeLabelTests fail for reasons unrelated to the phase codec
 
@@ -1513,3 +1780,516 @@ migrated. `GoldenDatasetTests` now derives its canonical order from
 Still open: `ScriptPhaseCorpus` and `ScriptCorpusExtractor` apply `labelingPhase`
 at several sites that were not examined. They are consumers rather than storage,
 so projecting there is probably correct, but it has not been checked.
+
+## ERR-025 — `classicHypnosisPhasesAreStrictlyForwardOrdered` fails against the widened phase target
+
+**Date discovered:** 2026-08-28
+**Status:** completed 2026-08-30
+
+> **ID cleanup.** This entry was originally appended as a second ERR-020. It was
+> renumbered to ERR-025 when the working tree was prepared for commit so every
+> entry has a unique identifier.
+
+**Symptom.** `IlumionateTests/GoldenDatasetTests/classicHypnosisPhasesAreStrictlyForwardOrdered()`
+fails. It is the only failure in the suite — 1802 test cases execute, 1801 pass.
+
+**Reproduction.**
+
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/GoldenDatasetTests
+```
+
+Fails in isolation as well as in the full suite, so it is not order- or
+parallelism-dependent.
+
+**Where.** [IlumionateTests/GoldenDatasetTests.swift:176](IlumionateTests/GoldenDatasetTests.swift:176).
+The test walks the analyzer's output for the `classicHypnosis` fixture and
+asserts each phase's index in `HypnosisMetadata.Phase.orderedHypnosisPhases`
+never decreases.
+
+**Root cause — probable, not confirmed.** The failure tracks the uncommitted
+analyzer work in the tree, not the working copy as committed: with all local
+changes stashed the test passes, and with them restored it fails. ERR-019 records
+that the phase target was widened from five phases to seven in that work, making
+`fractionation` and `conditioning` distinct targets rather than folding them into
+their neighbours. The test derives its canonical order from
+`orderedHypnosisPhases`, so widening the vocabulary widened what the test
+enforces: a `conditioning` segment emitted after `suggestions` (or a
+`fractionation` segment after `deepening`) now counts as a backward step where
+previously both projected onto a phase that was already in order. Which of the
+two new phases actually regresses has not been isolated — the assertion message
+naming the offending phase was not captured.
+
+**Proposed fix.** Print the emitted phase sequence for the fixture and compare it
+against `orderedHypnosisPhases` to find the backward step. Then decide which side
+is wrong: either the analyzer is mis-ordering the two newly-distinct phases and
+the smoothing pass in `ChunkedPhaseAnalyzer+Smoothing.swift` needs to enforce
+monotonicity across them, or strict forward ordering is simply not true of real
+hypnosis scripts once `fractionation` is a target — fractionation is by
+definition a return to a lighter state — in which case the test encodes an
+invariant the widened taxonomy has invalidated and should be relaxed to allow
+documented back-steps.
+
+**Risks.** Relaxing the assertion is the cheaper path and the wrong one if the
+analyzer is genuinely mis-ordering; that would silently degrade generated light,
+since phase order drives `intensityContour` and `tranceDepthEstimate`. Establish
+which case this is before touching the test.
+
+**Not caused by the Dynamic Type work** in this session (fonts and frame heights
+only); confirmed by stash comparison.
+
+**Resolution** _(2026-08-30)_ — no longer reproduces. Nothing was changed to fix
+it; the analyzer work that was uncommitted when this was filed has since landed in
+a different state, which is consistent with the root-cause note above ("the failure
+tracks the uncommitted analyzer work in the tree, not the working copy as
+committed").
+
+**Verified.**
+
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/GoldenDatasetTests
+# ** TEST SUCCEEDED **, Executed 28 test case(s)
+# classicHypnosisPhasesAreStrictlyForwardOrdered() passed
+```
+
+Confirmed at suite level rather than by a full-suite pass alone: a first full run
+reported 1857 cases and zero failures, but the captured log had been truncated and
+did not contain `GoldenDatasetTests` at all, so it could not by itself distinguish
+"passed" from "never ran".
+
+**The invariant question is now answered — the test was wrong** _(2026-08-30)_
+
+The entry asked whether strict forward ordering is actually true once
+`fractionation` is a distinct target. It is not, and `TrancePhase`'s own
+documentation settles it. `orderedHypnosisPhases` places `fractionation` at index
+1, *before* `deepening`:
+
+```swift
+[.induction, .fractionation, .deepening, .suggestions,
+ .brainwashing, .conditioning, .emergence]
+```
+
+with contour `fast-osc` and depth 0.42 against deepening's 0.62. But fractionation
+is not a stage a session passes through once — it is a repeated, deliberate return
+to a lighter state, interleaved with deepening. `deepening → fractionation →
+deepening` is textbook practice, and the old test scored that as a backward step.
+So the assertion asserted something untrue of real hypnosis, which is exactly why
+widening the target from five phases to seven broke it: `fractionation` stopped
+folding into `deepening` and became a distinct, legitimately-recurring index.
+
+`classicHypnosisPhasesAreStrictlyForwardOrdered` now skips `fractionation` and
+enforces forward order over the structural backbone only. `conditioning` was
+considered for the same exemption and deliberately **not** given one — it sits
+after `suggestions`, which is its normal position, so no back-step is expected
+there yet.
+
+Added `fractionationBetweenDeepeningIsNotABackwardStep()`, which asserts the
+exemption against the ordering rule directly and checks that it is load-bearing
+(`fractionation`'s index really is below `deepening`'s). It is written against the
+rule rather than the canned fixture because that fixture does not currently produce
+the arrangement — which is precisely how the invalid invariant survived unnoticed.
+
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/GoldenDatasetTests
+# ** TEST SUCCEEDED **, Executed 30 test case(s)
+```
+
+**Still outstanding.** Nothing verified that the *analyzer* orders phases well —
+only that the test no longer encodes a false rule. If `conditioning` later turns
+out to recur the way `fractionation` does, it needs the same treatment, and the
+comment in the test says so.
+
+## ERR-026 — An unresolvable `-destination` hangs `xcodebuild` silently, and `run-tests.sh` hides it
+
+**Date discovered:** 2026-08-28
+**Status:** completed 2026-08-30
+
+> **ID cleanup.** This entry was originally appended as a second ERR-021. It was
+> renumbered to ERR-026 when the working tree was prepared for commit so every
+> entry has a unique identifier.
+
+**Symptom.** A test or build command naming a simulator that does not exist on
+the machine never starts and never fails. `xcodebuild` sits at 0% CPU
+indefinitely with no output and no error. Observed cost on first encounter: 52
+minutes before the hang was noticed.
+
+**Reproduction.**
+
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 99 Pro' build
+```
+
+**Where.** Not a code defect — it is `xcodebuild`'s behaviour, compounded by two
+things in this repository:
+
+1. `CLAUDE.md` documented `name=iPhone 17 Pro` as *the* iOS destination. No such
+   simulator exists on this machine; only the iPhone 16 family is installed
+   (runtimes 18.0, 18.1, 18.3, 18.4, 18.5, 26.0). Fixed on 2026-08-28 — the
+   documented commands now name `iPhone 16 Pro,OS=26.0` and carry a warning.
+2. [Scripts/run-tests.sh](Scripts/run-tests.sh) pipes `xcodebuild` output through
+   `sort`, which buffers its entire input until EOF. A hung run therefore
+   produces a completely empty log, making a hang indistinguishable from a slow
+   build. **This is not fixed.**
+
+**Root cause.** `xcodebuild` treats an unmatched `-destination` as "wait for a
+matching device to appear" rather than as an error. Several simulators also share
+one name across runtimes, so an unpinned `name=` is ambiguous even when it does
+resolve.
+
+**Proposed fix.** Either resolve and validate the destination up front in
+`run-tests.sh` (`xcrun simctl list devices available`, fail fast when the name
+matches nothing), or stop routing progress output through `sort` so a stalled run
+is visible. Preferably both. A `-destination-timeout` argument also exists and
+would convert the hang into a failure.
+
+**Risks.** `sort -u` is presumably there to collapse duplicate lines from
+parallel destinations; removing it makes logs noisier. Validating destinations
+adds a `simctl` call to every invocation, which is slow on a cold CoreSimulator.
+
+**Workaround until fixed.** Redirect to a log file rather than piping, so
+progress is observable:
+
+```bash
+Scripts/run-tests.sh -destination '...' -only-testing:... > /tmp/run.log 2>&1
+```
+
+**Correction** _(2026-08-30)_ — point 2 above is wrong. `Scripts/run-tests.sh` does
+not pipe through `sort`; it uses `tee`, which streams. `git log -- Scripts/run-tests.sh`
+shows one commit (`8f5c941`), so it never did. The `sort` almost certainly came from
+an ad-hoc `xcodebuild ... | grep ... | sort -u` typed at the shell in the session
+that filed this, and was mis-attributed to the script. No fix was needed there.
+
+**Resolution** _(2026-08-30)_ — the real gap, fail-fast on an unresolvable
+destination, is fixed in [Scripts/run-tests.sh](Scripts/run-tests.sh). The script
+now appends `-destination-timeout 120` whenever a `-destination` is passed and the
+caller has not set their own, and prints guidance pointing at
+`xcrun simctl list devices available` when the run fails with a destination error.
+This bounds *resolution*, not build or run time, so it does not truncate slow builds.
+
+`-destination-timeout` was chosen over up-front `simctl` validation because it costs
+nothing on the common path and covers every destination type, not just simulators —
+the entry's own risk note flagged `simctl` as slow on a cold CoreSimulator.
+
+**Verified.**
+
+```bash
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 99 Pro' -only-testing:IlumionateTests/CableInboxFileKindTests
+```
+
+Fails in 2m06s with the guidance message and a non-zero exit, against the 52 minutes
+recorded above. xcodebuild also prints its list of eligible destinations.
+
+**Still outstanding.** 120s is a guess, not a measurement — it was picked to clear a
+cold CoreSimulator with margin. If it ever truncates a legitimately slow resolution,
+raise it rather than removing it.
+
+## ERR-022 — A wedged Xcode debug session blocks `xcodebuild test` from launching any test host
+
+**Date discovered:** 2026-08-28
+**Status:** identified
+
+**Symptom.** `xcodebuild test` builds successfully, then fails to start the test
+host:
+
+```
+Simulator device failed to launch com.byronquine.lumenSync.
+FBSOpenApplicationServiceErrorDomain Code=1 ... BSErrorCodeDescription=RequestDenied
+FBProcessExit Code=64 "The process failed to launch." ... "wait_for_debugger" = 1
+```
+
+Running the app from Xcode on a physical device fails at the same stage, with:
+
+```
+Failed to launch: 'Could not attach to pid : "18294"'
+Failed to get reply to handshake packet within timeout of 6.0 seconds
+```
+
+**Reproduction.** Not reliably reproducible on demand. Observed with Xcode open
+(pid 46663) holding a live `lldb-rpc-server` (pid 46943) from an earlier debug
+session.
+
+**The app is not at fault.** Installing and launching the same build manually
+succeeds and the app stays running:
+
+```bash
+xcrun simctl install <udid> ~/Library/Developer/Xcode/DerivedData/Ilumionate-*/Build/Products/Debug-iphonesimulator/Ilumionate.app
+xcrun simctl launch <udid> com.byronquine.lumenSync
+```
+
+The process appears in `xcrun simctl spawn <udid> launchctl list` and produces no
+crash report. Only the debugger-attach path fails.
+
+**Root cause — probable, not confirmed.** A stale `lldb-rpc-server` from a
+previous debug session denies new attach requests machine-wide. Both the
+simulator test host (which launches with `wait_for_debugger = 1`) and a device
+run need that attach, so both fail while a plain launch succeeds.
+
+**Proposed fix.** Quit Xcode, confirm no `lldb-rpc-server` or `debugserver`
+processes survive, then retry:
+
+```bash
+ps aux | grep -iE "debugserver|lldb-rpc-server" | grep -v grep
+```
+
+**Risks.** Unverified — the correlation with the surviving `lldb-rpc-server` is
+circumstantial. If it recurs with no Xcode running, the cause is elsewhere and
+this entry should be corrected rather than trusted.
+
+**Correction — the stale-lldb root cause is refuted** _(2026-08-30)_
+
+A live instance was caught and inspected. `Scripts/run-tests.sh` (PID 66603, parent
+66599) had been sitting at **0% CPU for 49 minutes** with completely empty output,
+started 03:11:22 against `-destination platform=iOS Simulator,id=C42D5AEB-9385-468B-8A5C-6666A992D4E5`.
+
+Two things the entry above predicts were **not** true:
+
+1. **No `lldb-rpc-server` and no `debugserver` process existed.** Checked directly
+   while the hang was in progress:
+
+   ```bash
+   ps aux | grep -iE "debugserver|lldb-rpc-server" | grep -v grep   # no output
+   ```
+
+   Xcode itself was running (PID 63285), but the debug-server process this entry
+   blames was absent. So a stale `lldb-rpc-server` is not necessary for the hang.
+
+2. **The destination resolved fine.** That UDID is a real, installed iPhone 16 Pro
+   (shutdown at the time), so this is not ERR-021 in disguise:
+
+   ```bash
+   xcrun simctl list devices | grep C42D5AEB
+   #     iPhone 16 Pro (C42D5AEB-...) (Shutdown)
+   ```
+
+What *was* present: two `DTServiceHub` processes (`DVTInstrumentsFoundation`) at 48+
+minutes and one `SWBBuildService`, all at 0% CPU. `lsof` on the build database showed
+no holder. That points at the test-host launch / diagnostics path wedging, which
+matches this entry's **symptom** but not its proposed **cause**.
+
+**Revised proposed fix.** Quitting Xcode may still help, but do not rely on the
+`lldb-rpc-server` check as the diagnostic — it was clean here. Look for long-lived
+`DTServiceHub` processes instead:
+
+```bash
+ps -o pid,etime,command -p $(pgrep -f DTServiceHub | tr '\n' ' ') 2>/dev/null
+```
+
+Killing the `xcodebuild` process group plus surviving `DTServiceHub` / `SWBBuildService`
+cleared it and let a fresh run proceed normally.
+
+**Second hypothesis also refuted — the shutdown simulator is not the cause**
+_(2026-08-30)_
+
+The obvious next suspect was that the target device was *shut down* and the
+host-launch path waited forever for it. Tested directly against the very same
+UDID from the hung run, still shut down:
+
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate \
+  -destination "platform=iOS Simulator,id=C42D5AEB-9385-468B-8A5C-6666A992D4E5" \
+  -only-testing:IlumionateTests/CableInboxFileKindTests test
+```
+
+**Completed in ~75 seconds, `** TEST SUCCEEDED **`, exit 0.** Neither the shutdown
+state nor addressing the device by `id=` rather than `name=` reproduces anything.
+
+**Current best hypothesis: concurrent `xcodebuild` invocations over one DerivedData.**
+This is the one piece of positive evidence collected. While the hung run held on,
+a second `xcodebuild` against the same DerivedData failed immediately with:
+
+```
+error: unable to attach DB: error: accessing build database
+".../XCBuildData/build.db": database is locked
+Possibly there are two concurrent builds running in the same filesystem location.
+```
+
+Xcode was open (PID 63285) throughout. So contention over that database is real and
+observable here, and a run that loses the race is a plausible way to sit at 0% CPU
+producing nothing. This has **not** been confirmed — reproducing it means
+deliberately racing two builds, which was not attempted.
+
+**Still outstanding.** Cause unknown. Two hypotheses are now eliminated with
+evidence; do not spend time re-testing either. If it recurs, capture
+`ps -o pid,ppid,etime,command` for every `xcodebuild`, `DTServiceHub` and
+`SWBBuildService` process, plus whether Xcode was mid-build, *before* killing
+anything — that is the state this entry still lacks.
+
+## ERR-023 — ePub import reads the entire file into memory with no size cap
+
+**Date discovered:** 2026-08-28
+**Status:** completed 2026-08-30
+
+**Symptom.** Importing a very large ePub can spike memory enough to be jetsammed
+on device. Not yet observed in the wild; found while adding a size cap to the
+plain-text import path.
+
+**Location.** `Ilumionate/TextTrance/ReadingDocumentImporter.swift`,
+`extractEPUB(from:)` — `EPUBArchive(data: Data(contentsOf: url))`. `EPUBArchive`
+then inflates each entry into memory in `data(forPath:)`.
+
+**Reproduction.** Import an ePub of several hundred MB through the reader's file
+importer, the share sheet, or the cable inbox.
+
+**Root cause.** `Data(contentsOf:)` with no options reads the whole file. There is
+no size check before the read and no streaming path.
+
+**Proposed fix.** Check `URLResourceValues.fileSize` before reading, as
+`extractPlainText` now does with `ReadingDocumentImporter.maximumPlainTextByteCount`,
+and add an equivalent ePub cap. `Data(contentsOf:options: .mappedIfSafe)` would
+reduce resident size for the archive read, though inflation still allocates.
+
+**Risks.** Any cap refuses books that currently import successfully. The right
+threshold needs a real measurement of memory against archive size rather than a
+guessed number, which is why it is not being set here.
+
+**Related.** Plain text is capped at 8 MB as of the reader file-drop ingestion
+work; see `docs/superpowers/specs/2026-08-28-reader-file-drop-ingestion-design.md`.
+
+**Resolution** _(2026-08-30)_
+
+**The sharper problem was not the one filed here.** `EPUBArchive.inflate` allocates
+`Data(count: expectedSize)`, and `expectedSize` is `entry.uncompressedSize` — read
+straight from the archive's own central directory and never validated. The
+allocation therefore happens *on the word of the file being imported*, before a
+single byte is decompressed. An archive of a few hundred bytes that declares a
+512 MB uncompressed size allocated 512 MB. That is a malformed-input bound, not
+just a large-legitimate-file bound.
+
+Fixed in `Ilumionate/TextTrance/ReadingDocumentImporter.swift`:
+
+- `EPUBArchive.data(forPath:)` refuses any entry whose declared `uncompressedSize`
+  exceeds `ReadingDocumentImporter.maximumPlainTextByteCount`, throwing
+  `.textFileTooLarge` before reaching `inflate`.
+- The archive is now read with `Data(contentsOf:options: .mappedIfSafe)`.
+
+**No new threshold was invented, which is what this entry was blocked on.** It
+reuses the 8 MB budget plain text already enforces. The reasoning: a single reader
+entry larger than that is past what the reader will display whether or not the
+declaration is honest. Capping the *archive file size* was considered and rejected
+— an illustrated ePub can legitimately exceed 8 MB compressed while holding far
+less than 8 MB of text, so that would have produced false rejections. Only spine
+XHTML is ever inflated, so images are unaffected by the per-entry bound.
+
+**Verified.** Two tests in `IlumionateTests/TextTrance/ReadingDocumentImporterTests.swift`.
+`makeDeflatedZip` gained a `declaredSizes:` parameter so a test can build an archive
+that *claims* to inflate to more than it contains:
+
+- `refusesEntryDeclaringImplausibleUncompressedSize()` — a chapter of a few dozen
+  bytes declaring 512 MB is rejected. Confirmed failing before the fix (the archive
+  was accepted) and passing after.
+- `acceptsEntryDeclaringSizeWithinTheTextBudget()` — guards against over-rejection;
+  passed both before and after.
+
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+# ** TEST SUCCEEDED **, Executed 24 test case(s)
+```
+
+**Aggregate bound added** _(2026-08-30, same day)_ — the residual noted here has
+since been closed. `EPUBPackage.readingText(maximumByteCount:)` now accumulates
+`section.utf8.count` as it walks the spine and throws `.textFileTooLarge` the
+moment the running total exceeds the budget, so an over-budget book is refused
+without first materialising the joined string. `extract(from:maximumTextByteCount:)`
+threads the budget through purely so tests can exercise it without an 8 MB fixture;
+production uses the default.
+
+Covered by `refusesEPUBWhoseSectionsExceedTheBudgetInAggregate()` (three ~1 kB
+chapters against a 1500-byte budget — passes every per-entry check, fails only in
+aggregate) and `acceptsEPUBWhoseSectionsFitTheBudgetInAggregate()` (the same
+archive under a budget it fits, so the bound cannot be satisfied by rejecting
+everything).
+
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+# ** TEST SUCCEEDED **, Executed 28 test case(s)
+```
+
+**Still outstanding.** The memory-versus-archive-size measurement this entry
+originally asked for was never taken. Both bounds reuse the 8 MB plain-text budget
+because it is the reader's existing product limit, not because anything was
+profiled. If a legitimate book is ever rejected, that measurement is the way to
+set a better number — not raising the constant by feel.
+
+## ERR-024 — Guardrail feedback with transcript excerpts sits in the file-sharing-visible Documents root
+
+**Date discovered:** 2026-08-30
+**Status:** completed 2026-08-30
+
+**Symptom.** `Guardrail Feedback/*.json` contains model prompts with transcript
+excerpts and is written to the Documents root, which `UIFileSharingEnabled` makes
+readable by any USB-trusted host and by the on-device Files app. Every other
+analysis by-product was moved out of Documents by `PrivateStorageMigration`;
+this one was not.
+
+**Location.** `Ilumionate/GuardrailFeedbackRecorder.swift:29` — the destination
+directory. Compare `Ilumionate/AppStoragePaths.swift`, which is where the
+migrated caches, generated sessions, and managed audio now live.
+
+**Reproduction.** Trigger a guardrail feedback record, then connect the device to
+a Mac and open Finder → device → Files → LumeSync. The JSON is listed and
+readable.
+
+**Root cause.** The recorder predates the `Documents` → `Application Support`
+migration added on `compat/ios-18` and was not included in it. Nothing routes it
+through `AppStoragePaths`.
+
+**Proposed fix.** Give `AppStoragePaths` a `guardrailFeedback` URL under
+`Application Support/LumeSync/`, point the recorder at it, and extend
+`PrivateStorageMigration` to relocate any existing directory so previously
+written files stop being exposed.
+
+**Risks.** If guardrail feedback is *intended* to be user-retrievable over file
+sharing — e.g. so a tester can send it in — moving it breaks that workflow, and
+the right fix is instead to strip transcript excerpts before writing. That is a
+product decision, which is why it is not being made here.
+
+**Discovered during.** Security review of the `compat/ios-18` branch. It was the
+only finding of that review; it was excluded from the report itself as
+data-at-rest requiring physical device trust, but it still needs a decision.
+
+**Resolution** _(2026-08-30)_ — relocated, per an explicit product decision to treat
+these as internal diagnostics rather than something a tester retrieves by hand.
+
+- `AppStoragePaths.guardrailFeedback` added under `Application Support/LumeSync/`.
+- `GuardrailFeedbackRecorder.directory` now resolves through
+  `PrivateStorageMigration.migrateItemIfNeeded`, so a directory already written to
+  Documents is moved on first use rather than left exposed. `static let` is lazy,
+  so this runs once.
+
+**This has a real cost, recorded so it is not rediscovered as a bug.** The old
+location was deliberate: the recorder's own doc comment explained that Documents
+placement let the attachment be dragged out of Finder straight into a
+feedbackassistant.apple.com report. **That workflow is now broken and nothing
+replaces it.** Retrieving an attachment requires an in-app share action that does
+not exist yet. If guardrail refusals need reporting before that is built, the file
+must be pulled from the app container via Xcode's device window.
+
+**Verified.** `GuardrailFeedbackRecorderTests.defaultDirectoryIsPrivate()` asserts
+the directory is under `AppStoragePaths.supportRoot` and *not* under
+`URL.documentsDirectory`.
+
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' \
+    -only-testing:IlumionateTests/GuardrailFeedbackRecorderTests \
+    -only-testing:IlumionateTests/PrivateStorageMigrationTests
+# ** TEST SUCCEEDED **, Executed 14 test case(s)
+```
+
+**Still outstanding.**
+
+1. **The migration is unverified against a real device** that already has files in
+   the old location. It is covered only by `PrivateStorageMigration`'s own tests.
+2. ~~**The migration does not fire if the destination already exists.**~~
+   **Closed the same day.** `PrivateStorageMigration.migrateItemIfNeeded` now
+   detects the both-exist case and calls `setAsideLegacyItem`, which moves the
+   superseded copy next to the destination as `<name> (Recovered)` — out of
+   Documents, but not deleted, since losing data is worse than keeping an orphan.
+   A failure there is logged and swallowed: the caller already has a usable
+   destination, and refusing to return it over a housekeeping problem would break
+   a working app. Covered by
+   `PrivateStorageMigrationTests.clearsLegacyItemWhenDestinationAlreadyExists()`,
+   which asserts the legacy path is gone, the destination is untouched, and a
+   `Recovered` copy exists. Confirmed failing before the change.
+3. **The attachments still contain transcript excerpts.** Moving them narrows who
+   can read them; it does not reduce what they hold. Stripping the excerpts was the
+   alternative option and was not taken.

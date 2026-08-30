@@ -22,8 +22,20 @@ xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platfo
 ```
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' build
 ```
+
+**Pick a simulator that actually exists on the machine.** `xcodebuild` does not
+error on an unresolvable `-destination` — it hangs at 0% CPU indefinitely. This
+machine has no iPhone 17 Pro; available iPhone 16 Pro runtimes are 18.0, 18.1,
+18.3, 18.4, 18.5, and 26.0. Pin `OS=` explicitly, because several simulators
+share the same name. Check before trusting a destination:
+
+```bash
+xcrun simctl list devices available | grep iPhone
+```
+
+See ERRORS.md ERR-026.
 
 Mac Catalyst is a compatibility destination — keep it compiling, but it is not the primary Mac experience:
 
@@ -38,7 +50,7 @@ xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platfo
 ```
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:IlumionateTests
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' test -only-testing:IlumionateTests
 ```
 
 ```bash
@@ -128,6 +140,43 @@ iOS and macOS share the `Ilumionate` target and all feature sources. `ContentVie
 
 `AVAudioSession` is configured on iOS only; macOS uses AVFoundation playback with no audio session.
 
+### iOS 18 back-compatibility
+
+The app deploys to **iOS 18.0** and **macOS 26.0**, built against the iOS 26 SDK. The two
+numbers differ, so `@available(iOS 26.0, macOS 26.0, *)` is a real gate on iOS and a no-op on
+native macOS. Mac Catalyst follows the *iOS* target, so it can reach the iOS 18 branches while
+running on a Mac — word user-facing copy in those branches accordingly.
+
+What is gated, and what iOS 18 gets instead:
+
+| iOS 26 only | iOS 18 fallback |
+|---|---|
+| `FoundationModels` — every `@Generable` type, `LanguageModelSession`, `SystemLanguageModel` | `AIAnalysisManager.analyzeContentWithBuiltInModels` — keyword, metadata, and audio heuristics |
+| `ChunkedPhaseAnalyzer` context-aware phase classification | `HypnosisPhaseAnalyzer` keyword phase detection |
+| `BGContinuedProcessingTask` — analysis continues out of foreground | `BGProcessingTask` deferred recovery only |
+
+Rules when touching this:
+
+- `FoundationModels` is **weak-linked**. Keep every one of its types behind `@available`,
+  including in stored properties and function signatures, or the app fails to launch on iOS 18.
+- Any keyword fallback must record why. Build the result with an `AIGenerationDiagnosis.Kind`
+  and emit `UsageAnalytics.aiGenerationFallback` — a fallback that reports nothing is invisible
+  in the funnel, because analysis still "completes".
+- Never label work as AI that iOS 18 does with keywords. `SessionDetailView`'s badge,
+  `AnalysisStageFeedback.stageSummary`, and `UnifiedPlayerViewModel.stageLabel` are all
+  deliberately worded for this.
+- A setting that only feeds `AnalysisPreferences.aiSystemAddendum` does nothing on iOS 18.
+  Disable it there rather than letting it look effective.
+- New SF Symbols must exist in iOS 18 — a too-new symbol renders blank with no build error.
+- `guard #available(iOS 26...) else { return }` in a test makes it **pass** on iOS 18, not skip.
+  Prefer a Swift Testing `.enabled(if:)` trait so the skip is visible.
+
+Verify platform changes on a real iOS 18 runtime, not just by compiling:
+
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5' build
+```
+
 ### Other layout notes
 
 - Root-level `Playlist*.swift` files handle playlist functionality
@@ -140,7 +189,9 @@ Write as a senior Apple platforms engineer. Follow Apple's Human Interface Guide
 
 ### Swift
 
-- Target iOS 26.0 / macOS 26.0+, Swift 6.2+, strict concurrency.
+- Target iOS 18.0+ / macOS 26.0+, Swift 6.2+, strict concurrency.
+- **iOS deploys to 18.0, so the iOS 26 SDK is not a free floor.** Anything newer than iOS 18.0
+  needs `@available` / `#available` with a working fallback — see "iOS 18 back-compatibility".
 - Prefer `async`/`await` over closure-based APIs wherever both exist. Never use GCD (`DispatchQueue.main.async`) for new code.
 - Shared state uses `@Observable` classes with `@State` for ownership and `@Bindable`/`@Environment` for passing. Avoid `ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject`, `@EnvironmentObject` except in legacy or integration corners where migrating is disproportionate.
 - `@Observable` classes must be `@MainActor` unless the project adopts main-actor default isolation. Flag any that aren't.

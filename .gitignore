@@ -54,8 +54,14 @@ Tools/CorpusGenerator/.build/
 __pycache__/
 /graphify-out/
 
-# Design docs and plans live in doc/ and are intentionally not tracked.
+# Reference audio and other bulk source media.
 /doc/
+
+# Historical design docs and plans (pre-2026-08). Consolidated here from the old
+# /doc/superpowers/ tree so every doc lives under docs/, but kept untracked to
+# match the original "design docs are intentionally not tracked" policy — this
+# repository is public. Current specs and plans under docs/superpowers/ ARE tracked.
+/docs/archive/
 
 # Coverage and SwiftPM build output that escaped the patterns above.
 default.profraw

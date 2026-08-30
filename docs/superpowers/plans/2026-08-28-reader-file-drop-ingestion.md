@@ -26,17 +26,32 @@ Read these before starting. They are the load-bearing facts.
 
 **Test filters that match nothing still report success.** Always run via `Scripts/run-tests.sh`, which fails when zero cases ran. Swift Testing identifiers end in `()`; suite-level filters do not. See ERRORS.md ERR-002.
 
+**There is no iPhone 17 Pro simulator on this machine**, despite `CLAUDE.md`
+naming one. An unresolvable destination makes `xcodebuild` hang at 0% CPU
+indefinitely rather than erroring — it burned 52 minutes once already. Available
+iPhone 16 Pro runtimes are 18.0, 18.1, 18.3, 18.4, 18.5, and 26.0; the OS is
+pinned explicitly below because six simulators share that name.
+
+**iOS is the destination that gates verification.** macOS builds, but iOS is the
+shipping platform, so every test step below runs on the simulator. Only run the
+macOS destination when the change is specifically about macOS.
+
 **Build and test commands used throughout:**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/SUITE_NAME
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/SUITE_NAME
 ```
 
 ```bash
 xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=macOS,arch=arm64' build
 ```
 
-**New files must be added to the `Ilumionate` target in Xcode** (and test files to `IlumionateTests`). A new `.swift` file that is not a target member compiles nowhere and fails with "cannot find X in scope."
+**New files need no Xcode project edits.** `Ilumionate` and `IlumionateTests` are
+both `PBXFileSystemSynchronizedRootGroup`s, so a `.swift` file dropped into either
+directory is picked up automatically — no file appears individually in
+`project.pbxproj`. The `LumeLabel` and `AnalyzerImprover` targets take only the
+files named in their `membershipExceptions` lists, so a new file joins the app
+target alone, which is what this work wants."
 
 ---
 
@@ -104,7 +119,7 @@ Append inside `struct ReadingDocumentImporterTests`:
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReadingDocumentImporterTests
 ```
 
 Expected: FAIL — `.text` is not a member of `ReadingDocumentKind`.
@@ -225,7 +240,7 @@ Also update the `unsupportedFileType` message, which currently names only two fo
 - [ ] **Step 5: Run the tests to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReadingDocumentImporterTests
 ```
 
 Expected: PASS, including the pre-existing ePub and PDF cases.
@@ -301,7 +316,7 @@ struct MarkdownTextCleanerTests {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/MarkdownTextCleanerTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/MarkdownTextCleanerTests
 ```
 
 Expected: FAIL — "cannot find 'MarkdownTextCleaner' in scope".
@@ -384,7 +399,7 @@ nonisolated enum MarkdownTextCleaner {
 - [ ] **Step 4: Run the cleaner tests to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/MarkdownTextCleanerTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/MarkdownTextCleanerTests
 ```
 
 Expected: PASS, 7 tests.
@@ -432,7 +447,7 @@ Append to `ReadingDocumentImporterTests`:
 - [ ] **Step 6: Run it to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReadingDocumentImporterTests
 ```
 
 Expected: FAIL on `cleansMarkdownSyntaxOnImport` — the `#` survives.
@@ -450,7 +465,7 @@ In `ReadingDocumentImporter.extractPlainText`, replace the line building `text`:
 - [ ] **Step 8: Run the tests to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReadingDocumentImporterTests
 ```
 
 Expected: PASS.
@@ -495,7 +510,7 @@ Append to `ReadingDocumentImporterTests`:
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReadingDocumentImporterTests
 ```
 
 Expected: FAIL — `maximumPlainTextByteCount` and `textFileTooLarge` do not exist.
@@ -534,7 +549,7 @@ At the top of `extractPlainText(from:)`, before `Data(contentsOf:)`:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReadingDocumentImporterTests
 ```
 
 Expected: PASS.
@@ -585,7 +600,7 @@ Append to `ReadingDocumentImporterTests`:
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReadingDocumentImporterTests
 ```
 
 Expected: FAIL — no `importDocumentReportingReplacement`.
@@ -642,7 +657,7 @@ Replace the existing `importDocument(from:originalFilename:)` with these two:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReadingDocumentImporterTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReadingDocumentImporterTests
 ```
 
 Expected: PASS, with the two pre-existing store tests still green.
@@ -672,7 +687,7 @@ Pure rename, no behavior change. Done **before** the routing work so later tasks
 - [ ] **Step 1: Confirm the suite is green before touching anything**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableAudioImportTests -only-testing:IlumionateTests/CableAudioRootInboxTests -only-testing:IlumionateTests/CableAudioImportModelTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableAudioImportTests -only-testing:IlumionateTests/CableAudioRootInboxTests -only-testing:IlumionateTests/CableAudioImportModelTests
 ```
 
 Expected: PASS. If this is red before you start, stop and report it — do not rename over a failing suite.
@@ -706,14 +721,12 @@ grep -rl "CableAudioImport\|CableAudioScan" Ilumionate IlumionateTests --include
 
 Then update the file-header comments inside the three renamed source files and three renamed test files, which still say the old filename.
 
-- [ ] **Step 4: Update the Xcode project references**
+- [ ] **Step 4: Build and run the suite to verify the rename changed nothing**
 
-The renamed files must point at the new paths in `Ilumionate.xcodeproj/project.pbxproj`. Open the project in Xcode, confirm no file shows in red, and that each renamed file still has the correct target membership (`Ilumionate` for sources, `IlumionateTests` for tests).
-
-- [ ] **Step 5: Build and run the suite to verify the rename changed nothing**
+No Xcode project edit is needed — `grep -c CableAudioImport Ilumionate.xcodeproj/project.pbxproj` returns 0, because these directories are filesystem-synchronized. `git mv` is the whole rename.
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableFileImportTests -only-testing:IlumionateTests/CableFileRootInboxTests -only-testing:IlumionateTests/CableFileImportModelTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableFileImportTests -only-testing:IlumionateTests/CableFileRootInboxTests -only-testing:IlumionateTests/CableFileImportModelTests
 ```
 
 Expected: PASS, with the same test count as Step 1.
@@ -779,7 +792,7 @@ Append to `CableFileRootInboxTests`:
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableFileRootInboxTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableFileRootInboxTests
 ```
 
 Expected: FAIL — the file in `_Imported/` and `Incoming Text/` is imported, because neither name is excluded.
@@ -945,7 +958,7 @@ and pass both into `makeService(minimumSettleAge:)`:
 - [ ] **Step 6: Run the cable suites to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableFileImportTests -only-testing:IlumionateTests/CableFileRootInboxTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableFileImportTests -only-testing:IlumionateTests/CableFileRootInboxTests
 ```
 
 Expected: PASS, including the new exclusion test.
@@ -1006,7 +1019,7 @@ struct CableInboxFileKindTests {
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableInboxFileKindTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableInboxFileKindTests
 ```
 
 Expected: FAIL — "cannot find 'CableInboxFileKind' in scope".
@@ -1047,12 +1060,10 @@ nonisolated enum CableInboxFileKind: Sendable, Equatable {
 }
 ```
 
-Add the file to the `Ilumionate` target and the test file to `IlumionateTests`.
-
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableInboxFileKindTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableInboxFileKindTests
 ```
 
 Expected: PASS, 4 tests.
@@ -1176,7 +1187,7 @@ struct ReaderInboxAdmissionTests {
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReaderInboxAdmissionTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReaderInboxAdmissionTests
 ```
 
 Expected: FAIL — "cannot find 'ReaderInboxAdmission' in scope".
@@ -1241,7 +1252,7 @@ nonisolated struct ReaderInboxAdmission: Sendable {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/ReaderInboxAdmissionTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/ReaderInboxAdmissionTests
 ```
 
 Expected: PASS, 5 tests.
@@ -1326,7 +1337,7 @@ Then update the three existing assertions whose copy generalises:
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableFileImportModelTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableFileImportModelTests
 ```
 
 Expected: FAIL — no `importedDocuments` member.
@@ -1436,7 +1447,7 @@ In `CableFileImportModel.scan(manual:)`, replace the session accounting so a doc
 - [ ] **Step 5: Run the tests to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableFileImportModelTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableFileImportModelTests
 ```
 
 Expected: PASS.
@@ -1598,7 +1609,7 @@ Because the fixture is now `@MainActor`, mark each new test `@MainActor` too, or
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableFileImportTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableFileImportTests
 ```
 
 Expected: FAIL — no `readerAdmission` parameter, no `importedDocuments`.
@@ -1794,7 +1805,7 @@ Mark `CableFileRootInboxTests` `@MainActor` at the struct level, as in Task 10 S
 - [ ] **Step 6: Run the cable suites to verify they pass**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests/CableFileImportTests -only-testing:IlumionateTests/CableFileRootInboxTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests/CableFileImportTests -only-testing:IlumionateTests/CableFileRootInboxTests
 ```
 
 Expected: PASS, with every pre-existing audio assertion still green.
@@ -1895,7 +1906,7 @@ xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platfo
 ```
 
 ```bash
-xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+xcodebuild -project Ilumionate.xcodeproj -scheme Ilumionate -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' build
 ```
 
 Expected: BUILD SUCCEEDED for both.
@@ -1973,7 +1984,7 @@ git commit -m "docs: log the unbounded epub read"
 - [ ] **Step 1: Run the whole shared suite on macOS**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' -only-testing:IlumionateTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests
 ```
 
 Expected: PASS. Note the total test count.
@@ -1981,7 +1992,7 @@ Expected: PASS. Note the total test count.
 - [ ] **Step 2: Run the whole shared suite on the iOS Simulator**
 
 ```bash
-Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:IlumionateTests
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests
 ```
 
 Expected: PASS, same count as Step 1.

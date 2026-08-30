@@ -72,6 +72,6 @@ xcodebuild -project Ilumionate.xcodeproj \
   test -only-testing:IlumionateTests
 ```
 
-See [`Ilumionate/TESTING_GUIDE.md`](Ilumionate/TESTING_GUIDE.md) for the broader
-test strategy and [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) for platform privacy
-details.
+See [`CLAUDE.md`](CLAUDE.md) for the test strategy, the subset-filter caveat, and
+the `Scripts/run-tests.sh` wrapper, and [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md)
+for platform privacy details.
