@@ -12,11 +12,13 @@
 
 import Foundation
 
-@MainActor
-final class AnalysisRefreshCoordinator<Value> {
+// Keep destruction nonisolated. Xcode 26.5's Swift optimizer crashes while
+// lowering a generic global-actor-isolated deinitializer for iOS 18. The public
+// behavior remains main-actor-isolated through the explicit annotations below.
+nonisolated final class AnalysisRefreshCoordinator<Value> {
 
-    private let load: () async -> Value
-    private let commit: (Value) -> Void
+    private let load: @MainActor () async -> Value
+    private let commit: @MainActor (Value) -> Void
 
     private var generation = 0
     private var committedGeneration = -1
@@ -24,7 +26,11 @@ final class AnalysisRefreshCoordinator<Value> {
     private var isDirty = false
     private var drainWaiters: [CheckedContinuation<Void, Never>] = []
 
-    init(load: @escaping () async -> Value, commit: @escaping (Value) -> Void = { _ in }) {
+    @MainActor
+    init(
+        load: @escaping @MainActor () async -> Value,
+        commit: @escaping @MainActor (Value) -> Void = { _ in }
+    ) {
         self.load = load
         self.commit = commit
     }
@@ -32,6 +38,7 @@ final class AnalysisRefreshCoordinator<Value> {
     /// Request a structural refresh. Safe to call from any mutation site; calls
     /// arriving during an in-flight pass set a dirty flag rather than starting
     /// a second pass, so importing forty files costs two passes, not forty.
+    @MainActor
     func invalidate() {
         guard !isLoading else {
             isDirty = true
@@ -41,6 +48,7 @@ final class AnalysisRefreshCoordinator<Value> {
     }
 
     /// Commit a loaded value only if no newer pass has already committed.
+    @MainActor
     func commitIfCurrent(value: Value, generation passGeneration: Int) {
         guard passGeneration > committedGeneration else { return }
         committedGeneration = passGeneration
@@ -49,6 +57,7 @@ final class AnalysisRefreshCoordinator<Value> {
 
     /// Resumes once no pass is in flight and nothing is pending. Test support;
     /// production code never needs to wait for a refresh.
+    @MainActor
     func drain() async {
         guard isLoading || isDirty else { return }
         await withCheckedContinuation { drainWaiters.append($0) }
@@ -56,6 +65,7 @@ final class AnalysisRefreshCoordinator<Value> {
 
     // MARK: Private
 
+    @MainActor
     private func startPass() {
         isLoading = true
         generation += 1

@@ -37,7 +37,7 @@ final class AnalysisCenterModel {
 
     private var coordinator: AnalysisRefreshCoordinator<AnalysisStructuralInput>!
 
-    init(loadStructure: @escaping () async -> AnalysisStructuralInput) {
+    init(loadStructure: @escaping @MainActor () async -> AnalysisStructuralInput) {
         // Observers are installed before any load starts, so an invalidation
         // racing bootstrap is recorded rather than lost.
         coordinator = AnalysisRefreshCoordinator(
