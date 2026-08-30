@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
-# run-tests.sh — xcodebuild test, but a filter that matches nothing fails.
+# run-tests.sh — xcodebuild test, but the two silent failure modes are loud:
+# a filter that matches nothing fails, and an unresolvable destination fails
+# instead of hanging forever.
 #
 # `xcodebuild -only-testing:` with a Swift Testing function name that is missing
 # its trailing "()" matches no tests, runs none, and still exits 0 printing
@@ -40,6 +42,23 @@ case " ${args[*]} " in
     *) args=(-scheme Ilumionate "${args[@]}") ;;
 esac
 
+# A -destination naming a device that does not exist is not an error to
+# xcodebuild — it waits for a matching device to appear, at 0% CPU, forever.
+# Observed cost on first encounter: 52 minutes before anyone noticed. Bounding
+# resolution turns that silent hang into a failure with a message. See
+# ERRORS.md ERR-026.
+#
+# This bounds *resolving* the destination, not building or running, so it is
+# safe to keep well below a real build's duration.
+case " ${args[*]} " in
+    *" -destination "*)
+        case " ${args[*]} " in
+            *" -destination-timeout "*) ;;
+            *) args+=(-destination-timeout 120) ;;
+        esac
+        ;;
+esac
+
 log="$(mktemp -t ilumionate-tests.XXXXXX)"
 trap 'rm -f "$log"' EXIT
 
@@ -62,6 +81,18 @@ identifiers end in "()":
 Filtering at suite level (-only-testing:IlumionateTests/MyTests) always works.
 EOF
     exit 1
+fi
+
+if [ "$status" -ne 0 ] && grep -q "Unable to find a device matching\|Timed out waiting for a destination" "$log"; then
+    cat >&2 <<'EOF'
+
+error: no device matched -destination, and xcodebuild gave up waiting.
+
+Several simulators share one name across runtimes, so pin OS= explicitly.
+List what this machine actually has:
+
+    xcrun simctl list devices available | grep iPhone
+EOF
 fi
 
 echo "Executed ${executed} test case(s)."
