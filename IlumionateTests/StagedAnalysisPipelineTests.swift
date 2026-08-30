@@ -40,7 +40,7 @@ struct StagedAnalysisPipelineTests {
         )
 
         let processing = Task {
-            await manager.queueForAnalysis([firstFile, secondFile])
+            await manager.queueForAnalysis([firstFile, secondFile], priority: testAnalysisPriority)
         }
 
         // Waits on the signal rather than a deadline: this takes as long as
@@ -87,7 +87,7 @@ struct StagedAnalysisPipelineTests {
             scheduleBackgroundAnalysis: { _ in }
         )
 
-        await manager.queueForAnalysis(file)
+        await manager.queueForAnalysis(file, priority: testAnalysisPriority)
 
         #expect(transcriber.callCount == 1, "The saved transcript should be reused for retry.")
         #expect(analyzer.callCount == 2)

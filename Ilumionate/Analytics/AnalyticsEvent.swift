@@ -161,9 +161,14 @@ nonisolated enum AnalyticsAnalysisStage: String, Codable, Equatable, Sendable {
 
 nonisolated enum AnalyticsAnalysisFailureReason: String, Codable, Equatable, Sendable {
     case modelNotReady, modelInitialization, invalidAudio, noAudioData
-    case transcription, contentAnalysis, generation, persistence, unknown
+    case transcription, contentAnalysis, generation, persistence, stalled, unknown
 
     init(error: any Error, stage: AnalyticsAnalysisStage) {
+        if error is AnalysisStalledError {
+            self = .stalled
+            return
+        }
+
         if let analyzerError = error as? AnalyzerError {
             switch analyzerError {
             case .whisperKitNotInitialized:

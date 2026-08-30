@@ -36,6 +36,7 @@ nonisolated struct AnalysisFailurePresentation: Equatable, Sendable {
         case .contentAnalysis: "Content analysis paused"
         case .generation: "Session generation paused"
         case .persistence: "Session couldn’t be saved"
+        case .stalled: "Analysis stopped responding"
         case .unknown: "Analysis paused"
         }
     }
@@ -56,6 +57,8 @@ nonisolated struct AnalysisFailurePresentation: Equatable, Sendable {
             "The analysis is safe, but the light session wasn’t generated."
         case .persistence:
             "The analysis is safe, but the generated session wasn’t saved."
+        case .stalled:
+            "LumeSync stopped this attempt because it made no progress for five minutes."
         case .unknown:
             "LumeSync couldn’t finish this analysis."
         }

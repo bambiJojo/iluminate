@@ -145,12 +145,10 @@ struct BackgroundAnalysisTests {
         let audioFile = AnalysisFixtures.audioFile()
 
         let processing = Task {
-            await manager.queueForAnalysis(audioFile)
+            await manager.queueForAnalysis(audioFile, priority: testAnalysisPriority)
         }
 
-        while !transcriber.hasStarted {
-            await Task.yield()
-        }
+        try await waitUntil("the transcriber to start") { transcriber.hasStarted }
 
         let reloadedStore = AnalysisProgressStore(storeURL: progressURL)
         let pendingIDs = await reloadedStore.allPending().map(\.audioFile.id)
@@ -181,7 +179,7 @@ struct BackgroundAnalysisTests {
             scheduleBackgroundAnalysis: { _ in }
         )
 
-        await manager.queueForAnalysis(AnalysisFixtures.audioFile())
+        await manager.queueForAnalysis(AnalysisFixtures.audioFile(), priority: testAnalysisPriority)
 
         #expect(await store.allPending().isEmpty)
         #expect(manager.failedAnalyses.count == 1)
@@ -213,7 +211,7 @@ struct BackgroundAnalysisTests {
             fileSize: 1_024
         )
 
-        await manager.queueForAnalysis(audioFile)
+        await manager.queueForAnalysis(audioFile, priority: testAnalysisPriority)
 
         #expect(transcriber.callCount == 0)
         #expect(analyzer.callCount == 0)
@@ -245,7 +243,7 @@ struct BackgroundAnalysisTests {
         )
         let audioFile = AnalysisFixtures.audioFile()
 
-        await manager.queueForAnalysis(audioFile)
+        await manager.queueForAnalysis(audioFile, priority: testAnalysisPriority)
 
         #expect(await store.allPending().isEmpty)
         #expect(await store.manualRecoveryCheckpoints().count == 1)
@@ -278,12 +276,10 @@ struct BackgroundAnalysisTests {
         defer { GeneratedSessionStore.shared.delete(for: audioFile) }
 
         let processing = Task {
-            await manager.queueForAnalysis(audioFile)
+            await manager.queueForAnalysis(audioFile, priority: testAnalysisPriority)
         }
 
-        while analyzer.callCount == 0 {
-            await Task.yield()
-        }
+        try await waitUntil("content analysis to begin") { analyzer.callCount > 0 }
         let interruptedCheckpoint = await store.checkpoint(for: audioFile)
         #expect(interruptedCheckpoint?.transcription != nil)
 
@@ -366,7 +362,7 @@ struct BackgroundAnalysisTests {
         let audioFile = AnalysisFixtures.audioFile()
         defer { GeneratedSessionStore.shared.delete(for: audioFile) }
 
-        await manager.queueForAnalysis(audioFile)
+        await manager.queueForAnalysis(audioFile, priority: testAnalysisPriority)
         _ = await manager.resumeInterruptedAnalyses()
 
         let failure = try #require(manager.failedAnalyses.first)
@@ -440,8 +436,11 @@ private final class InterruptedThenTransientContentAnalyzer: ContentAnalyzingSer
         callCount += 1
 
         if callCount == 1 {
+            // Sleeps rather than spinning on `Task.yield()`: a tight yield loop
+            // here competes with the very queue the test is waiting on, which is
+            // what made these tests crawl under iOS's `.background` throttling.
             while !Task.isCancelled {
-                await Task.yield()
+                try? await Task.sleep(for: .milliseconds(5))
             }
             throw CancellationError()
         }

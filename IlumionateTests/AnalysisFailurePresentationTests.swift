@@ -45,4 +45,17 @@ struct AnalysisFailurePresentationTests {
         #expect(presentation.canRetry)
         #expect(presentation.statusMessage == "Retry scheduled")
     }
+
+    @Test func stalledAnalysisExplainsTheWatchdogRecovery() {
+        let presentation = AnalysisFailurePresentation(
+            reason: .stalled,
+            failedStage: .transcription,
+            recoveryStage: .none,
+            retryState: .manual
+        )
+
+        #expect(presentation.title == "Analysis stopped responding")
+        #expect(presentation.message.contains("made no progress"))
+        #expect(presentation.canRetry)
+    }
 }

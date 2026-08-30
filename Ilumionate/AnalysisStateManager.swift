@@ -51,7 +51,7 @@ private actor AnalysisCachePersistence {
 
 // MARK: - Analysis Stage
 
-enum AnalysisStage: Sendable {
+nonisolated enum AnalysisStage: Sendable {
     case starting
     case transcribing
     case analyzing
@@ -109,13 +109,15 @@ class AnalysisStateManager {
         preferences: AnalysisPreferences? = nil,
         cacheURL: URL = AnalysisStateManager.cacheURL,
         stageOverlapOverride: Bool? = nil,
+        watchdogPolicy: AnalysisWatchdogPolicy = AnalysisWatchdogPolicy(),
         eagerlyLoadsCache: Bool = true,
         scheduleBackgroundAnalysis: @escaping @MainActor ([AudioFile]) -> Void = { audioFiles in
             BackgroundAnalysisScheduler.shared.schedule(for: audioFiles)
         }
     ) {
         self.analysisCoordinator = AnalysisCoordinator(
-            stageOverlapOverride: stageOverlapOverride
+            stageOverlapOverride: stageOverlapOverride,
+            watchdogPolicy: watchdogPolicy
         )
         self.audioAnalyzer = transcriber
         self.aiAnalyzer = analyzer
@@ -141,6 +143,14 @@ class AnalysisStateManager {
     private let analysisCacheURL: URL
     private let scheduleBackgroundAnalysis: @MainActor ([AudioFile]) -> Void
     private var automaticProcessingTask: Task<Void, Never>?
+    @ObservationIgnored private var quarantinedAttemptID: UUID?
+    @ObservationIgnored private var restartAfterCurrentProcessor = false
+    /// Priority the queue is currently being drained at, so a resume after a
+    /// stall keeps it. `endAnalysisResourceQuarantine` used the default
+    /// `.background`, which silently demoted a user-initiated run for the rest
+    /// of the queue — invisible on macOS, where `.background` is barely
+    /// throttled, and a crawl on iOS, where it is.
+    @ObservationIgnored private var activeProcessingPriority: TaskPriority = .background
     @ObservationIgnored private var cachedResultsLoadTask: Task<CachedAnalysisLoad, Never>?
     @ObservationIgnored private var hasLoadedCachedResults = false
     @ObservationIgnored private let cachePersistence = AnalysisCachePersistence()
@@ -397,6 +407,11 @@ class AnalysisStateManager {
 
     /// Start automatic background processing of the queue
     private func startAutomaticProcessing(priority: TaskPriority = .background) async {
+        guard quarantinedAttemptID == nil else {
+            restartAfterCurrentProcessor = !analysisQueue.isEmpty
+            return
+        }
+
         if let automaticProcessingTask {
             await automaticProcessingTask.value
             return
@@ -405,6 +420,8 @@ class AnalysisStateManager {
         guard currentAnalysis == nil && !analysisQueue.isEmpty else {
             return
         }
+
+        activeProcessingPriority = priority
 
         let task = Task(priority: priority) { [weak self] in
             guard let self else { return }
@@ -422,6 +439,14 @@ class AnalysisStateManager {
         automaticProcessingTask = task
         await task.value
         automaticProcessingTask = nil
+
+        if restartAfterCurrentProcessor,
+           quarantinedAttemptID == nil,
+           !analysisQueue.isEmpty {
+            restartAfterCurrentProcessor = false
+            await startAutomaticProcessing(priority: priority)
+            return
+        }
 
         if await progressStore.allPending().isEmpty {
             await BackgroundAnalysisScheduler.shared.analysisFinished()
@@ -478,6 +503,7 @@ class AnalysisStateManager {
     /// Cancel all analyses with structured cleanup
     func cancelAllAnalyses() {
         automaticProcessingTask?.cancel()
+        restartAfterCurrentProcessor = false
         Task {
             await audioAnalyzer.cancelTranscription()
             await aiAnalyzer.cancelAnalysis()
@@ -494,6 +520,33 @@ class AnalysisStateManager {
             await audioAnalyzer.cancelTranscription()
             await aiAnalyzer.cancelAnalysis()
         }
+    }
+
+    /// Prevents another attempt from touching an on-device model while an
+    /// operation that ignored cancellation is still unwinding.
+    func beginAnalysisResourceQuarantine(for attemptID: UUID) {
+        quarantinedAttemptID = attemptID
+    }
+
+    func endAnalysisResourceQuarantine(for attemptID: UUID) async {
+        guard quarantinedAttemptID == attemptID else { return }
+        await audioAnalyzer.releaseResources()
+        quarantinedAttemptID = nil
+
+        guard !analysisQueue.isEmpty else {
+            restartAfterCurrentProcessor = false
+            return
+        }
+
+        if automaticProcessingTask != nil {
+            restartAfterCurrentProcessor = true
+        } else {
+            await startAutomaticProcessing(priority: activeProcessingPriority)
+        }
+    }
+
+    var isAnalysisResourceQuarantined: Bool {
+        quarantinedAttemptID != nil
     }
 
     /// Check if a file is in the queue
@@ -852,6 +905,16 @@ class AnalysisStateManager {
 
 // MARK: - Analysis Coordinator
 
+private nonisolated struct ContentAnalysisStageResult: Sendable {
+    let analysis: AnalysisResult
+    let prosody: ProsodicProfile?
+}
+
+private enum AnalysisProcessingDisposition: Equatable {
+    case continueQueue
+    case haltForResourceCleanup
+}
+
 /// Main-actor coordinator for services whose observable state drives SwiftUI.
 /// CPU-heavy transcription, prosody, and file work explicitly leave this actor.
 @MainActor
@@ -861,9 +924,104 @@ final class AnalysisCoordinator {
 
     private var isProcessing = false
     private let stageOverlapOverride: Bool?
+    private let watchdogPolicy: AnalysisWatchdogPolicy
 
-    init(stageOverlapOverride: Bool? = nil) {
+    init(
+        stageOverlapOverride: Bool? = nil,
+        watchdogPolicy: AnalysisWatchdogPolicy = AnalysisWatchdogPolicy()
+    ) {
         self.stageOverlapOverride = stageOverlapOverride
+        self.watchdogPolicy = watchdogPolicy
+    }
+
+    private func superviseOperation<Value: Sendable>(
+        attemptID: UUID,
+        stage: AnalyticsAnalysisStage,
+        analysisManager: AnalysisStateManager,
+        progress: @escaping @MainActor () -> Double,
+        cancelOperation: @escaping @MainActor () async -> Void,
+        operation: @escaping @MainActor () async throws -> Value
+    ) async throws -> Value {
+        let race = AnalysisOperationRace<Value>()
+        let operationTask = Task<Value, Error> {
+            try await operation()
+        }
+        let completionTask = Task<Void, Never> {
+            let result: Result<Value, any Error>
+            do {
+                result = .success(try await operationTask.value)
+            } catch {
+                result = .failure(error)
+            }
+            await race.resolve(.result(result))
+        }
+
+        let timing = watchdogPolicy.timing
+        let monitorTask = Task<Void, Never> {
+            var watchdog = AnalysisInactivityWatchdog(
+                stage: stage,
+                progress: progress(),
+                startedAt: timing.elapsed(),
+                timeout: watchdogPolicy.noProgressTimeout
+            )
+
+            while !Task.isCancelled {
+                do {
+                    try await timing.sleep(watchdogPolicy.pollInterval)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                guard analysisManager.currentAnalysis?.attemptID == attemptID else {
+                    await race.resolve(.cancelled)
+                    return
+                }
+
+                let now = timing.elapsed()
+                watchdog.observe(stage: stage, progress: progress(), at: now)
+                if watchdog.hasTimedOut(at: now) {
+                    await race.resolve(.stalled)
+                    return
+                }
+            }
+        }
+
+        let outcome = await withTaskCancellationHandler {
+            await race.value()
+        } onCancel: {
+            operationTask.cancel()
+            monitorTask.cancel()
+            Task { await race.resolve(.cancelled) }
+        }
+
+        switch outcome {
+        case .result(let result):
+            monitorTask.cancel()
+            return try result.get()
+
+        case .cancelled:
+            operationTask.cancel()
+            monitorTask.cancel()
+            throw CancellationError()
+
+        case .stalled:
+            operationTask.cancel()
+            monitorTask.cancel()
+            analysisManager.beginAnalysisResourceQuarantine(for: attemptID)
+
+            let cancellationTask = Task<Void, Never> {
+                await cancelOperation()
+            }
+            // Do not await a model task that has already failed to respond.
+            // Quarantine remains until both the operation and its explicit
+            // cancellation path confirm that the resource has been released.
+            Task<Void, Never> {
+                await completionTask.value
+                await cancellationTask.value
+                await analysisManager.endAnalysisResourceQuarantine(for: attemptID)
+            }
+            throw AnalysisStalledError(stage: stage)
+        }
     }
 
     private func enrichAnalysis(
@@ -912,8 +1070,7 @@ final class AnalysisCoordinator {
 
     /// Processes the queue as a resource-aware pipeline. Whisper transcription
     /// and Foundation Models analysis remain mutually exclusive because they
-    /// compete for constrained on-device ML resources. The next transcription
-    /// may still overlap the current file's lightweight generation and saving.
+    /// compete for constrained on-device ML resources.
     func processQueueAutomatically(
         analysisManager: AnalysisStateManager,
         audioAnalyzer: any AudioTranscribingService,
@@ -932,60 +1089,8 @@ final class AnalysisCoordinator {
         defer { isProcessing = false }
 
         Log.analysis.info("🚀 Starting staged automatic queue processing...")
-        let stageConcurrencyLimit = await performanceOptimizer.getOptimalConcurrentLimit()
-
-        struct TranscriptionPrefetch {
-            let audioFileID: UUID
-            let task: Task<Void, Never>
-        }
-
-        var transcriptionPrefetch: TranscriptionPrefetch?
-
-        func awaitPrefetchedTranscriptionForNextFile() async {
-            guard let prefetch = transcriptionPrefetch else { return }
-
-            // Queue reordering remains authoritative. A speculative transcript
-            // for a file that is no longer next should not delay the new leader.
-            if analysisManager.analysisQueue.first?.id != prefetch.audioFileID {
-                prefetch.task.cancel()
-                await audioAnalyzer.cancelTranscription()
-            }
-
-            await prefetch.task.value
-            transcriptionPrefetch = nil
-        }
-
-        func startPrefetchingNextTranscription() {
-            let concurrencyAllowsPrefetch = stageOverlapOverride ?? (stageConcurrencyLimit > 1)
-            guard concurrencyAllowsPrefetch,
-                  transcriptionPrefetch == nil,
-                  let nextFile = analysisManager.analysisQueue.first else {
-                return
-            }
-
-            if stageOverlapOverride == nil {
-                guard case .normal = performanceOptimizer.memoryPressure else { return }
-            }
-
-            Log.analysis.info("⏩ Prefetching transcription: \(nextFile.filename)")
-            let task = Task(priority: priority) {
-                await self.prefetchTranscription(
-                    for: nextFile,
-                    analysisManager: analysisManager,
-                    audioAnalyzer: audioAnalyzer,
-                    progressStore: progressStore
-                )
-            }
-            transcriptionPrefetch = TranscriptionPrefetch(
-                audioFileID: nextFile.id,
-                task: task
-            )
-        }
 
         while true {
-            // Do not promote a file into content analysis until its speculative
-            // transcription has either completed or cleanly fallen back.
-            await awaitPrefetchedTranscriptionForNextFile()
             if Task.isCancelled { break }
 
             // Get next file from queue on main actor
@@ -1012,18 +1117,25 @@ final class AnalysisCoordinator {
             let queuePosition = await MainActor.run { analysisManager.queuePosition(for: audioFile) }
             Log.analysis.info("🔄 Processing: \(audioFile.filename) (queue position: \(queuePosition))")
 
-            // Stay structured: cancelling the queue task now propagates into
-            // the current file instead of leaving an unstructured child alive.
-            await performSingleAnalysisWithStateUpdates(
+            guard let attemptID = analysisManager.currentAnalysis?.attemptID else {
+                continue
+            }
+
+            let disposition = await performSingleAnalysisWithStateUpdates(
                 audioFile: audioFile,
+                attemptID: attemptID,
                 analysisManager: analysisManager,
                 audioAnalyzer: audioAnalyzer,
                 aiAnalyzer: aiAnalyzer,
                 progressStore: progressStore,
                 performanceOptimizer: performanceOptimizer,
-                onTranscriptionReady: startPrefetchingNextTranscription,
                 onComplete: onComplete
             )
+
+            if disposition == .haltForResourceCleanup {
+                Log.analysis.info("⏸️ Queue paused while stalled model resources unwind")
+                break
+            }
 
             // Check for cancellation between files
             if Task.isCancelled {
@@ -1035,13 +1147,9 @@ final class AnalysisCoordinator {
             }
         }
 
-        if let transcriptionPrefetch {
-            transcriptionPrefetch.task.cancel()
-            await audioAnalyzer.cancelTranscription()
-            await transcriptionPrefetch.task.value
+        if !analysisManager.isAnalysisResourceQuarantined {
+            await audioAnalyzer.releaseResources()
         }
-
-        await audioAnalyzer.releaseResources()
 
         // Clear current analysis when done
         await MainActor.run {
@@ -1051,64 +1159,17 @@ final class AnalysisCoordinator {
         Log.analysis.info("🏁 Automatic queue processing finished")
     }
 
-    /// Speculatively completes only the transcription stage for the next file.
-    /// The normal checkpoint-aware pipeline still owns attempts, telemetry,
-    /// retries, AI analysis, and finalization when the file reaches the front.
-    private func prefetchTranscription(
-        for audioFile: AudioFile,
-        analysisManager: AnalysisStateManager,
-        audioAnalyzer: any AudioTranscribingService,
-        progressStore: AnalysisProgressStore
-    ) async {
-        let trace = PerformanceTrace.begin("Transcription Prefetch")
-        defer { PerformanceTrace.end(trace) }
-
-        do {
-            try Task.checkCancellation()
-
-            if let checkpoint = await progressStore.checkpoint(for: audioFile),
-               checkpoint.transcription != nil || checkpoint.analysis != nil {
-                Log.analysis.info("⏭️ Prefetch already checkpointed: \(audioFile.filename)")
-                return
-            }
-
-            guard analysisManager.cachedCompletion(for: audioFile) == nil else {
-                Log.analysis.info("⏭️ Prefetch skipped cached file: \(audioFile.filename)")
-                return
-            }
-
-            let transcription: AudioTranscriptionResult
-            if let reusable = AnalysisStateManager.reusableTranscriptionResult(for: audioFile) {
-                transcription = reusable
-            } else {
-                transcription = try await audioAnalyzer.transcribe(audioFile: audioFile)
-            }
-
-            try Task.checkCancellation()
-            await progressStore.saveTranscription(transcription, for: audioFile)
-            Log.analysis.info("✅ Prefetched transcription: \(audioFile.filename)")
-        } catch is CancellationError {
-            Log.analysis.info("🛑 Transcription prefetch cancelled: \(audioFile.filename)")
-        } catch {
-            // Prefetch is opportunistic. The regular pipeline gets the normal
-            // attempt and retry semantics when this file becomes current.
-            Log.analysis.info(
-                "⚠️ Transcription prefetch deferred for \(audioFile.filename): \(error.localizedDescription)"
-            )
-        }
-    }
-
     /// Perform single analysis with proper state updates, resuming from any saved checkpoint.
     private func performSingleAnalysisWithStateUpdates(
         audioFile: AudioFile,
+        attemptID: UUID,
         analysisManager: AnalysisStateManager,
         audioAnalyzer: any AudioTranscribingService,
         aiAnalyzer: any ContentAnalyzingService,
         progressStore: AnalysisProgressStore,
         performanceOptimizer: PerformanceOptimizer,
-        onTranscriptionReady: @MainActor () -> Void,
         onComplete: @Sendable @escaping (AudioFile, CompletedAnalysis) async -> Void
-    ) async {
+    ) async -> AnalysisProcessingDisposition {
         let trace = PerformanceTrace.begin("Analyze File")
         defer { PerformanceTrace.end(trace) }
 
@@ -1141,7 +1202,6 @@ final class AnalysisCoordinator {
                 telemetryStage = .generation
                 createGenerationStartedAt = Date()
                 Log.analysis.info("⚡ Restoring cached analysis: \(audioFile.filename)")
-                onTranscriptionReady()
                 await MainActor.run {
                     UsageAnalytics.shared.createStarted(.audioSession)
                     analysisManager.currentAnalysis?.stage = .generatingSession
@@ -1176,7 +1236,7 @@ final class AnalysisCoordinator {
                     )
                 }
                 await onComplete(audioFile, cached)
-                return
+                return .continueQueue
             }
 
             try await performanceOptimizer.withBackgroundTask(name: "AudioAnalysis-\(audioFile.filename)") {
@@ -1232,7 +1292,14 @@ final class AnalysisCoordinator {
                     await MainActor.run {
                         analysisManager.currentAnalysis?.stage = .transcribing
                     }
-                    transcriptionResult = try await audioAnalyzer.transcribe(audioFile: audioFile)
+                    transcriptionResult = try await superviseOperation(
+                        attemptID: attemptID,
+                        stage: .transcription,
+                        analysisManager: analysisManager,
+                        progress: { audioAnalyzer.progress },
+                        cancelOperation: { await audioAnalyzer.cancelTranscription() },
+                        operation: { try await audioAnalyzer.transcribe(audioFile: audioFile) }
+                    )
                     try Task.checkCancellation()
                     await progressStore.saveTranscription(transcriptionResult, for: audioFile)
                 }
@@ -1247,10 +1314,19 @@ final class AnalysisCoordinator {
                 let analysisResult: AnalysisResult
                 if let saved = checkpoint?.analysis {
                     Log.analysis.info("⏭️ Skipping AI analysis (checkpoint found) for \(audioFile.filename)")
-                    analysisResult = await self.enrichAnalysis(
-                        audioFile: audioFile,
-                        analysis: saved,
-                        transcription: transcriptionResult
+                    analysisResult = try await superviseOperation(
+                        attemptID: attemptID,
+                        stage: .contentAnalysis,
+                        analysisManager: analysisManager,
+                        progress: { 0 },
+                        cancelOperation: {},
+                        operation: {
+                            await self.enrichAnalysis(
+                                audioFile: audioFile,
+                                analysis: saved,
+                                transcription: transcriptionResult
+                            )
+                        }
                     )
                     await progressStore.saveAnalysis(analysisResult, for: audioFile)
                     await MainActor.run {
@@ -1264,29 +1340,40 @@ final class AnalysisCoordinator {
                     // Prosody extraction is pure signal processing on the raw
                     // audio and independent of the AI stage — run both
                     // concurrently instead of paying for prosody afterwards.
-                    let enricher = AudioAnalysisEnricher(analyzerConfig: AnalyzerConfigLoader.load())
-                    async let prosodyAsync = enricher.extractProsody(
-                        audioFile: audioFile,
-                        transcription: transcriptionResult
-                    )
-                    let rawAnalysis = try await aiAnalyzer.analyzeContent(
-                        transcription: transcriptionResult,
-                        audioFile: audioFile
+                    let stageResult = try await superviseOperation(
+                        attemptID: attemptID,
+                        stage: .contentAnalysis,
+                        analysisManager: analysisManager,
+                        progress: { aiAnalyzer.progress },
+                        cancelOperation: { await aiAnalyzer.cancelAnalysis() },
+                        operation: {
+                            let enricher = AudioAnalysisEnricher(
+                                analyzerConfig: AnalyzerConfigLoader.load()
+                            )
+                            async let prosody = enricher.extractProsody(
+                                audioFile: audioFile,
+                                transcription: transcriptionResult
+                            )
+                            let rawAnalysis = try await aiAnalyzer.analyzeContent(
+                                transcription: transcriptionResult,
+                                audioFile: audioFile
+                            )
+                            return ContentAnalysisStageResult(
+                                analysis: rawAnalysis,
+                                prosody: await prosody
+                            )
+                        }
                     )
                     try Task.checkCancellation()
+                    let enricher = AudioAnalysisEnricher(analyzerConfig: AnalyzerConfigLoader.load())
                     analysisResult = enricher.enrich(
-                        rawAnalysis,
+                        stageResult.analysis,
                         transcription: transcriptionResult,
                         audioFile: audioFile,
-                        prosody: await prosodyAsync
+                        prosody: stageResult.prosody
                     )
                     await progressStore.saveAnalysis(analysisResult, for: audioFile)
                 }
-
-                // WhisperKit and Foundation Models share constrained on-device
-                // ML resources. Start lookahead only after content analysis is
-                // checkpointed; it can still overlap generation and persistence.
-                onTranscriptionReady()
 
                 // Stage 3: Generate Light Session (always run — it's fast)
                 telemetryStage = .generation
@@ -1396,15 +1483,26 @@ final class AnalysisCoordinator {
             )
             let reason = AnalyticsAnalysisFailureReason(error: error, stage: finalStage)
             let failedAttemptNumber: Int
-            if reason.supportsAutomaticRetry {
+            if reason.supportsAutomaticRetry && reason != .stalled {
                 failedAttemptNumber = await progressStore.recordFailedAttempt(for: audioFile)
             } else {
                 failedAttemptNumber = 1
             }
-            let shouldRetry = reason.supportsAutomaticRetry && failedAttemptNumber < 2
+            let shouldRetry = reason.supportsAutomaticRetry
+                && reason != .stalled
+                && failedAttemptNumber < 2
             let failedAt = Date()
             let retryState: AnalysisRetryState
-            if shouldRetry {
+            if reason == .stalled {
+                retryState = .manual
+                await progressStore.markRequiresManualRetry(
+                    for: audioFile,
+                    reason: reason,
+                    failedStage: finalStage,
+                    failedAt: failedAt
+                )
+                Log.analysis.info("⏸️ Stalled model attempt quarantined; manual retry available")
+            } else if shouldRetry {
                 retryState = .automatic
                 Log.analysis.info("🔁 Preserving checkpoint for one retry: \(audioFile.filename)")
             } else if reason.supportsAutomaticRetry {
@@ -1457,13 +1555,18 @@ final class AnalysisCoordinator {
                     )
                 )
             }
+            if reason == .stalled {
+                return .haltForResourceCleanup
+            }
         }
+        return .continueQueue
     }
 }
 
 private extension AnalyticsAnalysisFailureReason {
     /// Invalid or empty audio cannot become valid by repeating the same work.
-    /// Other failures get one recovery attempt, bounded by the coordinator.
+    /// Stalls use manual recovery after resource quarantine; ordinary transient
+    /// failures get one automatic recovery attempt, bounded by the coordinator.
     var supportsAutomaticRetry: Bool {
         switch self {
         case .invalidAudio, .noAudioData:

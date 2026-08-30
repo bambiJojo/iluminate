@@ -185,3 +185,41 @@ enum AnalysisFixtures {
         ]
     )
 }
+
+// MARK: - Waiting
+
+/// Thrown by `waitUntil` so a stuck wait fails the test by name instead of
+/// running out the clock.
+struct WaitTimedOut: Error, CustomStringConvertible {
+    let label: String
+    var description: String { "Timed out waiting for \(label)" }
+}
+
+/// Polls `condition` until it holds, then returns; throws once the budget runs out.
+///
+/// Pipeline tests used to spin on `while !condition { await Task.yield() }`, which
+/// has no exit. When the queue was slow the test ran to its time limit, and on iOS
+/// that aborted the *rest of the suite* — a run would report 63 of 1799 cases and
+/// still exit 0 (ERR-021). Sleeping also lets the queue's own task make progress,
+/// which a tight yield loop on the main actor does not.
+@MainActor
+func waitUntil(
+    _ label: String,
+    polls: Int = 400,
+    interval: Duration = .milliseconds(10),
+    _ condition: () -> Bool
+) async throws {
+    for _ in 0..<polls {
+        if condition() { return }
+        try await Task.sleep(for: interval)
+    }
+    guard condition() else { throw WaitTimedOut(label: label) }
+}
+
+/// Priority the pipeline tests drive the analysis queue at.
+///
+/// Never `.background`: iOS throttles that QoS hard, so a queue drained at the
+/// default crawled (~14 s to reach transcription where macOS took 0.2 s) and blew
+/// through the tests' time limits. These tests assert pipeline behaviour, not how
+/// the OS schedules background work, so they queue the way a user action does.
+let testAnalysisPriority: TaskPriority = .userInitiated
