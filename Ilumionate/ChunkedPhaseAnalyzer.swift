@@ -652,7 +652,7 @@ extension ChunkedPhaseAnalyzer {
     /// gives up. Set generously: the cost of tripping late is wasted time, and
     /// the cost of tripping early is a keyword fallback that a refusing pass
     /// would have reached anyway.
-    static let consecutiveUnusableChunkLimit = 12
+    nonisolated static let consecutiveUnusableChunkLimit = 12
 
     @available(iOS 26.0, macOS 26.0, *)
     nonisolated static func runPass(
