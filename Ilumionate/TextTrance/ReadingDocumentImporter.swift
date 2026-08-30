@@ -67,7 +67,13 @@ enum ReadingDocumentImporter {
         return types
     }
 
-    nonisolated static func extract(from url: URL) throws -> ExtractedReadingDocument {
+    /// - Parameter maximumTextByteCount: the budget extracted text must fit.
+    ///   Injectable only so tests can exercise the aggregate bound without
+    ///   building an 8 MB fixture; production always uses the default.
+    nonisolated static func extract(
+        from url: URL,
+        maximumTextByteCount: Int = maximumPlainTextByteCount
+    ) throws -> ExtractedReadingDocument {
         guard let kind = ReadingDocumentKind(fileExtension: url.pathExtension) else {
             throw ReadingDocumentImportError.unsupportedFileType
         }
@@ -76,7 +82,7 @@ enum ReadingDocumentImporter {
         case .pdf:
             return try extractPDF(from: url)
         case .epub:
-            return try extractEPUB(from: url)
+            return try extractEPUB(from: url, maximumTextByteCount: maximumTextByteCount)
         case .text:
             return try extractPlainText(from: url)
         }
@@ -148,10 +154,16 @@ enum ReadingDocumentImporter {
         )
     }
 
-    private nonisolated static func extractEPUB(from url: URL) throws -> ExtractedReadingDocument {
+    private nonisolated static func extractEPUB(
+        from url: URL,
+        maximumTextByteCount: Int = maximumPlainTextByteCount
+    ) throws -> ExtractedReadingDocument {
         let archive: EPUBArchive
         do {
-            archive = try EPUBArchive(data: Data(contentsOf: url))
+            // `.mappedIfSafe` keeps the container out of resident memory where
+            // the platform can back it by the file instead. Entry inflation still
+            // allocates, which is what the size bound above is for.
+            archive = try EPUBArchive(data: Data(contentsOf: url, options: .mappedIfSafe))
         } catch let error as ReadingDocumentImportError {
             throw error
         } catch {
@@ -159,7 +171,7 @@ enum ReadingDocumentImporter {
         }
 
         let package = try EPUBPackage(archive: archive)
-        let text = try package.readingText()
+        let text = try package.readingText(maximumByteCount: maximumTextByteCount)
         guard wordCount(in: text) >= 8 else {
             throw ReadingDocumentImportError.noReadableText
         }
@@ -206,24 +218,42 @@ private struct EPUBPackage {
         spine = Self.spineIDs(in: opf)
     }
 
-    nonisolated func readingText() throws -> String {
+    /// - Parameter maximumByteCount: bounds the *sum* of the extracted sections.
+    ///   The per-entry check in `EPUBArchive.data(forPath:)` bounds one
+    ///   allocation; it says nothing about a spine of many individually legal
+    ///   sections, which still join into one string. See ERRORS.md ERR-023.
+    nonisolated func readingText(
+        maximumByteCount: Int = ReadingDocumentImporter.maximumPlainTextByteCount
+    ) throws -> String {
         let orderedItems = spine.compactMap { manifest[$0] }
         let htmlItems = orderedItems.isEmpty
             ? manifest.values.sorted { $0.href < $1.href }
             : orderedItems
 
-        let sections = htmlItems.compactMap { item -> String? in
-            guard item.isReadableText else { return nil }
+        var accumulatedByteCount = 0
+        var sections: [String] = []
+        for item in htmlItems {
+            guard item.isReadableText else { continue }
             let path = Self.resolve(item.href, relativeTo: packageDirectory)
-            guard let html = archive.string(forPath: path) else { return nil }
+            guard let html = archive.string(forPath: path) else { continue }
             let text = ReaderDocumentHTMLExtractor.readerText(fromHTML: html)
-            guard ReadingDocumentImporter.wordCount(in: text) > 0 else { return nil }
+            guard ReadingDocumentImporter.wordCount(in: text) > 0 else { continue }
 
+            let section: String
             if let heading = ReaderDocumentHTMLExtractor.chapterTitle(fromHTML: html),
                !text.localizedCaseInsensitiveContains(heading) {
-                return "\(heading)\n\n\(text)"
+                section = "\(heading)\n\n\(text)"
+            } else {
+                section = text
             }
-            return text
+
+            // Checked as we go rather than after joining, so an over-budget book
+            // is refused without first materialising the whole string.
+            accumulatedByteCount += section.utf8.count
+            guard accumulatedByteCount <= maximumByteCount else {
+                throw ReadingDocumentImportError.textFileTooLarge
+            }
+            sections.append(section)
         }
 
         let text = ReaderDocumentHTMLExtractor.normalizeText(sections.joined(separator: "\n\n"))
@@ -392,6 +422,19 @@ private struct EPUBArchive {
         let entry = entries[normalized]
             ?? entries.first { $0.key.lowercased() == normalized.lowercased() }?.value
         guard let entry else { return nil }
+
+        // `uncompressedSize` is read straight from the archive's own central
+        // directory and is what `inflate` allocates — before decompressing a
+        // single byte. Nothing verifies it, so an archive claiming to inflate to
+        // 512 MB allocates 512 MB on the word of the file being imported.
+        //
+        // Bounded by the budget plain text already gets rather than a new
+        // number: a single reader entry larger than that is past what the reader
+        // will display regardless of whether the claim is honest. Images are
+        // unaffected — only spine XHTML is ever inflated. See ERRORS.md ERR-023.
+        guard entry.uncompressedSize <= ReadingDocumentImporter.maximumPlainTextByteCount else {
+            throw ReadingDocumentImportError.textFileTooLarge
+        }
 
         let compressedData = data.subdata(in: entry.dataRange)
         switch entry.compressionMethod {

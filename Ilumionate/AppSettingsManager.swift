@@ -35,6 +35,9 @@ enum AppSettingsManager {
         static let hasSeenFlashWarning = "hasSeenFlashWarning"
         static let hasSeenLightSyncWarning = "hasSeenLightSyncWarning"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
+        /// Retired streaming credentials. The SoundCloud integration was removed
+        /// in `e9cb0f1`; these are kept only so `purgeRetiredStreamingCredentials`
+        /// and reset can delete values written before then. Nothing reads them.
         static let soundCloudClientId = "SoundCloud_ClientId"
         static let soundCloudSecret = "SoundCloud_Secret"
         static let soundCloudAccessToken = "SoundCloud_AccessToken"
@@ -79,11 +82,6 @@ enum AppSettingsManager {
         let fileNames: [String]
     }
 
-    struct ExportStreaming: Codable, Sendable {
-        let soundCloudConfigured: Bool
-        let soundCloudAuthenticated: Bool
-    }
-
     struct ExportSnapshot: Codable, Sendable {
         let exportedAt: Date
         let profile: ExportProfile
@@ -91,7 +89,6 @@ enum AppSettingsManager {
         let analysisPreferences: AnalysisPreferences.Snapshot
         let sessionHistory: [SessionHistoryEntry]
         let audioLibrary: ExportAudioLibrary
-        let streaming: ExportStreaming
     }
 
     static func isHapticFeedbackEnabled(defaults: UserDefaults = .standard) -> Bool {
@@ -152,12 +149,7 @@ enum AppSettingsManager {
             ),
             analysisPreferences: analysisPreferencesSnapshot ?? AnalysisPreferences.shared.snapshot,
             sessionHistory: sessionHistory(defaults: defaults),
-            audioLibrary: audioLibrary(files: audioFiles),
-            streaming: ExportStreaming(
-                soundCloudConfigured: !(defaults.string(forKey: Key.soundCloudClientId) ?? "").isEmpty
-                    && !(defaults.string(forKey: Key.soundCloudSecret) ?? "").isEmpty,
-                soundCloudAuthenticated: !(defaults.string(forKey: Key.soundCloudAccessToken) ?? "").isEmpty
-            )
+            audioLibrary: audioLibrary(files: audioFiles)
         )
 
         let encoder = JSONEncoder()
@@ -171,6 +163,24 @@ enum AppSettingsManager {
         let data = try encoder.encode(snapshot)
         try data.write(to: exportURL, options: .atomic)
         return exportURL
+    }
+
+    /// Deletes credentials left behind by the retired SoundCloud integration.
+    ///
+    /// Removing the feature (`e9cb0f1`) removed everything that *read* the client
+    /// secret and OAuth token, but not the values themselves: they persist in the
+    /// `UserDefaults` plist, which is unencrypted beyond its file-protection class
+    /// and is captured in device backups. Anyone who authenticated before the
+    /// feature was retired is still carrying them. Runs on every launch — the keys
+    /// are never written again, so after the first pass it is a no-op.
+    ///
+    /// See ERRORS.md ERR-020.
+    nonisolated static func purgeRetiredStreamingCredentials(
+        defaults: UserDefaults = .standard
+    ) {
+        for key in [Key.soundCloudClientId, Key.soundCloudSecret, Key.soundCloudAccessToken] {
+            defaults.removeObject(forKey: key)
+        }
     }
 
     static func resetPreferences(

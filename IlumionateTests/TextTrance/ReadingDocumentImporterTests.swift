@@ -348,7 +348,213 @@ struct ReadingDocumentImporterTests {
         try archive.write(to: url, options: .atomic)
     }
 
-    private func makeDeflatedZip(entries: [(String, Data)], to url: URL) throws {
+    /// `declaredSizes` overrides the uncompressed size written into the headers
+    /// for a given path, so a test can produce an archive that *claims* to
+    /// inflate to far more than it contains. That claim is what the importer
+    /// allocates against, so it is the value worth attacking.
+    // MARK: - Declared-size bounds (ERRORS.md ERR-023)
+
+    /// `inflate` allocates `Data(count: expectedSize)` where `expectedSize` comes
+    /// straight from the archive's own central directory. Nothing verified that
+    /// number, so a file claiming to inflate to 512 MB allocated 512 MB before a
+    /// single byte was decompressed.
+    @Test func refusesEntryDeclaringImplausibleUncompressedSize() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appending(path: "hostile.epub")
+        try makeDeflatedZip(
+            entries: [
+                ("META-INF/container.xml", Data("""
+                <?xml version="1.0"?>
+                <container version="1.0">
+                  <rootfiles>
+                    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+                  </rootfiles>
+                </container>
+                """.utf8)),
+                ("OEBPS/content.opf", Data("""
+                <?xml version="1.0"?>
+                <package version="3.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+                  <metadata><dc:title>Bounded</dc:title></metadata>
+                  <manifest>
+                    <item id="chapter-one" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+                  </manifest>
+                  <spine><itemref idref="chapter-one"/></spine>
+                </package>
+                """.utf8)),
+                ("OEBPS/chapter1.xhtml", Data("""
+                <html xmlns="http://www.w3.org/1999/xhtml">
+                  <body><p>A short chapter, honestly declared as half a gigabyte.</p></body>
+                </html>
+                """.utf8))
+            ],
+            // Half a gigabyte, from a few dozen real bytes.
+            declaredSizes: ["OEBPS/chapter1.xhtml": 512 * 1024 * 1024],
+            to: url
+        )
+
+        #expect(throws: ReadingDocumentImportError.self) {
+            _ = try ReadingDocumentImporter.extract(from: url)
+        }
+    }
+
+    /// The bound must not reject ordinary books. A chapter whose declared size is
+    /// within the reader's existing text budget still extracts normally.
+    @Test func acceptsEntryDeclaringSizeWithinTheTextBudget() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appending(path: "ordinary.epub")
+        let body = String(repeating: "settle a little further with every breath. ", count: 40)
+        try makeDeflatedZip(
+            entries: [
+                ("META-INF/container.xml", Data("""
+                <?xml version="1.0"?>
+                <container version="1.0">
+                  <rootfiles>
+                    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+                  </rootfiles>
+                </container>
+                """.utf8)),
+                ("OEBPS/content.opf", Data("""
+                <?xml version="1.0"?>
+                <package version="3.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+                  <metadata><dc:title>Bounded</dc:title></metadata>
+                  <manifest>
+                    <item id="chapter-one" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+                  </manifest>
+                  <spine><itemref idref="chapter-one"/></spine>
+                </package>
+                """.utf8)),
+                ("OEBPS/chapter1.xhtml", Data("""
+                <html xmlns="http://www.w3.org/1999/xhtml">
+                  <body><h1>Bounded</h1><p>\(body)</p></body>
+                </html>
+                """.utf8))
+            ],
+            to: url
+        )
+
+        let extracted = try ReadingDocumentImporter.extract(from: url)
+
+        #expect(extracted.kind == .epub)
+        #expect(extracted.title == "Bounded")
+        #expect(extracted.text.contains("settle a little further"))
+    }
+
+    /// The per-entry bound does not bound the *sum*. A spine of many individually
+    /// legal sections still joins into one string, so an archive of 500 entries at
+    /// 7 MB each passes every per-entry check and still exhausts memory.
+    @Test func refusesEPUBWhoseSectionsExceedTheBudgetInAggregate() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        func chapter(_ name: String) -> Data {
+            Data("""
+            <html xmlns="http://www.w3.org/1999/xhtml">
+              <body><p>\(String(repeating: "chapter \(name) body text. ", count: 40))</p></body>
+            </html>
+            """.utf8)
+        }
+
+        let url = directory.appending(path: "many.epub")
+        try makeDeflatedZip(
+            entries: [
+                ("META-INF/container.xml", Data("""
+                <?xml version="1.0"?>
+                <container version="1.0">
+                  <rootfiles>
+                    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+                  </rootfiles>
+                </container>
+                """.utf8)),
+                ("OEBPS/content.opf", Data("""
+                <?xml version="1.0"?>
+                <package version="3.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+                  <metadata><dc:title>Many Chapters</dc:title></metadata>
+                  <manifest>
+                    <item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="c3" href="c3.xhtml" media-type="application/xhtml+xml"/>
+                  </manifest>
+                  <spine>
+                    <itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/>
+                  </spine>
+                </package>
+                """.utf8)),
+                ("OEBPS/c1.xhtml", chapter("one")),
+                ("OEBPS/c2.xhtml", chapter("two")),
+                ("OEBPS/c3.xhtml", chapter("three"))
+            ],
+            to: url
+        )
+
+        // Each chapter is roughly 1 kB of extracted text, so three of them clear a
+        // 1500-byte budget only in aggregate — this cannot pass a per-entry check.
+        #expect(throws: ReadingDocumentImportError.textFileTooLarge) {
+            _ = try ReadingDocumentImporter.extract(from: url, maximumTextByteCount: 1_500)
+        }
+    }
+
+    /// The same archive under a budget it fits must still import, so the aggregate
+    /// bound cannot be satisfied by rejecting everything.
+    @Test func acceptsEPUBWhoseSectionsFitTheBudgetInAggregate() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        func chapter(_ name: String) -> Data {
+            Data("""
+            <html xmlns="http://www.w3.org/1999/xhtml">
+              <body><p>\(String(repeating: "chapter \(name) body text. ", count: 40))</p></body>
+            </html>
+            """.utf8)
+        }
+
+        let url = directory.appending(path: "many-ok.epub")
+        try makeDeflatedZip(
+            entries: [
+                ("META-INF/container.xml", Data("""
+                <?xml version="1.0"?>
+                <container version="1.0">
+                  <rootfiles>
+                    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+                  </rootfiles>
+                </container>
+                """.utf8)),
+                ("OEBPS/content.opf", Data("""
+                <?xml version="1.0"?>
+                <package version="3.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+                  <metadata><dc:title>Many Chapters</dc:title></metadata>
+                  <manifest>
+                    <item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="c3" href="c3.xhtml" media-type="application/xhtml+xml"/>
+                  </manifest>
+                  <spine>
+                    <itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/>
+                  </spine>
+                </package>
+                """.utf8)),
+                ("OEBPS/c1.xhtml", chapter("one")),
+                ("OEBPS/c2.xhtml", chapter("two")),
+                ("OEBPS/c3.xhtml", chapter("three"))
+            ],
+            to: url
+        )
+
+        let extracted = try ReadingDocumentImporter.extract(from: url, maximumTextByteCount: 1_000_000)
+
+        #expect(extracted.title == "Many Chapters")
+        #expect(extracted.text.contains("chapter one"))
+        #expect(extracted.text.contains("chapter three"))
+    }
+
+    private func makeDeflatedZip(
+        entries: [(String, Data)],
+        declaredSizes: [String: UInt32] = [:],
+        to url: URL
+    ) throws {
         var archive = Data()
         var centralDirectory = Data()
 
@@ -364,7 +570,7 @@ struct ReadingDocumentImporterTests {
             archive.appendUInt16(0)
             archive.appendUInt32(0)
             archive.appendUInt32(UInt32(compressed.count))
-            archive.appendUInt32(UInt32(contents.count))
+            archive.appendUInt32(declaredSizes[path] ?? UInt32(contents.count))
             archive.appendUInt16(UInt16(pathData.count))
             archive.appendUInt16(0)
             archive.append(pathData)
@@ -379,7 +585,7 @@ struct ReadingDocumentImporterTests {
             centralDirectory.appendUInt16(0)
             centralDirectory.appendUInt32(0)
             centralDirectory.appendUInt32(UInt32(compressed.count))
-            centralDirectory.appendUInt32(UInt32(contents.count))
+            centralDirectory.appendUInt32(declaredSizes[path] ?? UInt32(contents.count))
             centralDirectory.appendUInt16(UInt16(pathData.count))
             centralDirectory.appendUInt16(0)
             centralDirectory.appendUInt16(0)

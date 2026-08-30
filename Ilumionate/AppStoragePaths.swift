@@ -28,6 +28,12 @@ nonisolated enum AppStoragePaths {
     static let analyzerConfig = supportRoot
         .appending(path: "AnalyzerConfig.json")
 
+    /// Guardrail refusal attachments. Each embeds the prompt that was refused,
+    /// which carries transcript excerpts, so these are kept out of the
+    /// Finder-visible Documents root. See ERRORS.md ERR-024.
+    static let guardrailFeedback = supportRoot
+        .appending(path: "Guardrail Feedback", directoryHint: .isDirectory)
+
     /// The real cable inbox. `UIFileSharingEnabled` exposes the Documents
     /// *root*, and Finder's device Files tab drops onto the app row — it cannot
     /// deliver into a subfolder. Anything watching only a subfolder watches a

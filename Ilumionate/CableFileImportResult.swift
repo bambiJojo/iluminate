@@ -22,6 +22,11 @@ nonisolated struct CableFileImportResult: Sendable {
     /// saying "connect Finder" then reads as failure when the transfer in fact
     /// succeeded moments earlier.
     var priorImportCount = 0
+    /// How many admitted files were found inside a folder rather than at the
+    /// top of the inbox. Import *moves* the original, so a dropped folder is
+    /// emptied and its layout is not preserved — the alert is the only place
+    /// that can say where the user's folder went.
+    var movedFromSubfolderCount = 0
 
     /// Folds a recheck pass into the running total. Outcomes accumulate, but
     /// `pending` is replaced rather than appended: it describes what is *still*
@@ -32,6 +37,7 @@ nonisolated struct CableFileImportResult: Sendable {
         duplicates.append(contentsOf: other.duplicates)
         rejected.append(contentsOf: other.rejected)
         failures.append(contentsOf: other.failures)
+        movedFromSubfolderCount += other.movedFromSubfolderCount
         pending = other.pending
     }
 
@@ -95,7 +101,9 @@ nonisolated struct CableFileImportResult: Sendable {
 
         if imported.isEmpty == false {
             let subject = noun(imported.count, singular: "file is", plural: "files are")
-            lines.append("\(imported.count) \(subject) ready in your Library.")
+            lines.append(
+                "\(imported.count) \(subject) ready in your Library, and no longer in the Finder folder."
+            )
         }
         if importedDocuments.isEmpty == false {
             let subject = noun(
@@ -103,7 +111,22 @@ nonisolated struct CableFileImportResult: Sendable {
                 singular: "document is",
                 plural: "documents are"
             )
-            lines.append("\(importedDocuments.count) \(subject) ready in your Reader.")
+            let archived = noun(
+                importedDocuments.count,
+                singular: "The original moved",
+                plural: "The originals moved"
+            )
+            lines.append(
+                "\(importedDocuments.count) \(subject) ready in your Reader. \(archived) to _Imported."
+            )
+        }
+        // Only worth saying when it happened. Explaining folder flattening on a
+        // flat drop is noise on the common path.
+        if movedFromSubfolderCount > 0 {
+            let phrase = movedFromSubfolderCount == 1
+                ? "1 file came out of a folder you dropped in"
+                : "\(movedFromSubfolderCount) files came out of folders you dropped in"
+            lines.append("\(phrase). LumeSync keeps everything in one list, not in folders.")
         }
         if duplicates.isEmpty == false {
             let subject = noun(

@@ -112,7 +112,7 @@ private struct LibraryHeader: View {
     var body: some View {
         HStack {
             Text("Reader")
-                .font(.system(size: 28, weight: .bold))
+                .font(TranceTypography.navTitle)
                 .foregroundStyle(Color.textPrimary)
 
             Spacer()

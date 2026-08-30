@@ -24,9 +24,6 @@ struct AppSettingsManagerTests {
         defaults.set(1.4, forKey: AppSettingsManager.Key.userFrequencyMultiplier)
         defaults.set(7, forKey: AppSettingsManager.Key.countdownDuration)
         defaults.set(true, forKey: AppSettingsManager.Key.listeningHistoryEnabled)
-        defaults.set("client", forKey: AppSettingsManager.Key.soundCloudClientId)
-        defaults.set("secret", forKey: AppSettingsManager.Key.soundCloudSecret)
-        defaults.set("token", forKey: AppSettingsManager.Key.soundCloudAccessToken)
 
         let files = [
             AnalysisFixtures.audioFile(filename: "first.m4a"),
@@ -75,8 +72,6 @@ struct AppSettingsManagerTests {
         #expect(snapshot.settings.keepScreenAwakeDuringSessions == false)
         #expect(snapshot.audioLibrary.fileCount == 2)
         #expect(snapshot.sessionHistory.count == 1)
-        #expect(snapshot.streaming.soundCloudConfigured)
-        #expect(snapshot.streaming.soundCloudAuthenticated)
         #expect(snapshot.analysisPreferences.customInstructions.contains("warmer"))
     }
 
@@ -189,5 +184,44 @@ struct AppSettingsManagerTests {
 
     private enum TestError: Error {
         case defaultsCreationFailed
+    }
+}
+
+/// The streaming feature was removed in `e9cb0f1`, but removing the code that
+/// reads a credential does not remove the credential. A device that authenticated
+/// with SoundCloud before then still holds the client secret and OAuth token in
+/// `UserDefaults` — a plist in the app container, included in device backups.
+/// See ERRORS.md ERR-020.
+@MainActor
+struct RetiredStreamingCredentialTests {
+
+    @Test("Credentials left by the retired streaming feature are purged")
+    func purgesRetiredStreamingCredentials() throws {
+        let suiteName = "retired-streaming-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set("client", forKey: AppSettingsManager.Key.soundCloudClientId)
+        defaults.set("secret", forKey: AppSettingsManager.Key.soundCloudSecret)
+        defaults.set("token", forKey: AppSettingsManager.Key.soundCloudAccessToken)
+
+        AppSettingsManager.purgeRetiredStreamingCredentials(defaults: defaults)
+
+        #expect(defaults.string(forKey: AppSettingsManager.Key.soundCloudClientId) == nil)
+        #expect(defaults.string(forKey: AppSettingsManager.Key.soundCloudSecret) == nil)
+        #expect(defaults.string(forKey: AppSettingsManager.Key.soundCloudAccessToken) == nil)
+    }
+
+    /// It runs on every launch, so the overwhelmingly common case is that there is
+    /// nothing to remove.
+    @Test("Purging is safe when no credentials were ever stored")
+    func purgeIsSafeWhenNothingStored() throws {
+        let suiteName = "retired-streaming-empty-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        AppSettingsManager.purgeRetiredStreamingCredentials(defaults: defaults)
+
+        #expect(defaults.string(forKey: AppSettingsManager.Key.soundCloudAccessToken) == nil)
     }
 }

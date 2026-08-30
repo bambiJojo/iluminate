@@ -132,6 +132,11 @@ actor CableFileImportService {
                     let outcome = await admitReaderDocument(at: snapshot.url)
                     if let document = outcome.document {
                         result.importedDocuments.append(document)
+                        // A failed archive leaves the file where it was found,
+                        // so claiming its folder was emptied would be wrong.
+                        if snapshot.isNested, outcome.failure == nil {
+                            result.movedFromSubfolderCount += 1
+                        }
                     }
                     if let failure = outcome.failure {
                         result.failures.append(failure)
@@ -203,6 +208,9 @@ actor CableFileImportService {
                         }
                         duplicateIndex = DuplicateAudioIndex(library)
                         result.imported.append(audioFile)
+                        if snapshot.isNested {
+                            result.movedFromSubfolderCount += 1
+                        }
                     }
                 } catch {
                     result.failures.append(CableFileImportFailure(
@@ -312,6 +320,7 @@ actor CableFileImportService {
             return [:]
         }
 
+        let rootPath = Self.normalizedPath(directoryURL)
         var found: [URL: CableFileSnapshot] = [:]
         for case let url as URL in enumerator {
             let values = try url.resourceValues(forKeys: Set(keys))
@@ -325,11 +334,20 @@ actor CableFileImportService {
             found[url] = CableFileSnapshot(
                 url: url,
                 source: source,
+                isNested: Self.normalizedPath(url.deletingLastPathComponent()) != rootPath,
                 byteCount: Int64(values.fileSize ?? 0),
                 modificationDate: values.contentModificationDate
             )
         }
         return found
+    }
+
+    /// Directory URLs built with `directoryHint: .isDirectory` carry a trailing
+    /// slash that a URL derived from `deletingLastPathComponent()` may not, so
+    /// the two are compared in normalized form rather than as raw paths.
+    private static func normalizedPath(_ url: URL) -> String {
+        let path = url.standardizedFileURL.path(percentEncoded: false)
+        return path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
     }
 
     /// A file with no modification date is treated as unsettled: without
@@ -449,6 +467,10 @@ actor CableFileImportService {
 private nonisolated struct CableFileSnapshot: Sendable, Equatable {
     let url: URL
     let source: CableFileImportService.Source
+    /// True when the file was found inside a folder rather than at the top of
+    /// its inbox. Import moves the original, so this is what tells the result
+    /// that a folder the user dropped in was emptied.
+    let isNested: Bool
     let byteCount: Int64
     let modificationDate: Date?
 }

@@ -100,6 +100,46 @@ struct CableFileRootInboxTests {
         #expect(Set(result.imported.map(\.filename.lastPathSegment)) == ["One.mp3", "Two.mp3"])
     }
 
+    /// Import moves the originals, so a dropped folder is emptied and its
+    /// layout is not preserved. The result has to carry that count or the alert
+    /// cannot explain where the user's folder went.
+    @Test("Audio taken out of a dropped folder is counted as relocated")
+    func countsAudioMovedOutOfADroppedFolder() async throws {
+        let fixture = try RootInboxFixture()
+        defer { fixture.remove() }
+
+        let droppedFolder = fixture.rootInboxURL.appending(
+            path: "Sleep Sessions",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(at: droppedFolder, withIntermediateDirectories: true)
+        try fixture.mp3Data(distinguishedBy: 0x01)
+            .write(to: droppedFolder.appending(path: "One.mp3"))
+        try fixture.mp3Data(distinguishedBy: 0x02)
+            .write(to: droppedFolder.appending(path: "Two.mp3"))
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.imported.count == 2)
+        #expect(result.movedFromSubfolderCount == 2)
+    }
+
+    /// The Finder drop lands in the Documents root itself, which is the common
+    /// case. Nothing was flattened, so nothing should be reported.
+    @Test("Audio dropped at the root is not counted as relocated")
+    func doesNotCountAudioDroppedAtTheRoot() async throws {
+        let fixture = try RootInboxFixture()
+        defer { fixture.remove() }
+
+        try fixture.validMP3Data
+            .write(to: fixture.rootInboxURL.appending(path: "Platinum Focus 1.mp3"))
+
+        let result = await fixture.makeService().importAvailableFiles()
+
+        #expect(result.imported.count == 1)
+        #expect(result.movedFromSubfolderCount == 0)
+    }
+
     /// migrateLegacyAudio sweeps `.documents` entries into managed storage, but
     /// ordering against a cable scan is not guaranteed. Re-importing a file the
     /// library already owns would move it out from under its own row.

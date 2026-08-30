@@ -356,3 +356,97 @@ struct CableFileImportTitleTests {
         )
     }
 }
+
+/// Import moves the originals rather than copying them, so a file dragged in
+/// through Finder disappears from the folder it was dragged into. The alert is
+/// the only place that can say so, and until it did, a successful transfer read
+/// as "my files vanished".
+@MainActor
+struct CableTransferRelocationCopyTests {
+
+    @Test("An audio import says the files are no longer in the Finder folder")
+    func audioImportReportsThatOriginalsLeftFinder() {
+        var result = CableFileImportResult()
+        result.imported = [AudioFile(filename: "One.mp3", duration: 1, fileSize: 1)]
+
+        #expect(result.message.contains("no longer in the Finder folder"))
+    }
+
+    /// Reader documents keep a visible original in _Imported, so they must not
+    /// borrow the audio wording — the file really is still there.
+    @Test("A document import names where the original was filed")
+    func documentImportNamesTheArchiveLocation() {
+        var result = CableFileImportResult()
+        result.importedDocuments = [makeDocument("Script")]
+
+        #expect(result.message.contains("The original moved to _Imported."))
+        #expect(result.message.contains("no longer in the Finder folder") == false)
+    }
+
+    @Test("Several documents pluralize the archived originals")
+    func multipleDocumentsPluralizeTheArchiveSentence() {
+        var result = CableFileImportResult()
+        result.importedDocuments = [makeDocument("One"), makeDocument("Two")]
+
+        #expect(result.message.contains("The originals moved to _Imported."))
+    }
+
+    @Test("Files taken out of dropped folders are counted in the message")
+    func subfolderRelocationIsReported() {
+        var result = CableFileImportResult()
+        result.imported = [
+            AudioFile(filename: "One.mp3", duration: 1, fileSize: 1),
+            AudioFile(filename: "Two.mp3", duration: 1, fileSize: 1)
+        ]
+        result.movedFromSubfolderCount = 2
+
+        #expect(result.message.contains("2 files came out of folders"))
+    }
+
+    @Test("A single file out of a folder is described in the singular")
+    func singleSubfolderRelocationUsesSingularCopy() {
+        var result = CableFileImportResult()
+        result.imported = [AudioFile(filename: "One.mp3", duration: 1, fileSize: 1)]
+        result.movedFromSubfolderCount = 1
+
+        #expect(result.message.contains("1 file came out of a folder"))
+    }
+
+    /// A flat drop is the common case. Explaining folder flattening that did not
+    /// happen is noise.
+    @Test("A flat drop never mentions folders")
+    func flatDropOmitsTheFolderSentence() {
+        var result = CableFileImportResult()
+        result.imported = [AudioFile(filename: "One.mp3", duration: 1, fileSize: 1)]
+
+        #expect(result.message.contains("came out of") == false)
+    }
+
+    /// Recheck passes accumulate, so a batch split across two passes must not
+    /// lose the count from the first.
+    @Test("Recheck passes accumulate the subfolder count")
+    func mergeAccumulatesSubfolderCount() {
+        var first = CableFileImportResult()
+        first.movedFromSubfolderCount = 2
+        var second = CableFileImportResult()
+        second.movedFromSubfolderCount = 3
+
+        first.merge(second)
+
+        #expect(first.movedFromSubfolderCount == 5)
+    }
+
+    private func makeDocument(_ name: String) -> ReadingDocument {
+        ReadingDocument(
+            id: UUID().uuidString,
+            title: name,
+            kind: .text,
+            originalFilename: "\(name).txt",
+            importedAt: .now,
+            wordCount: 12,
+            characterCount: 60,
+            contentHash: "hash-\(name)",
+            textFilename: "\(name).txt"
+        )
+    }
+}

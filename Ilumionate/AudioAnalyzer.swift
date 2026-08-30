@@ -26,6 +26,12 @@ struct WhisperModelInstallation: Sendable, Equatable {
     let folderURL: URL
 }
 
+private nonisolated struct PreparedTranscriptionInput: Sendable {
+    let chunk: TranscriptionChunk
+    let url: URL
+    let isTemporary: Bool
+}
+
 enum WhisperModelBootstrap {
     nonisolated static let modelRepositoryOwner = "argmaxinc"
     nonisolated static let modelRepositoryName = "whisperkit-coreml"
@@ -490,73 +496,62 @@ actor WhisperManager {
         audioFile: AudioFile,
         onProgress: @Sendable @escaping (ProgressInfo) async -> Void
     ) async throws -> AudioTranscriptionResult {
-        // MP3 files can fail inside WhisperKit's internal AVFoundation pipeline.
-        // Pre-convert to M4A in a temp directory so WhisperKit always receives
-        // a format it handles reliably. The conversion starts immediately so it
-        // overlaps model loading instead of waiting behind it.
         let sourceURL = audioFile.url
-        let conversionTask: Task<URL, Error>? = sourceURL.pathExtension.lowercased() == "mp3"
-            ? Task(priority: .userInitiated) { try await Self.convertMP3ToM4A(sourceURL) }
-            : nil
+        let asset = AVURLAsset(url: sourceURL)
+        let duration = try await asset.load(.duration)
+        let measuredDuration = CMTimeGetSeconds(duration)
+        let audioDuration = measuredDuration.isFinite && measuredDuration > 0
+            ? measuredDuration
+            : audioFile.duration
+        guard audioDuration > 0 else { throw AnalyzerError.noAudioData }
+
+        // Conversion starts immediately and overlaps model loading. Hour-long
+        // files are exported as bounded M4A slices: the old whole-MP3 export was
+        // itself part of the failing path, before WhisperKit could make progress.
+        let preparationTask = Task(priority: .userInitiated) {
+            try await Self.prepareTranscriptionInputs(
+                sourceURL: sourceURL,
+                duration: audioDuration,
+                onActivity: { fraction in
+                    let progress = 0.01 + (min(max(fraction, 0), 1) * 0.08)
+                    await onProgress(
+                        ProgressInfo(progress: progress, message: "Preparing audio...")
+                    )
+                }
+            )
+        }
 
         // Ensure WhisperKit is initialized before proceeding
         do {
             try await initializeWithPriority()
         } catch {
-            conversionTask?.cancel()
+            preparationTask.cancel()
+            if let abandonedInputs = try? await preparationTask.value {
+                Self.removeTemporaryInputs(abandonedInputs)
+            }
             throw error
         }
         guard let whisper = whisperKit else {
-            conversionTask?.cancel()
+            preparationTask.cancel()
+            if let abandonedInputs = try? await preparationTask.value {
+                Self.removeTemporaryInputs(abandonedInputs)
+            }
             throw AnalyzerError.whisperKitNotInitialized
         }
 
-        let transcribeURL: URL
-        var tempURL: URL?
-        if let conversionTask {
-            let converted = try await conversionTask.value
-            tempURL = converted
-            transcribeURL = converted
-        } else {
-            transcribeURL = sourceURL
-        }
-        defer { if let url = tempURL { try? FileManager.default.removeItem(at: url) } }
-
-        // Get audio duration for progress calculation
-        let asset = AVURLAsset(url: audioFile.url)
-        let duration = try await asset.load(.duration)
-        let audioDuration = CMTimeGetSeconds(duration)
+        let inputs = try await preparationTask.value
+        guard !inputs.isEmpty else { throw AnalyzerError.noAudioData }
+        defer { Self.removeTemporaryInputs(inputs) }
 
         await onProgress(ProgressInfo(progress: 0.1, message: "Starting transcription..."))
 
-        // Create transcription task with optimizations
-        let transcribePath = transcribeURL.path(percentEncoded: false)
         let taskID = UUID()
-        let transcriptionTask = Task(priority: .userInitiated) {
-            let decodeOptions = DecodingOptions(
-                verbose: false,  // Reduce overhead
-                language: nil,   // nil = auto-detect; WhisperKit identifies the spoken language
-                temperature: 0.0 // Deterministic output
-            )
-
-            return try await whisper.transcribe(
-                audioPath: transcribePath,
-                decodeOptions: decodeOptions
-            ) { transcriptionProgress in
-                Task {
-                    // Optimized progress calculation
-                    let estimatedSecondsProcessed = Double(transcriptionProgress.windowId) * 28.0
-                    let progressRatio = min(estimatedSecondsProcessed / audioDuration, 1.0)
-                    let overallProgress = 0.1 + (progressRatio * 0.85)
-
-                    await onProgress(ProgressInfo(
-                        progress: overallProgress,
-                        message: "Transcribing... \(Int(overallProgress * 100))%"
-                    ))
-                }
-                return nil // Continue transcription
-            }
-        }
+        let transcriptionTask = makeTranscriptionTask(
+            whisper: whisper,
+            inputs: inputs,
+            audioDuration: audioDuration,
+            onProgress: onProgress
+        )
         currentTaskID = taskID
         currentTask = transcriptionTask
 
@@ -586,49 +581,101 @@ actor WhisperManager {
                     throw AnalyzerError.whisperKitNotInitialized
                 }
 
-                let retryResults = try await freshWhisper.transcribe(
-                    audioPath: transcribePath,
-                    decodeOptions: DecodingOptions(verbose: false, language: nil, temperature: 0.0)
+                let retryTask = makeTranscriptionTask(
+                    whisper: freshWhisper,
+                    inputs: inputs,
+                    audioDuration: audioDuration,
+                    onProgress: onProgress
                 )
-                results = retryResults
+                currentTask = retryTask
+                results = try await retryTask.value
             } else {
                 throw error
             }
         }
-        // Process results
-        guard let whisperResult = results.first else {
+
+        guard results.count == inputs.count else {
             throw AnalyzerError.noAudioData
         }
 
-        // Convert segments
-        let segments = whisperResult.segments.map { segment in
-            AudioTranscriptionSegment(
-                text: segment.text,
-                timestamp: TimeInterval(segment.start),
-                duration: TimeInterval(segment.duration),
-                confidence: Double(segment.avgLogprob)
+        let chunks = zip(inputs, results).map { input, whisperResult in
+            let segments = whisperResult.segments.map { segment in
+                AudioTranscriptionSegment(
+                    text: segment.text,
+                    timestamp: TimeInterval(segment.start),
+                    duration: TimeInterval(segment.duration),
+                    confidence: Double(segment.avgLogprob)
+                )
+            }
+            let detectedLanguage = whisperResult.language.isEmpty
+                ? (Locale.current.language.languageCode?.identifier ?? "en")
+                : whisperResult.language
+            return TranscriptionChunkResult(
+                start: input.chunk.start,
+                transcription: AudioTranscriptionResult(
+                    fullText: whisperResult.text,
+                    segments: segments,
+                    duration: input.chunk.duration,
+                    detectedLanguage: detectedLanguage
+                )
             )
         }
 
         await onProgress(ProgressInfo(progress: 1.0, message: "Transcription complete"))
-
-        // WhisperKit sets `language` to the ISO 639-1 code it detected (e.g. "en", "fr").
-        // Fall back to the device locale language code when auto-detection is inconclusive.
-        let detectedLanguage = whisperResult.language.isEmpty
-            ? (Locale.current.language.languageCode?.identifier ?? "en")
-            : whisperResult.language
-
-        let result = AudioTranscriptionResult(
-            fullText: whisperResult.text,
-            segments: segments,
-            duration: audioFile.duration,
-            detectedLanguage: detectedLanguage
-        )
+        guard let result = LongFormTranscriptionPlan.merge(chunks, duration: audioDuration) else {
+            throw AnalyzerError.noAudioData
+        }
 
         Log.audio.info("✅ Transcription completed: \(result.fullText.prefix(100))...")
-        Log.audio.info("📊 Segments: \(segments.count), Words: \(result.wordCount)")
+        Log.audio.info("📊 Segments: \(result.segments.count), Words: \(result.wordCount)")
 
         return result
+    }
+
+    private func makeTranscriptionTask(
+        whisper: WhisperKit,
+        inputs: [PreparedTranscriptionInput],
+        audioDuration: TimeInterval,
+        onProgress: @Sendable @escaping (ProgressInfo) async -> Void
+    ) -> Task<[TranscriptionResult], Error> {
+        Task(priority: .userInitiated) {
+            var results: [TranscriptionResult] = []
+            results.reserveCapacity(inputs.count)
+
+            for input in inputs {
+                try Task.checkCancellation()
+                let transcribePath = input.url.path(percentEncoded: false)
+                let chunkResults = try await whisper.transcribe(
+                    audioPath: transcribePath,
+                    decodeOptions: DecodingOptions(
+                        verbose: false,
+                        language: nil,
+                        temperature: 0.0
+                    )
+                ) { transcriptionProgress in
+                    Task {
+                        let secondsWithinChunk = min(
+                            Double(transcriptionProgress.windowId) * 28.0,
+                            input.chunk.duration
+                        )
+                        let secondsProcessed = input.chunk.start + secondsWithinChunk
+                        let progressRatio = min(secondsProcessed / audioDuration, 1.0)
+                        let overallProgress = 0.1 + (progressRatio * 0.85)
+
+                        await onProgress(ProgressInfo(
+                            progress: overallProgress,
+                            message: "Transcribing... \(Int(overallProgress * 100))%"
+                        ))
+                    }
+                    return nil
+                }
+                guard let first = chunkResults.first else {
+                    throw AnalyzerError.noAudioData
+                }
+                results.append(first)
+            }
+            return results
+        }
     }
 
     func cancelTranscription() async {
@@ -652,18 +699,72 @@ actor WhisperManager {
         Log.audio.info("🧹 WhisperKit models unloaded")
     }
 
-    // MARK: - MP3 Pre-Conversion
+    // MARK: - Audio Preparation
+
+    private nonisolated static func prepareTranscriptionInputs(
+        sourceURL: URL,
+        duration: TimeInterval,
+        onActivity: @Sendable (Double) async -> Void
+    ) async throws -> [PreparedTranscriptionInput] {
+        let chunks = LongFormTranscriptionPlan.chunks(for: duration)
+        let needsChunking = chunks.count > 1
+        let needsMP3Conversion = sourceURL.pathExtension.lowercased() == "mp3"
+        guard needsChunking || needsMP3Conversion else {
+            return chunks.map {
+                PreparedTranscriptionInput(chunk: $0, url: sourceURL, isTemporary: false)
+            }
+        }
+
+        var prepared: [PreparedTranscriptionInput] = []
+        do {
+            for (index, chunk) in chunks.enumerated() {
+                try Task.checkCancellation()
+                await onActivity(Double(index) / Double(chunks.count))
+                let url = try await exportM4A(
+                    sourceURL,
+                    timeRange: needsChunking ? chunk : nil
+                )
+                prepared.append(
+                    PreparedTranscriptionInput(chunk: chunk, url: url, isTemporary: true)
+                )
+                await onActivity(Double(index + 1) / Double(chunks.count))
+            }
+            return prepared
+        } catch {
+            removeTemporaryInputs(prepared)
+            throw error
+        }
+    }
+
+    private nonisolated static func removeTemporaryInputs(
+        _ inputs: [PreparedTranscriptionInput]
+    ) {
+        for input in inputs where input.isTemporary {
+            try? FileManager.default.removeItem(at: input.url)
+        }
+    }
 
     /// Exports an MP3 to a temporary M4A file so WhisperKit always receives a
-    /// format that AVFoundation's internal pipeline handles without errors.
+    /// format that AVFoundation's internal pipeline handles without errors. A
+    /// time range turns long-form input into independently decodable slices.
     /// Nonisolated so it can run concurrently with actor-isolated model loading.
-    private nonisolated static func convertMP3ToM4A(_ sourceURL: URL) async throws -> URL {
+    private nonisolated static func exportM4A(
+        _ sourceURL: URL,
+        timeRange: TranscriptionChunk?
+    ) async throws -> URL {
         let tempURL = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString + ".m4a")
 
         let asset = AVURLAsset(url: sourceURL)
         guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
             throw AnalyzerError.audioFileInvalid
+        }
+
+        if let timeRange {
+            session.timeRange = CMTimeRange(
+                start: CMTime(seconds: timeRange.start, preferredTimescale: 600),
+                duration: CMTime(seconds: timeRange.duration, preferredTimescale: 600)
+            )
         }
 
         try await session.export(to: tempURL, as: .m4a)

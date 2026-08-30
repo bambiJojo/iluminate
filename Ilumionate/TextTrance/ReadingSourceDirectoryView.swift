@@ -583,7 +583,7 @@ private struct TagPill: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10, weight: .semibold))
+            .font(TranceTypography.cardLabel)
             .foregroundStyle(.textSecondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -641,7 +641,7 @@ private struct ImportPolicyBadge: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 10, weight: .semibold))
+            .font(TranceTypography.cardLabel)
             .foregroundStyle(color)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -668,7 +668,7 @@ private struct ImportPolicyBadge: View {
 private struct AdultBadge: View {
     var body: some View {
         Text("18+")
-            .font(.system(size: 10, weight: .bold))
+            .font(.system(.caption2, weight: .bold))
             .foregroundStyle(.warmAccent)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

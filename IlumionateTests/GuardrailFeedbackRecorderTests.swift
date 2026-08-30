@@ -58,6 +58,17 @@ struct GuardrailFeedbackRecorderTests {
     }
 
     /// A diagnostic must never be able to fail the analysis that produced it.
+    /// The attachment embeds the prompt that was refused, which carries
+    /// transcript excerpts. `UIFileSharingEnabled` exposes the Documents root to
+    /// any USB-trusted host, so this must not live there. See ERRORS.md ERR-024.
+    @Test("Attachments are stored outside the file-sharing-visible Documents root")
+    func defaultDirectoryIsPrivate() {
+        let directory = GuardrailFeedbackRecorder.directory.standardizedFileURL.path
+
+        #expect(directory.hasPrefix(AppStoragePaths.supportRoot.standardizedFileURL.path))
+        #expect(directory.hasPrefix(URL.documentsDirectory.standardizedFileURL.path) == false)
+    }
+
     @Test("An unwritable destination reports nil rather than throwing")
     func writeFailureIsContained() {
         let blocked = URL(filePath: "/dev/null/cannot-exist")

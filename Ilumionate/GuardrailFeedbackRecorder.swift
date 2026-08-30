@@ -20,14 +20,22 @@ import os
 
 nonisolated enum GuardrailFeedbackRecorder {
 
-    /// Written to the Documents root, which `UIFileSharingEnabled` already
-    /// exposes in Finder for the cable importer. The attachment can be dragged
-    /// from there straight into a feedbackassistant.apple.com report.
+    /// Kept in private storage, not the Documents root.
     ///
-    /// The cable importer scans that root but only claims audio extensions, so
-    /// a `.json` sitting here is ignored rather than quarantined.
-    static let directory = URL.documentsDirectory
-        .appending(path: "Guardrail Feedback", directoryHint: .isDirectory)
+    /// This used to sit in Documents so the attachment could be dragged from
+    /// Finder straight into a feedbackassistant.apple.com report. That is a real
+    /// cost of moving it, and nothing replaces that path yet — but the
+    /// attachment embeds the refused prompt, which carries transcript excerpts,
+    /// and `UIFileSharingEnabled` exposes the Documents root to any USB-trusted
+    /// host. Retrieving one now needs an in-app share action. See ERRORS.md
+    /// ERR-024.
+    ///
+    /// `static let` is lazy, so the migration runs once on first use.
+    static let directory = PrivateStorageMigration.migrateItemIfNeeded(
+        from: URL.documentsDirectory
+            .appending(path: "Guardrail Feedback", directoryHint: .isDirectory),
+        to: AppStoragePaths.guardrailFeedback
+    )
 
     /// Asks the failed session for its attachment and stores it.
     ///
