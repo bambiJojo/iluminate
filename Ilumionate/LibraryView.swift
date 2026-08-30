@@ -93,6 +93,11 @@ struct LibraryView: View {
             }
         }
         .animation(.snappy(duration: 0.25), value: pendingDeletion.staged.count)
+        #if os(macOS) || targetEnvironment(macCatalyst)
+        // Only offered while the Library is on screen, which is what greys out
+        // ⌘F everywhere else rather than letting it fire into nothing.
+        .focusedSceneValue(\.focusLibrarySearch) { searchFocusRequest += 1 }
+        #endif
         .task(id: pendingDeletion.staged.map(\.id)) {
             guard !pendingDeletion.staged.isEmpty else { return }
             try? await Task.sleep(for: PendingAudioDeletion.undoWindow)
@@ -120,21 +125,11 @@ struct LibraryView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: TranceSpacing.cardMargin) {
-                        LibraryHubHeader {
-                            LibraryAddMenu(
-                                acquisition: acquisition,
-                                onNewPlaylist: { editingPlaylist = Playlist(name: "") },
-                                onImportPlaylistLink: { playlistImportRequest = PlaylistImportRequest(audioFiles: audioFiles) },
-                                onBrowseForPlaylist: { showingPlaylistLinkBrowser = true },
-                                isCheckingIncomingFiles: isCheckingIncomingFiles,
-                                onCheckIncomingFiles: onCheckIncomingFiles,
-                                onManageAudio: { showingSessionsManager = true }
-                            )
-                        }
+                        LibraryHubHeader { addMenu }
                         .padding(.horizontal, TranceSpacing.screen)
 
                         if audioFiles.isEmpty == false {
-                            LibrarySearchField(text: $searchText)
+                            LibrarySearchField(text: $searchText, focusRequest: searchFocusRequest)
                                 .padding(.horizontal, TranceSpacing.screen)
 
                             if cachedFilterChips.isEmpty == false {
@@ -267,6 +262,24 @@ struct LibraryView: View {
     /// All Files card-for-card, and every card now carries its own analyzed seal.
     /// "Continue" is absent too: it lives on home, next to the Current section,
     /// so resuming does not require a tab hop first.
+    /// Incremented by the Mac ⌘F command to move focus into the search field.
+    @State private var searchFocusRequest = 0
+
+    /// The one way to add anything to the Library. Shared by the header's "+" and
+    /// by the empty-state card, so an empty library offers it where it is described.
+    @ViewBuilder
+    private var addMenu: some View {
+        LibraryAddMenu(
+            acquisition: acquisition,
+            onNewPlaylist: { editingPlaylist = Playlist(name: "") },
+            onImportPlaylistLink: { playlistImportRequest = PlaylistImportRequest(audioFiles: audioFiles) },
+            onBrowseForPlaylist: { showingPlaylistLinkBrowser = true },
+            isCheckingIncomingFiles: isCheckingIncomingFiles,
+            onCheckIncomingFiles: onCheckIncomingFiles,
+            onManageAudio: { showingSessionsManager = true }
+        )
+    }
+
     @ViewBuilder
     private var browseShelves: some View {
         LibraryAnalysisEntryRow(
@@ -278,7 +291,7 @@ struct LibraryView: View {
         .padding(.horizontal, TranceSpacing.screen)
 
         if audioFiles.isEmpty {
-            LibraryEmptyCard()
+            LibraryEmptyCard { addMenu }
                 .padding(.horizontal, TranceSpacing.screen)
         }
 

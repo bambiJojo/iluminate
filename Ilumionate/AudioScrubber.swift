@@ -64,11 +64,11 @@ struct AudioScrubber: View {
 
                 HStack {
                     Text("18:24")
-                        .font(.system(size: 11))
+                        .font(TranceTypography.caption)
                         .foregroundStyle(.textLight)
                     Spacer()
                     Text("-42:16")
-                        .font(.system(size: 11))
+                        .font(TranceTypography.caption)
                         .foregroundStyle(.textLight)
                 }
             }

@@ -69,9 +69,9 @@ struct PlayerBilateralSection: View {
         } label: {
             VStack(spacing: 3) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(.footnote, weight: .semibold))
                 Text(subtitle)
-                    .font(.system(size: 11))
+                    .font(TranceTypography.caption)
                     .foregroundStyle(isSelected ? Color.roseGold.opacity(0.8) : Color.white.opacity(0.5))
             }
             .foregroundStyle(isSelected ? Color.roseGold : Color.white.opacity(0.7))

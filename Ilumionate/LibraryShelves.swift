@@ -22,7 +22,7 @@ struct LibraryHubHeader<Menu: View>: View {
     var body: some View {
         HStack {
             Text("Library")
-                .font(.system(size: 28, weight: .bold))
+                .font(TranceTypography.navTitle)
                 .foregroundStyle(Color.textPrimary)
 
             Spacer()
@@ -126,6 +126,7 @@ struct LibraryAudioShelf: View {
     var body: some View {
         CarouselRow(items: files, cardWidthFraction: LibraryShelfMetrics.cardWidthFraction) { file in
             Button {
+                TranceHaptics.shared.medium()
                 onPlay(file)
             } label: {
                 AudioShelfCard(
@@ -164,7 +165,10 @@ private struct ShelfInfoButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            TranceHaptics.shared.light()
+            action()
+        } label: {
             Image(systemName: "info.circle")
                 .font(.system(size: 16))
                 .foregroundStyle(Color.textLight)
@@ -203,6 +207,8 @@ private struct AudioShelfCard: View {
         return "\(creator) · \(file.durationFormatted)"
     }
 
+    @ScaledMetric(relativeTo: .subheadline) private var cardHeight = LibraryShelfMetrics.audioCardHeight
+
     var body: some View {
         VStack(alignment: .leading, spacing: TranceSpacing.inner) {
             HStack(spacing: TranceSpacing.icon) {
@@ -240,7 +246,7 @@ private struct AudioShelfCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
-        .frame(height: LibraryShelfMetrics.audioCardHeight)
+        .frame(height: cardHeight)
         .liminalSurface(glow: false)
     }
 }
@@ -276,6 +282,7 @@ struct LibraryPlaylistShelf: View {
                 .buttonStyle(.plain)
             case .playlist(let playlist):
                 Button {
+                    TranceHaptics.shared.medium()
                     onPlay(playlist)
                 } label: {
                     PlaylistShelfCard(playlist: playlist, reservesInfoSlot: onOpenInfo != nil)
@@ -319,6 +326,8 @@ private enum PlaylistShelfItem: Identifiable {
 
 /// Dashed "New Playlist" affordance leading the playlists shelf.
 private struct NewPlaylistCard: View {
+    @ScaledMetric(relativeTo: .subheadline) private var cardHeight = LibraryShelfMetrics.audioCardHeight
+
     var body: some View {
         VStack(spacing: TranceSpacing.inner) {
             Image(systemName: "plus.circle.fill")
@@ -330,7 +339,7 @@ private struct NewPlaylistCard: View {
                 .foregroundStyle(Color.textPrimary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(height: LibraryShelfMetrics.audioCardHeight)
+        .frame(height: cardHeight)
         .background(Color.glassBorder.opacity(0.10),
                     in: .rect(cornerRadius: TranceRadius.glassCard))
         .overlay {
@@ -344,6 +353,8 @@ private struct NewPlaylistCard: View {
 private struct PlaylistShelfCard: View {
     let playlist: Playlist
     var reservesInfoSlot = false
+
+    @ScaledMetric(relativeTo: .subheadline) private var cardHeight = LibraryShelfMetrics.audioCardHeight
 
     var body: some View {
         VStack(alignment: .leading, spacing: TranceSpacing.inner) {
@@ -375,7 +386,7 @@ private struct PlaylistShelfCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
-        .frame(height: LibraryShelfMetrics.audioCardHeight)
+        .frame(height: cardHeight)
         .liminalSurface(glow: false)
     }
 }
@@ -390,6 +401,7 @@ struct LibraryBuiltInSessionShelf: View {
     var body: some View {
         CarouselRow(items: sessions, cardWidthFraction: LibraryShelfMetrics.cardWidthFraction) { session in
             Button {
+                TranceHaptics.shared.medium()
                 onPlay(session)
             } label: {
                 BuiltInSessionShelfCard(session: session)
@@ -401,6 +413,8 @@ struct LibraryBuiltInSessionShelf: View {
 
 private struct BuiltInSessionShelfCard: View {
     let session: LightSession
+
+    @ScaledMetric(relativeTo: .subheadline) private var cardHeight = LibraryShelfMetrics.audioCardHeight
 
     var body: some View {
         VStack(alignment: .leading, spacing: TranceSpacing.inner) {
@@ -429,7 +443,7 @@ private struct BuiltInSessionShelfCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
-        .frame(height: LibraryShelfMetrics.audioCardHeight)
+        .frame(height: cardHeight)
         .liminalSurface(glow: false)
     }
 }
@@ -456,6 +470,8 @@ struct LibraryArtistShelf: View {
 
 private struct ArtistShelfCard: View {
     let artist: LibraryArtist
+
+    @ScaledMetric(relativeTo: .subheadline) private var cardHeight = LibraryShelfMetrics.artistCardHeight
 
     var body: some View {
         HStack(spacing: TranceSpacing.inner) {
@@ -486,7 +502,7 @@ private struct ArtistShelfCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(TranceSpacing.list)
-        .frame(height: LibraryShelfMetrics.artistCardHeight)
+        .frame(height: cardHeight)
         .liminalSurface(glow: false)
     }
 }
@@ -494,24 +510,36 @@ private struct ArtistShelfCard: View {
 // MARK: - Empty Library
 
 /// Shown under the header when no audio files exist at all.
-struct LibraryEmptyCard: View {
+///
+/// The card carries the same add menu as the header's "+", so the one thing a
+/// brand-new library offers is reachable by tapping the thing that describes it.
+/// It previously only pointed at the "+" and did nothing when tapped.
+struct LibraryEmptyCard<Menu: View>: View {
+    @ViewBuilder let menu: () -> Menu
+
     var body: some View {
-        GlassCard {
-            HStack(spacing: TranceSpacing.list) {
-                Image(systemName: "plus")
-                    .font(.title2)
-                    .foregroundStyle(Color.roseGold)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("No sessions yet")
-                        .font(TranceTypography.sectionTitle)
-                        .foregroundStyle(Color.textPrimary)
-                    Text("Tap  +  to add your first session")
-                        .font(TranceTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
+        SwiftUI.Menu {
+            menu()
+        } label: {
+            GlassCard {
+                HStack(spacing: TranceSpacing.list) {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .foregroundStyle(Color.roseGold)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No sessions yet")
+                            .font(TranceTypography.sectionTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("Add your first session")
+                            .font(TranceTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add your first session")
     }
 }
 
@@ -543,7 +571,10 @@ struct LibraryPlaylistResultRow: View {
     }
 
     private var playButton: some View {
-        Button(action: onPlay) {
+        Button {
+            TranceHaptics.shared.medium()
+            onPlay()
+        } label: {
             HStack(spacing: TranceSpacing.list) {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.roseGold.opacity(0.18))

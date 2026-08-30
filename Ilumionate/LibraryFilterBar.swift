@@ -16,6 +16,9 @@ import SwiftUI
 struct LibrarySearchField: View {
     @Binding var text: String
     var prompt: String = "Search titles, artists, types"
+    /// Bumped from outside to pull keyboard focus here — the Mac ⌘F command has
+    /// no other way in, since the field owns its own focus state.
+    var focusRequest: Int = 0
 
     @FocusState private var isFocused: Bool
 
@@ -56,6 +59,9 @@ struct LibrarySearchField: View {
                 .strokeBorder(Color.roseGold.opacity(isFocused ? 0.55 : 0), lineWidth: 1)
         }
         .animation(.easeOut(duration: 0.18), value: isFocused)
+        .onChange(of: focusRequest) {
+            isFocused = true
+        }
     }
 }
 

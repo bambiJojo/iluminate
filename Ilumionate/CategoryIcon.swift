@@ -33,7 +33,7 @@ struct CategoryIcon: View {
                     .scaleEffect(isPressed ? 1.1 : 1.0)
 
                 Text(label)
-                    .font(.system(size: 11))
+                    .font(TranceTypography.caption)
                     .foregroundStyle(.textSecondary)
             }
         }

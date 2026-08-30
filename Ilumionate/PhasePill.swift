@@ -12,7 +12,7 @@ struct PhasePill: View {
 
     var body: some View {
         Text(phase)
-            .font(.system(size: 12, weight: .medium))
+            .font(.system(.caption, weight: .medium))
             .foregroundStyle(.roseDeep)
             .padding(.horizontal, TranceSpacing.card)
             .padding(.vertical, 5)

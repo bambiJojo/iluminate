@@ -157,7 +157,7 @@ extension ProfileSettingsView {
         GlassCard {
             VStack(spacing: TranceSpacing.micro) {
                 Text(value)
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(.title2, weight: .bold))
                     .foregroundStyle(color)
                 Text(label)
                     .font(TranceTypography.caption)
@@ -207,7 +207,7 @@ extension ProfileSettingsView {
                         )
 
                     Text(dayLabel)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(.caption2, weight: .medium))
                         .foregroundStyle(isToday ? Color.roseGold : Color.textLight)
                 }
                 .frame(maxWidth: .infinity)
@@ -242,7 +242,7 @@ extension ProfileSettingsView {
                     .foregroundStyle(Color.textSecondary)
                 if entry.completed {
                     Text("Completed")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(TranceTypography.cardLabel)
                         .foregroundStyle(Color.roseGold)
                 }
             }

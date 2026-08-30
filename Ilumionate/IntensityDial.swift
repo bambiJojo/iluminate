@@ -50,10 +50,10 @@ struct IntensityDial: View {
 
                 VStack(spacing: 2) {
                     Text("\(Int(intensity * 100))")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(TranceTypography.frequency)
                         .foregroundStyle(.textPrimary)
                     Text("%")
-                        .font(.system(size: 10, weight: .regular))
+                        .font(TranceTypography.caption)
                         .foregroundStyle(.textSecondary)
                 }
             }

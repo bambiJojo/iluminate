@@ -50,6 +50,11 @@ struct TranceTabBar: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 10)
+        // Four labels share one capsule across the screen width. Past `.xxLarge` they wrap
+        // and the bar grows tall enough to cover the content behind it, so growth is capped
+        // here — UIKit's own tab bar clamps its labels the same way and hands the full-size
+        // text to the large-content HUD instead.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .liminalGlass(.capsule)
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
@@ -77,7 +82,8 @@ struct TranceTabBar: View {
                     .symbolEffect(.bounce, value: reduceMotion ? tab : selected)
 
                 Text(tab.title)
-                    .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
+                    .font(.system(.caption2, weight: isSelected ? .semibold : .regular))
+                    .lineLimit(1)
             }
             .foregroundStyle(isSelected ? tabAccentColor : Color.textLight)
             .scaleEffect(isSelected && !reduceMotion ? 1.05 : 1.0)

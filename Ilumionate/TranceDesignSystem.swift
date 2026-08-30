@@ -247,38 +247,66 @@ struct TranceShadow {
 
 // MARK: - Typography
 
+/// The app's type scale.
+///
+/// Every token is built from a relative `Font.TextStyle`, never a fixed point size, so all
+/// text tracks the reader's Dynamic Type setting including the five accessibility sizes.
+/// Adding a `Font.system(size:)` token here re-breaks that for every call site downstream.
+///
+/// Styles were chosen to land on (or within a point of) the sizes the app shipped with, so
+/// the default-size layout is preserved:
+///
+/// | Token                    | Text style  | Size at `.large` |
+/// |--------------------------|-------------|------------------|
+/// | `greeting`/`Accent`      | `.title`    | 28               |
+/// | `trackTitle`             | `.title3`   | 20               |
+/// | `screenTitle`            | `.headline` | 17               |
+/// | `frequency`/`dataReadout`| `.headline` | 17               |
+/// | `sectionTitle`           | `.callout`  | 16               |
+/// | `body`                   | `.subheadline` | 15            |
+/// | `trackArtist`            | `.footnote` | 13               |
+/// | `caption`/`cardLabel`/`tabLabel` | `.caption2` | 11       |
+///
+/// Anything sized to fit this text — card heights, row heights, reserved chrome — has to
+/// scale with it. Use `@ScaledMetric` for those; a fixed `.frame(height:)` around a scaled
+/// token truncates the text instead of growing.
 struct TranceTypography {
+    // Large navigation title standing at the top of a root screen ("Library", "Reader")
+    static let navTitle = Font.system(.title, weight: .bold)
+
     // Screen title
-    static let screenTitle = Font.system(size: 18, weight: .semibold)
+    static let screenTitle = Font.system(.headline, weight: .semibold)
 
     // Greeting
-    static let greeting = Font.system(size: 26, weight: .light)
-    static let greetingAccent = Font.system(size: 26, weight: .medium)
+    static let greeting = Font.system(.title, weight: .light)
+    static let greetingAccent = Font.system(.title, weight: .medium)
+    static let greetingHero = Font.system(.title, weight: .ultraLight)
+    static let greetingSubtle = Font.system(.subheadline, weight: .light)
 
     // Section title
-    static let sectionTitle = Font.system(size: 16, weight: .semibold)
+    static let sectionTitle = Font.system(.callout, weight: .semibold)
 
     // Card label
-    static let cardLabel = Font.system(size: 11, weight: .semibold)
+    static let cardLabel = Font.system(.caption2, weight: .semibold)
 
     // Body
-    static let body = Font.system(size: 14, weight: .regular)
+    static let body = Font.system(.subheadline, weight: .regular)
 
     // Caption
-    static let caption = Font.system(size: 11, weight: .regular)
+    static let caption = Font.system(.caption2, weight: .regular)
 
     // Frequency display
-    static let frequency = Font.system(size: 18, weight: .semibold)
+    static let frequency = Font.system(.headline, weight: .semibold)
 
     // Monospaced data readout (frequency / Hz / counts) — the instrument showing through (spec §2.2)
-    static let dataReadout = Font.system(size: 18, weight: .semibold, design: .monospaced)
+    static let dataReadout = Font.system(.headline, design: .monospaced, weight: .semibold)
 
     // Track title and artist
-    static let trackTitle = Font.system(size: 20, weight: .semibold)
-    static let trackArtist = Font.system(size: 13, weight: .regular)
+    static let trackTitle = Font.system(.title3, weight: .semibold)
+    static let trackArtist = Font.system(.footnote, weight: .regular)
 
     // Tab label
-    static let tabLabel = Font.system(size: 10, weight: .medium)
+    static let tabLabel = Font.system(.caption2, weight: .medium)
 }
 
 // MARK: - Button Styles

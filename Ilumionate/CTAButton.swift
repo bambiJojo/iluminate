@@ -29,7 +29,7 @@ struct CTAButton: View {
             action()
         }) {
             Text(title)
-                .font(.system(size: 16, weight: .semibold))
+                .font(TranceTypography.sectionTitle)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, TranceSpacing.card)

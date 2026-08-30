@@ -28,6 +28,8 @@ struct LibraryGeneratedSessionShelf: View {
 private struct GeneratedSessionShelfCard: View {
     let item: GeneratedSessionItem
 
+    @ScaledMetric(relativeTo: .subheadline) private var cardHeight = LibraryShelfMetrics.audioCardHeight
+
     var body: some View {
         VStack(alignment: .leading, spacing: TranceSpacing.inner) {
             RoundedRectangle(cornerRadius: 7)
@@ -55,7 +57,7 @@ private struct GeneratedSessionShelfCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(TranceSpacing.list)
-        .frame(height: LibraryShelfMetrics.audioCardHeight)
+        .frame(height: cardHeight)
         .liminalSurface(glow: false)
     }
 }

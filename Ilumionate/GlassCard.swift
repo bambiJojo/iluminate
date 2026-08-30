@@ -58,7 +58,7 @@ struct GlassCard<Content: View>: View {
                     .frame(width: 44, height: 44)
                     .overlay(
                         Text("60%")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(TranceTypography.cardLabel)
                             .foregroundStyle(.roseGold)
                     )
             }

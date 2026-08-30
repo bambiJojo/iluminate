@@ -161,11 +161,11 @@ struct HomeView: View {
     private var greeting: some View {
         VStack(spacing: TranceSpacing.micro) {
             Text(portalGreeting)
-                .font(.system(size: 15, weight: .light))
+                .font(TranceTypography.greetingSubtle)
                 .foregroundStyle(Color.textSecondary)
 
             Text("Ready to descend?")
-                .font(.system(size: 26, weight: .ultraLight))
+                .font(TranceTypography.greetingHero)
                 .foregroundStyle(Color.textPrimary)
 
             if let streakText {

@@ -36,7 +36,7 @@ struct FeaturedSessionCard: View {
                         Image(systemName: session.categoryIcon)
                             .font(.system(size: 10, weight: .semibold))
                         Text(session.brainwaveCategory.rawValue.uppercased())
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(.caption2, weight: .bold))
                             .tracking(1.2)
                     }
                     .foregroundStyle(session.accentColor)
@@ -49,21 +49,21 @@ struct FeaturedSessionCard: View {
 
                     // Session name
                     Text(session.displayName)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(TranceTypography.sectionTitle)
                         .foregroundStyle(.textPrimary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Tagline
                     Text(session.tagline)
-                        .font(.system(size: 12))
+                        .font(.system(.caption))
                         .foregroundStyle(.textSecondary)
                         .lineLimit(1)
 
                     // Duration + play row
                     HStack {
                         Label(session.durationFormatted, systemImage: "clock")
-                            .font(.system(size: 12))
+                            .font(.system(.caption))
                             .foregroundStyle(.textSecondary)
 
                         Spacer()
@@ -151,7 +151,7 @@ struct SessionCountBadge: View {
 
     var body: some View {
         Text("\(count) session\(count == 1 ? "" : "s")")
-            .font(.system(size: 10, weight: .semibold))
+            .font(TranceTypography.cardLabel)
             .foregroundStyle(color)
             .padding(.horizontal, TranceSpacing.inner)
             .padding(.vertical, 4)

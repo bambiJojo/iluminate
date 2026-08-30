@@ -3,7 +3,8 @@
 //  Ilumionate
 //
 //  Compact now-playing bar that appears above the tab bar when a session
-//  is active. Tapping it re-presents the full UnifiedPlayerView.
+//  is active. Tapping it re-presents the full UnifiedPlayerView; the transport
+//  control on its trailing edge plays and pauses in place.
 //
 
 import SwiftUI
@@ -13,10 +14,15 @@ struct MiniPlayerBar: View {
 
     var nowPlaying: NowPlayingState
     var onTap: () -> Void
+    /// Toggles playback without leaving the current screen. Omitted when nothing
+    /// can act on it, so the control is absent rather than present and inert.
+    var onPlayPause: (() -> Void)?
 
     // MARK: - Constants
 
     private let barHeight: CGFloat = 56
+    /// Tap target for the transport control, at the HIG minimum.
+    private let controlDiameter: CGFloat = 44
 
     // MARK: - Body
 
@@ -57,11 +63,13 @@ struct MiniPlayerBar: View {
 
                     Spacer()
 
-                    // Play / Pause indicator
-                    Image(systemName: nowPlaying.playbackState == .playing ? "pause.fill" : "play.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Color.roseGold)
-                        .contentTransition(.symbolEffect(.replace))
+                    // Room for the transport control, which is layered above this
+                    // button rather than nested inside it — a Button inside another
+                    // Button's label never receives the tap.
+                    if onPlayPause != nil {
+                        Color.clear
+                            .frame(width: controlDiameter, height: controlDiameter)
+                    }
                 }
                 .padding(.horizontal, TranceSpacing.card)
                 .frame(height: barHeight)
@@ -73,7 +81,31 @@ struct MiniPlayerBar: View {
         .accessibilityLabel("Now playing: \(nowPlaying.currentTitle)")
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Tap to return to the full player")
+        .overlay(alignment: .trailing) {
+            if let onPlayPause {
+                playPauseButton(action: onPlayPause)
+            }
+        }
         .padding(.horizontal, 24)
+    }
+
+    // MARK: - Transport
+
+    private var isPlaying: Bool { nowPlaying.playbackState == .playing }
+
+    private func playPauseButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(Color.roseGold)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: controlDiameter, height: controlDiameter)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .disabled(nowPlaying.playbackState == .countdown)
+        .accessibilityLabel(isPlaying ? "Pause" : "Play")
+        .padding(.trailing, TranceSpacing.card)
     }
 
     // MARK: - Helpers
@@ -103,6 +135,8 @@ struct MiniPlayerBar: View {
                     Spacer()
                     MiniPlayerBar(nowPlaying: state) {
                         Log.ui.info("Tapped mini player")
+                    } onPlayPause: {
+                        Log.ui.info("Toggled playback from mini player")
                     }
                 }
                 .padding(.bottom, 80)

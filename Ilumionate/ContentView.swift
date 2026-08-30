@@ -58,6 +58,10 @@ struct ContentView: View {
 
     var body: some View {
         mainLayout
+        #if os(macOS) || targetEnvironment(macCatalyst)
+        // Lets the menu bar drive navigation without owning it — see AppCommands.
+        .focusedSceneValue(\.tabSelection, $selectedTab)
+        #endif
         .task {
             await analysisManager.prepareCachedResults()
             await analysisManager.restoreManualRecoveries()
@@ -300,9 +304,16 @@ struct ContentView: View {
                 }
 
                 if showsMiniPlayer {
-                    MiniPlayerBar(nowPlaying: nowPlaying) {
-                        showingResumedPlayer = true
-                    }
+                    // Written out rather than with trailing closures: a labelled
+                    // trailing closure has to be a closure literal, and
+                    // `onPlayPause` is an optional built with `.map`.
+                    MiniPlayerBar(
+                        nowPlaying: nowPlaying,
+                        onTap: { showingResumedPlayer = true },
+                        onPlayPause: nowPlaying.viewModel.map { viewModel in
+                            { viewModel.togglePlayPause() }
+                        }
+                    )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 

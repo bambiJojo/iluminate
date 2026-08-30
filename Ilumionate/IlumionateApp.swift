@@ -64,6 +64,9 @@ struct IlumionateApp: App {
         UserDefaults.standard.register(defaults: [
             AppSettingsManager.Key.listeningHistoryEnabled: true
         ])
+        // Credentials from the retired SoundCloud integration outlive the code
+        // that read them. See ERRORS.md ERR-020.
+        AppSettingsManager.purgeRetiredStreamingCredentials()
         UsageAnalytics.configure()
         #if os(macOS)
         BackgroundAnalysisScheduler.shared.register()
@@ -94,10 +97,16 @@ struct IlumionateApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             SidebarCommands()
+            NavigationCommands()
+            PlaybackCommands()
         }
         #elseif targetEnvironment(macCatalyst)
         .defaultSize(width: 1_100, height: 760)
         .windowResizability(.contentMinSize)
+        .commands {
+            NavigationCommands()
+            PlaybackCommands()
+        }
         #endif
 
         #if os(macOS)
