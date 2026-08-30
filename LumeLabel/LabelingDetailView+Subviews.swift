@@ -18,6 +18,7 @@ extension LabelingDetailView {
                     drawPhaseFills(&context, size: size, editor: editor)
                     drawDepthCurve(&context, size: size, editor: editor)
                     drawBoundaries(&context, size: size, editor: editor)
+                    drawTransitionCandidates(&context, size: size, editor: editor)
                     drawPlayhead(&context, size: size, editor: editor)
                     drawRuler(&context, size: size, editor: editor)
                 }
@@ -31,6 +32,13 @@ extension LabelingDetailView {
                     .onChanged { value in
                         let frac = value.location.x / max(geo.size.width, 1)
                         editor.seek(to: (editor.viewStart + frac * editor.viewSpan) * editor.duration)
+                    }
+                    .onEnded { value in
+                        guard abs(value.translation.width) < 4,
+                              abs(value.translation.height) < 4 else { return }
+                        let time = editor.timeForViewX(value.location.x, width: geo.size.width)
+                        let tolerance = max(0.5, editor.viewSpan * editor.duration * 0.015)
+                        editor.selectNearestTransitionCandidate(to: time, tolerance: tolerance)
                     }
             )
             .simultaneousGesture(
@@ -67,20 +75,18 @@ extension LabelingDetailView {
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
                 .contentShape(Rectangle().inset(by: -10))
                 .position(x: xPosition, y: yPosition)
-                .opacity(isVisible ? 1 : 0)
-                .allowsHitTesting(isVisible)
+                .opacity(isVisible ? (editor.isAnalyzerReviewMode ? 0.65 : 1) : 0)
+                .allowsHitTesting(isVisible && !editor.isAnalyzerReviewMode)
                 .highPriorityGesture(
                     DragGesture(minimumDistance: 2)
                         .onChanged { value in
                             editor.draggingPointID = point.id
                             let time = editor.timeForViewX(value.location.x, width: size.width)
-                            let phase = editor.phaseForCanvasY(value.location.y, chartHeight: chartHeight)
-                            editor.updatePhasePoint(id: point.id, time: time, phase: phase)
+                            editor.movePhasePoint(id: point.id, to: time)
                         }
                         .onEnded { value in
                             let time = editor.timeForViewX(value.location.x, width: size.width)
-                            let phase = editor.phaseForCanvasY(value.location.y, chartHeight: chartHeight)
-                            editor.updatePhasePoint(id: point.id, time: time, phase: phase)
+                            editor.movePhasePoint(id: point.id, to: time)
                             editor.draggingPointID = nil
                         }
                 )
@@ -97,10 +103,12 @@ extension LabelingDetailView {
                         }
                     }
 
-                    Divider()
+                    if !point.isInitial {
+                        Divider()
 
-                    Button("Delete Point", role: .destructive) {
-                        editor.deletePhasePoint(id: point.id)
+                        Button("Delete Boundary", role: .destructive) {
+                            editor.deletePhasePoint(id: point.id)
+                        }
                     }
                 }
         }
@@ -112,13 +120,25 @@ extension LabelingDetailView {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Color(nsColor: .underPageBackgroundColor))
 
-                ForEach(editor.draft.phases) { phase in
-                    let startFrac = phase.startTime / editor.duration
-                    let widthFrac = (phase.endTime - phase.startTime) / editor.duration
+                ForEach(editor.labelingSegments) { segment in
+                    let startFrac = segment.startTime / editor.duration
+                    let widthFrac = (segment.endTime - segment.startTime) / editor.duration
                     Rectangle()
-                        .fill(editor.phaseColor(phase.phase).opacity(0.7))
+                        .fill(editor.phaseColor(segment.phase).opacity(0.7))
                         .frame(width: max(2, geo.size.width * widthFrac))
                         .offset(x: geo.size.width * startFrac)
+                }
+
+                ForEach(editor.transitionCandidates) { candidate in
+                    let decision = editor.candidateDecision(for: candidate.id)
+                    Rectangle()
+                        .fill(
+                            transitionCandidateColor(candidate, decision: decision)
+                                .opacity(decision == .dismissed ? 0.12 : 0.85)
+                        )
+                        .frame(width: editor.selectedTransitionCandidateID == candidate.id ? 3 : 2)
+                        .offset(x: (candidate.time / editor.duration) * geo.size.width)
+                        .allowsHitTesting(false)
                 }
 
                 Rectangle()
@@ -168,7 +188,7 @@ extension LabelingDetailView {
                     Button("Zoom Out", systemImage: "minus.magnifyingglass") { editor.zoomOut() }
                         .labelStyle(.iconOnly)
                         .buttonStyle(.plain)
-                    Button("Fit All", systemImage: "arrow.left.and.right.magnifyingglass") {
+                    Button("Fit All", systemImage: "arrow.left.and.right") {
                         editor.zoomFit()
                     }
                     .labelStyle(.iconOnly)
@@ -184,6 +204,12 @@ extension LabelingDetailView {
             }
 
             HStack(spacing: 12) {
+                if editor.isAudioPreparing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .help("Preparing audio in the background")
+                }
+
                 Button { editor.seekRelative(-300) } label: {
                     Text("−5m").monospacedDigit().font(.callout)
                 }
@@ -218,86 +244,288 @@ extension LabelingDetailView {
     }
 
     func phaseButtons(_ editor: LabelingDetailEditor) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Mark phase at playhead")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 2)
+        VStack(alignment: .leading, spacing: 8) {
+            if editor.isAnalyzerReviewMode {
+                Label("Analyzer review", systemImage: "lock.shield.fill")
+                    .font(.headline)
 
-            ForEach(Array(editor.orderedPhases.enumerated()), id: \.element) { index, phase in
-                if let shortcut = editor.keyboardShortcutLabel(for: index) {
-                    Button {
-                        editor.markPhaseStart(phase)
-                    } label: {
-                        phaseButtonLabel(
-                            title: phase.displayName,
-                            color: editor.phaseColor(phase),
-                            shortcut: shortcut
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(KeyEquivalent(Character(shortcut)), modifiers: [])
-                } else {
-                    Button {
-                        editor.markPhaseStart(phase)
-                    } label: {
-                        phaseButtonLabel(
-                            title: phase.displayName,
-                            color: editor.phaseColor(phase),
-                            shortcut: nil
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Spacer()
-
-            if editor.canSuggestPhases {
-                Divider()
-                    .padding(.vertical, 4)
-
-                Button(editor.suggestedPhaseTimeline == nil ? "Suggest From Phrase Library" : "Refresh Suggestions") {
-                    Task { await editor.generatePhaseSuggestions() }
-                }
-                .font(.caption.weight(.semibold))
-                .buttonStyle(.plain)
-                .disabled(editor.isSuggestionLoading)
-
-                if !editor.suggestedPhaseSegments.isEmpty {
-                    Button("Apply Suggestions") {
-                        editor.applyPhaseSuggestions()
-                    }
+                Text("The saved blind timeline is locked. Review suggestions against what you already labeled; they cannot edit it.")
                     .font(.caption)
-                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+
+                transitionCandidateReviewPanel(editor)
+            } else {
+                switch editor.labelingPass {
+                case .boundaries:
+                    Label("1. Find transitions", systemImage: "timeline.selection")
+                        .font(.headline)
+
+                    Text("Scrub through the file. When you find a transition, place the playhead precisely and press B to mark it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button("Mark at Playhead", systemImage: "plus") {
+                        editor.markBoundaryAtPlayhead()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("b", modifiers: [])
+
+                    Text("\(editor.boundaryCount) transition\(editor.boundaryCount == 1 ? "" : "s") marked")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button("Name Phase Segments", systemImage: "arrow.right") {
+                        editor.beginPhaseNaming()
+                    }
+                    .buttonStyle(.bordered)
+
+                case .phaseNames:
+                    Label("2. Name segments", systemImage: "tag")
+                        .font(.headline)
+
+                    if let selectedSegment = editor.selectedSegment {
+                        Text("Selected: \(editor.formatTime(selectedSegment.startTime))–\(editor.formatTime(selectedSegment.endTime))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+
+                    if editor.unassignedSegmentCount == 0 {
+                        Label("All segments named", systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(editor.isReadyToSave ? .green : .orange)
+                    } else {
+                        Text("\(editor.unassignedSegmentCount) remaining")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    if let validationMessage = editor.labelValidationMessage,
+                       editor.unassignedSegmentCount == 0 {
+                        Label(validationMessage, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    ForEach(Array(editor.orderedPhases.enumerated()), id: \.element) { index, phase in
+                        if let shortcut = editor.keyboardShortcutLabel(for: index) {
+                            Button {
+                                editor.assignSelectedPhase(phase)
+                            } label: {
+                                phaseButtonLabel(
+                                    title: phase.displayName,
+                                    color: editor.phaseColor(phase),
+                                    shortcut: shortcut
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .keyboardShortcut(KeyEquivalent(Character(shortcut)), modifiers: [])
+                            .disabled(editor.selectedSegment == nil)
+                        }
+                    }
+
+                    Button("Back to Transitions", systemImage: "arrow.left") {
+                        editor.resumeBoundaryMarking()
+                    }
+                    .buttonStyle(.bordered)
                 }
+
+                Spacer()
+
+                if editor.canEnterAnalyzerReview {
+                    Divider()
+
+                    Button("Review Analyzer", systemImage: "lock.open") {
+                        isConfirmingAnalyzerReview = true
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Text("Reveals model suggestions only after preserving these saved labels as the blind baseline.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button("Clear Timeline", role: .destructive) {
+                    editor.clearAllPhases()
+                }
+                .font(.caption)
+                .foregroundStyle(.red)
+            }
+        }
+    }
+
+    @ViewBuilder
+    func transitionCandidateReviewPanel(_ editor: LabelingDetailEditor) -> some View {
+        Divider()
+
+        Label("Candidate review", systemImage: "scope")
+            .font(.subheadline.weight(.semibold))
+
+        Text("Cyan marks tone changes; purple marks meaning changes. Record whether each suggestion matches the locked labels.")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+
+        VStack(alignment: .leading, spacing: 6) {
+            Button(
+                editor.backgroundToneAnalysis == nil ? "Scan Background Tones" : "Rescan Background Tones",
+                systemImage: "waveform.and.magnifyingglass"
+            ) {
+                Task { await editor.analyzeBackgroundTones() }
+            }
+            .controlSize(.small)
+            .disabled(editor.isBackgroundToneAnalysisRunning)
+
+            if editor.hasTranscript {
+                Button(
+                    editor.semanticPhaseAnalysis == nil ? "Scan Transcript Meaning" : "Rescan Transcript Meaning",
+                    systemImage: "brain.head.profile"
+                ) {
+                    Task { await editor.analyzeSemanticWindows() }
+                }
+                .controlSize(.small)
+                .disabled(editor.isSemanticPhaseAnalysisRunning)
+            }
+        }
+
+        if editor.isBackgroundToneAnalysisRunning || editor.isSemanticPhaseAnalysisRunning {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Finding candidates…")
+                    .font(.caption)
+                Spacer(minLength: 0)
+                Button("Cancel") {
+                    editor.cancelBackgroundToneAnalysis()
+                    editor.cancelSemanticPhaseAnalysis()
+                }
+                .font(.caption)
+            }
+        }
+
+        if editor.transitionCandidates.isEmpty == false {
+            Text(
+                "\(editor.pendingTransitionCandidates.count) pending · \(editor.acceptedCandidateCount) matched · \(editor.dismissedCandidateCount) dismissed"
+            )
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Button("Previous", systemImage: "chevron.left") {
+                    editor.jumpToPreviousTransitionCandidate()
+                }
+                .labelStyle(.iconOnly)
+                .keyboardShortcut("[", modifiers: [])
+                .help("Previous pending candidate ([)")
+
+                Menu(
+                    editor.selectedTransitionCandidate.map {
+                        "\($0.source.displayName) · \(editor.formatTime($0.time))"
+                    } ?? "Choose candidate"
+                ) {
+                    ForEach(editor.pendingTransitionCandidates) { candidate in
+                        Button(
+                            "\(candidate.source.displayName) · \(editor.formatTime(candidate.time))"
+                        ) {
+                            editor.jumpToTransitionCandidate(candidate)
+                        }
+                    }
+                }
+                .menuStyle(.borderlessButton)
+
+                Button("Next", systemImage: "chevron.right") {
+                    editor.jumpToNextTransitionCandidate()
+                }
+                .labelStyle(.iconOnly)
+                .keyboardShortcut("]", modifiers: [])
+                .help("Next pending candidate (])")
             }
 
-            Button("Clear All Phases", role: .destructive) {
-                editor.clearAllPhases()
+            if let candidate = editor.selectedTransitionCandidate {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(transitionCandidateColor(candidate, decision: nil))
+                            .frame(width: 7, height: 7)
+                        Text(candidate.source.displayName)
+                            .font(.caption.weight(.semibold))
+                        Spacer(minLength: 0)
+                        Text(editor.formatTime(candidate.time))
+                            .font(.caption.monospacedDigit())
+                    }
+
+                    if let suggestedPhase = candidate.suggestedPhase {
+                        Text("Likely next phase: \(suggestedPhase.displayName)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack(spacing: 6) {
+                        Button("Matches") {
+                            editor.acceptSelectedTransitionCandidate()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .keyboardShortcut("m", modifiers: [])
+                        .help("Record that this matches the locked labels (M)")
+
+                        Button("Dismiss") {
+                            editor.dismissSelectedTransitionCandidate()
+                        }
+                        .controlSize(.small)
+                        .keyboardShortcut("d", modifiers: [])
+                        .help("Record that this does not match the locked labels (D)")
+                    }
+                }
+                .padding(8)
+                .background(
+                    transitionCandidateColor(candidate, decision: nil).opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 8)
+                )
+            } else if editor.pendingTransitionCandidates.isEmpty == false {
+                Text("Press ] for the next candidate, or click a marker on the timeline.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.red)
+        }
+
+        if let status = editor.backgroundToneStatusMessage {
+            Text(status)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+
+        if let error = editor.backgroundToneErrorMessage {
+            Text(error)
+                .font(.caption2)
+                .foregroundStyle(.red)
+        }
+
+        if let error = editor.semanticPhaseErrorMessage {
+            Text(error)
+                .font(.caption2)
+                .foregroundStyle(.red)
         }
     }
 
     func phaseListPanel(_ editor: LabelingDetailEditor) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Phases (\(editor.draft.phases.count))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Segments (\(editor.labelingSegments.count))")
+                Spacer()
+                if editor.isAnalyzerReviewMode {
+                    Label("Blind baseline", systemImage: "lock.fill")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
-            if editor.draft.phases.isEmpty {
-                Text("No phases marked yet.\nPlay and use the phase buttons or 1–9 shortcuts at each boundary.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
-            } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(Array(editor.draft.phases.enumerated()), id: \.element.id) { index, phase in
-                            phaseRow(phase: phase, index: index, editor: editor)
-                            if index < editor.draft.phases.count - 1 { Divider() }
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(editor.labelingSegments.enumerated()), id: \.element.id) { index, segment in
+                        phaseRow(segment: segment, index: index, editor: editor)
+                        if index < editor.labelingSegments.count - 1 {
+                            Divider()
+                                .padding(.leading, 16)
                         }
                     }
                 }
@@ -306,26 +534,27 @@ extension LabelingDetailView {
     }
 
     func phaseRow(
-        phase: LabeledFile.LabeledPhase,
+        segment: TransitionLabelingDraft.Segment,
         index: Int,
         editor: LabelingDetailEditor
     ) -> some View {
-        let isSelected = editor.selectedPhaseID == phase.id
+        let isSelected = editor.selectedPhaseID == segment.id
+        let color = editor.phaseColor(segment.phase)
 
         return HStack(spacing: 8) {
             Button {
-                editor.selectPhase(id: phase.id)
+                editor.selectPhase(id: segment.id)
             } label: {
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(editor.phaseColor(phase.phase))
+                        .fill(color)
                         .frame(width: 8, height: 8)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(phase.phase.displayName)
+                        Text(editor.phaseDisplayName(segment.phase))
                             .bold()
                             .font(.callout)
-                        Text("\(editor.formatTime(phase.startTime)) – \(editor.formatTime(phase.endTime))")
+                        Text("\(editor.formatTime(segment.startTime)) – \(editor.formatTime(segment.endTime))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
@@ -337,32 +566,34 @@ extension LabelingDetailView {
                 .padding(.horizontal, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(isSelected ? editor.phaseColor(phase.phase).opacity(0.12) : .clear)
+                        .fill(isSelected ? color.opacity(0.12) : .clear)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? editor.phaseColor(phase.phase).opacity(0.35) : .clear, lineWidth: 1)
+                        .stroke(isSelected ? color.opacity(0.35) : .clear, lineWidth: 1)
                 )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             Button("Jump", systemImage: "arrow.right.to.line") {
-                editor.jumpToPhase(phase)
-                editor.selectPhase(id: phase.id)
+                editor.jumpToSegment(segment)
+                editor.selectPhase(id: segment.id)
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .font(.caption)
 
-            Button("Remove", systemImage: "minus.circle") {
-                editor.removePhase(at: index)
+            if index > 0 && !editor.isAnalyzerReviewMode {
+                Button("Remove Boundary", systemImage: "minus.circle") {
+                    editor.removePhase(at: index)
+                }
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.secondary)
+                .font(.caption)
+                .buttonStyle(.plain)
             }
-            .labelStyle(.iconOnly)
-            .foregroundStyle(.secondary)
-            .font(.caption)
-            .buttonStyle(.plain)
         }
         .padding(.vertical, 5)
     }
@@ -371,7 +602,7 @@ extension LabelingDetailView {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(editor.selectedPhase?.phase.displayName ?? "Transcript")
+                    Text(editor.phaseDisplayName(editor.selectedSegment?.phase))
                         .font(.headline)
                     if let insight = editor.activeTranscriptInsight {
                         Text("\(editor.formatTime(insight.startTime)) – \(editor.formatTime(insight.endTime))")
@@ -393,18 +624,23 @@ extension LabelingDetailView {
                     }
                     .disabled(editor.isTranscriptLoading)
 
-                    if editor.hasTranscript {
+                    if editor.isAnalyzerReviewMode && editor.hasTranscript {
                         Button(editor.suggestedPhaseTimeline == nil ? "Suggest Phases" : "Refresh Suggestions") {
                             Task { await editor.generatePhaseSuggestions() }
                         }
                         .disabled(editor.isSuggestionLoading)
                     }
 
-                    if editor.hasTranscript && !editor.draft.phases.isEmpty {
-                        Button(editor.analyzerDiagnostics == nil ? "Analyze vs Labels" : "Refresh Diagnostics") {
-                            Task { await editor.refreshAnalyzerDiagnostics() }
+                    if editor.isAnalyzerReviewMode && editor.hasTranscript && editor.isReadyToSave {
+                        if editor.isDiagnosticsLoading {
+                            Button("Cancel Analysis", role: .cancel) {
+                                editor.cancelAnalyzerDiagnostics()
+                            }
+                        } else {
+                            Button(editor.analyzerDiagnostics == nil ? "Analyze vs Labels" : "Refresh Diagnostics") {
+                                Task { await editor.refreshAnalyzerDiagnostics() }
+                            }
                         }
-                        .disabled(editor.isDiagnosticsLoading)
                     }
                 }
             }
@@ -415,19 +651,41 @@ extension LabelingDetailView {
                     .foregroundStyle(.secondary)
             }
 
-            if let diagnosticsStatusMessage = editor.diagnosticsStatusMessage, !diagnosticsStatusMessage.isEmpty {
+            if editor.isAnalyzerReviewMode,
+               let diagnosticsStatusMessage = editor.diagnosticsStatusMessage,
+               !diagnosticsStatusMessage.isEmpty {
                 Label(
                     diagnosticsStatusMessage,
                     systemImage: editor.isDiagnosticsLoading ? "waveform.and.magnifyingglass" : "chart.bar.doc.horizontal"
                 )
                 .font(.caption)
                 .foregroundStyle(editor.diagnosticsAreStale ? .orange : .secondary)
+
+                if let progress = editor.diagnosticsProgress {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                }
             }
 
-            if let suggestionStatusMessage = editor.suggestionStatusMessage, !suggestionStatusMessage.isEmpty {
+            if editor.isAnalyzerReviewMode,
+               let suggestionStatusMessage = editor.suggestionStatusMessage,
+               !suggestionStatusMessage.isEmpty {
                 Label(
                     suggestionStatusMessage,
                     systemImage: editor.isSuggestionLoading ? "wand.and.stars.inverse" : "sparkles.rectangle.stack"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            if editor.isAnalyzerReviewMode,
+               let semanticPhaseStatusMessage = editor.semanticPhaseStatusMessage,
+               !semanticPhaseStatusMessage.isEmpty {
+                Label(
+                    semanticPhaseStatusMessage,
+                    systemImage: editor.isSemanticPhaseAnalysisRunning
+                        ? "brain.head.profile"
+                        : "text.bubble"
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -452,8 +710,11 @@ extension LabelingDetailView {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         transcriptMetrics(insight, editor: editor)
-                        phaseSuggestionsSection(editor)
-                        analyzerDiagnosticsSection(editor)
+                        if editor.isAnalyzerReviewMode {
+                            phaseSuggestionsSection(editor)
+                            semanticPhaseSection(editor)
+                            analyzerDiagnosticsSection(editor)
+                        }
                         topWordSection(insight)
                         excerptSection(insight, editor: editor)
                     }
@@ -530,11 +791,9 @@ extension LabelingDetailView {
                     .font(.headline)
                 Spacer()
                 if !editor.suggestedPhaseSegments.isEmpty {
-                    Button("Apply Suggested Timeline") {
-                        editor.applyPhaseSuggestions()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    Label("Read-only", systemImage: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -564,7 +823,7 @@ extension LabelingDetailView {
                     )
                     transcriptMetricCard(
                         "Current Labels",
-                        value: editor.draft.phases.count.formatted(),
+                        value: editor.labelingSegments.count.formatted(),
                         systemImage: "checklist"
                     )
                 }
@@ -627,6 +886,134 @@ extension LabelingDetailView {
         }
         .padding(10)
         .background(Color(nsColor: .underPageBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    func semanticPhaseSection(_ editor: LabelingDetailEditor) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Semantic Window Experiment")
+                    .font(.headline)
+                Text("Experimental")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.purple.opacity(0.14), in: Capsule())
+                    .foregroundStyle(.purple)
+                Spacer()
+
+                if editor.isSemanticPhaseAnalysisRunning {
+                    Button("Cancel") {
+                        editor.cancelSemanticPhaseAnalysis()
+                    }
+                    .controlSize(.small)
+                } else {
+                    Button(editor.semanticPhaseAnalysis == nil ? "Analyze Meaning" : "Analyze Again") {
+                        Task { await editor.analyzeSemanticWindows() }
+                    }
+                    .controlSize(.small)
+                    .disabled(editor.hasTranscript == false)
+                }
+            }
+
+            Text("Compares overlapping 28-word transcript windows with excerpts from your hand-labeled phases using Apple's on-device sentence embedding. These results never change labels automatically.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            if let semanticPhaseErrorMessage = editor.semanticPhaseErrorMessage,
+               !semanticPhaseErrorMessage.isEmpty {
+                Text(semanticPhaseErrorMessage)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+            } else if editor.isSemanticPhaseAnalysisRunning {
+                ProgressView()
+            } else if let analysis = editor.semanticPhaseAnalysis {
+                if analysis.exampleCount == 0 {
+                    Text("No hand-labeled transcript excerpts are available. Label and transcribe more phase sections before evaluating semantic matching.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 140), spacing: 10)],
+                        alignment: .leading,
+                        spacing: 10
+                    ) {
+                        transcriptMetricCard(
+                            "Labeled Examples",
+                            value: analysis.exampleCount.formatted(),
+                            systemImage: "text.quote"
+                        )
+                        transcriptMetricCard(
+                            "Meaning Windows",
+                            value: analysis.windows.count.formatted(),
+                            systemImage: "rectangle.split.3x1"
+                        )
+                        transcriptMetricCard(
+                            "Tentative Runs",
+                            value: analysis.segments.count.formatted(),
+                            systemImage: "timeline.selection"
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(analysis.segments.prefix(30))) { segment in
+                            semanticPhaseSegmentRow(segment, editor: editor)
+                        }
+                    }
+
+                    if analysis.segments.count > 30 {
+                        Text("Showing the first 30 of \(analysis.segments.count) tentative runs.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Text("Run this independently from phrase-library suggestions so their results can be compared by ear.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    func semanticPhaseSegmentRow(
+        _ segment: SemanticPhaseAnalyzer.Segment,
+        editor: LabelingDetailEditor
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill(editor.phaseColor(segment.phase))
+                .frame(width: 9, height: 9)
+                .padding(.top, 6)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(segment.phase.displayName)
+                        .font(.callout.weight(.semibold))
+                    Spacer()
+                    Text(segment.confidence.formatted(.percent.precision(.fractionLength(0))))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("\(editor.formatTime(segment.startTime)) – \(editor.formatTime(segment.endTime)) · \(segment.windowCount) windows")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+
+                Text("Closest labeled excerpt: \(segment.matchedExampleText)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Button("Jump", systemImage: "arrow.right.to.line") {
+                editor.jumpToSemanticSegment(segment)
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .background(Color.purple.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
     }
 
     func analyzerDiagnosticsSection(_ editor: LabelingDetailEditor) -> some View {
@@ -988,22 +1375,22 @@ extension LabelingDetailView {
 
             Menu {
                 Button("Delta/Theta  0.5–6 Hz") {
-                    editor.draft.expectedFrequencyBand = .init(lower: 0.5, upper: 6.0)
+                    editor.setExpectedFrequencyBand(.init(lower: 0.5, upper: 6.0))
                 }
                 Button("Theta  4–8 Hz") {
-                    editor.draft.expectedFrequencyBand = .init(lower: 4.0, upper: 8.0)
+                    editor.setExpectedFrequencyBand(.init(lower: 4.0, upper: 8.0))
                 }
                 Button("Low Alpha  6–8 Hz") {
-                    editor.draft.expectedFrequencyBand = .init(lower: 6.0, upper: 8.0)
+                    editor.setExpectedFrequencyBand(.init(lower: 6.0, upper: 8.0))
                 }
                 Button("Alpha  8–12 Hz") {
-                    editor.draft.expectedFrequencyBand = .init(lower: 8.0, upper: 12.0)
+                    editor.setExpectedFrequencyBand(.init(lower: 8.0, upper: 12.0))
                 }
                 Button("Upper Alpha  9–11 Hz") {
-                    editor.draft.expectedFrequencyBand = .init(lower: 9.0, upper: 11.0)
+                    editor.setExpectedFrequencyBand(.init(lower: 9.0, upper: 11.0))
                 }
                 Button("SMR/Beta  12–18 Hz") {
-                    editor.draft.expectedFrequencyBand = .init(lower: 12.0, upper: 18.0)
+                    editor.setExpectedFrequencyBand(.init(lower: 12.0, upper: 18.0))
                 }
             } label: {
                 let lower = editor.draft.expectedFrequencyBand.lower
@@ -1012,20 +1399,50 @@ extension LabelingDetailView {
                     .formatted(.number.precision(.fractionLength(1)))
                 Label("\(lower)–\(upper) Hz", systemImage: "waveform")
             }
+            .disabled(editor.isAnalyzerReviewMode)
 
             TextField("Notes…", text: Binding(
                 get: { editor.draft.labelerNotes },
-                set: { editor.draft.labelerNotes = $0 }
+                set: { editor.setLabelerNotes($0) }
             ))
             .textFieldStyle(.roundedBorder)
+            .disabled(editor.isAnalyzerReviewMode)
         }
     }
 
+    func saveStateBadge(_ editor: LabelingDetailEditor) -> some View {
+        let presentation: (label: String, symbol: String, color: Color)
+        switch editor.saveState {
+        case .saved:
+            presentation = ("Saved", "checkmark.circle.fill", .green)
+        case .draftSaved:
+            presentation = ("Draft saved", "checkmark.circle", .blue)
+        case .saving:
+            presentation = ("Saving…", "arrow.trianglehead.2.clockwise.rotate.90", .secondary)
+        case .unsaved:
+            presentation = ("Unsaved", "circle", .orange)
+        case .failed:
+            presentation = ("Save failed", "exclamationmark.triangle.fill", .red)
+        }
+
+        return Label(presentation.label, systemImage: presentation.symbol)
+            .font(.caption)
+            .foregroundStyle(presentation.color)
+            .help(editor.saveFailureMessage ?? "Labeling changes are saved automatically.")
+    }
+
     func statusBadge(_ editor: LabelingDetailEditor) -> some View {
-        let (label, color): (String, Color) = switch editor.draft.status {
-        case .unlabeled: ("Unlabeled", .secondary)
-        case .rough:     ("Rough", .orange)
-        case .refined:   ("Refined", .green)
+        let (label, color): (String, Color)
+        if editor.isAnalyzerReviewMode {
+            (label, color) = ("Analyzer review", .purple)
+        } else if editor.isReadyToSave {
+            (label, color) = ("Ready", .green)
+        } else if editor.unassignedSegmentCount == editor.labelingSegments.count {
+            (label, color) = ("Transitions", .secondary)
+        } else if editor.unassignedSegmentCount == 0 {
+            (label, color) = ("Needs review", .orange)
+        } else {
+            (label, color) = ("\(editor.unassignedSegmentCount) unnamed", .orange)
         }
         return Text(label)
             .font(.caption)

@@ -22,8 +22,11 @@ struct ChunkPhaseClassification {
 
     @Guide(description: """
         Best structural hypnosis phase for this transcript chunk.
-        Fractionation and confusion are techniques, not phase labels; classify them as deepening.
-        Therapeutic work, erotic suggestions, and post-hypnotic conditioning are suggestion-work labels.
+        The light-control phases are induction, fractionation, deepening, suggestions,
+        brainwashing, post-hypnotic conditioning, and emergence. Confusion maps to
+        deepening; therapeutic and erotic suggestion work maps to suggestions.
+        Sustained returns between deepening/suggestions and suggestions/conditioning
+        are valid and must be classified from the current chunk's meaning.
         """)
     var phase: ChunkPhaseLabel
 
@@ -43,6 +46,7 @@ struct ChunkPhaseClassification {
 enum ChunkPhaseLabel: String, Codable, Sendable {
     case preTalk = "pre_talk"
     case induction = "induction"
+    case fractionation = "fractionation"
     case deepening = "deepening"
     case therapy = "therapy"
     case suggestions = "suggestions"
@@ -57,6 +61,8 @@ enum ChunkPhaseLabel: String, Codable, Sendable {
             return .preTalk.labelingPhase
         case .induction:
             return .induction
+        case .fractionation:
+            return .fractionation
         case .deepening:
             return .deepening
         case .therapy:
@@ -150,11 +156,17 @@ nonisolated struct ChunkedPhaseAnalyzer {
             // unrelated causes with two unrelated fixes. See ERRORS.md ERR-008.
             let classifiedCount = Set(timeline).count
 
+            timeline = Self.flagFractionationCycles(in: timeline)
             let minRun = max(20, Int(duration * 0.035))
             timeline = Self.collapseShortRuns(timeline, minRun: minRun)
             let collapsedCount = Set(timeline).count
 
             timeline = Self.enforcePhaseOrdering(timeline: timeline)
+            timeline = Self.applyFractionationSpans(
+                to: timeline,
+                wordTimestamps: wordTimestamps,
+                duration: duration
+            )
             let segments = Self.consolidatePhaseSegments(timeline: timeline, duration: duration)
             let distinctCount = Set(segments.map(\.phase)).count
             guard distinctCount >= 2 else {
@@ -446,7 +458,7 @@ extension ChunkedPhaseAnalyzer {
             knowledge: knowledge
         ))
 
-        return baseExamples
+        let ranked = baseExamples
             .filter { example in
                 sourceMultiplier(
                     for: example,
@@ -470,8 +482,19 @@ extension ChunkedPhaseAnalyzer {
                     corpusLearning: corpusLearning
                 )
             }
-            .prefix(4)
-            .map { $0 }
+        var selected = Array(ranked.prefix(2))
+        if let previousPhase,
+           selected.contains(where: { $0.correctPhase == previousPhase.rawValue }) == false,
+           let previousPhaseExample = ranked.first(where: {
+               $0.correctPhase == previousPhase.rawValue
+           }) {
+            if selected.count == 2 {
+                selected[1] = previousPhaseExample
+            } else {
+                selected.append(previousPhaseExample)
+            }
+        }
+        return selected
     }
 
     nonisolated static func renderFewShotExamples(
@@ -484,9 +507,10 @@ extension ChunkedPhaseAnalyzer {
             let normalizedText = example.text
                 .replacingOccurrences(of: "\n", with: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            let excerpt = String(normalizedText.prefix(220))
             return """
                 Example \(index + 1) (\(positionPercent)%):
-                Transcript: "\(normalizedText)"
+                Transcript: "\(excerpt)"
                 Correct phase: \(example.correctPhase)
                 """
         }.joined(separator: "\n\n")
@@ -533,9 +557,9 @@ extension ChunkedPhaseAnalyzer {
     nonisolated static func positionAnchoredPhases(for positionPct: Int) -> [HypnosisMetadata.Phase] {
         switch positionPct {
         case 0..<8:
-            return [.induction]
+            return [.induction, .fractionation]
         case 8..<35:
-            return [.induction, .deepening]
+            return [.induction, .fractionation, .deepening]
         case 35..<65:
             return [.deepening, .suggestions]
         case 65..<82:
@@ -864,16 +888,16 @@ extension ChunkedPhaseAnalyzer {
 
 // MARK: - Position Hints & Response Parsing
 
-private extension ChunkedPhaseAnalyzer {
+extension ChunkedPhaseAnalyzer {
 
     static func buildPositionHint(pct: Int) -> String {
         switch pct {
         case 0..<8:
-            return "This is the BEGINNING of the session (\(pct)%). Expect orientation-style induction."
+            return "This is the BEGINNING of the session (\(pct)%). Expect orientation-style induction unless repeated wake-and-drop cycles establish fractionation."
         case 8..<20:
-            return "This is early in the session (\(pct)%). Likely induction or early deepening; fractionation is a technique, not a phase."
+            return "This is early in the session (\(pct)%). Consider induction, fractionation, or early deepening. Repeated wake-and-drop cycles are structural fractionation."
         case 20..<40:
-            return "This is the early-middle (\(pct)%). Likely deepening; fractionation and confusion are techniques inside the structural phase."
+            return "This is the early-middle (\(pct)%). Consider fractionation or deepening. Repeated wake-and-drop cycles are structural fractionation; confusion alone maps to deepening."
         case 40..<60:
             return "This is the middle (\(pct)%). Likely deepening or suggestions; confusion language is a technique, not its own phase."
         case 60..<78:

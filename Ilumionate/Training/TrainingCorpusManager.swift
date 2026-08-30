@@ -483,6 +483,7 @@ final class TrainingCorpusManager {
 
     var labeledFiles: [LabeledFile] = []
     var lastLoadIssues: [TrainingCorpusLoadIssue] = []
+    private(set) var hasFinishedInitialLoad = false
 
     private let store: TrainingCorpusStore
     private let audioDirectory: URL
@@ -506,6 +507,7 @@ final class TrainingCorpusManager {
     }
 
     func reload() async {
+        defer { hasFinishedInitialLoad = true }
         do {
             let snapshot = try await store.loadAll()
             labeledFiles = snapshot.labeledFiles

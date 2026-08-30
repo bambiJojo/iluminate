@@ -20,6 +20,55 @@ private func makeSegment(text: String, start: Double, duration: Double) -> Audio
     AudioTranscriptionSegment(text: text, timestamp: start, duration: duration, confidence: 1.0)
 }
 
+private func phaseScores(
+    _ values: [HypnosisMetadata.Phase: Double]
+) -> [Double] {
+    HypnosisMetadata.Phase.orderedHypnosisPhases.map { values[$0] ?? 0 }
+}
+
+// MARK: - PhaseSequenceResolver Tests
+
+struct PhaseSequenceResolverTests {
+    private let resolver = PhaseSequenceResolver()
+
+    @Test func transitionPriorsDoNotCauseOscillationWithoutNewEvidence() {
+        let chosen = resolver.resolve(
+            emissionScores: [
+                phaseScores([.deepening: 1.0]),
+                phaseScores([.deepening: 0.5, .suggestions: 0.5]),
+                phaseScores([.deepening: 0.5, .suggestions: 0.5]),
+                phaseScores([.deepening: 0.5, .suggestions: 0.5])
+            ],
+            transitionPriors: [
+                .deepening: [.suggestions: 1.0],
+                .suggestions: [.deepening: 1.0]
+            ],
+            transitionPriorMultiplier: 1.0
+        )
+        let phases = chosen.map { HypnosisMetadata.Phase.orderedHypnosisPhases[$0] }
+
+        #expect(phases == [.deepening, .deepening, .deepening, .deepening])
+    }
+
+    @Test func sustainedEvidenceCanStillCreateARecurrentPhase() {
+        let chosen = resolver.resolve(
+            emissionScores: [
+                phaseScores([.deepening: 1.0]),
+                phaseScores([.deepening: 0.1, .suggestions: 0.9]),
+                phaseScores([.deepening: 0.9, .suggestions: 0.1])
+            ],
+            transitionPriors: [
+                .deepening: [.suggestions: 1.0],
+                .suggestions: [.deepening: 1.0]
+            ],
+            transitionPriorMultiplier: 1.0
+        )
+        let phases = chosen.map { HypnosisMetadata.Phase.orderedHypnosisPhases[$0] }
+
+        #expect(phases == [.deepening, .suggestions, .deepening])
+    }
+}
+
 // MARK: - approximateWordTimestamps Tests
 
 struct ApproximateWordTimestampsTests {
@@ -171,11 +220,439 @@ struct MajorityVoteSmoothTests {
     }
 }
 
+// MARK: - Fractionation Cycle Gate Tests
+
+struct FractionationCycleGateTests {
+
+    @Test func repeatedInteriorWakeAndDropCyclesBecomeOneFractionationSection() {
+        let timeline: [HypnosisMetadata.Phase?] =
+            Array(repeating: .induction, count: 20)
+            + Array(repeating: .emergence, count: 10)
+            + Array(repeating: .induction, count: 25)
+            + Array(repeating: .suggestions, count: 20)
+            + Array(repeating: .conditioning, count: 15)
+            + Array(repeating: .emergence, count: 10)
+            + Array(repeating: .induction, count: 25)
+            + Array(repeating: .suggestions, count: 20)
+            + Array(repeating: .emergence, count: 15)
+
+        let result = ChunkedPhaseAnalyzer.flagFractionationCycles(in: timeline)
+
+        #expect(result[0..<125].allSatisfy { $0 == .fractionation })
+        #expect(result[125..<145].allSatisfy { $0 == .suggestions })
+        #expect(result[145..<160].allSatisfy { $0 == .emergence })
+    }
+
+    @Test func sparseClassificationsCarryFractionationToTheNextObservedPhase() {
+        var timeline = [HypnosisMetadata.Phase?](repeating: nil, count: 200)
+        set(.induction, in: 0..<15, on: &timeline)
+        set(.emergence, in: 30..<45, on: &timeline)
+        set(.induction, in: 60..<75, on: &timeline)
+        set(.suggestions, in: 90..<105, on: &timeline)
+        set(.emergence, in: 120..<135, on: &timeline)
+        set(.induction, in: 150..<165, on: &timeline)
+        set(.suggestions, in: 180..<195, on: &timeline)
+
+        let result = ChunkedPhaseAnalyzer.flagFractionationCycles(in: timeline)
+
+        #expect(result[0..<180].allSatisfy { $0 == .fractionation })
+        #expect(result[180..<195].allSatisfy { $0 == .suggestions })
+    }
+
+    @Test func oneInteriorWakeAndReturnDoesNotTriggerFractionation() {
+        let timeline: [HypnosisMetadata.Phase?] =
+            Array(repeating: .induction, count: 20)
+            + Array(repeating: .emergence, count: 10)
+            + Array(repeating: .induction, count: 25)
+            + Array(repeating: .suggestions, count: 30)
+            + Array(repeating: .emergence, count: 15)
+
+        let result = ChunkedPhaseAnalyzer.flagFractionationCycles(in: timeline)
+
+        #expect(result == timeline)
+    }
+
+    @Test func backToBackWakeAndDropCyclesAreSufficient() {
+        let timeline: [HypnosisMetadata.Phase?] =
+            Array(repeating: .induction, count: 20)
+            + Array(repeating: .emergence, count: 10)
+            + Array(repeating: .induction, count: 20)
+            + Array(repeating: .emergence, count: 10)
+            + Array(repeating: .induction, count: 20)
+            + Array(repeating: .emergence, count: 20)
+
+        let result = ChunkedPhaseAnalyzer.flagFractionationCycles(in: timeline)
+
+        #expect(result[0..<80].allSatisfy { $0 == .fractionation })
+        #expect(result[80..<100].allSatisfy { $0 == .emergence })
+    }
+
+    @Test func laterWakeAndDropCyclesStartAfterPrecedingSuggestions() {
+        let timeline: [HypnosisMetadata.Phase?] =
+            Array(repeating: .suggestions, count: 30)
+            + Array(repeating: .emergence, count: 5)
+            + Array(repeating: .induction, count: 15)
+            + Array(repeating: .emergence, count: 5)
+            + Array(repeating: .induction, count: 15)
+            + Array(repeating: .deepening, count: 20)
+
+        let result = ChunkedPhaseAnalyzer.flagFractionationCycles(in: timeline)
+
+        #expect(result[0..<30].allSatisfy { $0 == .suggestions })
+        #expect(result[30..<70].allSatisfy { $0 == .fractionation })
+        #expect(result[70..<90].allSatisfy { $0 == .deepening })
+    }
+
+    @Test func transcriptWakeAndDropCyclesProduceFractionationWithoutPhaseLabels() throws {
+        let words =
+            timedWords("continue with these suggestions", at: 0)
+            + timedWords("open those eyes up for me", at: 100)
+            + timedWords("and sleep all the way down", at: 110)
+            + timedWords("open your eyes now", at: 140)
+            + timedWords("and sleep all the way down", at: 150)
+            + timedWords("continue deeper now", at: 180)
+
+        let spans = ChunkedPhaseAnalyzer.detectFractionationSpans(
+            in: words,
+            duration: 220
+        )
+        #expect(spans.count == 1)
+        let span = try #require(spans.first)
+
+        #expect(span.startTime == 100)
+        #expect(span.endTime == 152)
+        #expect(span.cycleCount == 2)
+    }
+
+    @Test func secondPassRemovesLocalFractionationGuessWithoutAnAwakener() {
+        let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
+        let transcription = AudioTranscriptionResult(
+            fullText: "Aware but unaware, relaxing and drifting more deeply.",
+            segments: [
+                makeSegment(
+                    text: "Aware but unaware, relaxing and drifting more deeply.",
+                    start: 0,
+                    duration: 120
+                )
+            ],
+            duration: 120,
+            detectedLanguage: "en"
+        )
+        let initial = [
+            PhaseSegment(phase: .induction, startTime: 0, endTime: 30, characteristics: "", tranceDepthEstimate: 0.3),
+            PhaseSegment(phase: .fractionation, startTime: 30, endTime: 70, characteristics: "", tranceDepthEstimate: 0.4),
+            PhaseSegment(phase: .deepening, startTime: 70, endTime: 120, characteristics: "", tranceDepthEstimate: 0.6)
+        ]
+
+        let result = analyzer.applyFractionationSecondPass(in: initial, transcription: transcription)
+
+        #expect(result.contains { $0.phase == .fractionation } == false)
+    }
+
+    @Test func secondPassCanIntroduceFractionationFromOneInteriorAwakener() {
+        let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
+        let transcriptSegments = [
+            makeSegment(text: "Continue relaxing deeply.", start: 0, duration: 120),
+            makeSegment(text: "Eyes open, come back up for me now.", start: 200, duration: 10),
+            makeSegment(text: "And continue going deeper.", start: 210, duration: 90),
+            makeSegment(text: "Accept these suggestions easily.", start: 300, duration: 200),
+            makeSegment(text: "One two three four five, wide awake.", start: 560, duration: 40)
+        ]
+        let transcription = AudioTranscriptionResult(
+            fullText: transcriptSegments.map(\.text).joined(separator: " "),
+            segments: transcriptSegments,
+            duration: 600,
+            detectedLanguage: "en"
+        )
+        let initial = [
+            PhaseSegment(phase: .induction, startTime: 0, endTime: 120, characteristics: "", tranceDepthEstimate: 0.3),
+            PhaseSegment(phase: .deepening, startTime: 120, endTime: 300, characteristics: "", tranceDepthEstimate: 0.6),
+            PhaseSegment(phase: .suggestions, startTime: 300, endTime: 560, characteristics: "", tranceDepthEstimate: 0.7),
+            PhaseSegment(phase: .emergence, startTime: 560, endTime: 600, characteristics: "", tranceDepthEstimate: 0.2)
+        ]
+
+        let result = analyzer.applyFractionationSecondPass(in: initial, transcription: transcription)
+        let phaseAtAwakener = result.first { 200 >= $0.startTime && 200 < $0.endTime }?.phase
+
+        #expect(phaseAtAwakener == .fractionation)
+        #expect(result.last?.phase == .emergence)
+    }
+
+    @Test func keywordAnalyzerAppliesTranscriptFractionationEvidence() throws {
+        let words =
+            timedWords("continue with these suggestions", at: 0)
+            + timedWords("open those eyes up for me", at: 100)
+            + timedWords("and sleep all the way down", at: 110)
+            + timedWords("open your eyes now", at: 140)
+            + timedWords("and sleep all the way down", at: 150)
+            + timedWords("continue deeper now", at: 180)
+
+        let segments = HypnosisPhaseAnalyzer(corpusKnowledge: .empty).analyze(
+            wordTimestamps: words,
+            duration: 220
+        )
+        let fractionation = try #require(segments.first { $0.phase == .fractionation })
+
+        #expect(fractionation.startTime == 100)
+        #expect(fractionation.endTime == 152)
+    }
+
+    @Test func hybridSelectionCannotEraseTranscriptFractionationEvidence() throws {
+        let transcriptSegments = [
+            makeSegment(text: "continue with these suggestions", start: 0, duration: 8),
+            makeSegment(text: "open those eyes up for me", start: 100, duration: 6),
+            makeSegment(text: "and sleep all the way down", start: 110, duration: 6),
+            makeSegment(text: "open your eyes now", start: 140, duration: 5),
+            makeSegment(text: "and sleep all the way down", start: 150, duration: 6),
+            makeSegment(text: "continue deeper now", start: 180, duration: 6),
+        ]
+        let transcription = AudioTranscriptionResult(
+            fullText: transcriptSegments.map(\.text).joined(separator: " "),
+            segments: transcriptSegments,
+            duration: 220,
+            detectedLanguage: "en"
+        )
+        let collapsed = [
+            PhaseSegment(
+                phase: .suggestions,
+                startTime: 0,
+                endTime: 220,
+                characteristics: "Suggestions",
+                tranceDepthEstimate: TrancePhase.suggestions.tranceDepthEstimate
+            ),
+        ]
+        let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
+
+        let selected = analyzer.selectPreferredPhases(
+            keywordPhases: collapsed,
+            chunkedPhases: collapsed,
+            transcription: transcription
+        )
+
+        #expect(selected.phases.contains { $0.phase == .fractionation })
+    }
+
+    @Test func fractionationRecoveryUsesMeaningBeforeTerminalEmergence() throws {
+        let transcriptSegments = [
+            makeSegment(text: "fractionation begins now", start: 0, duration: 5),
+            makeSegment(text: "open those eyes", start: 10, duration: 4),
+            makeSegment(text: "and sleep all the way down", start: 20, duration: 5),
+            makeSegment(text: "open those eyes", start: 30, duration: 4),
+            makeSegment(text: "and sleep all the way down", start: 40, duration: 5),
+            makeSegment(text: "sink deeper and deeper, relaxing completely into profound trance", start: 50, duration: 15),
+            makeSegment(text: "my suggestions fill your mind and become automatic", start: 70, duration: 20),
+            makeSegment(text: "in a moment, not just yet, I am going to count and you will come back", start: 120, duration: 20),
+            makeSegment(text: "one, two, three, come back into the room, four, five, wide awake", start: 150, duration: 20),
+        ]
+        let transcription = AudioTranscriptionResult(
+            fullText: transcriptSegments.map(\.text).joined(separator: " "),
+            segments: transcriptSegments,
+            duration: 180,
+            detectedLanguage: "en"
+        )
+        let collapsed = [
+            PhaseSegment(
+                phase: .therapy,
+                startTime: 0,
+                endTime: 180,
+                characteristics: "Collapsed model output",
+                tranceDepthEstimate: TrancePhase.therapy.tranceDepthEstimate
+            )
+        ]
+        let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
+
+        let selected = analyzer.selectPreferredPhases(
+            keywordPhases: collapsed,
+            chunkedPhases: collapsed,
+            transcription: transcription
+        ).phases
+        func phase(at time: TimeInterval) -> HypnosisMetadata.Phase? {
+            selected.first { time >= $0.startTime && time < $0.endTime }?.phase
+        }
+
+        #expect(phase(at: 55) == .deepening)
+        #expect(phase(at: 80) == .suggestions)
+        #expect(phase(at: 130) == .suggestions)
+        #expect(phase(at: 160) == .emergence)
+    }
+
+    @Test func longFractionationTranscriptSeparatesTwoCycleSections() throws {
+        let words =
+            timedWords("fractionation begins", at: 0)
+            + timedWords("open your eyes", at: 305)
+            + timedWords("and sleep", at: 315)
+            + timedWords("open your eyes", at: 462)
+            + timedWords("and sleep", at: 470)
+            + timedWords("open your eyes", at: 610)
+            + timedWords("and sleep", at: 618)
+            + timedWords("open your eyes", at: 760)
+            + timedWords("and sleep", at: 768)
+            + timedWords("open your eyes", at: 900)
+            + timedWords("and sleep", at: 908)
+            + timedWords("open your eyes", at: 1018)
+            + timedWords("and sleep", at: 1027)
+            + timedWords("continue with suggestions", at: 1178)
+            + timedWords("open your eyes", at: 1306)
+            + timedWords("and sleep", at: 1310)
+            + timedWords("open your eyes", at: 1403)
+            + timedWords("and sleep", at: 1412)
+            + timedWords("open your eyes", at: 1476)
+            + timedWords("and sleep", at: 1483)
+
+        let spans = ChunkedPhaseAnalyzer.detectFractionationSpans(
+            in: words,
+            duration: 1_704
+        )
+
+        #expect(spans.count == 2)
+        #expect(spans[0].startTime == 0)
+        #expect(spans[0].endTime == 1029)
+        #expect(spans[1].startTime == 1306)
+        #expect(spans[1].endTime == 1485)
+    }
+
+    @Test func sparseASRWakeCuesBridgeOneFractionationEpisodeButRespectItsExit() throws {
+        let words =
+            timedWords("fractionation begins", at: 0)
+            + timedWords("open those eyes", at: 170)
+            + timedWords("eyes open", at: 216)
+            + timedWords("open those eyes", at: 305)
+            + timedWords("open those eyes", at: 462)
+            + timedWords("open those eyes", at: 497)
+            + timedWords("open those eyes", at: 533)
+            + timedWords("eyes close", at: 540)
+            + timedWords("open those eyes", at: 560)
+            + timedWords("eyes close", at: 606)
+            + timedWords("open those eyes", at: 616)
+            + timedWords("open those eyes", at: 700)
+            + timedWords("eyes open", at: 809)
+            + timedWords("eyes open", at: 909)
+            + timedWords("those eyes close", at: 929)
+            + timedWords("eyes open", at: 958)
+            + timedWords("open those eyes", at: 1_000)
+            + timedWords("eyes close", at: 1_027)
+            + timedWords("open those eyes", at: 1_077)
+            + timedWords("open those eyes", at: 1_237)
+            + timedWords("and sleep", at: 1_259)
+            + timedWords("open those eyes", at: 1_306)
+            + timedWords("and sleep", at: 1_310)
+            + timedWords("fractionation feels good", at: 1_324)
+            + timedWords("open those eyes", at: 1_337)
+            + timedWords("and sleep", at: 1_344)
+            + timedWords("open those eyes", at: 1_403)
+            + timedWords("and sleep", at: 1_412)
+            + timedWords("open those eyes", at: 1_476)
+            + timedWords("and sleep", at: 1_483)
+            + timedWords("eyes open keep them open wait for my cue", at: 1_497)
+            + timedWords("open those eyes and sleep", at: 1_535)
+
+        let spans = ChunkedPhaseAnalyzer.detectFractionationSpans(
+            in: words,
+            duration: 1_704
+        )
+
+        #expect(spans.count == 2)
+        #expect(spans[0].startTime == 0)
+        #expect(spans[0].endTime == 1_029)
+        #expect(spans[1].startTime == 1_311)
+        #expect(spans[1].endTime == 1_485)
+    }
+
+    private func set(
+        _ phase: HypnosisMetadata.Phase,
+        in range: Range<Int>,
+        on timeline: inout [HypnosisMetadata.Phase?]
+    ) {
+        for index in range {
+            timeline[index] = phase
+        }
+    }
+
+    private func timedWords(_ text: String, at startTime: TimeInterval) -> [WordTimestamp] {
+        text.split(separator: " ").enumerated().map { index, word in
+            WordTimestamp(
+                word: String(word),
+                startTime: startTime + Double(index),
+                duration: 1
+            )
+        }
+    }
+}
+
 // MARK: - Final Timeline Stability Tests
 
 struct FinalTimelineStabilityTests {
 
     private let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
+
+    @Test func futureAwakeningAnnouncementDoesNotStartTerminalEmergence() throws {
+        let transcriptSegments = [
+            makeSegment(
+                text: "Continue integrating these suggestions while you rest deeply.",
+                start: 0,
+                duration: 100
+            ),
+            makeSegment(
+                text: "Until then allow these suggestions to settle into your mind.",
+                start: 100,
+                duration: 40
+            ),
+            makeSegment(
+                text: "I'm going to wake you soon, but continue resting deeply for now.",
+                start: 140,
+                duration: 10
+            ),
+            makeSegment(
+                text: "One, two, three, feeling yourself come back into the room, four, five, wide awake.",
+                start: 150,
+                duration: 30
+            ),
+        ]
+        let transcription = AudioTranscriptionResult(
+            fullText: transcriptSegments.map(\.text).joined(separator: " "),
+            segments: transcriptSegments,
+            duration: 180,
+            detectedLanguage: "en"
+        )
+        let primary = [
+            PhaseSegment(
+                phase: .suggestions,
+                startTime: 0,
+                endTime: 180,
+                characteristics: "Suggestions",
+                tranceDepthEstimate: TrancePhase.suggestions.tranceDepthEstimate
+            )
+        ]
+
+        let result = analyzer.adaptPredictedPhases(primary, transcription: transcription)
+        let emergence = try #require(result.first { $0.phase == .emergence })
+
+        #expect(emergence.startTime == 150)
+    }
+
+    @Test func prematurePredictedEmergenceMovesToTheActiveWakeCue() throws {
+        let transcriptSegments = [
+            makeSegment(text: "Continue integrating these suggestions while you rest deeply.", start: 0, duration: 100),
+            makeSegment(text: "Until then allow these suggestions to settle into your mind.", start: 100, duration: 40),
+            makeSegment(text: "I'm going to wake you soon, but continue resting deeply for now.", start: 140, duration: 10),
+            makeSegment(text: "Wake now, coming back into the room, alert and fully awake.", start: 150, duration: 30)
+        ]
+        let transcription = AudioTranscriptionResult(
+            fullText: transcriptSegments.map(\.text).joined(separator: " "),
+            segments: transcriptSegments,
+            duration: 180,
+            detectedLanguage: "en"
+        )
+        let premature = [
+            PhaseSegment(phase: .suggestions, startTime: 0, endTime: 100, characteristics: "", tranceDepthEstimate: 0.7),
+            PhaseSegment(phase: .emergence, startTime: 100, endTime: 180, characteristics: "", tranceDepthEstimate: 0.2)
+        ]
+
+        let result = analyzer.adaptPredictedPhases(premature, transcription: transcription)
+        let emergence = try #require(result.first { $0.phase == .emergence })
+
+        #expect(emergence.startTime == 150)
+    }
 
     @Test func adaptationDoesNotReintroduceRapidPhaseChanges() {
         let transcriptionSegments = [
@@ -216,6 +693,146 @@ struct FinalTimelineStabilityTests {
             "Final adaptation must honor the configured 20-second minimum: \(runs)"
         )
     }
+
+    @Test func adaptationRejectsBriefSuggestionIslandInsideStableInduction() {
+        let transcriptSegments = [
+            makeSegment(
+                text: "Take a slow breath, close your eyes, and let your whole body relax comfortably.",
+                start: 0,
+                duration: 163
+            ),
+            makeSegment(
+                text: "You will notice calm confidence growing naturally within you.",
+                start: 163,
+                duration: 59
+            ),
+            makeSegment(
+                text: "Continue breathing slowly, remaining deeply relaxed and comfortably settled.",
+                start: 222,
+                duration: 1_355
+            )
+        ]
+        let transcription = AudioTranscriptionResult(
+            fullText: transcriptSegments.map(\.text).joined(separator: " "),
+            segments: transcriptSegments,
+            duration: 1_577,
+            detectedLanguage: "en"
+        )
+        let primary = [
+            PhaseSegment(
+                phase: .induction,
+                startTime: 0,
+                endTime: 1_577,
+                characteristics: "Induction",
+                tranceDepthEstimate: TrancePhase.induction.tranceDepthEstimate
+            )
+        ]
+
+        let result = analyzer.adaptPredictedPhases(primary, transcription: transcription)
+        let isolatedSuggestion = result.indices.contains { index in
+            guard index > result.startIndex, index < result.index(before: result.endIndex) else {
+                return false
+            }
+            let segment = result[index]
+            return segment.phase.labelingPhase == .suggestions
+                && result[result.index(before: index)].phase.labelingPhase
+                    == result[result.index(after: index)].phase.labelingPhase
+        }
+        let resultDescription = result
+            .map { "\($0.phase.rawValue) \($0.startTime)-\($0.endTime)" }
+            .joined(separator: ", ")
+
+        #expect(
+            isolatedSuggestion == false,
+            "A single 59-second suggestion phrase must not create a section in a stable 26-minute induction: \(resultDescription)"
+        )
+    }
+
+    @Test func adaptationPreservesSustainedSuggestionReturnAfterConditioning() {
+        let transcriptionSegments = [
+            makeSegment(
+                text: "Take a slow breath, close your eyes, and settle comfortably into trance.",
+                start: 0,
+                duration: 25
+            ),
+            makeSegment(
+                text: "Whenever you hear the bell, this trigger will bring the response back automatically.",
+                start: 25,
+                duration: 30
+            ),
+            makeSegment(
+                text: "You can feel calm, confident, and free to enjoy this pleasant change in everyday life.",
+                start: 55,
+                duration: 30
+            ),
+            makeSegment(
+                text: "From now on, every time I say the word relax, the response activates instantly.",
+                start: 85,
+                duration: 30
+            ),
+            makeSegment(
+                text: "I count up to five, becoming wide awake, alert, clear headed, and back in the room.",
+                start: 115,
+                duration: 25
+            )
+        ]
+        let transcription = AudioTranscriptionResult(
+            fullText: transcriptionSegments.map(\.text).joined(separator: " "),
+            segments: transcriptionSegments,
+            duration: 140,
+            detectedLanguage: "en"
+        )
+        let primary = [
+            PhaseSegment(
+                phase: .induction,
+                startTime: 0,
+                endTime: 25,
+                characteristics: "Induction",
+                tranceDepthEstimate: TrancePhase.induction.tranceDepthEstimate
+            ),
+            PhaseSegment(
+                phase: .conditioning,
+                startTime: 25,
+                endTime: 55,
+                characteristics: "Conditioning",
+                tranceDepthEstimate: TrancePhase.conditioning.tranceDepthEstimate
+            ),
+            PhaseSegment(
+                phase: .suggestions,
+                startTime: 55,
+                endTime: 85,
+                characteristics: "Suggestions",
+                tranceDepthEstimate: TrancePhase.suggestions.tranceDepthEstimate
+            ),
+            PhaseSegment(
+                phase: .conditioning,
+                startTime: 85,
+                endTime: 115,
+                characteristics: "Conditioning",
+                tranceDepthEstimate: TrancePhase.conditioning.tranceDepthEstimate
+            ),
+            PhaseSegment(
+                phase: .emergence,
+                startTime: 115,
+                endTime: 140,
+                characteristics: "Emergence",
+                tranceDepthEstimate: TrancePhase.emergence.tranceDepthEstimate
+            )
+        ]
+
+        let result = analyzer.adaptPredictedPhases(primary, transcription: transcription)
+        let phases = result.map(\.phase)
+        let conditioningIndex = phases.firstIndex(of: .conditioning)
+        let laterSuggestionIndex = phases.indices.first { index in
+            phases[index] == .suggestions && index > (conditioningIndex ?? phases.endIndex)
+        }
+
+        #expect(
+            conditioningIndex != nil && laterSuggestionIndex != nil,
+            "A sustained, transcript-supported return must survive adaptation; got \(phases.map(\.rawValue))"
+        )
+    }
+
 }
 
 // MARK: - consolidatePhaseSegments Tests
@@ -654,6 +1271,10 @@ struct TranscriptConfidenceEnrichmentTests {
         #expect(phases.contains(.suggestions) || phases.contains(.conditioning))
         #expect(phases.last == .emergence)
         #expect(suggestion.averageConfidence > 0.40)
+        #expect(
+            Set(suggestion.segments.map(\.id)).count == suggestion.segments.count,
+            "Every suggested timeline row must have a stable, unique identity."
+        )
     }
 
     @Test func adaptPredictedPhasesCanAdoptPhraseDrivenProposalWhenSeedTimelineIsWeak() {
@@ -701,7 +1322,7 @@ struct TranscriptConfidenceEnrichmentTests {
         #expect(adaptedPhases.last == .emergence)
     }
 
-    @Test func techniqueMarkersCanCreateLateConditioningPhaseEvidence() {
+    @Test func techniqueMarkersDoNotInventPhaseTransitions() {
         let baseline = analyzer.analyze(
             wordTimestamps: [
                 makeWord("welcome", at: 0),
@@ -747,10 +1368,10 @@ struct TranscriptConfidenceEnrichmentTests {
             )
         )
 
-        #expect(baseline.count == 1)
-        #expect(baseline.first?.phase == .induction)
-        #expect(techniqueAware.count >= 2)
-        #expect(techniqueAware.last?.phase == .conditioning)
+        #expect(
+            techniqueAware.map { "\($0.phase.rawValue):\($0.startTime):\($0.endTime)" }
+                == baseline.map { "\($0.phase.rawValue):\($0.startTime):\($0.endTime)" }
+        )
     }
 }
 
@@ -790,6 +1411,15 @@ struct ChunkedPromptCalibrationTests {
         #expect(instructions.contains("induction"))
         #expect(instructions.contains("breathe"))
         #expect(instructions.contains("when i say relax"))
+    }
+
+    @Test func earlyContextTreatsRepeatedWakeAndDropAsFractionation() {
+        let hint = ChunkedPhaseAnalyzer.buildPositionHint(pct: 12)
+        let candidates = ChunkedPhaseAnalyzer.positionAnchoredPhases(for: 12)
+
+        #expect(hint.contains("not a phase") == false)
+        #expect(hint.contains("wake-and-drop"))
+        #expect(candidates.contains(.fractionation))
     }
 
     @Test func therapeuticSourceProfileSuppressesBambiPromptCues() {
@@ -874,6 +1504,27 @@ struct ChunkedPromptCalibrationTests {
         #expect(examples.contains { $0.correctPhase == HypnosisMetadata.Phase.brainwashing.rawValue })
         #expect(!examples.prefix(2).contains { $0.correctPhase == HypnosisMetadata.Phase.preTalk.rawValue })
     }
+
+    @Test func contextualFewShotPromptStaysInsideACompactBudget() {
+        let examples = (0..<6).map { index in
+            AnalyzerConfig.ChunkedAnalyzer.FewShotExample(
+                text: String(repeating: "calibration-word-\(index) ", count: 80),
+                position: Double(index) / 6.0,
+                correctPhase: HypnosisMetadata.Phase.suggestions.rawValue
+            )
+        }
+        let knowledge = CorpusPhaseKnowledge(fewShotExamples: examples)
+        let selected = ChunkedPhaseAnalyzer.contextualFewShotExamples(
+            positionPct: 50,
+            previousPhase: .deepening,
+            knowledge: knowledge,
+            baseExamples: examples
+        )
+        let rendered = ChunkedPhaseAnalyzer.renderFewShotExamples(selected)
+
+        #expect(selected.count <= 2)
+        #expect(rendered.count <= 800)
+    }
 }
 
 // MARK: - Chunked Structured Output Tests
@@ -884,6 +1535,7 @@ struct ChunkedStructuredOutputTests {
         guard #available(iOS 26.0, macOS 26.0, *) else { return }
         #expect(ChunkPhaseLabel.preTalk.normalizedPhase == .induction)
         #expect(ChunkPhaseLabel.induction.normalizedPhase == .induction)
+        #expect(ChunkPhaseLabel.fractionation.normalizedPhase == .fractionation)
         #expect(ChunkPhaseLabel.deepening.normalizedPhase == .deepening)
         #expect(ChunkPhaseLabel.therapy.normalizedPhase == .suggestions)
         #expect(ChunkPhaseLabel.suggestions.normalizedPhase == .suggestions)
@@ -891,6 +1543,15 @@ struct ChunkedStructuredOutputTests {
         #expect(ChunkPhaseLabel.postHypnoticConditioning.normalizedPhase == .conditioning)
         #expect(ChunkPhaseLabel.brainwashing.normalizedPhase == .brainwashing)
         #expect(ChunkPhaseLabel.emergence.normalizedPhase == .emergence)
+    }
+
+    @Test func defaultPromptUsesSevenRecurrentLightPhases() {
+        let instructions = AnalyzerConfigLoader.load().chunkedAnalyzer.systemInstructions
+
+        #expect(instructions.contains("Phases ALWAYS occur in this strict order") == false)
+        #expect(instructions.contains("fractionation"))
+        #expect(instructions.contains("post_hypnotic_conditioning"))
+        #expect(instructions.contains("induction, fractionation, deepening, suggestions, brainwashing, post_hypnotic_conditioning, emergence"))
     }
 
     @Test func structuredClassificationUsesNormalizedPhase() {
@@ -902,5 +1563,173 @@ struct ChunkedStructuredOutputTests {
         )
 
         #expect(classification.normalizedPhase == .conditioning)
+    }
+}
+
+// MARK: - Human-gold corpus regressions
+
+private nonisolated func phaseSuggestionCorpusRoot() -> URL? {
+    let environment = ProcessInfo.processInfo.environment
+    let path = environment["LUMESYNC_CORPUS"] ?? environment["TEST_RUNNER_LUMESYNC_CORPUS"]
+    return path.map { URL(filePath: $0) }
+}
+
+struct PhaseSuggestionCorpusRegressionTests {
+    @Test(
+        "Shipping pipeline keeps reviewed granularity without private corpus access",
+        .enabled(if: phaseSuggestionCorpusRoot() != nil)
+    )
+    func shippingPipelineKeepsReviewedGranularityWithoutPrivateCorpusAccess() async throws {
+        let root = try #require(phaseSuggestionCorpusRoot())
+        let dataset = try AnalyzerOptimizationDataset.load(from: root)
+        let example = try #require(
+            dataset.examples.first { $0.originalFilename == "Against Your Will 01.mp3" }
+        )
+        let transcription = try await AnalyzerTranscriptCache(
+            cacheDirectory: dataset.transcriptCacheDirectory
+        ).transcription(for: example)
+        let shippingKnowledge = try #require(CorpusPhaseKnowledgeSnapshot.loadDefault())
+        let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: shippingKnowledge)
+        let phases = analyzer.analyzeTranscription(transcription)
+        let suggestion = analyzer.suggestPhaseTimeline(for: transcription).segments
+        let summary = phases.map {
+            "\($0.phase.displayName) \(Int($0.startTime))–\(Int($0.endTime))"
+        }.joined(separator: "\n")
+        let suggestionSummary = suggestion.map {
+            "\($0.phase.displayName) \(Int($0.startTime))–\(Int($0.endTime))"
+        }.joined(separator: "\n")
+        Attachment.record(
+            "SHIPPING PIPELINE\n\(summary)\n\nPHRASE PROPOSAL\n\(suggestionSummary)",
+            named: "shipping-against-your-will.txt"
+        )
+
+        #expect(phases.first?.phase == .induction)
+        #expect(phases.last?.phase == .emergence)
+        #expect(phases.contains { $0.phase == .fractionation } == false)
+        #expect(
+            phases.count >= example.phaseSegments.count - 2
+                && phases.count <= example.phaseSegments.count + 2,
+            "The in-app analyzer should preserve the reviewed section granularity without access to a developer corpus."
+        )
+        if let firstSuggestionIndex = phases.firstIndex(where: { $0.phase == .suggestions }) {
+            #expect(
+                phases.dropFirst(firstSuggestionIndex + 1).contains { $0.phase == .deepening },
+                "The in-app analyzer should preserve sustained returns from suggestions to deepening."
+            )
+        }
+    }
+
+    @Test(
+        "Whole-file awakener pass recovers human fractionation files",
+        .enabled(if: phaseSuggestionCorpusRoot() != nil)
+    )
+    func wholeFileAwakenerPassRecoversFractionation() async throws {
+        let root = try #require(phaseSuggestionCorpusRoot())
+        let dataset = try AnalyzerOptimizationDataset.load(from: root)
+        let examples = dataset.examples.filter { example in
+            example.example.labelTrust.isTrustedForLearning
+                && example.phaseSegments.contains { $0.phase == .fractionation }
+        }
+        try #require(!examples.isEmpty)
+        let analyzer = HypnosisPhaseAnalyzer(corpusKnowledge: .empty)
+        let cache = AnalyzerTranscriptCache(cacheDirectory: dataset.transcriptCacheDirectory)
+        var misses: [String] = []
+
+        for example in examples {
+            let transcription = try await cache.transcription(for: example)
+            let ordinaryTimeline = example.phaseSegments.map { segment in
+                let phase: HypnosisMetadata.Phase = segment.phase == .fractionation
+                    ? .deepening
+                    : segment.phase
+                return PhaseSegment(
+                    id: segment.id,
+                    phase: phase,
+                    startTime: segment.startTime,
+                    endTime: segment.endTime,
+                    characteristics: phase.displayName,
+                    tranceDepthEstimate: phase.tranceDepthEstimate
+                )
+            }
+            let recovered = analyzer.applyFractionationSecondPass(
+                in: ordinaryTimeline,
+                transcription: transcription
+            )
+            if recovered.contains(where: { $0.phase == .fractionation }) == false {
+                misses.append(example.originalFilename)
+            }
+        }
+
+        #expect(misses.isEmpty, "Missed fractionation in: \(misses.joined(separator: ", "))")
+    }
+
+    @Test(
+        "Explanatory opening stays induction in Against Your Will",
+        .enabled(if: phaseSuggestionCorpusRoot() != nil)
+    )
+    func explanatoryOpeningStaysInduction() async throws {
+        let root = try #require(phaseSuggestionCorpusRoot())
+        let dataset = try AnalyzerOptimizationDataset.load(from: root)
+        let example = try #require(
+            dataset.examples.first { $0.originalFilename == "Against Your Will 01.mp3" }
+        )
+        let transcription = try await AnalyzerTranscriptCache(
+            cacheDirectory: dataset.transcriptCacheDirectory
+        ).transcription(for: example)
+        let knowledge = CorpusPhaseKnowledgeBuilder(
+            dataset: dataset,
+            scriptCorpus: ScriptPhaseCorpus.loadDefault()
+        ).build()
+
+        let suggestion = HypnosisPhaseAnalyzer(corpusKnowledge: knowledge)
+            .suggestPhaseTimeline(for: transcription)
+        let openingCutoff = transcription.duration * 0.12
+        let openingSegments = suggestion.segments.filter { $0.startTime < openingCutoff - 0.001 }
+        let segmentSummary = suggestion.segments.map {
+            "\($0.phase.displayName) \(Int($0.startTime))–\(Int($0.endTime))"
+        }.joined(separator: "\n")
+        let windowSummary = suggestion.windows.map { window in
+            let scores = window.evidence.prefix(3).map { evidence in
+                let parts = [
+                    "total=\(String(format: "%.2f", evidence.totalScore))",
+                    "text=\(String(format: "%.2f", evidence.transcriptScore))",
+                    "phrase=\(String(format: "%.2f", evidence.phraseLibraryScore))",
+                    "marker=\(String(format: "%.2f", evidence.waymarkerScore))",
+                    "position=\(String(format: "%.2f", evidence.positionScore))",
+                    "transition=\(String(format: "%.2f", evidence.transitionScore))"
+                ].joined(separator: ",")
+                return "\(evidence.phase.displayName){\(parts)}"
+            }.joined(separator: " | ")
+            return "\(Int(window.startTime))–\(Int(window.endTime)) \(window.phase.displayName) \(String(format: "%.0f%%", window.confidence * 100)) :: \(scores)"
+        }.joined(separator: "\n")
+        Attachment.record(
+            "SEGMENTS\n\(segmentSummary)\n\nWINDOWS\n\(windowSummary)",
+            named: "against-your-will-suggestions.txt"
+        )
+
+        #expect(!openingSegments.isEmpty)
+        #expect(
+            openingSegments.allSatisfy { $0.phase == .induction },
+            "The explanatory opening should not be classified as an active downstream phase."
+        )
+        #expect(
+            suggestion.segments.count >= example.phaseSegments.count - 2
+                && suggestion.segments.count <= example.phaseSegments.count + 2,
+            "The proposal should stay near the human section granularity instead of over- or under-segmenting."
+        )
+        #expect(suggestion.segments.last?.phase == .emergence)
+        #expect(
+            suggestion.segments.contains { $0.phase == .fractionation } == false,
+            "A single contrast such as 'aware, but unaware' is not repeated fractionation."
+        )
+        #expect(
+            (suggestion.segments.last?.startTime ?? 0) >= transcription.duration * 0.92,
+            "A terminal emergence should not begin on an earlier countdown into hypnosis."
+        )
+        if let firstSuggestionIndex = suggestion.segments.firstIndex(where: { $0.phase == .suggestions }) {
+            #expect(
+                suggestion.segments.dropFirst(firstSuggestionIndex + 1).contains { $0.phase == .deepening },
+                "Sustained returns from suggestions to deepening must remain available."
+            )
+        }
     }
 }

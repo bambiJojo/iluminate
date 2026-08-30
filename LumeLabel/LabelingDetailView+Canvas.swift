@@ -10,18 +10,18 @@ import SwiftUI
 extension LabelingDetailView {
     func drawPhaseFills(_ ctx: inout GraphicsContext, size: CGSize, editor: LabelingDetailEditor) {
         let chartH = size.height * 0.82
-        for phase in editor.draft.phases {
-            let startX = editor.timeToViewFrac(phase.startTime) * size.width
-            let endX = editor.timeToViewFrac(phase.endTime) * size.width
+        for segment in editor.labelingSegments {
+            let startX = editor.timeToViewFrac(segment.startTime) * size.width
+            let endX = editor.timeToViewFrac(segment.endTime) * size.width
             guard endX > startX else { continue }
-            let topY = chartH * (1 - editor.phaseDepth(phase.phase))
+            let topY = chartH * (1 - editor.phaseDepth(segment.phase))
             var path = Path()
             path.move(to: CGPoint(x: startX, y: chartH))
             path.addLine(to: CGPoint(x: startX, y: topY))
             path.addLine(to: CGPoint(x: endX, y: topY))
             path.addLine(to: CGPoint(x: endX, y: chartH))
             path.closeSubpath()
-            ctx.fill(path, with: .color(editor.phaseColor(phase.phase).opacity(0.22)))
+            ctx.fill(path, with: .color(editor.phaseColor(segment.phase).opacity(0.22)))
         }
     }
 
@@ -73,28 +73,90 @@ extension LabelingDetailView {
 
     func drawBoundaries(_ ctx: inout GraphicsContext, size: CGSize, editor: LabelingDetailEditor) {
         let chartH = size.height * 0.82
-        for (index, phase) in editor.draft.phases.enumerated() {
-            let boundX = editor.timeToViewFrac(phase.startTime) * size.width
-            var line = Path()
-            line.move(to: CGPoint(x: boundX, y: 0))
-            line.addLine(to: CGPoint(x: boundX, y: chartH))
-            ctx.stroke(line, with: .color(editor.phaseColor(phase.phase).opacity(0.4)), lineWidth: 1)
+        for (index, segment) in editor.labelingSegments.enumerated() {
+            if index > 0 {
+                let boundX = editor.timeToViewFrac(segment.startTime) * size.width
+                var line = Path()
+                line.move(to: CGPoint(x: boundX, y: 0))
+                line.addLine(to: CGPoint(x: boundX, y: chartH))
+                ctx.stroke(line, with: .color(editor.phaseColor(segment.phase).opacity(0.4)), lineWidth: 1)
+            }
 
-            let nextStart = index + 1 < editor.draft.phases.count
-                ? editor.draft.phases[index + 1].startTime
+            let nextStart = index + 1 < editor.labelingSegments.count
+                ? editor.labelingSegments[index + 1].startTime
                 : editor.duration
             let endFrac = editor.timeToViewFrac(nextStart)
-            let startFrac = editor.timeToViewFrac(phase.startTime)
+            let startFrac = editor.timeToViewFrac(segment.startTime)
             let blockWidth = (endFrac - startFrac) * size.width
             if blockWidth > 44 {
                 let midX = ((startFrac + endFrac) / 2) * size.width
                 ctx.draw(
-                    Text(phase.phase.displayName)
+                    Text(editor.phaseDisplayName(segment.phase))
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(editor.phaseColor(phase.phase)),
+                        .foregroundStyle(editor.phaseColor(segment.phase)),
                     at: CGPoint(x: midX, y: 13)
                 )
             }
+        }
+    }
+
+    func drawTransitionCandidates(
+        _ ctx: inout GraphicsContext,
+        size: CGSize,
+        editor: LabelingDetailEditor
+    ) {
+        let chartHeight = size.height * 0.82
+        for candidate in editor.transitionCandidates {
+            let xPosition = editor.timeToViewFrac(candidate.time) * size.width
+            guard xPosition >= 0, xPosition <= size.width else { continue }
+
+            let decision = editor.candidateDecision(for: candidate.id)
+            let isSelected = editor.selectedTransitionCandidateID == candidate.id
+            let color = transitionCandidateColor(candidate, decision: decision)
+            let opacity: Double = if isSelected {
+                1
+            } else if decision == .dismissed {
+                0.16
+            } else if decision == .accepted {
+                0.7
+            } else {
+                0.48
+            }
+
+            var line = Path()
+            line.move(to: CGPoint(x: xPosition, y: 0))
+            line.addLine(to: CGPoint(x: xPosition, y: chartHeight))
+            ctx.stroke(
+                line,
+                with: .color(color.opacity(opacity)),
+                style: StrokeStyle(
+                    lineWidth: isSelected ? 3 : 1.5,
+                    dash: decision == .accepted ? [] : [5, 3]
+                )
+            )
+
+            var marker = Path()
+            marker.move(to: CGPoint(x: xPosition, y: chartHeight - 10))
+            marker.addLine(to: CGPoint(x: xPosition - 5, y: chartHeight))
+            marker.addLine(to: CGPoint(x: xPosition + 5, y: chartHeight))
+            marker.closeSubpath()
+            ctx.fill(marker, with: .color(color.opacity(opacity)))
+        }
+    }
+
+    func transitionCandidateColor(
+        _ candidate: TransitionCandidateReview.Candidate,
+        decision: TransitionCandidateReview.Decision?
+    ) -> Color {
+        if decision == .accepted {
+            return .green
+        }
+        if decision == .dismissed {
+            return .gray
+        }
+        switch candidate.source {
+        case .backgroundTone: return .cyan
+        case .semantic: return .purple
         }
     }
 

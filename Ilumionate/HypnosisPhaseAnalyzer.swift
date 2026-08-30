@@ -18,6 +18,152 @@
 
 import Foundation
 
+// MARK: - Phase Sequence Resolution
+
+/// Resolves phase evidence over time without treating vocabulary order as a
+/// one-way state machine. The ordered phase array is a stable vocabulary; this
+/// module owns the separate transition topology observed in labeled sessions.
+nonisolated struct PhaseSequenceResolver: Sendable {
+    typealias Phase = HypnosisMetadata.Phase
+
+    private let phases: [Phase]
+
+    init(phases: [Phase] = Phase.orderedHypnosisPhases) {
+        self.phases = phases
+    }
+
+    func resolve(
+        emissionScores: [[Double]],
+        transitionPriors: [Phase: [Phase: Double]],
+        transitionPriorMultiplier: Double
+    ) -> [Int] {
+        guard
+            !emissionScores.isEmpty,
+            !phases.isEmpty,
+            emissionScores.allSatisfy({ $0.count == phases.count })
+        else {
+            return []
+        }
+
+        var cumulativeScores = Array(
+            repeating: Array(repeating: -Double.infinity, count: phases.count),
+            count: emissionScores.count
+        )
+        var previousChoice = Array(
+            repeating: Array(repeating: -1, count: phases.count),
+            count: emissionScores.count
+        )
+
+        for phaseIndex in phases.indices {
+            let startPenalty = Double(max(0, phaseIndex - 2)) * 0.08
+            cumulativeScores[0][phaseIndex] = emissionScores[0][phaseIndex] - startPenalty
+        }
+
+        for windowIndex in emissionScores.indices.dropFirst() {
+            for phaseIndex in phases.indices {
+                var bestScore = -Double.infinity
+                var bestPreviousIndex = phaseIndex
+
+                for previousPhaseIndex in phases.indices {
+                    let previousPhase = phases[previousPhaseIndex]
+                    let nextPhase = phases[phaseIndex]
+                    let learnedPrior = (transitionPriors[previousPhase]?[nextPhase] ?? 0.0)
+                        * transitionPriorMultiplier
+                    let score = cumulativeScores[windowIndex - 1][previousPhaseIndex]
+                        + emissionScores[windowIndex][phaseIndex]
+                        + transitionScore(
+                            from: previousPhase,
+                            to: nextPhase,
+                            learnedPrior: learnedPrior
+                        )
+                    if score > bestScore {
+                        bestScore = score
+                        bestPreviousIndex = previousPhaseIndex
+                    }
+                }
+
+                cumulativeScores[windowIndex][phaseIndex] = bestScore
+                previousChoice[windowIndex][phaseIndex] = bestPreviousIndex
+            }
+        }
+
+        guard let finalPhaseIndex = cumulativeScores.last?.enumerated().max(by: {
+            $0.element < $1.element
+        })?.offset else {
+            return []
+        }
+
+        var chosenIndices = Array(repeating: 0, count: emissionScores.count)
+        var currentPhaseIndex = finalPhaseIndex
+        for windowIndex in stride(from: emissionScores.count - 1, through: 0, by: -1) {
+            chosenIndices[windowIndex] = currentPhaseIndex
+            guard windowIndex > 0 else { continue }
+            currentPhaseIndex = max(0, previousChoice[windowIndex][currentPhaseIndex])
+        }
+        return chosenIndices
+    }
+
+    func transitionScore(
+        from previousPhase: Phase,
+        to nextPhase: Phase,
+        learnedPrior: Double
+    ) -> Double {
+        let previous = previousPhase.labelingPhase
+        let next = nextPhase.labelingPhase
+        // Corpus priors are measured at hand-labelled section boundaries, while
+        // this resolver advances once per overlapping transcript window. Treat
+        // them as support for a transition, not a reward large enough to cause
+        // a transition on every window. Otherwise common recurrent edges such
+        // as deepening ↔ suggestions oscillate even when the text is tied.
+        let priorBonus = min(max(learnedPrior, 0.0), 1.0) * 0.06
+
+        if previous == next {
+            return 0.12
+        }
+
+        // Emergence is terminal unless a caller has overwhelming contrary
+        // evidence. A non-waking outro should not create this state in the first
+        // place; late wake cues are handled by transcript evidence and repair.
+        if previous == .emergence {
+            return -0.90
+        }
+
+        if isObservedRecurrence(from: previous, to: next) {
+            return 0.02 + priorBonus
+        }
+
+        guard
+            let previousIndex = phases.firstIndex(of: previous),
+            let nextIndex = phases.firstIndex(of: next)
+        else {
+            return priorBonus
+        }
+
+        let signedJump = nextIndex - previousIndex
+        if signedJump < 0 {
+            return (-0.18 * Double(abs(signedJump))) + priorBonus
+        }
+
+        switch signedJump {
+        case 1:
+            return 0.04 + priorBonus
+        case 2:
+            return priorBonus
+        default:
+            return (-0.08 * Double(signedJump - 2)) + priorBonus
+        }
+    }
+
+    func isObservedRecurrence(from previousPhase: Phase, to nextPhase: Phase) -> Bool {
+        let previous = previousPhase.labelingPhase
+        let next = nextPhase.labelingPhase
+        return (previous == .deepening && next == .suggestions)
+            || (previous == .suggestions && next == .deepening)
+            || (previous == .suggestions && next == .conditioning)
+            || (previous == .conditioning && next == .suggestions)
+    }
+}
+
 
 // MARK: - Analyzer
 
@@ -68,6 +214,7 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
     private let corpusKnowledge: CorpusPhaseKnowledge
     private let keywordTokensByPhase: [HypnosisMetadata.Phase: Set<String>]
     private let keywordPhrasesByPhase: [HypnosisMetadata.Phase: Set<String>]
+    private let phaseSequenceResolver = PhaseSequenceResolver()
 
     /// Convenience entry point: loads the resolved config and optionally overrides
     /// just the keyword pipeline. Delegates to the canonical initializer so the
@@ -138,17 +285,17 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
     func analyze(
         wordTimestamps: [WordTimestamp],
         duration: Double,
-        techniqueDetection: TechniqueDetectionResult? = nil
+        techniqueDetection _: TechniqueDetectionResult? = nil
     ) -> [PhaseSegment] {
         guard !wordTimestamps.isEmpty, Task.isCancelled == false else { return [] }
 
         let bucketCount = max(1, Int(ceil(duration)))
-        var hitMap = buildHitMap(wordTimestamps: wordTimestamps, bucketCount: bucketCount)
-        let techniqueEvidence = techniqueEvidenceMap(
-            from: techniqueDetection,
-            bucketCount: bucketCount
-        )
-        mergeTechniqueEvidence(techniqueEvidence, into: &hitMap)
+        // Technique markers describe what the hypnotist is doing, but they are
+        // not independent evidence of a phase boundary. On the human-gold corpus
+        // injecting them into this hit map changed four of nine files, worsened
+        // every changed file, and improved none. Keep them for metadata and for
+        // comparing complete candidate timelines, not for inventing transitions.
+        let hitMap = buildHitMap(wordTimestamps: wordTimestamps, bucketCount: bucketCount)
         guard Task.isCancelled == false else { return [] }
         var timeline = resolveTimeline(hitMap: hitMap, bucketCount: bucketCount)
 
@@ -162,6 +309,11 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         )
         guard Task.isCancelled == false else { return [] }
         timeline = enforcePhaseOrdering(timeline: timeline)
+        timeline = ChunkedPhaseAnalyzer.applyFractionationSpans(
+            to: timeline,
+            wordTimestamps: wordTimestamps,
+            duration: duration
+        )
 
         let phaseSegments = consolidatePhaseSegments(timeline: timeline, duration: duration)
         return repairOpeningActivePhase(
@@ -264,6 +416,14 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             transcription: transcription,
             transcriptAnalyzer: transcriptAnalyzer
         )
+        // `suggestPhaseTimeline` has already completed cue splitting, boundary
+        // refinement, run stabilization, confidence enrichment, and the
+        // whole-file fractionation pass. Running the generic primary-timeline
+        // repair over a selected proposal a second time can erase the learned
+        // section structure that caused the proposal to win.
+        if selected.usedProposal {
+            return selected.segments
+        }
         let repairedSegments = repairUnsupportedPhaseAssignments(
             selected.segments,
             transcription: transcription,
@@ -273,11 +433,8 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             repairedSegments,
             transcription: transcription
         )
-        let orderedSegments = preventSuggestionRegressionAfterConditioning(
-            terminalRepairedSegments
-        )
         let stabilizedSegments = stabilizeAdaptedPhaseRuns(
-            orderedSegments,
+            terminalRepairedSegments,
             baselineSegments: phaseSegments,
             duration: transcription.duration
         )
@@ -285,9 +442,13 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             transcription: transcription,
             phases: stabilizedSegments
         )
-        return enrichSegmentsWithTranscriptConfidence(
+        let enrichedSegments = enrichSegmentsWithTranscriptConfidence(
             stabilizedSegments,
             transcriptAnalysis: repairedAnalysis
+        )
+        return applyFractionationSecondPass(
+            in: enrichedSegments,
+            transcription: transcription
         )
     }
 
@@ -312,10 +473,18 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         let adaptedChunked = chunkedPhases.map { adaptPredictedPhases($0, transcription: transcription) } ?? []
 
         guard !adaptedChunked.isEmpty else {
-            return (keywordPhases, false)
+            return selectionPreservingTranscriptFractionation(
+                phases: keywordPhases,
+                usedChunkedAnalyzer: false,
+                transcription: transcription
+            )
         }
         guard !keywordPhases.isEmpty else {
-            return (adaptedChunked, true)
+            return selectionPreservingTranscriptFractionation(
+                phases: adaptedChunked,
+                usedChunkedAnalyzer: true,
+                transcription: transcription
+            )
         }
 
         let keywordScore = sourceSelectionQualityScore(
@@ -392,15 +561,275 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
                     rhs: adaptedChunked,
                     duration: transcription.duration
                 )
-                return (ensembled, chunkedMatch >= keywordMatch + hybridSelection.ensembleChunkedSourceLead)
+                return selectionPreservingTranscriptFractionation(
+                    phases: ensembled,
+                    usedChunkedAnalyzer: chunkedMatch >= keywordMatch
+                        + hybridSelection.ensembleChunkedSourceLead,
+                    transcription: transcription
+                )
             }
         }
 
         if chunkedWinsClearly || chunkedWinsNarrowlyWithBetterCoverage || keywordLooksCollapsed {
-            return (adaptedChunked, true)
+            return selectionPreservingTranscriptFractionation(
+                phases: adaptedChunked,
+                usedChunkedAnalyzer: true,
+                transcription: transcription
+            )
         }
 
-        return (keywordPhases, false)
+        return selectionPreservingTranscriptFractionation(
+            phases: keywordPhases,
+            usedChunkedAnalyzer: false,
+            transcription: transcription
+        )
+    }
+
+    private func selectionPreservingTranscriptFractionation(
+        phases: [PhaseSegment],
+        usedChunkedAnalyzer: Bool,
+        transcription: AudioTranscriptionResult
+    ) -> (phases: [PhaseSegment], usedChunkedAnalyzer: Bool) {
+        (
+            applyFractionationSecondPass(in: phases, transcription: transcription),
+            usedChunkedAnalyzer
+        )
+    }
+
+    /// Fractionation is a whole-file structural diagnosis, not a local phase
+    /// vocabulary guess. First accept the ordinary phase arc, then scan for
+    /// non-terminal awakeners and repeated wake/drop cycles. This pass is the
+    /// only place allowed to preserve or introduce fractionation.
+    func applyFractionationSecondPass(
+        in segments: [PhaseSegment],
+        transcription: AudioTranscriptionResult
+    ) -> [PhaseSegment] {
+        guard segments.isEmpty == false else { return [] }
+
+        let wordTimestamps = Self.approximateWordTimestamps(from: transcription.segments)
+        let fractionationSpans = ChunkedPhaseAnalyzer.detectFractionationSpans(
+            in: wordTimestamps,
+            duration: transcription.duration
+        )
+        let awakenerTimes = fractionationAwakenerTimes(in: transcription)
+        let hasWholeFileEvidence = !fractionationSpans.isEmpty || !awakenerTimes.isEmpty
+        let reconciledSegments = hasWholeFileEvidence
+            ? segments
+            : removingUnsupportedFractionation(from: segments)
+        let bucketCount = max(1, Int(ceil(transcription.duration)))
+        let originalTimeline = phaseTimeline(from: reconciledSegments, bucketCount: bucketCount)
+        var fractionationTimeline = ChunkedPhaseAnalyzer.applyFractionationSpans(
+            to: originalTimeline,
+            wordTimestamps: wordTimestamps,
+            duration: transcription.duration
+        )
+        for awakenerTime in awakenerTimes where !fractionationSpans.contains(where: {
+            awakenerTime >= $0.startTime && awakenerTime <= $0.endTime
+        }) {
+            guard let containingSegment = reconciledSegments.first(where: {
+                awakenerTime >= $0.startTime && awakenerTime < $0.endTime
+            }), containingSegment.phase.labelingPhase != .emergence else {
+                continue
+            }
+            paint(
+                phase: .fractionation,
+                from: containingSegment.startTime,
+                to: containingSegment.endTime,
+                in: &fractionationTimeline
+            )
+        }
+        let repairedTimeline = repairFractionationRecovery(
+            in: fractionationTimeline,
+            spans: fractionationSpans,
+            transcription: transcription
+        )
+        guard repairedTimeline != originalTimeline else { return reconciledSegments }
+
+        let repairedSegments = consolidatePhaseSegments(
+            timeline: repairedTimeline,
+            duration: transcription.duration
+        )
+        let transcriptAnalysis = TranscriptFeatureAnalyzer().analyze(
+            transcription: transcription,
+            phases: repairedSegments
+        )
+        let enrichedSegments = enrichSegmentsWithTranscriptConfidence(
+            repairedSegments,
+            transcriptAnalysis: transcriptAnalysis
+        )
+        return restoreTerminalEmergenceCue(
+            enrichedSegments,
+            transcription: transcription
+        )
+    }
+
+    private func removingUnsupportedFractionation(
+        from segments: [PhaseSegment]
+    ) -> [PhaseSegment] {
+        var repaired = segments
+        for index in repaired.indices where repaired[index].phase.labelingPhase == .fractionation {
+            let nextPhase = repaired.indices.contains(index + 1)
+                ? repaired[index + 1].phase.labelingPhase
+                : nil
+            let previousPhase = index > repaired.startIndex
+                ? repaired[index - 1].phase.labelingPhase
+                : nil
+            let replacement: HypnosisMetadata.Phase
+            if nextPhase == .deepening {
+                replacement = .deepening
+            } else if previousPhase == .deepening {
+                replacement = .deepening
+            } else {
+                replacement = previousPhase ?? nextPhase ?? .induction
+            }
+            repaired[index] = copySegment(repaired[index], phase: replacement)
+        }
+        return mergeAdjacentPhaseSegments(repaired)
+    }
+
+    private func fractionationAwakenerTimes(
+        in transcription: AudioTranscriptionResult
+    ) -> [TimeInterval] {
+        let terminalWindowStart = transcription.duration * 0.92
+        var times: [TimeInterval] = []
+
+        for segment in transcription.segments.sorted(by: { $0.timestamp < $1.timestamp }) {
+            guard segment.timestamp < terminalWindowStart,
+                  isActiveFractionationAwakener(segment.text),
+                  times.last.map({ segment.timestamp - $0 >= 8.0 }) ?? true else {
+                continue
+            }
+            times.append(segment.timestamp)
+        }
+        return times
+    }
+
+    private func isActiveFractionationAwakener(_ text: String) -> Bool {
+        let normalizedText = " \(normalizedTokens(in: text).joined(separator: " ")) "
+        let futurePhrases = [
+            " will open your eyes ", " will open those eyes ",
+            " going to open your eyes ", " when you wake ",
+            " when you come back ", " count of five you will open "
+        ]
+        guard !announcesFutureEmergence(in: text),
+              !futurePhrases.contains(where: normalizedText.contains) else {
+            return false
+        }
+
+        let activePhrases = [
+            " open your eyes ", " open those eyes ", " open the eyes ",
+            " eyes open ", " wake up ", " wide awake ",
+            " come back up ", " come out of trance ", " awaken from hypnosis "
+        ]
+        return activePhrases.contains(where: normalizedText.contains)
+    }
+
+    private func repairFractionationRecovery(
+        in timeline: [HypnosisMetadata.Phase?],
+        spans: [FractionationCycleSpan],
+        transcription: AudioTranscriptionResult
+    ) -> [HypnosisMetadata.Phase?] {
+        guard spans.isEmpty == false, timeline.isEmpty == false else { return timeline }
+
+        var repaired = timeline
+        let transcriptSegments = transcription.segments.sorted { $0.timestamp < $1.timestamp }
+        let terminalEmergenceStart = transcriptSegments.first(where: {
+            $0.timestamp >= max(spans.last?.endTime ?? 0, transcription.duration * 0.58)
+                && hasDirectEmergenceCue(in: $0.text)
+        })?.timestamp
+
+        for (index, span) in spans.enumerated() {
+            let recoveryStart = min(transcription.duration, span.endTime)
+            let nextFractionationStart = spans.indices.contains(index + 1)
+                ? spans[index + 1].startTime
+                : transcription.duration
+            let recoveryEnd = min(
+                min(
+                    nextFractionationStart,
+                    terminalEmergenceStart.map { max(recoveryStart, $0) } ?? transcription.duration
+                ),
+                recoveryStart + 300
+            )
+            guard recoveryEnd - recoveryStart >= 20,
+                  hasDeepeningEvidence(
+                    in: transcriptSegments,
+                    startTime: recoveryStart,
+                    endTime: min(recoveryEnd, recoveryStart + 150)
+                  ) else {
+                continue
+            }
+
+            let semanticSuggestionStart = transcriptSegments.first(where: { segment in
+                guard segment.timestamp >= recoveryStart + 10,
+                      segment.timestamp < recoveryEnd else {
+                    return false
+                }
+                return hasExplicitSuggestionDeclaration(in: segment.text)
+                    || announcesFutureEmergence(in: segment.text)
+            })?.timestamp
+            let deepeningEnd = semanticSuggestionStart ?? recoveryEnd
+            paint(
+                phase: .deepening,
+                from: recoveryStart,
+                to: deepeningEnd,
+                in: &repaired
+            )
+            if let semanticSuggestionStart {
+                paint(
+                    phase: .suggestions,
+                    from: semanticSuggestionStart,
+                    to: recoveryEnd,
+                    in: &repaired
+                )
+            }
+        }
+
+        if let terminalEmergenceStart {
+            paint(
+                phase: .emergence,
+                from: terminalEmergenceStart,
+                to: transcription.duration,
+                in: &repaired
+            )
+        }
+        return repaired
+    }
+
+    private func paint(
+        phase: HypnosisMetadata.Phase,
+        from startTime: TimeInterval,
+        to endTime: TimeInterval,
+        in timeline: inout [HypnosisMetadata.Phase?]
+    ) {
+        let start = max(timeline.startIndex, Int(floor(startTime)))
+        let end = min(timeline.endIndex, Int(ceil(endTime)))
+        guard start < end else { return }
+        for second in start..<end {
+            timeline[second] = phase
+        }
+    }
+
+    private func hasDeepeningEvidence(
+        in segments: [AudioTranscriptionSegment],
+        startTime: TimeInterval,
+        endTime: TimeInterval
+    ) -> Bool {
+        let deepeningTokens: Set<String> = [
+            "deep", "deeper", "deepest", "drop", "dropping", "drift", "drifting",
+            "relax", "relaxing", "sink", "sinking", "sleep", "trance"
+        ]
+        let matches = segments
+            .filter {
+                $0.timestamp + max($0.duration, 0) >= startTime && $0.timestamp < endTime
+            }
+            .flatMap { normalizedTokens(in: $0.text) }
+            .filter { deepeningTokens.contains($0) }
+        return matches.count >= 3
+    }
+
+    private func hasExplicitSuggestionDeclaration(in text: String) -> Bool {
+        let tokens = Set(normalizedTokens(in: text))
+        return tokens.isDisjoint(with: ["suggestion", "suggestions", "suggest", "suggesting"]) == false
     }
 
     private func ensemblePhases(
@@ -546,7 +975,15 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
                 let previousIndex = Self.orderedPhases.firstIndex(of: previousPhase),
                 let currentIndex = Self.orderedPhases.firstIndex(of: phase),
                 currentIndex < previousIndex {
-                score -= hybridSelection.backwardJumpPenalty
+                if phaseSequenceResolver.isObservedRecurrence(
+                    from: previousPhase,
+                    to: phase
+                ) {
+                    score += transitionPrior(from: previousPhase, to: phase)
+                        * hybridSelection.transitionPriorWeight
+                } else {
+                    score -= hybridSelection.backwardJumpPenalty
+                }
             } else {
                 score += transitionPrior(from: previousPhase, to: phase) * hybridSelection.transitionPriorWeight
             }
@@ -620,18 +1057,6 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         }
 
         return evidence
-    }
-
-    private func mergeTechniqueEvidence(
-        _ techniqueEvidence: [[HypnosisMetadata.Phase: Double]],
-        into hitMap: inout [[HypnosisMetadata.Phase: Double]]
-    ) {
-        guard hitMap.count == techniqueEvidence.count else { return }
-        for index in hitMap.indices {
-            for (phase, score) in techniqueEvidence[index] {
-                hitMap[index][phase, default: 0.0] += score
-            }
-        }
     }
 
     private func techniqueAlignmentScore(
@@ -769,13 +1194,37 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             count: bucketCount
         )
         // Apply config weight overrides on top of the built-in taxonomy.
-        // Build an override lookup: phrase → (phase, weight)
+        // Build an override lookup: phrase → (phase, weight). Explicitly
+        // curated config terms establish the phase first; corpus learning may
+        // add new vocabulary or strengthen that phase, but must not move a
+        // known cue to a different phase because it happened to occur inside a
+        // differently labeled section of one training file.
         var configOverrides: [String: (HypnosisMetadata.Phase, Double)] = [:]
+        var curatedTargets: [String: (HypnosisMetadata.Phase, Double)] = [:]
         for phase in HypnosisMetadata.Phase.allCases {
-            for (phrase, weight) in effectiveWeightsForPhase(phase) {
+            for (phrase, weight) in config.weightsForPhase(phase) {
                 setConfigOverride(
                     phrase: phrase,
                     phase: hitMapTargetPhase(for: phase),
+                    weight: weight,
+                    in: &curatedTargets
+                )
+            }
+        }
+        configOverrides = curatedTargets
+
+        for phase in HypnosisMetadata.Phase.allCases {
+            for (phrase, weight) in effectiveWeightsForPhase(phase) {
+                let targetPhase = hitMapTargetPhase(for: phase)
+                if let curated = curatedTargets[phrase] {
+                    if curated.0 == targetPhase {
+                        configOverrides[phrase] = (targetPhase, max(curated.1, weight))
+                    }
+                    continue
+                }
+                setConfigOverride(
+                    phrase: phrase,
+                    phase: targetPhase,
                     weight: weight,
                     in: &configOverrides
                 )
@@ -1000,16 +1449,22 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
     private static let orderedPhases: [HypnosisMetadata.Phase] = HypnosisMetadata.Phase.orderedHypnosisPhases
     private static let phasePositionAnchors: [HypnosisMetadata.Phase: ClosedRange<Double>] = [
         .preTalk: 0.0...12.0,
-        .induction: 0.0...24.0,
+        .induction: 0.0...35.0,
         .fractionation: 8.0...30.0,
-        .deepening: 12.0...45.0,
+        // Deepening commonly returns after suggestion blocks; human-gold
+        // examples contain supported returns as late as 90% of a session.
+        .deepening: 12.0...90.0,
         .confusion: 22.0...60.0,
         .therapy: 28.0...72.0,
         .suggestions: 42.0...86.0,
         .eroticSuggestions: 48.0...86.0,
         .brainwashing: 55.0...92.0,
-        .conditioning: 68.0...100.0,
-        .emergence: 84.0...100.0,
+        .conditioning: 80.0...100.0,
+        // In multi-section human-gold files emergence begins at 92–99% (median
+        // 97%). Dedicated emergence clips can still start immediately through
+        // direct wake cues; the positional prior prevents an earlier countdown
+        // *into* hypnosis from becoming a terminal awakening.
+        .emergence: 95.0...100.0,
         .transitional: 0.0...100.0
     ]
 
@@ -1242,11 +1697,8 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             cueSplitSegments,
             transcription: transcription
         )
-        let activeTailOrderedSegments = preventSuggestionRegressionAfterConditioning(
-            terminalRepairedSegments
-        )
         let stabilizedSegments = stabilizeAdaptedPhaseRuns(
-            activeTailOrderedSegments,
+            terminalRepairedSegments,
             baselineSegments: refinedSegments,
             duration: transcription.duration
         )
@@ -1258,10 +1710,14 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             stabilizedSegments,
             transcriptAnalysis: analysis
         )
+        let fractionationReconciledSegments = applyFractionationSecondPass(
+            in: enrichedSegments,
+            transcription: transcription
+        )
 
         return PhaseSuggestionTimeline(
             windows: decodedWindows,
-            segments: enrichedSegments
+            segments: fractionationReconciledSegments
         )
     }
 
@@ -1286,19 +1742,10 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             guard let section = transcriptAnalysis.section(at: midpoint) else { return segment }
 
             let currentScore = transcriptSupportScore(for: segment.phase, section: section)
-            // Don't allow a relabel that moves a segment backward in the canonical
-            // phase order: a backward relabel (e.g. induction → pre_talk) doesn't
-            // refine the phase, it erases it by merging into the earlier adjacent
-            // phase, dropping a structural stage the keyword pipeline detected.
-            // Forward refinement (induction → deepening) is still allowed.
-            let currentOrderIndex = Self.orderedPhases.firstIndex(of: segment.phase)
-            let alternatives = candidatePhases(for: segment.phase).filter { candidate in
-                guard
-                    let currentOrderIndex,
-                    let candidateIndex = Self.orderedPhases.firstIndex(of: candidate)
-                else { return true }
-                return candidateIndex >= currentOrderIndex
-            }
+            // Vocabulary order is not transition topology. Real sessions return
+            // from conditioning to suggestions and from suggestions to deepening;
+            // the evidence margin below, not array position, governs relabeling.
+            let alternatives = candidatePhases(for: segment.phase)
             let bestCandidate = alternatives.max { lhs, rhs in
                 transcriptSupportScore(for: lhs, section: section) < transcriptSupportScore(for: rhs, section: section)
             } ?? segment.phase
@@ -1355,7 +1802,7 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         proposalSegments: [PhaseSegment],
         transcription: AudioTranscriptionResult,
         transcriptAnalyzer: TranscriptFeatureAnalyzer
-    ) -> (segments: [PhaseSegment], analysis: TranscriptAnalysis) {
+    ) -> (segments: [PhaseSegment], usedProposal: Bool) {
         let primaryAnalysis = transcriptAnalyzer.analyze(
             transcription: transcription,
             phases: primarySegments
@@ -1365,14 +1812,14 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             duration: transcription.duration
         )
         guard !normalizedProposalSegments.isEmpty else {
-            return (primarySegments, primaryAnalysis)
+            return (primarySegments, false)
         }
 
         // A proposal with overlapping spans is structurally invalid (a timeline
         // cannot be in two phases at once). It must never win over the primary on
         // an intrinsic quality score — reject it outright and keep the primary.
         guard Self.segmentsAreNonOverlapping(normalizedProposalSegments) else {
-            return (primarySegments, primaryAnalysis)
+            return (primarySegments, false)
         }
 
         let proposalAnalysis = transcriptAnalyzer.analyze(
@@ -1401,12 +1848,16 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         let proposalRestoresEmergence =
             proposalAddsTerminalEmergence &&
             proposalScore >= primaryScore - 0.08
+        let proposalRepairsOpening =
+            normalizedProposalSegments.first?.phase.labelingPhase == .induction &&
+            primarySegments.first?.phase.labelingPhase != .induction
 
-        if proposalWinsClearly || proposalWinsCoverageTie || proposalRestoresEmergence {
-            return (normalizedProposalSegments, proposalAnalysis)
+        if proposalWinsClearly || proposalWinsCoverageTie || proposalRestoresEmergence
+            || proposalRepairsOpening {
+            return (normalizedProposalSegments, true)
         }
 
-        return (primarySegments, primaryAnalysis)
+        return (primarySegments, false)
     }
 
     /// True when no two segments overlap in time (sorted by start). A small
@@ -1452,8 +1903,9 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
     /// Cue refinement runs after the second-resolution classifier has already
     /// enforced its minimum phase duration. Re-apply that invariant here so a
     /// handful of phrase-level cues cannot make playback switch modes every few
-    /// seconds. The pre-refinement timeline acts as hysteresis when either
-    /// neighbour agrees with it.
+    /// seconds. On long files, also reject a modestly longer cue island when the
+    /// same stable phase surrounds it and the pre-cue timeline agrees. Explicit
+    /// fractionation, conditioning, and emergence runs remain protected.
     private func stabilizeAdaptedPhaseRuns(
         _ phaseSegments: [PhaseSegment],
         baselineSegments: [PhaseSegment],
@@ -1471,14 +1923,44 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
                 Int(duration * config.collapseThresholdFraction)
             )
         )
+        let weakIslandMaximumDuration = minimumDuration * 1.5
+        let protectedIslandPhases: Set<HypnosisMetadata.Phase> = [
+            .fractionation, .conditioning, .emergence
+        ]
 
         while stabilized.count > 1 {
-            let shortIndices = stabilized.indices.filter {
-                stabilized[$0].endTime - stabilized[$0].startTime < minimumDuration
-            }
-            guard !shortIndices.isEmpty else { break }
+            let weakIslandIndices = stabilized.indices.filter { index in
+                guard
+                    index > stabilized.startIndex,
+                    index < stabilized.index(before: stabilized.endIndex)
+                else {
+                    return false
+                }
 
-            let shortIndex = shortIndices.first(where: { index in
+                let candidate = stabilized[index]
+                let candidatePhase = candidate.phase.labelingPhase
+                guard
+                    protectedIslandPhases.contains(candidatePhase) == false,
+                    candidate.endTime - candidate.startTime < weakIslandMaximumDuration
+                else {
+                    return false
+                }
+
+                let previousPhase = stabilized[stabilized.index(before: index)].phase.labelingPhase
+                let nextPhase = stabilized[stabilized.index(after: index)].phase.labelingPhase
+                guard previousPhase == nextPhase else { return false }
+
+                let midpoint = (candidate.startTime + candidate.endTime) / 2
+                return baselinePhase(at: midpoint, in: baselineSegments) == previousPhase
+            }
+            let shortIndices = stabilized.indices.filter { index in
+                let candidate = stabilized[index]
+                return protectedIslandPhases.contains(candidate.phase.labelingPhase) == false
+                    && candidate.endTime - candidate.startTime < minimumDuration
+            }
+            guard !weakIslandIndices.isEmpty || !shortIndices.isEmpty else { break }
+
+            let shortIndex = weakIslandIndices.first ?? shortIndices.first(where: { index in
                 index > stabilized.startIndex
                     && index < stabilized.index(before: stabilized.endIndex)
                     && stabilized[stabilized.index(before: index)].phase.labelingPhase
@@ -1764,31 +2246,6 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         return mergeAdjacentPhaseSegments(repaired)
     }
 
-    private func preventSuggestionRegressionAfterConditioning(
-        _ phaseSegments: [PhaseSegment]
-    ) -> [PhaseSegment] {
-        var seenConditioning = false
-        let repaired = phaseSegments.map { segment -> PhaseSegment in
-            if segment.phase == .conditioning {
-                seenConditioning = true
-                return segment
-            }
-            if segment.phase == .emergence {
-                return segment
-            }
-            guard
-                seenConditioning,
-                segment.phase == .suggestions
-            else {
-                return segment
-            }
-
-            return copySegment(segment, phase: .conditioning)
-        }
-
-        return mergeAdjacentPhaseSegments(repaired)
-    }
-
     private func repairUnsupportedPhaseAssignments(
         _ phaseSegments: [PhaseSegment],
         transcription: AudioTranscriptionResult,
@@ -2019,6 +2476,14 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         guard !tokens.isEmpty else { return false }
         let tokenSet = Set(tokens)
         let normalizedText = " \(tokens.joined(separator: " ")) "
+        let countTokens = tokenSet.intersection([
+            "one", "two", "three", "four", "five", "1", "2", "3", "4", "5"
+        ])
+        // Describing a future awakening is still suggestion content. Require an
+        // active count or a direct present-tense cue before beginning emergence.
+        if announcesFutureEmergence(in: text), countTokens.count < 2 {
+            return false
+        }
         let phrases = [
             "wide awake", "fully awake", "coming back", "come back",
             "back in the room", "when you wake", "as you return",
@@ -2028,6 +2493,25 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             return true
         }
         return !tokenSet.isDisjoint(with: ["awake", "alert", "refreshed", "energized"])
+    }
+
+    private func announcesFutureEmergence(in text: String) -> Bool {
+        let normalizedText = " \(normalizedTokens(in: text).joined(separator: " ")) "
+        let phrases = [
+            "in a moment", "not just yet", "going to count",
+            "going to come back", "you will come back", "you ll come back",
+            "you'll come back", "you are going to come back",
+            "when i get to", "when we get to", "when i reach", "when we reach",
+            // Post-hypnotic lines describe a waking that happens later, outside
+            // the session. They carry the same waking vocabulary as a real
+            // awakener, so without these a suggestion like "from now on you will
+            // wake refreshed" read as a direct emergence cue and planted an
+            // emergence island in the middle of the suggestions arc.
+            "you will wake", "you ll wake", "you'll wake",
+            "you will awaken", "you ll awaken", "you'll awaken",
+            "when you wake", "from now on you will"
+        ]
+        return phrases.contains { normalizedText.contains(" \($0) ") }
     }
 
     private func activePhaseReplacement(
@@ -2513,64 +2997,12 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         guard !windows.isEmpty else { return [] }
 
         let baseEvidence = windows.map { baseEvidenceBreakdowns(for: $0, duration: duration) }
-        var cumulativeScores = Array(
-            repeating: Array(repeating: Double.leastNormalMagnitude, count: Self.orderedPhases.count),
-            count: windows.count
+        let chosenIndices = phaseSequenceResolver.resolve(
+            emissionScores: baseEvidence.map { $0.map(\.totalScore) },
+            transitionPriors: corpusKnowledge.transitionPriors,
+            transitionPriorMultiplier: corpusLearning.transitionPriorMultiplier
         )
-        var previousChoice = Array(
-            repeating: Array(repeating: -1, count: Self.orderedPhases.count),
-            count: windows.count
-        )
-
-        for phaseIndex in Self.orderedPhases.indices {
-            let startPenalty = Double(max(0, phaseIndex - 2)) * 0.08
-            cumulativeScores[0][phaseIndex] = baseEvidence[0][phaseIndex].totalScore - startPenalty
-        }
-
-        if windows.count > 1 {
-            for windowIndex in 1..<windows.count {
-                for phaseIndex in Self.orderedPhases.indices {
-                    let currentPhase = Self.orderedPhases[phaseIndex]
-                    let emissionScore = baseEvidence[windowIndex][phaseIndex].totalScore
-                    var bestScore = Double.leastNormalMagnitude
-                    var bestPreviousIndex = phaseIndex
-
-                    for previousPhaseIndex in 0...phaseIndex {
-                        let previousPhase = Self.orderedPhases[previousPhaseIndex]
-                        let transitionScore = transitionScore(
-                            from: previousPhase,
-                            to: currentPhase
-                        )
-                        let score = cumulativeScores[windowIndex - 1][previousPhaseIndex]
-                            + emissionScore
-                            + transitionScore
-                        if score > bestScore {
-                            bestScore = score
-                            bestPreviousIndex = previousPhaseIndex
-                        }
-                    }
-
-                    cumulativeScores[windowIndex][phaseIndex] = bestScore
-                    previousChoice[windowIndex][phaseIndex] = bestPreviousIndex
-                }
-            }
-        }
-
-        guard
-            let finalPhaseIndex = cumulativeScores.last?.enumerated().max(by: {
-                $0.element < $1.element
-            })?.offset
-        else {
-            return []
-        }
-
-        var chosenIndices = Array(repeating: 0, count: windows.count)
-        var currentPhaseIndex = finalPhaseIndex
-        for windowIndex in stride(from: windows.count - 1, through: 0, by: -1) {
-            chosenIndices[windowIndex] = currentPhaseIndex
-            guard windowIndex > 0 else { continue }
-            currentPhaseIndex = max(0, previousChoice[windowIndex][currentPhaseIndex])
-        }
+        guard chosenIndices.count == windows.count else { return [] }
 
         return windows.enumerated().map { windowIndex, window in
             let previousPhase = windowIndex > 0
@@ -2631,15 +3063,18 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
             let keywordAlignment = phaseKeywordAlignment(for: phase, section: section)
             let transcriptSupport = transcriptSupportScore(for: phase, section: section)
             let semanticTranscriptScore = (transcriptSupport * 0.50) + (keywordAlignment * 0.50)
-            let transcriptScore = semanticTranscriptScore * 0.52
+            // Position is the strongest measured phase signal in the human-gold
+            // corpus. Keep wording primary, but do not let weak lexical ties
+            // overpower the broad structural arc of a session.
+            let transcriptScore = semanticTranscriptScore * 0.42
             let phraseAlignment = phraseLibraryAlignment(for: phase, section: section)
-            let phraseScore = phraseAlignment.score * 0.24
-            let waymarkerScore = phaseWaymarkerAlignment(for: phase, section: section) * 0.16
+            let phraseScore = phraseAlignment.score * 0.20
+            let waymarkerScore = phaseWaymarkerAlignment(for: phase, section: section) * 0.13
             let positionScore = phasePositionWeight(
                 for: phase,
                 secondIndex: secondIndex,
                 bucketCount: phaseBucketCount
-            ) * 0.08
+            ) * 0.25
             let totalScore = transcriptScore + phraseScore + waymarkerScore + positionScore
 
             return PhaseEvidenceBreakdown(
@@ -2716,30 +3151,11 @@ nonisolated struct HypnosisPhaseAnalyzer: Sendable {
         from previousPhase: HypnosisMetadata.Phase,
         to nextPhase: HypnosisMetadata.Phase
     ) -> Double {
-        guard
-            let previousIndex = Self.orderedPhases.firstIndex(of: previousPhase),
-            let nextIndex = Self.orderedPhases.firstIndex(of: nextPhase)
-        else {
-            return 0.0
-        }
-
-        if nextIndex < previousIndex {
-            return -0.40
-        }
-
-        let jump = nextIndex - previousIndex
-        let priorBonus = transitionPrior(from: previousPhase, to: nextPhase) * 0.30
-
-        switch jump {
-        case 0:
-            return 0.10 + priorBonus
-        case 1:
-            return 0.08 + priorBonus
-        case 2:
-            return 0.03 + priorBonus
-        default:
-            return -0.08 * Double(jump - 2) + priorBonus
-        }
+        phaseSequenceResolver.transitionScore(
+            from: previousPhase,
+            to: nextPhase,
+            learnedPrior: transitionPrior(from: previousPhase, to: nextPhase)
+        )
     }
 
     private func suggestionConfidence(

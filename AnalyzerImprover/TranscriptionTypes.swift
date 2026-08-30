@@ -2,61 +2,16 @@
 //  TranscriptionTypes.swift
 //  AnalyzerImprover
 //
-//  Shared transcript models used by the analyzer optimizer when running from
-//  cached transcript exports.
+//  AnalyzerImprover-specific errors. The transcript value types themselves live
+//  in Ilumionate/AudioTranscriptionResult.swift, which was extracted from
+//  AudioAnalyzer precisely so tools that only read cached transcripts could
+//  share them without linking a speech recogniser. This file used to carry its
+//  own copies; they drifted (the shared type sanitizes text and drops empty
+//  segments, these did not) and collided once the shared file was added to this
+//  target's membership list. See ERRORS.md ERR-018.
 //
 
 import Foundation
-
-struct AudioTranscriptionResult: Codable, Sendable {
-    let fullText: String
-    let segments: [AudioTranscriptionSegment]
-    let duration: TimeInterval
-    let locale: String
-
-    init(
-        fullText: String,
-        segments: [AudioTranscriptionSegment],
-        duration: TimeInterval,
-        detectedLanguage: String
-    ) {
-        self.fullText = fullText
-        self.segments = segments
-        self.duration = duration
-        self.locale = detectedLanguage
-    }
-
-    var wordCount: Int {
-        fullText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
-    }
-
-    var averageConfidence: Double {
-        guard !segments.isEmpty else { return 0 }
-        return segments.map(\.confidence).reduce(0, +) / Double(segments.count)
-    }
-}
-
-struct AudioTranscriptionSegment: Codable, Identifiable, Sendable {
-    let id: UUID
-    let text: String
-    let timestamp: TimeInterval
-    let duration: TimeInterval
-    let confidence: Double
-
-    init(
-        id: UUID = UUID(),
-        text: String,
-        timestamp: TimeInterval,
-        duration: TimeInterval,
-        confidence: Double
-    ) {
-        self.id = id
-        self.text = text
-        self.timestamp = timestamp
-        self.duration = duration
-        self.confidence = confidence
-    }
-}
 
 enum AnalyzerError: LocalizedError {
     case whisperKitNotInitialized

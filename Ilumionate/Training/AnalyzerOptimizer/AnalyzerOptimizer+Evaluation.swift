@@ -18,7 +18,7 @@ extension AnalyzerOptimizer {
         onProgress: (@Sendable (Progress) async -> Void)? = nil
     ) async throws -> MeasurementResult {
         try Task.checkCancellation()
-        let dataset = try loadDataset()
+        let dataset = try loadDataset().trustedForLearning
         guard !dataset.examples.isEmpty else {
             throw AnalyzerOptimizerError.emptyDataset
         }

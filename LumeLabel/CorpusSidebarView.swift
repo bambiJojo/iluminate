@@ -29,6 +29,7 @@ struct CorpusSidebarView: View {
     }
 
     @Environment(TrainingCorpusManager.self) private var corpus
+    @Environment(LabelingSprintController.self) private var labelingSprint
     @Binding var selectedFileID: LabeledFile.ID?
     @State private var isFileImporterPresented = false
     @State private var importRequest: ImportRequest = .audio
@@ -36,94 +37,139 @@ struct CorpusSidebarView: View {
     @State private var alertMessage: String?
     @State private var workflow = TrainingWorkflowController()
     @State private var bulkTranscription = BulkTranscriptionController()
+    @State private var bambiDerivation = BambiDerivedLabelingController.shared
     @State private var sortOrder: CorpusSortOrder = .name
 
     /// Recomputed rather than observed: the cache is written by a background run
     /// and by the detail editor, so the filesystem is the only source that is
     /// always right. Refreshed when the corpus changes or a bulk run advances.
     @State private var transcribedHashes: Set<String> = []
+    @State private var bambiTranscriptHashes: Set<String> = []
 
     private var sortedFiles: [LabeledFile] {
         TranscriptInventory.sorted(corpus.labeledFiles, by: sortOrder, transcribed: transcribedHashes)
     }
 
+    private var displayedFiles: [LabeledFile] {
+        if labelingSprint.isActive {
+            return labelingSprint.queuedFiles(
+                from: corpus.labeledFiles,
+                bambiTranscriptHashes: bambiTranscriptHashes
+            )
+        }
+        return sortedFiles
+    }
+
+    private var transcriptionAvailability: BulkTranscriptionAvailability {
+        BulkTranscriptionAvailability(
+            files: corpus.labeledFiles,
+            transcribedHashes: transcribedHashes
+        )
+    }
+
+    private var bambiAvailability: BambiDerivedLabelingAvailability {
+        BambiDerivedLabelingAvailability(
+            files: corpus.labeledFiles,
+            transcribedHashes: transcribedHashes
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            CorpusTrainingWorkflowPanel(
-                totalFileCount: corpus.labeledFiles.count,
-                labeledFileCount: corpus.labeledFiles.filter { $0.status != .unlabeled }.count,
-                workflow: workflow
-            )
+            if labelingSprint.isActive {
+                GoldSprintProgressPanel(
+                    progress: labelingSprint.progress(in: corpus.labeledFiles),
+                    onPause: pauseSprint
+                )
+            } else {
+                GoldSprintLaunchPanel(
+                    hasExistingPlan: labelingSprint.hasPlan,
+                    progress: labelingSprint.progress(in: corpus.labeledFiles),
+                    onStart: beginOrResumeSprint
+                )
 
-            if bulkTranscription.isRunning || bulkTranscription.statusMessage != nil {
-                BulkTranscriptionBanner(controller: bulkTranscription)
+                CorpusTrainingWorkflowPanel(
+                    totalFileCount: corpus.labeledFiles.count,
+                    labeledFileCount: corpus.labeledFiles.filter { $0.status != .unlabeled }.count,
+                    workflow: workflow
+                )
+
+                BambiSafetyPanel(
+                    controller: bambiDerivation,
+                    availability: bambiAvailability,
+                    isBlocked: bulkTranscription.isRunning,
+                    onStart: { bambiDerivation.start(corpus: corpus) },
+                    onStop: { bambiDerivation.cancel() }
+                )
+
+                BulkTranscriptionPanel(
+                    controller: bulkTranscription,
+                    availability: transcriptionAvailability,
+                    isBlocked: bambiDerivation.isRunning,
+                    onStart: { bulkTranscription.start(corpus: corpus) },
+                    onStop: {
+                        bulkTranscription.cancel()
+                        refreshTranscribedHashes()
+                    }
+                )
             }
 
-            List(sortedFiles, selection: $selectedFileID) { file in
+            List(displayedFiles, selection: $selectedFileID) { file in
                 CorpusFileRow(
                     file: file,
                     hasTranscript: transcribedHashes.contains(file.audioSHA256)
                 )
                     .tag(file.id)
                     .contextMenu {
-                        Button("Delete", role: .destructive) {
-                            Task { await delete(file) }
+                        if !labelingSprint.isActive {
+                            Button("Delete", role: .destructive) {
+                                Task { await delete(file) }
+                            }
                         }
                     }
             }
         }
         .task(id: corpus.labeledFiles.count) { refreshTranscribedHashes() }
         .onChange(of: bulkTranscription.completed) { refreshTranscribedHashes() }
+        .onChange(of: bambiDerivation.completed) { refreshTranscribedHashes() }
         .navigationTitle("Corpus")
         .navigationSubtitle(subtitleText)
         .toolbar {
-            ToolbarItemGroup(placement: .secondaryAction) {
-                Button("Measure", systemImage: TrainingWorkflowAction.measure.systemImage) {
-                    workflow.startMeasure()
-                }
-                .disabled(workflow.isRunning || workflow.datasetSnapshot.validExampleCount == 0)
-
-                Button("Optimize", systemImage: TrainingWorkflowAction.optimize.systemImage) {
-                    workflow.startOptimize()
-                }
-                .disabled(workflow.isRunning || workflow.datasetSnapshot.validExampleCount == 0)
-            }
-
-            ToolbarItem(placement: .automatic) {
-                Picker("Sort", selection: $sortOrder) {
-                    ForEach(CorpusSortOrder.allCases, id: \.rawValue) { order in
-                        Text(order.label).tag(order)
+            if !labelingSprint.isActive {
+                ToolbarItemGroup(placement: .secondaryAction) {
+                    Button("Measure", systemImage: TrainingWorkflowAction.measure.systemImage) {
+                        workflow.startMeasure()
                     }
+                    .disabled(workflow.isRunning || workflow.datasetSnapshot.validExampleCount == 0)
+
+                    Button("Optimize", systemImage: TrainingWorkflowAction.optimize.systemImage) {
+                        workflow.startOptimize()
+                    }
+                    .disabled(workflow.isRunning || workflow.datasetSnapshot.validExampleCount == 0)
                 }
-                .pickerStyle(.menu)
-            }
 
-            ToolbarItem(placement: .automatic) {
-                if bulkTranscription.isRunning {
-                    Button("Stop", systemImage: "stop.fill") {
-                        bulkTranscription.cancel()
-                        refreshTranscribedHashes()
+                ToolbarItem(placement: .automatic) {
+                    Picker("Sort", selection: $sortOrder) {
+                        ForEach(CorpusSortOrder.allCases, id: \.rawValue) { order in
+                            Text(order.label).tag(order)
+                        }
                     }
-                } else {
-                    Button("Transcribe All", systemImage: "waveform.badge.plus") {
-                        bulkTranscription.start(corpus: corpus)
-                    }
-                    .disabled(corpus.labeledFiles.isEmpty)
+                    .pickerStyle(.menu)
                 }
-            }
 
-            ToolbarItem(placement: .primaryAction) {
-                Menu("Import", systemImage: "plus") {
-                    Button("Import Audio", systemImage: "waveform") {
-                        importRequest = .audio
-                        isFileImporterPresented = true
-                    }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu("Import", systemImage: "plus") {
+                        Button("Import Audio", systemImage: "waveform") {
+                            importRequest = .audio
+                            isFileImporterPresented = true
+                        }
 
-                    Menu("Batch Label Folder", systemImage: "folder.badge.plus") {
-                        ForEach(TrancePhase.orderedHypnosisPhases, id: \.rawValue) { phase in
-                            Button(phase.displayName) {
-                                importRequest = .folder(phase)
-                                isFileImporterPresented = true
+                        Menu("Batch Label Folder", systemImage: "folder.badge.plus") {
+                            ForEach(TrancePhase.orderedHypnosisPhases, id: \.rawValue) { phase in
+                                Button(phase.displayName) {
+                                    importRequest = .folder(phase)
+                                    isFileImporterPresented = true
+                                }
                             }
                         }
                     }
@@ -163,12 +209,45 @@ struct CorpusSidebarView: View {
 
     private func refreshTranscribedHashes() {
         transcribedHashes = TranscriptInventory.availableHashes(in: corpus.analyzerDatasetDirectory)
+        bambiTranscriptHashes = BambiSafetyPolicy.transcriptHashesRequiringTranscriptOnlyLabeling(
+            in: corpus.labeledFiles,
+            datasetDirectory: corpus.analyzerDatasetDirectory
+        )
     }
 
     private var subtitleText: String {
+        if labelingSprint.isActive {
+            let progress = labelingSprint.progress(in: corpus.labeledFiles)
+            return "Gold sprint · \(progress.completedCount)/\(progress.targetCount)"
+        }
         let total = corpus.labeledFiles.count
         let labeled = corpus.labeledFiles.filter { $0.status != .unlabeled }.count
         return "\(labeled)/\(total) labeled"
+    }
+
+    private func beginOrResumeSprint() {
+        let currentBambiTranscriptHashes =
+            BambiSafetyPolicy.transcriptHashesRequiringTranscriptOnlyLabeling(
+                in: corpus.labeledFiles,
+                datasetDirectory: corpus.analyzerDatasetDirectory
+            )
+        if labelingSprint.hasPlan {
+            selectedFileID = labelingSprint.resume(
+                files: corpus.labeledFiles,
+                bambiTranscriptHashes: currentBambiTranscriptHashes
+            )
+        } else {
+            selectedFileID = labelingSprint.start(
+                files: corpus.labeledFiles,
+                targetCount: 25,
+                transcribedHashes: transcribedHashes,
+                bambiTranscriptHashes: currentBambiTranscriptHashes
+            )
+        }
+    }
+
+    private func pauseSprint() {
+        labelingSprint.pause()
     }
 
     private var workflowRefreshKey: String {
@@ -263,11 +342,105 @@ struct CorpusSidebarView: View {
 
 // MARK: - File Row
 
-struct BulkTranscriptionBanner: View {
-    let controller: BulkTranscriptionController
+private struct GoldSprintLaunchPanel: View {
+    let hasExistingPlan: Bool
+    let progress: LabelingSprintController.Progress
+    let onStart: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Label("Gold Sprint", systemImage: "target")
+                    .font(.headline)
+
+                Spacer()
+
+                Button(hasExistingPlan ? "Resume" : "Start", action: onStart)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(progress.remainingCount == 0)
+            }
+
+            Text("\(progress.completedCount) of \(progress.targetCount) gold files")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .controlSize(.small)
+        .padding(12)
+        .background(.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+    }
+}
+
+private struct GoldSprintProgressPanel: View {
+    let progress: LabelingSprintController.Progress
+    let onPause: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Gold Sprint", systemImage: "target")
+                    .font(.headline)
+                Spacer()
+                Button("Pause", action: onPause)
+                    .buttonStyle(.bordered)
+            }
+
+            ProgressView(value: progress.fractionCompleted)
+
+            HStack {
+                Text("\(progress.completedCount) of \(progress.targetCount) gold files")
+                Spacer()
+                Text("\(progress.remainingCount) remaining")
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+
+            if progress.deferredCount > 0 {
+                Text("\(progress.deferredCount) deferred and replaced")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .controlSize(.small)
+        .padding(12)
+        .background(.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+    }
+}
+
+struct BulkTranscriptionPanel: View {
+    let controller: BulkTranscriptionController
+    let availability: BulkTranscriptionAvailability
+    let isBlocked: Bool
+    let onStart: () -> Void
+    let onStop: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("Transcripts", systemImage: "text.bubble")
+                        .font(.headline)
+                    Text(availability.summary)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if controller.isRunning {
+                    Button("Stop", systemImage: "stop.fill", action: onStop)
+                        .buttonStyle(.bordered)
+                } else {
+                    Button(availability.actionTitle, systemImage: "waveform.badge.plus", action: onStart)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(availability.pendingCount == 0 || isBlocked)
+                        .help("Generate transcripts for every file that does not already have one.")
+                }
+            }
+
             if controller.isRunning {
                 ProgressView(value: controller.progress)
                 Text(controller.currentFilename ?? "Starting…")
@@ -292,8 +465,81 @@ struct BulkTranscriptionBanner: View {
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 6)
+        .controlSize(.small)
+        .padding(12)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 8)
+        .padding(.bottom, 4)
+    }
+}
+
+struct BambiSafetyPanel: View {
+    let controller: BambiDerivedLabelingController
+    let availability: BambiDerivedLabelingAvailability
+    let isBlocked: Bool
+    let onStart: () -> Void
+    let onStop: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("Bambi Safety", systemImage: "shield.fill")
+                        .font(.headline)
+                    Text(availability.summary)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if controller.isRunning {
+                    Button("Stop", systemImage: "stop.fill", action: onStop)
+                        .buttonStyle(.bordered)
+                } else {
+                    Button(availability.actionTitle, systemImage: "text.badge.checkmark", action: onStart)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(availability.pendingCount == 0 || isBlocked)
+                }
+            }
+
+            Text("Transcript-only · no audio playback · human labels are never overwritten")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            if controller.isRunning {
+                ProgressView(value: controller.progress)
+                Text(controller.currentFilename ?? "Starting…")
+                    .lineLimit(1)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("\(controller.stage?.rawValue ?? "Preparing") · \(controller.completed) of \(controller.total)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else if let statusMessage = controller.statusMessage {
+                Text(statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(controller.failures.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
+            }
+
+            if availability.protectedHumanCount > 0 {
+                Text("\(availability.protectedHumanCount) existing human-labeled file\(availability.protectedHumanCount == 1 ? " is" : "s are") protected")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(controller.failures.prefix(3), id: \.filename) { failure in
+                Text("\(failure.filename): \(failure.reason)")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+        }
+        .controlSize(.small)
+        .padding(12)
+        .background(Color.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 8)
+        .padding(.bottom, 4)
     }
 }
 
@@ -325,13 +571,20 @@ struct CorpusFileRow: View {
         .padding(.vertical, 2)
     }
 
+    @ViewBuilder
     private var statusIcon: some View {
-        let (icon, color): (String, Color) = switch file.status {
-        case .unlabeled: ("circle.dashed", .secondary)
-        case .rough:     ("circle.lefthalf.filled", .orange)
-        case .refined:   ("checkmark.circle.fill", .green)
+        if BambiSafetyPolicy.isTranscriptOnlySilver(file) {
+            Image(systemName: "shield.lefthalf.filled")
+                .foregroundStyle(Color.purple)
+                .help("Transcript-only derived silver label — independent review required")
+        } else {
+            let (icon, color): (String, Color) = switch file.status {
+            case .unlabeled: ("circle.dashed", .secondary)
+            case .rough:     ("circle.lefthalf.filled", .orange)
+            case .refined:   ("checkmark.circle.fill", .green)
+            }
+            Image(systemName: icon)
+                .foregroundStyle(color)
         }
-        return Image(systemName: icon)
-            .foregroundStyle(color)
     }
 }

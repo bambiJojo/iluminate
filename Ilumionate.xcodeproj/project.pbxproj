@@ -19,7 +19,6 @@
 		79D548392F4F723B00B3B07F /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 79D548382F4F723B00B3B07F /* WhisperKit */; };
 		79D5483B2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */; };
 		79D5483D2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */; };
-		79D548412F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */; };
 		A1B2C3022FF1000000000002 /* IlumionateShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C3012FF1000000000001 /* IlumionateShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B3DBB1014D277A17D1ADB4CD /* CorpusKit in Frameworks */ = {isa = PBXBuildFile; productRef = B3DBB1024D277A17D1ADB4CD /* CorpusKit */; };
 /* End PBXBuildFile section */
@@ -89,7 +88,6 @@
 		79999FDA2F7B8A4900DC1F2D /* LumeLabelUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LumeLabelUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightScoreGenerator.swift; sourceTree = "<group>"; };
 		79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLightSyncPlayer.swift; sourceTree = "<group>"; };
-		79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ENHANCED_LIGHT_SCORE_GUIDE.md; sourceTree = "<group>"; };
 		79E9C70F2FE2000000C0DEC0 /* ScriptCorpus */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ScriptCorpus; sourceTree = "<group>"; };
 		83640685C4B57F62AB496B2B /* AnalyzerImprover */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = AnalyzerImprover; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3012FF1000000000001 /* IlumionateShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = IlumionateShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -100,21 +98,33 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AIAnalysisModels.swift,
+				AIGenerationDiagnosis.swift,
 				AnalyzerConfig/AnalyzerConfig.swift,
 				AnalyzerConfig/AnalyzerConfigLoader.swift,
+				AnalyzerConfig/CorpusPhaseKnowledgeSnapshot.swift,
+				AppStoragePaths.swift,
 				AudioContentType.swift,
 				AudioEnergyAnalyzer.swift,
 				AudioFile.swift,
+				AudioStorageLocation.swift,
 				AudioTrackMetadata.swift,
+				AudioTranscriptionResult.swift,
+				BundledAudioTranscriptCatalog.swift,
 				ChunkedPhaseAnalyzer.swift,
 				"ChunkedPhaseAnalyzer+Smoothing.swift",
 				CorpusPhaseKnowledge.swift,
 				HypnosisPhaseAnalyzer.swift,
 				HypnosisPhaseKeywords.swift,
 				HypnosisPhraseLexicons.swift,
+				LibraryDedupe/RemoteAudioSource.swift,
 				Logging.swift,
+				PrivateStorageMigration.swift,
+				ProsodicProfile.swift,
+				ProsodyAnalyzer.swift,
+				"ProsodyAnalyzer+PauseDetection.swift",
 				TechniqueDetector.swift,
 				"TechniqueDetector+AdvancedTechniques.swift",
+				TimestampedTranscriptBuilder.swift,
 				Training/AnalyzerOptimizer/AnalyzerEvaluationEngine.swift,
 				Training/AnalyzerOptimizer/AnalyzerMetrics.swift,
 				Training/AnalyzerOptimizer/AnalyzerMutationEngine.swift,
@@ -135,9 +145,9 @@
 		79999FF72F7C46C700DC1F2D /* Exceptions for "Ilumionate" folder in "LumeLabel" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Training/TranscriptInventory.swift,
 				AnalyzerConfig/AnalyzerConfig.swift,
 				AnalyzerConfig/AnalyzerConfigLoader.swift,
+				AnalyzerConfig/CorpusPhaseKnowledgeSnapshot.swift,
 				AppStoragePaths.swift,
 				AudioAnalyzer.swift,
 				AudioContentType.swift,
@@ -151,6 +161,7 @@
 				HypnosisPhraseLexicons.swift,
 				KnownAudioCatalog.json,
 				Logging.swift,
+				LongFormTranscription.swift,
 				PerformanceTrace.swift,
 				PrivateStorageMigration.swift,
 				ProsodicProfile.swift,
@@ -168,6 +179,7 @@
 				Training/LabeledFile.swift,
 				Training/ScriptPhaseCorpus.swift,
 				Training/TrainingCorpusManager.swift,
+				Training/TranscriptInventory.swift,
 				TranscriptFeatureAnalyzer.swift,
 				TranscriptModels.swift,
 				WordTimestamp.swift,
@@ -325,7 +337,6 @@
 				795944042F38010900907305 /* Products */,
 				79D5483A2F4F76EF00B3B07F /* AudioLightScoreGenerator.swift */,
 				79D5483C2F4F7B7F00B3B07F /* AudioLightSyncPlayer.swift */,
-				79D548402F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md */,
 				7988F3932F4FB6E700E1DC5E /* Playlist.swift */,
 				7988F3952F4FB70800E1DC5E /* PlaylistEditorView.swift */,
 				7988F3972F4FB79400E1DC5E /* PlaylistLibraryView.swift */,
@@ -633,7 +644,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				79D548412F4F88AB00B3B07F /* ENHANCED_LIGHT_SCORE_GUIDE.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -913,7 +923,7 @@
 				CODE_SIGN_ENTITLEMENTS = Ilumionate/Ilumionate.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Ilumionate/IlumionateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10021;
+				CURRENT_PROJECT_VERSION = 10022;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -931,7 +941,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.7.6;
+				MARKETING_VERSION = 0.7.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -961,7 +971,7 @@
 				CODE_SIGN_ENTITLEMENTS = Ilumionate/Ilumionate.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Ilumionate/IlumionateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10021;
+				CURRENT_PROJECT_VERSION = 10022;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -979,7 +989,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.7.6;
+				MARKETING_VERSION = 0.7.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -1276,7 +1286,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = IlumionateShareExtension/IlumionateShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10021;
+				CURRENT_PROJECT_VERSION = 10022;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
@@ -1286,7 +1296,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.7.6;
+				MARKETING_VERSION = 0.7.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -1311,7 +1321,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = IlumionateShareExtension/IlumionateShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10021;
+				CURRENT_PROJECT_VERSION = 10022;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
@@ -1321,7 +1331,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.7.6;
+				MARKETING_VERSION = 0.7.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

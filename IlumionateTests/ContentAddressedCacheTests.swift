@@ -154,7 +154,9 @@ struct CacheKeyFallbackTests {
             createdDate: Date()
         )
         let key = AnalysisStateManager.cacheKey(for: file)
-        #expect(key == file.id.uuidString,
-            "Must fall back to UUID when file can't be read, got: \(key)")
+        #expect(
+            key == "\(file.id.uuidString):\(AnalysisStateManager.currentModelVersion)",
+            "Legacy UUID-backed entries must still include the analysis version so analyzer improvements invalidate them."
+        )
     }
 }

@@ -566,10 +566,10 @@ class AnalysisStateManager {
 
     // MARK: Content-Addressed Key
 
-    /// WhisperKit model version baked into every cache key.
+    /// Complete transcription-and-analysis pipeline version baked into every cache key.
     /// Incrementing this string automatically invalidates all existing entries
-    /// and forces re-analysis — do this after upgrading the WhisperKit model.
-    nonisolated static let currentModelVersion = "base-v4-catalog-verification"
+    /// and forces re-analysis after either the model or analyzer behavior changes.
+    nonisolated static let currentModelVersion = "base-v5-analyzer-knowledge-v1"
 
     /// Returns a content-addressed cache key: SHA-256 of the complete audio file,
     /// followed by a colon and the model version string.
@@ -582,7 +582,7 @@ class AnalysisStateManager {
         }
         // Fingerprints are computed by the import worker. Never hash an entire
         // legacy audio file synchronously from this MainActor cache lookup.
-        return audioFile.id.uuidString
+        return "\(audioFile.id.uuidString):\(currentModelVersion)"
     }
 
     /// Computes SHA-256 of the complete contents of `url`.

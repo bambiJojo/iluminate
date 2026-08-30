@@ -3,9 +3,12 @@
 //  LumeLabel
 //
 //  Keyboard shortcuts:
-//    1–9     Mark phase at playhead
+//    B       Mark transition at playhead
+//    1–9     Name selected segment
 //    Space   Play / Pause
 //    ←  →   Seek ±10 seconds
+//    [  ]    Previous / next pending candidate
+//    M / D   Matches / dismiss selected candidate
 //    ⌘S     Save
 //
 
@@ -14,10 +17,14 @@ import SwiftUI
 @MainActor
 struct LabelingDetailView: View {
     @Environment(TrainingCorpusManager.self) private var corpus
+    @Environment(LabelingSprintController.self) private var labelingSprint
 
     let fileID: LabeledFile.ID
+    let onSavedAndNext: (LabeledFile.ID) -> Void
+    let onDefer: (LabeledFile.ID) -> Void
 
     @State private var editor: LabelingDetailEditor?
+    @State var isConfirmingAnalyzerReview = false
 
     var body: some View {
         Group {
@@ -40,9 +47,18 @@ struct LabelingDetailView: View {
                 return
             }
             let newEditor = LabelingDetailEditor(file: file, corpus: corpus)
+            await newEditor.restoreWorkInProgressIfAvailable()
+            guard !Task.isCancelled else { return }
             newEditor.preparePlayer()
-            await newEditor.loadTranscriptIfAvailable()
             editor = newEditor
+
+            // Let the selection and first detail layout finish before doing
+            // transcript work. A rapid second selection cancels this task at
+            // the yield instead of finishing work for a detail view that is
+            // already disappearing.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            await newEditor.loadTranscriptIfAvailable()
         }
         .onDisappear {
             editor?.cleanup()
@@ -55,21 +71,39 @@ struct LabelingDetailView: View {
         } message: {
             Text(editor?.alertMessage ?? "")
         }
+        .confirmationDialog(
+            "Reveal analyzer suggestions?",
+            isPresented: $isConfirmingAnalyzerReview,
+            titleVisibility: .visible
+        ) {
+            Button("Lock Labels and Reveal") {
+                _ = editor?.enterAnalyzerReview()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The current saved timeline will become the preserved blind baseline. Analyzer review is read-only, so suggestions cannot alter those labels.")
+        }
     }
 
     @ViewBuilder
     private func detailBody(_ editor: LabelingDetailEditor) -> some View {
         VStack(spacing: 0) {
-            phaseArc(editor)
-                .padding([.horizontal, .top])
-                .padding(.bottom, 4)
+            PlaybackUpdateScope {
+                phaseArc(editor)
+                    .padding([.horizontal, .top])
+                    .padding(.bottom, 4)
+            }
 
-            overviewStrip(editor)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+            PlaybackUpdateScope {
+                overviewStrip(editor)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+            }
 
             Divider()
-            transportBar(editor).padding()
+            PlaybackUpdateScope {
+                transportBar(editor).padding()
+            }
             Divider()
 
             HStack(alignment: .top, spacing: 0) {
@@ -86,21 +120,57 @@ struct LabelingDetailView: View {
             }
             .frame(minHeight: 220)
 
-            Divider()
-            metadataBar(editor)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
+            if !labelingSprint.isActive {
+                Divider()
+                metadataBar(editor)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+            }
         }
         .navigationTitle(editor.draft.audioFilename)
         .toolbar {
+            if labelingSprint.isActive {
+                ToolbarItem(placement: .secondaryAction) {
+                    Button("Defer", systemImage: "arrow.right.to.line") {
+                        onDefer(fileID)
+                    }
+                    .disabled(editor.isSaving)
+                    .help("Move this file out of the sprint and replace it with another.")
+                }
+            }
+
             ToolbarItem(placement: .primaryAction) {
-                Button("Save") {
-                    Task { await editor.save() }
+                Button(labelingSprint.isActive ? "Save & Next" : "Save") {
+                    Task {
+                        let didSave = await editor.save()
+                        if didSave, labelingSprint.isActive {
+                            onSavedAndNext(fileID)
+                        }
+                    }
                 }
                 .keyboardShortcut("s")
-                .disabled(editor.isSaving)
+                .disabled(editor.isAnalyzerReviewMode || editor.isSaving || !editor.isReadyToSave)
+                .help(
+                    editor.isAnalyzerReviewMode
+                        ? "The blind timeline is locked during analyzer review."
+                        : (editor.isReadyToSave
+                            ? (labelingSprint.isActive ? "Save labels and open the next sprint file" : "Save labels")
+                            : (editor.labelValidationMessage ?? "Review the phase timeline"))
+                )
             }
+            ToolbarItem { saveStateBadge(editor) }
             ToolbarItem { statusBadge(editor) }
         }
+    }
+}
+
+/// Keeps rapidly changing playback state from invalidating the entire detail
+/// editor. Observable reads performed by `content` belong to this small view's
+/// body instead of `LabelingDetailView.body`.
+private struct PlaybackUpdateScope<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
     }
 }

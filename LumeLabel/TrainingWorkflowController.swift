@@ -280,10 +280,7 @@ struct TrainingWorkflowDatasetSnapshot: Sendable {
     }
 
     private nonisolated static func isSilverLabel(_ example: AnalyzerOptimizationDataset.Example) -> Bool {
-        example.example.labels.labelerNotes
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .hasPrefix("silver label:")
+        example.example.labelTrust == .derivedSilver
     }
 
     private nonisolated static func phaseSortIndex(_ phase: TrancePhase) -> Int {

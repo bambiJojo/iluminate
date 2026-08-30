@@ -9,6 +9,25 @@ import Foundation
 import os
 import CryptoKit
 
+/// Trust level attached to analyzer labels. Existing exports encode provenance
+/// in `labelerNotes`; this type keeps that compatibility detail behind one
+/// interface so learning and evaluation do not mistake derived labels for gold.
+nonisolated enum AnalyzerLabelTrust: String, Codable, Sendable {
+    case humanGold = "human_gold"
+    case derivedSilver = "derived_silver"
+
+    init(labelerNotes: String) {
+        let normalized = labelerNotes
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        self = normalized.hasPrefix("silver label:") ? .derivedSilver : .humanGold
+    }
+
+    var isTrustedForLearning: Bool {
+        self == .humanGold
+    }
+}
+
 nonisolated struct LabeledFile: Codable, Identifiable, Sendable {
     var id: UUID = UUID()
     var version: Int = 2
@@ -24,6 +43,9 @@ nonisolated struct LabeledFile: Codable, Identifiable, Sendable {
     var labelerNotes: String
 
     nonisolated var audioFilename: String { originalFilename }
+    nonisolated var analyzerLabelTrust: AnalyzerLabelTrust {
+        AnalyzerLabelTrust(labelerNotes: labelerNotes)
+    }
 
     var status: LabelStatus {
         if phases.isEmpty { return .unlabeled }
@@ -346,6 +368,12 @@ nonisolated struct AnalyzerTrainingExample: Codable, Sendable {
         let startTime: TimeInterval
         let endTime: TimeInterval
         let durationSeconds: TimeInterval
+    }
+}
+
+extension AnalyzerTrainingExample {
+    nonisolated var labelTrust: AnalyzerLabelTrust {
+        AnalyzerLabelTrust(labelerNotes: labels.labelerNotes)
     }
 }
 

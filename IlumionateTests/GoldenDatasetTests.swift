@@ -171,8 +171,22 @@ struct GoldenDatasetTests {
         }
     }
 
-    /// This fixture's ground-truth arc is forward-only, even though the analyzer
-    /// permits sustained returns to earlier phases in other session structures.
+    /// The structural backbone runs forward: a session does not return to
+    /// induction after suggestions, or re-deepen after emergence.
+    ///
+    /// **`fractionation` is deliberately exempt.** It sits at index 1 in
+    /// `orderedHypnosisPhases`, before `deepening`, but it is not a stage a
+    /// session passes through once — it is a repeated, deliberate return to a
+    /// lighter state, interleaved with deepening (see `TrancePhase`: contour
+    /// `fast-osc`, depth 0.42 against deepening's 0.62). `deepening →
+    /// fractionation → deepening` is textbook practice, so scoring it as a
+    /// backward step asserts something untrue of real hypnosis rather than
+    /// catching a regression.
+    ///
+    /// That exemption is the whole reason this test failed when the target was
+    /// widened from five phases to seven: `fractionation` stopped folding into
+    /// `deepening` and became a distinct, legitimately-recurring index. See
+    /// ERRORS.md ERR-020.
     @Test func classicHypnosisPhasesAreStrictlyForwardOrdered() {
         // Derived from the taxonomy rather than restated, so the two cannot
         // drift. Phases outside the target vocabulary are projected onto it,
@@ -183,12 +197,42 @@ struct GoldenDatasetTests {
 
         var lastIndex = -1
         for phase in phases {
-            if let idx = canonical.firstIndex(of: phase.labelingPhase) {
+            let projected = phase.labelingPhase
+            guard projected != .fractionation else { continue }
+            if let idx = canonical.firstIndex(of: projected) {
                 #expect(idx >= lastIndex,
                     "Phase '\(phase.rawValue)' appeared out of canonical order")
                 lastIndex = idx
             }
         }
+    }
+
+    /// Guards the exemption above rather than trusting the comment: a
+    /// fractionation segment between two deepening segments must not be scored
+    /// as a backward step. Written against the ordering rule directly, because
+    /// the canned fixture does not currently produce that arrangement — which is
+    /// exactly why the invalid invariant survived unnoticed.
+    @Test func fractionationBetweenDeepeningIsNotABackwardStep() {
+        let canonical = HypnosisMetadata.Phase.orderedHypnosisPhases
+        let arc: [HypnosisMetadata.Phase] = [
+            .induction, .deepening, .fractionation, .deepening, .suggestions, .emergence
+        ]
+
+        var lastIndex = -1
+        var backwardSteps = 0
+        for phase in arc {
+            let projected = phase.labelingPhase
+            guard projected != .fractionation else { continue }
+            if let idx = canonical.firstIndex(of: projected) {
+                if idx < lastIndex { backwardSteps += 1 }
+                lastIndex = idx
+            }
+        }
+
+        #expect(backwardSteps == 0)
+        // The exemption must be load-bearing, not decorative: without it this
+        // same arc does step backwards.
+        #expect(canonical.firstIndex(of: .fractionation)! < canonical.firstIndex(of: .deepening)!)
     }
 
     /// Emergence should be confined to the final quarter of the session.

@@ -182,6 +182,39 @@ struct AnalyzerOptimizerTests {
     }
 
     @Test
+    func metricsTreatChronologicalRecurrentPhasesAsStructurallyValid() {
+        let labeled = makeLabeledFile(
+            originalFilename: "recurrent.wav",
+            storedAudioFilename: "recurrent.wav",
+            phases: [
+                .init(phase: .suggestions, startTime: 0, endTime: 20),
+                .init(phase: .conditioning, startTime: 20, endTime: 40),
+                .init(phase: .suggestions, startTime: 40, endTime: 60)
+            ]
+        )
+        let example = labeled.analyzerTrainingExample(
+            exportedAt: Date(timeIntervalSince1970: 1_000),
+            datasetRelativeAudioPath: "AnalyzerDataset/audio/recurrent.wav",
+            datasetRelativeExamplePath: "AnalyzerDataset/examples/\(labeled.id.uuidString).json"
+        )
+        let predicted = [
+            PhaseSegment(phase: .suggestions, startTime: 0, endTime: 20, characteristics: "", tranceDepthEstimate: 0.72),
+            PhaseSegment(phase: .conditioning, startTime: 20, endTime: 40, characteristics: "", tranceDepthEstimate: 0.58),
+            PhaseSegment(phase: .suggestions, startTime: 40, endTime: 60, characteristics: "", tranceDepthEstimate: 0.72)
+        ]
+
+        let metrics = AnalyzerMetrics.score(
+            example: example,
+            predictedSegments: predicted,
+            predictedContentType: .hypnosis,
+            boundaryToleranceSeconds: 5
+        )
+
+        #expect(metrics.orderValidity == 1.0)
+        #expect(abs(metrics.overallScore - 1.0) < 0.000_000_001)
+    }
+
+    @Test
     func boundaryScoreRetainsSignalForLargeMisses() {
         let labeled = makeLabeledFile(
             originalFilename: "boundary.wav",
@@ -498,6 +531,82 @@ struct AnalyzerOptimizerTests {
         #expect(FileManager.default.fileExists(atPath: measurement.historyURL.path()))
         #expect(measurement.scorecard.evaluatedExampleCount == 1)
         #expect(measurement.scorecard.splitSummaries.contains(where: { $0.name == "all" }))
+    }
+
+    @Test
+    func measureUsesOnlyHumanGoldExamples() async throws {
+        let corpusDirectory = try makeTempDirectory()
+        let outputDirectory = corpusDirectory.appending(path: "Output", directoryHint: .isDirectory)
+        let datasetDirectory = corpusDirectory.appending(path: "AnalyzerDataset", directoryHint: .isDirectory)
+        let audioDirectory = datasetDirectory.appending(path: "audio", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: audioDirectory, withIntermediateDirectories: true)
+
+        let gold = makeLabeledFile(
+            originalFilename: "human-gold.wav",
+            storedAudioFilename: "human-gold.wav",
+            phases: [.init(phase: .induction, startTime: 0, endTime: 30)]
+        )
+        let silver = makeLabeledFile(
+            originalFilename: "derived-silver.wav",
+            storedAudioFilename: "derived-silver.wav",
+            phases: [.init(phase: .suggestions, startTime: 0, endTime: 30)],
+            labelerNotes: "Silver label: transcript-only Bambi derivation; not human reviewed."
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let lines = try [gold, silver].map { file -> String in
+            try Data("audio".utf8).write(
+                to: audioDirectory.appending(path: file.storedAudioFilename),
+                options: .atomic
+            )
+            let example = file.analyzerTrainingExample(
+                exportedAt: Date(timeIntervalSince1970: 1_000),
+                datasetRelativeAudioPath: "AnalyzerDataset/audio/\(file.storedAudioFilename)",
+                datasetRelativeExamplePath: "AnalyzerDataset/examples/\(file.id.uuidString).json"
+            )
+            return String(decoding: try encoder.encode(example), as: UTF8.self)
+        }
+        try Data(lines.joined(separator: "\n").utf8).write(
+            to: datasetDirectory.appending(path: "dataset.jsonl"),
+            options: .atomic
+        )
+
+        let optimizer = AnalyzerOptimizer(
+            corpusDirectory: corpusDirectory,
+            outputDirectory: outputDirectory
+        )
+        let measurement = try await optimizer.measure(
+            config: AnalyzerConfigLoader.load(),
+            evaluationMode: .keywordOnly,
+            transcribe: { example in
+                syntheticTranscription(for: example)
+            }
+        )
+
+        #expect(measurement.scorecard.evaluatedExampleCount == 1)
+        #expect(measurement.scorecard.dataset.exampleCount == 1)
+        #expect(measurement.scorecard.worstMatches.map(\.filename) == ["human-gold.wav"])
+
+        let run = try await optimizer.run(
+            seedConfig: AnalyzerConfigLoader.load(),
+            params: .init(
+                populationSize: 1,
+                maxGenerations: 0,
+                elitismCount: 1,
+                mutationRate: 0,
+                earlyStopPatience: 1,
+                evaluationMode: .keywordOnly,
+                publishBestConfigToDocuments: false
+            ),
+            transcribe: { example in
+                syntheticTranscription(for: example)
+            }
+        )
+
+        #expect(run.report.dataset.exampleCount == 1)
+        #expect(run.scorecard.evaluatedExampleCount == 1)
+        #expect(run.scorecard.worstMatches.map(\.filename) == ["human-gold.wav"])
     }
 
     @Test
@@ -1004,7 +1113,8 @@ struct AnalyzerOptimizerTests {
     private func makeLabeledFile(
         originalFilename: String,
         storedAudioFilename: String,
-        phases: [LabeledFile.LabeledPhase]
+        phases: [LabeledFile.LabeledPhase],
+        labelerNotes: String = "test"
     ) -> LabeledFile {
         LabeledFile(
             originalFilename: originalFilename,
@@ -1016,7 +1126,7 @@ struct AnalyzerOptimizerTests {
             phases: phases,
             techniques: [],
             labeledAt: Date(timeIntervalSince1970: 1_000),
-            labelerNotes: "test"
+            labelerNotes: labelerNotes
         )
     }
 

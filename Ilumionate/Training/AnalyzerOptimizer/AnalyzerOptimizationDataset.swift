@@ -114,6 +114,22 @@ nonisolated struct AnalyzerOptimizationDataset: Sendable {
         )
     }
 
+    /// The subset that is safe to use as analyzer ground truth. Derived labels
+    /// remain available to corpus review tools, but must not influence scoring
+    /// or optimization as though a human had approved them.
+    var trustedForLearning: AnalyzerOptimizationDataset {
+        AnalyzerOptimizationDataset(
+            corpusDirectory: corpusDirectory,
+            datasetDirectory: datasetDirectory,
+            datasetIndexURL: datasetIndexURL,
+            audioDirectory: audioDirectory,
+            transcriptCacheDirectory: transcriptCacheDirectory,
+            examples: examples.filter { $0.example.labelTrust.isTrustedForLearning },
+            issues: issues,
+            datasetHash: datasetHash
+        )
+    }
+
     init(
         corpusDirectory: URL,
         datasetDirectory: URL,

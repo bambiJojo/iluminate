@@ -16,6 +16,31 @@
 import Foundation
 import Observation
 
+nonisolated struct BulkTranscriptionAvailability: Equatable, Sendable {
+    let cachedCount: Int
+    let pendingCount: Int
+    let totalCount: Int
+
+    init(files: [LabeledFile], transcribedHashes: Set<String>) {
+        let eligibleHashes = Set(files.map(\.audioSHA256).filter { !$0.isEmpty })
+        totalCount = eligibleHashes.count
+        cachedCount = eligibleHashes.intersection(transcribedHashes).count
+        pendingCount = TranscriptInventory.pending(files, transcribed: transcribedHashes).count
+    }
+
+    var actionTitle: String {
+        switch pendingCount {
+        case 0: "All Transcribed"
+        case 1: "Transcribe 1 Missing"
+        default: "Transcribe \(pendingCount) Missing"
+        }
+    }
+
+    var summary: String {
+        "\(cachedCount) of \(totalCount) cached · \(pendingCount) missing"
+    }
+}
+
 @MainActor
 @Observable
 final class BulkTranscriptionController {
@@ -74,7 +99,7 @@ final class BulkTranscriptionController {
                         createdDate: values?.creationDate ?? file.labeledAt
                     )
                     let result = try await analyzer.transcribe(audioFile: audioFile)
-                    try Self.persist(result, for: file, in: datasetDirectory)
+                    try TranscriptCacheStore.save(result, for: file, in: datasetDirectory)
                 } catch is CancellationError {
                     break
                 } catch {
@@ -110,37 +135,4 @@ final class BulkTranscriptionController {
         }
     }
 
-    /// Written in the same shape the per-file path uses, so a bulk run and a
-    /// hand-made transcript are indistinguishable to everything downstream.
-    private nonisolated static func persist(
-        _ result: AudioTranscriptionResult,
-        for file: LabeledFile,
-        in datasetDirectory: URL
-    ) throws {
-        let destination = TranscriptInventory.cacheURL(forHash: file.audioSHA256, in: datasetDirectory)
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(
-            BulkCachedTranscription(
-                schemaVersion: 1,
-                cachedAt: Date(),
-                exampleID: file.id,
-                audioSHA256: file.audioSHA256,
-                transcription: result
-            )
-        ).write(to: destination, options: .atomic)
-    }
-}
-
-private struct BulkCachedTranscription: Codable {
-    let schemaVersion: Int
-    let cachedAt: Date
-    let exampleID: UUID
-    let audioSHA256: String
-    let transcription: AudioTranscriptionResult
 }

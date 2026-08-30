@@ -85,11 +85,16 @@ nonisolated final class CorpusPhaseKnowledgeCache: @unchecked Sendable {
 
     private static func loadKnowledge() -> CorpusPhaseKnowledge {
         let dataset = try? AnalyzerOptimizationDataset.load()
-        let scriptCorpus = ScriptPhaseCorpus.loadDefault()
-        guard dataset != nil || !scriptCorpus.examples.isEmpty else {
-            return .empty
+        if let dataset {
+            let scriptCorpus = ScriptPhaseCorpus.loadDefault()
+            return CorpusPhaseKnowledgeBuilder(dataset: dataset, scriptCorpus: scriptCorpus).build()
         }
-        return CorpusPhaseKnowledgeBuilder(dataset: dataset, scriptCorpus: scriptCorpus).build()
+        if let bundledKnowledge = CorpusPhaseKnowledgeSnapshot.loadDefault() {
+            return bundledKnowledge
+        }
+        let scriptCorpus = ScriptPhaseCorpus.loadDefault()
+        guard !scriptCorpus.examples.isEmpty else { return .empty }
+        return CorpusPhaseKnowledgeBuilder(dataset: nil, scriptCorpus: scriptCorpus).build()
     }
 }
 
@@ -137,7 +142,11 @@ nonisolated struct CorpusPhaseKnowledgeBuilder {
         var accumulator = Accumulator()
         seedCuratedPhrasePriors(into: &accumulator.phraseScores)
         if let dataset {
-            for example in dataset.examples {
+            // Derived silver is useful for review and experiments, but it must
+            // never teach the shipping analyzer as if it were human ground
+            // truth. Existing exports expose this through the centralized
+            // backward-compatible label-trust interface.
+            for example in dataset.examples where example.example.labelTrust.isTrustedForLearning {
                 accumulate(example: example, into: &accumulator)
             }
         }

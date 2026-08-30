@@ -248,7 +248,7 @@ struct AnalyzerOptimizer: Sendable {
         pauseRequested: (@Sendable () async -> Bool)? = nil
     ) async throws -> RunResult {
         try Task.checkCancellation()
-        let dataset = try loadDataset()
+        let dataset = try loadDataset().trustedForLearning
         guard !dataset.examples.isEmpty else {
             throw AnalyzerOptimizerError.emptyDataset
         }

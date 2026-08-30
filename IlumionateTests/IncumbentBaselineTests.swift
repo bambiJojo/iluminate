@@ -137,6 +137,11 @@ struct IncumbentBaselineTests {
             )
             lines.append("     labels:    " + file.boundaries.map { Int($0).description }.joined(separator: " "))
             lines.append("     predicted: " + predicted.map { Int($0).description }.joined(separator: " "))
+            lines.append(
+                "     phases:    " + phases.map {
+                    "\($0.phase.rawValue)@\(Int($0.startTime))-\(Int($0.endTime))"
+                }.joined(separator: " ")
+            )
         }
 
         let recall = totalTrue > 0 ? Double(totalHits) / Double(totalTrue) : 0

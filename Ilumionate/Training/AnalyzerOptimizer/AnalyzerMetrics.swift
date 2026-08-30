@@ -71,8 +71,6 @@ enum AnalyzerMetrics {
         .emergence
     ]
 
-    private static let canonicalOrder: [TrancePhase] = scoredPhases
-
     static func score(
         example: AnalyzerTrainingExample,
         predictedSegments: [PhaseSegment],
@@ -133,7 +131,7 @@ enum AnalyzerMetrics {
             tolerance: boundaryToleranceSeconds
         )
 
-        let orderValidity = scorePhaseOrder(predictedSegments.map(\.phase))
+        let orderValidity = scorePhaseOrder(predictedSegments)
         let contentTypeAccuracy = predictedContentType == example.labels.contentType ? 1.0 : 0.0
 
         // Treat boundary/order quality as a multiplier on phase quality rather than a substitute
@@ -267,17 +265,20 @@ enum AnalyzerMetrics {
         return (boundaryScore, meanError, transitionRecall, matchedCount)
     }
 
-    private static func scorePhaseOrder(_ phases: [TrancePhase]) -> Double {
-        guard !phases.isEmpty else { return 1.0 }
+    private static func scorePhaseOrder(_ segments: [PhaseSegment]) -> Double {
+        guard !segments.isEmpty else { return 1.0 }
 
-        var lastIndex = -1
-        for phase in phases {
-            guard phase != .transitional else { continue }
-            guard let index = canonicalOrder.firstIndex(of: phase) else { continue }
-            if index < lastIndex {
+        var previousEnd = -Double.infinity
+        for segment in segments {
+            guard
+                segment.startTime.isFinite,
+                segment.endTime.isFinite,
+                segment.startTime >= previousEnd - 0.001,
+                segment.endTime > segment.startTime
+            else {
                 return 0.0
             }
-            lastIndex = index
+            previousEnd = segment.endTime
         }
         return 1.0
     }

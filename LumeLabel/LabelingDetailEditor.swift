@@ -9,13 +9,69 @@ import SwiftUI
 import Observation
 import AVFoundation
 
+/// Owns `AVAudioPlayer` on a non-UI actor. Constructing a player for a long MP3
+/// performs synchronous file reads, so keeping the non-Sendable player here
+/// preserves its reliable playback clock without blocking the main actor.
+actor AudioPlaybackSession {
+    private var player: AVAudioPlayer?
+
+    var isPrepared: Bool {
+        player != nil
+    }
+
+    func prepare(url: URL) throws {
+        try Task.checkCancellation()
+        let preparedPlayer = try AVAudioPlayer(contentsOf: url)
+        preparedPlayer.prepareToPlay()
+        try Task.checkCancellation()
+        player?.stop()
+        player = preparedPlayer
+    }
+
+    func play() -> Bool {
+        player?.play() ?? false
+    }
+
+    func pause() {
+        player?.pause()
+    }
+
+    func seek(to time: TimeInterval) {
+        guard !Task.isCancelled else { return }
+        player?.currentTime = time
+    }
+
+    func currentTime() -> TimeInterval {
+        player?.currentTime ?? 0
+    }
+
+    func cleanup() {
+        player?.stop()
+        player = nil
+    }
+}
+
 @MainActor
 @Observable
 final class LabelingDetailEditor {
+    enum LabelingPass: Sendable {
+        case boundaries
+        case phaseNames
+    }
+
+    enum SaveState: Equatable, Sendable {
+        case saved
+        case unsaved
+        case saving
+        case draftSaved
+        case failed
+    }
+
     struct PhasePoint: Identifiable, Sendable {
         let id: UUID
-        let phase: TrancePhase
+        let phase: TrancePhase?
         let time: TimeInterval
+        let isInitial: Bool
     }
 
     struct TranscriptKeyword: Identifiable, Hashable, Sendable {
@@ -112,7 +168,7 @@ final class LabelingDetailEditor {
     }
 
     struct SuggestedPhaseSegment: Identifiable, Sendable {
-        let id: UUID
+        let id: String
         let phase: TrancePhase
         let startTime: TimeInterval
         let endTime: TimeInterval
@@ -133,14 +189,19 @@ final class LabelingDetailEditor {
     let orderedPhases: [TrancePhase] = TrancePhase.orderedHypnosisPhases
 
     var draft: LabeledFile
+    var transitionLabeling: TransitionLabelingDraft
+    var labelingPass: LabelingPass = .boundaries
     var currentTime: TimeInterval = 0
     var isPlaying = false
+    var isAudioPreparing = false
     var viewStart: Double = 0
     var viewEnd: Double = 1
     var lastMagnification: Double = 1
     var draggingPointID: PhasePoint.ID?
     var alertMessage: String?
     var isSaving = false
+    var saveState: SaveState = .saved
+    var saveFailureMessage: String?
     var selectedPhaseID: UUID?
     var transcription: AudioTranscriptionResult?
     var transcriptStatusMessage: String?
@@ -150,6 +211,7 @@ final class LabelingDetailEditor {
     var fullTranscriptInsight: PhaseTranscriptInsight?
     var analyzerDiagnostics: AnalyzerDiagnostics?
     var isDiagnosticsLoading = false
+    var diagnosticsProgress: Double?
     var diagnosticsStatusMessage: String?
     var diagnosticsErrorMessage: String?
     var diagnosticsAreStale = true
@@ -157,26 +219,80 @@ final class LabelingDetailEditor {
     var isSuggestionLoading = false
     var suggestionStatusMessage: String?
     var suggestionErrorMessage: String?
+    var semanticPhaseAnalysis: SemanticPhaseAnalyzer.Analysis?
+    var isSemanticPhaseAnalysisRunning = false
+    var semanticPhaseStatusMessage: String?
+    var semanticPhaseErrorMessage: String?
+    var backgroundToneAnalysis: BackgroundToneAnalysis?
+    var isBackgroundToneAnalysisRunning = false
+    var backgroundToneStatusMessage: String?
+    var backgroundToneErrorMessage: String?
+    var candidateReviewRecords: [TransitionCandidateReview.Record] = []
+    var selectedTransitionCandidateID: TransitionCandidateReview.ID?
+    private(set) var isAnalyzerReviewMode = false
+    private(set) var analyzerReviewBaseline: TransitionCandidateReview.BlindBaseline?
 
     private let corpus: TrainingCorpusManager
-    private var player: AVAudioPlayer?
+    private var playbackSession: AudioPlaybackSession?
+    private var preparationTask: Task<Void, Never>?
     private var positionTask: Task<Void, Never>?
+    private var seekTask: Task<Void, Never>?
+    private var playbackControlTask: Task<Void, Never>?
+    private var semanticPhaseAnalysisTask: Task<SemanticPhaseAnalyzer.Analysis, Error>?
+    private var semanticPhaseAnalysisRequestID: UUID?
+    private var backgroundToneAnalysisTask: Task<BackgroundToneAnalysis, Error>?
+    private var backgroundToneAnalysisRequestID: UUID?
+    private var diagnosticsTask: Task<AnalyzerDiagnostics?, Never>?
+    private var diagnosticsRequestID: UUID?
+    private var autosaveTask: Task<Void, Never>?
+    private var analyzerReviewPersistenceTask: Task<Void, Never>?
+    private var pendingWork: LabelingWorkInProgress?
+    private var savingRevision: UUID?
     private var transcriptAnalyzer: AudioAnalyzer?
+    private let recoveryStore: LabelingDraftRecoveryStore
+    private let recoveryDirectory: URL
 
-    init(file: LabeledFile, corpus: TrainingCorpusManager) {
+    init(
+        file: LabeledFile,
+        corpus: TrainingCorpusManager,
+        recoveryStore: LabelingDraftRecoveryStore = .shared
+    ) {
         self.fileID = file.id
         self.draft = file
+        self.transitionLabeling = TransitionLabelingDraft(
+            duration: file.audioDuration,
+            phases: file.phases
+        )
         self.corpus = corpus
+        self.recoveryStore = recoveryStore
+        self.recoveryDirectory = corpus.analyzerDatasetDirectory
+            .deletingLastPathComponent()
+            .appending(path: "LabelingDrafts")
         self.draft.expectedContentType = .hypnosis
-        normalizePhases()
         syncSelectedPhase()
     }
 
     var duration: TimeInterval { max(draft.audioDuration, 1) }
+    var hasAudioPlaybackSession: Bool { playbackSession != nil }
     var viewSpan: Double { max(0.001, viewEnd - viewStart) }
+    var labelingSegments: [TransitionLabelingDraft.Segment] { transitionLabeling.segments }
+    var boundaryCount: Int { transitionLabeling.boundaryCount }
+    var unassignedSegmentCount: Int { transitionLabeling.unassignedCount }
+    var isReadyToSave: Bool { transitionLabeling.isReadyToSave }
+    var canEnterAnalyzerReview: Bool {
+        saveState == .saved
+            && transitionLabeling.isReadyToSave
+            && draft.phases.isEmpty == false
+    }
+    var labelValidationMessage: String? { transitionLabeling.readinessIssue?.message }
     var phasePoints: [PhasePoint] {
-        draft.phases.map { phase in
-            PhasePoint(id: phase.id, phase: phase.phase, time: phase.startTime)
+        transitionLabeling.segments.enumerated().map { index, segment in
+            PhasePoint(
+                id: segment.id,
+                phase: segment.phase,
+                time: segment.startTime,
+                isInitial: index == 0
+            )
         }
     }
     var activeTranscriptInsight: PhaseTranscriptInsight? {
@@ -186,9 +302,9 @@ final class LabelingDetailEditor {
         }
         return fullTranscriptInsight
     }
-    var selectedPhase: LabeledFile.LabeledPhase? {
+    var selectedSegment: TransitionLabelingDraft.Segment? {
         guard let selectedPhaseID else { return nil }
-        return draft.phases.first { $0.id == selectedPhaseID }
+        return transitionLabeling.segments.first { $0.id == selectedPhaseID }
     }
     var selectedPhaseComparison: AnalyzerPhaseComparison? {
         guard let selectedPhaseID else { return nil }
@@ -196,14 +312,60 @@ final class LabelingDetailEditor {
     }
     var hasTranscript: Bool { transcription != nil }
     var canRunAnalyzerDiagnostics: Bool {
-        transcription != nil && !draft.phases.isEmpty
+        transcription != nil && transitionLabeling.isReadyToSave
     }
     var canSuggestPhases: Bool { transcription != nil }
+    var backgroundToneCandidates: [BackgroundToneCandidate] {
+        backgroundToneAnalysis?.candidates ?? []
+    }
+    var transitionCandidates: [TransitionCandidateReview.Candidate] {
+        guard isAnalyzerReviewMode else { return [] }
+        let toneCandidates = backgroundToneCandidates.map { candidate in
+            TransitionCandidateReview.Candidate(
+                source: .backgroundTone,
+                time: candidate.time,
+                confidence: candidate.strength
+            )
+        }
+        let semanticCandidates = (semanticPhaseAnalysis?.segments.dropFirst() ?? []).map { segment in
+            TransitionCandidateReview.Candidate(
+                source: .semantic,
+                time: segment.startTime,
+                confidence: segment.confidence,
+                suggestedPhase: segment.phase,
+                evidence: segment.matchedExampleText
+            )
+        }
+        return (toneCandidates + semanticCandidates).sorted {
+            if abs($0.time - $1.time) > 0.001 {
+                return $0.time < $1.time
+            }
+            return $0.source.rawValue < $1.source.rawValue
+        }
+    }
+    var pendingTransitionCandidates: [TransitionCandidateReview.Candidate] {
+        transitionCandidates.filter { candidateDecision(for: $0.id) == nil }
+    }
+    var selectedTransitionCandidate: TransitionCandidateReview.Candidate? {
+        guard let selectedTransitionCandidateID else { return nil }
+        return transitionCandidates.first { $0.id == selectedTransitionCandidateID }
+    }
+    var acceptedCandidateCount: Int {
+        transitionCandidates.count { candidateDecision(for: $0.id) == .accepted }
+    }
+    var dismissedCandidateCount: Int {
+        transitionCandidates.count { candidateDecision(for: $0.id) == .dismissed }
+    }
     var suggestedPhaseSegments: [SuggestedPhaseSegment] {
         (suggestedPhaseTimeline?.segments ?? []).compactMap { segment in
             guard let trancePhase = trancePhase(for: segment.phase) else { return nil }
             return SuggestedPhaseSegment(
-                id: segment.id,
+                id: [
+                    segment.id.uuidString,
+                    trancePhase.rawValue,
+                    String(segment.startTime.bitPattern, radix: 16),
+                    String(segment.endTime.bitPattern, radix: 16)
+                ].joined(separator: ":"),
                 phase: trancePhase,
                 startTime: segment.startTime,
                 endTime: segment.endTime,
@@ -235,22 +397,108 @@ final class LabelingDetailEditor {
     }
 
     func preparePlayer() {
-        do {
-            let url = corpus.audioURL(for: draft)
-            player = try AVAudioPlayer(contentsOf: url)
-            player?.prepareToPlay()
-        } catch {
-            alertMessage = error.localizedDescription
+        let url = corpus.audioURL(for: draft)
+        let session = AudioPlaybackSession()
+        playbackSession = session
+        isAudioPreparing = true
+
+        preparationTask?.cancel()
+        preparationTask = Task { @MainActor [weak self, session] in
+            defer {
+                if let self, self.playbackSession === session {
+                    self.isAudioPreparing = false
+                    self.preparationTask = nil
+                }
+            }
+
+            do {
+                try await session.prepare(url: url)
+            } catch is CancellationError {
+                await session.cleanup()
+            } catch {
+                guard let self, self.playbackSession === session else { return }
+                self.alertMessage = "Could not prepare audio: \(error.localizedDescription)"
+            }
         }
     }
 
     func cleanup() {
+        autosaveTask?.cancel()
+        autosaveTask = nil
+        analyzerReviewPersistenceTask?.cancel()
+        analyzerReviewPersistenceTask = nil
+        if analyzerReviewBaseline != nil || candidateReviewRecords.isEmpty == false {
+            let reviewWork = makeWorkInProgress()
+            recoveryStore.stage(reviewWork, in: recoveryDirectory)
+            Task { [recoveryStore, recoveryDirectory] in
+                try? await recoveryStore.persist(reviewWork, in: recoveryDirectory)
+            }
+        }
+        if let pendingWork, saveState == .unsaved || saveState == .saving {
+            recoveryStore.stage(pendingWork, in: recoveryDirectory)
+            Task { [recoveryStore, recoveryDirectory] in
+                try? await recoveryStore.persist(pendingWork, in: recoveryDirectory)
+            }
+        }
+        preparationTask?.cancel()
+        preparationTask = nil
         positionTask?.cancel()
         positionTask = nil
-        player?.stop()
+        seekTask?.cancel()
+        seekTask = nil
+        playbackControlTask?.cancel()
+        playbackControlTask = nil
+        semanticPhaseAnalysisTask?.cancel()
+        semanticPhaseAnalysisTask = nil
+        semanticPhaseAnalysisRequestID = nil
+        isSemanticPhaseAnalysisRunning = false
+        backgroundToneAnalysisTask?.cancel()
+        backgroundToneAnalysisTask = nil
+        backgroundToneAnalysisRequestID = nil
+        isBackgroundToneAnalysisRunning = false
+        cancelAnalyzerDiagnostics(showStatus: false)
+        let session = playbackSession
+        playbackSession = nil
+        Task { await session?.cleanup() }
         isPlaying = false
+        isAudioPreparing = false
         if let transcriptAnalyzer {
             Task { await transcriptAnalyzer.cancelTranscription() }
+        }
+    }
+
+    func restoreWorkInProgressIfAvailable() async {
+        do {
+            guard let recovered = try await recoveryStore.recover(
+                fileID: fileID,
+                from: recoveryDirectory
+            ) else {
+                return
+            }
+
+            // Review decisions are useful measurement data even when the
+            // underlying phase timeline is already fully saved.
+            candidateReviewRecords = recovered.candidateReviews ?? []
+            analyzerReviewBaseline = recovered.analyzerReviewBaseline
+            isAnalyzerReviewMode = analyzerReviewBaseline != nil
+
+            guard recovered.canRestore(over: draft) else { return }
+
+            draft = recovered.fileMetadata.mergedForSave(over: draft)
+            draft.expectedContentType = .hypnosis
+            transitionLabeling = recovered.labeling
+            labelingPass = transitionLabeling.unassignedCount == transitionLabeling.segments.count
+                ? .boundaries
+                : .phaseNames
+            pendingWork = recovered
+            saveState = .draftSaved
+            saveFailureMessage = nil
+            syncSelectedPhase()
+            rebuildTranscriptInsights()
+            scheduleAutosave(for: recovered)
+        } catch {
+            saveState = .failed
+            saveFailureMessage = "Could not recover the saved draft: \(error.localizedDescription)"
         }
     }
 
@@ -258,27 +506,70 @@ final class LabelingDetailEditor {
         alertMessage = nil
     }
 
+    @discardableResult
+    func enterAnalyzerReview() -> Bool {
+        guard canEnterAnalyzerReview else { return false }
+        if analyzerReviewBaseline == nil {
+            analyzerReviewBaseline = TransitionCandidateReview.BlindBaseline(
+                lockedAt: Date(),
+                sourceLabeledAt: draft.labeledAt,
+                phases: draft.phases
+            )
+        }
+        isAnalyzerReviewMode = true
+        persistAnalyzerReviewState()
+        return true
+    }
+
     func togglePlayback() {
-        guard let player else {
+        guard let session = playbackSession else {
             alertMessage = "Audio player is unavailable for this file."
             return
         }
 
         if isPlaying {
-            player.pause()
             positionTask?.cancel()
             positionTask = nil
             isPlaying = false
+            playbackControlTask?.cancel()
+            playbackControlTask = Task {
+                await session.pause()
+            }
             return
         }
 
-        player.play()
         isPlaying = true
+        let preparationTask = preparationTask
+        let seekTask = seekTask
+        let previousControlTask = playbackControlTask
         positionTask = Task { @MainActor [weak self] in
-            guard let self else { return }
+            await preparationTask?.value
+            await seekTask?.value
+            await previousControlTask?.value
+
+            guard let self,
+                  !Task.isCancelled,
+                  self.isPlaying,
+                  self.playbackSession === session,
+                  await session.isPrepared else {
+                if !Task.isCancelled {
+                    self?.isPlaying = false
+                }
+                return
+            }
+
+            guard await session.play() else {
+                self.isPlaying = false
+                self.alertMessage = "Audio playback could not start."
+                return
+            }
+
             while !Task.isCancelled {
-                self.currentTime = player.currentTime
-                if player.currentTime >= player.duration {
+                let observedTime = await session.currentTime()
+                if observedTime.isFinite {
+                    self.currentTime = observedTime
+                }
+                if self.currentTime >= self.duration {
                     self.isPlaying = false
                     break
                 }
@@ -289,12 +580,174 @@ final class LabelingDetailEditor {
 
     func seek(to time: TimeInterval) {
         let clamped = max(0, min(duration, time))
-        player?.currentTime = clamped
         currentTime = clamped
+        guard let session = playbackSession else { return }
+        seekTask?.cancel()
+        seekTask = Task {
+            await session.seek(to: clamped)
+        }
     }
 
     func seekRelative(_ delta: TimeInterval) {
         seek(to: currentTime + delta)
+    }
+
+    func analyzeBackgroundTones(
+        configuration: BackgroundToneAnalyzer.Configuration = .labelingExperiment
+    ) async {
+        backgroundToneAnalysisTask?.cancel()
+        let requestID = UUID()
+        backgroundToneAnalysisRequestID = requestID
+        isBackgroundToneAnalysisRunning = true
+        backgroundToneErrorMessage = nil
+        backgroundToneStatusMessage = "Listening for background changes…"
+
+        let audioURL = corpus.audioURL(for: draft)
+        let analysisTask = Task.detached(priority: .userInitiated) {
+            try BackgroundToneAnalyzer.analyze(
+                audioURL: audioURL,
+                configuration: configuration
+            )
+        }
+        backgroundToneAnalysisTask = analysisTask
+
+        do {
+            let analysis = try await analysisTask.value
+            guard backgroundToneAnalysisRequestID == requestID else { return }
+            backgroundToneAnalysis = analysis
+            let count = analysis.candidates.count
+            if count == 0 {
+                backgroundToneStatusMessage = "No strong background-tone changes found."
+            } else {
+                let noun = count == 1 ? "candidate" : "candidates"
+                backgroundToneStatusMessage = "Found \(count) \(noun) from the \(analysis.source.displayName)."
+            }
+        } catch is CancellationError {
+            guard backgroundToneAnalysisRequestID == requestID else { return }
+            backgroundToneStatusMessage = nil
+        } catch {
+            guard backgroundToneAnalysisRequestID == requestID else { return }
+            backgroundToneStatusMessage = "Background-tone analysis failed."
+            backgroundToneErrorMessage = error.localizedDescription
+        }
+
+        if backgroundToneAnalysisRequestID == requestID {
+            backgroundToneAnalysisTask = nil
+            backgroundToneAnalysisRequestID = nil
+            isBackgroundToneAnalysisRunning = false
+        }
+    }
+
+    func cancelBackgroundToneAnalysis() {
+        backgroundToneAnalysisTask?.cancel()
+        backgroundToneAnalysisTask = nil
+        backgroundToneAnalysisRequestID = nil
+        isBackgroundToneAnalysisRunning = false
+        backgroundToneStatusMessage = nil
+    }
+
+    func candidateDecision(
+        for id: TransitionCandidateReview.ID
+    ) -> TransitionCandidateReview.Decision? {
+        candidateReviewRecords.last { $0.candidateID == id }?.decision
+    }
+
+    func jumpToTransitionCandidate(_ candidate: TransitionCandidateReview.Candidate) {
+        selectedTransitionCandidateID = candidate.id
+        seekAndCenter(on: candidate.time)
+    }
+
+    func selectNearestTransitionCandidate(
+        to time: TimeInterval,
+        tolerance: TimeInterval
+    ) {
+        guard let candidate = pendingTransitionCandidates.min(by: {
+            abs($0.time - time) < abs($1.time - time)
+        }), abs(candidate.time - time) <= tolerance else {
+            return
+        }
+        selectedTransitionCandidateID = candidate.id
+    }
+
+    func jumpToNextTransitionCandidate() {
+        let candidates = pendingTransitionCandidates
+        guard candidates.isEmpty == false else {
+            selectedTransitionCandidateID = nil
+            return
+        }
+        let candidate: TransitionCandidateReview.Candidate
+        if let selectedTransitionCandidateID,
+           let index = candidates.firstIndex(where: { $0.id == selectedTransitionCandidateID }) {
+            candidate = candidates[(index + 1) % candidates.count]
+        } else {
+            candidate = candidates.first { $0.time > currentTime + 0.5 } ?? candidates[0]
+        }
+        jumpToTransitionCandidate(candidate)
+    }
+
+    func jumpToPreviousTransitionCandidate() {
+        let candidates = pendingTransitionCandidates
+        guard candidates.isEmpty == false else {
+            selectedTransitionCandidateID = nil
+            return
+        }
+        let candidate: TransitionCandidateReview.Candidate
+        if let selectedTransitionCandidateID,
+           let index = candidates.firstIndex(where: { $0.id == selectedTransitionCandidateID }) {
+            candidate = candidates[(index - 1 + candidates.count) % candidates.count]
+        } else {
+            candidate = candidates.last { $0.time < currentTime - 0.5 }
+                ?? candidates[candidates.count - 1]
+        }
+        jumpToTransitionCandidate(candidate)
+    }
+
+    func acceptSelectedTransitionCandidate() {
+        guard isAnalyzerReviewMode,
+              let candidate = selectedTransitionCandidate,
+              candidateDecision(for: candidate.id) == nil else { return }
+        let nearestBoundary = transitionLabeling.segments
+            .dropFirst()
+            .map(\.startTime)
+            .min { abs($0 - candidate.time) < abs($1 - candidate.time) }
+        recordCandidateDecision(.accepted, for: candidate, boundaryTime: nearestBoundary)
+        selectedTransitionCandidateID = nil
+        persistAnalyzerReviewState()
+        jumpToNextTransitionCandidate()
+    }
+
+    func dismissSelectedTransitionCandidate() {
+        guard isAnalyzerReviewMode,
+              let candidate = selectedTransitionCandidate,
+              candidateDecision(for: candidate.id) == nil else { return }
+        recordCandidateDecision(.dismissed, for: candidate, boundaryTime: nil)
+        selectedTransitionCandidateID = nil
+        persistAnalyzerReviewState()
+        jumpToNextTransitionCandidate()
+    }
+
+    private func recordCandidateDecision(
+        _ decision: TransitionCandidateReview.Decision,
+        for candidate: TransitionCandidateReview.Candidate,
+        boundaryTime: TimeInterval?
+    ) {
+        candidateReviewRecords.removeAll { $0.candidateID == candidate.id }
+        candidateReviewRecords.append(
+            TransitionCandidateReview.Record(
+                candidateID: candidate.id,
+                decision: decision,
+                decidedAt: Date(),
+                boundaryTime: boundaryTime
+            )
+        )
+    }
+
+    private func seekAndCenter(on time: TimeInterval) {
+        seek(to: time)
+        let fraction = time / duration
+        let newStart = max(0, min(1 - viewSpan, fraction - viewSpan / 2))
+        viewStart = newStart
+        viewEnd = newStart + viewSpan
     }
 
     func zoomAround(_ center: Double, scale: Double) {
@@ -318,73 +771,80 @@ final class LabelingDetailEditor {
         viewEnd = 1
     }
 
-    func markPhaseStart(_ phase: TrancePhase) {
-        let maxStartTime = max(duration - 0.001, 0)
-        let clampedTime = max(0, min(maxStartTime, currentTime))
-        if let existingIndex = draft.phases.firstIndex(where: { abs($0.startTime - clampedTime) < 0.05 }) {
-            draft.phases[existingIndex].phase = phase
-            draft.phases[existingIndex].startTime = clampedTime
-        } else {
-            draft.phases.append(
-                LabeledFile.LabeledPhase(
-                    phase: phase,
-                    startTime: clampedTime,
-                    endTime: draft.audioDuration
-                )
-            )
+    func markBoundaryAtPlayhead() {
+        guard !isAnalyzerReviewMode else { return }
+        let previousCount = transitionLabeling.segments.count
+        transitionLabeling.markBoundary(at: currentTime)
+        guard transitionLabeling.segments.count != previousCount else { return }
+        selectedPhaseID = transitionLabeling.segments.first {
+            abs($0.startTime - currentTime) < 0.051
+        }?.id
+        labelingDidChange()
+    }
+
+    func beginPhaseNaming() {
+        labelingPass = .phaseNames
+        selectedPhaseID = transitionLabeling.segments.first { $0.phase == nil }?.id
+            ?? transitionLabeling.segments.first?.id
+        if let selectedSegment {
+            jumpToSegment(selectedSegment)
         }
-        normalizePhases()
+    }
+
+    func resumeBoundaryMarking() {
+        labelingPass = .boundaries
+    }
+
+    func assignSelectedPhase(_ phase: TrancePhase) {
+        guard !isAnalyzerReviewMode, let selectedPhaseID else { return }
+        let nextID = transitionLabeling.assign(phase, toSegmentID: selectedPhaseID)
+        labelingDidChange()
+        self.selectedPhaseID = nextID ?? selectedPhaseID
+        if let nextID,
+           let next = transitionLabeling.segments.first(where: { $0.id == nextID }) {
+            jumpToSegment(next)
+        }
     }
 
     func removePhase(at index: Int) {
-        guard draft.phases.indices.contains(index) else { return }
-        draft.phases.remove(at: index)
-        normalizePhases()
+        guard !isAnalyzerReviewMode,
+              transitionLabeling.segments.indices.contains(index),
+              index > 0 else { return }
+        transitionLabeling.removeBoundary(startingSegmentID: transitionLabeling.segments[index].id)
+        labelingDidChange()
     }
 
     func clearAllPhases() {
-        draft.phases.removeAll()
-        syncSelectedPhase()
-        rebuildTranscriptInsights()
+        guard !isAnalyzerReviewMode else { return }
+        transitionLabeling = TransitionLabelingDraft(duration: draft.audioDuration, phases: [])
+        labelingPass = .boundaries
+        labelingDidChange()
     }
 
-    func jumpToPhase(_ phase: LabeledFile.LabeledPhase) {
-        seek(to: phase.startTime)
-        let frac = phase.startTime / duration
+    func jumpToSegment(_ segment: TransitionLabelingDraft.Segment) {
+        seek(to: segment.startTime)
+        let frac = segment.startTime / duration
         let newStart = max(0, min(1 - viewSpan, frac - viewSpan / 2))
         viewStart = newStart
         viewEnd = newStart + viewSpan
     }
 
     func movePhasePoint(id: PhasePoint.ID, to time: TimeInterval) {
-        guard let index = draft.phases.firstIndex(where: { $0.id == id }) else { return }
-        let maxStartTime = max(duration - 0.001, 0)
-        draft.phases[index].startTime = max(0, min(maxStartTime, time))
-        normalizePhases()
-    }
-
-    func updatePhasePoint(
-        id: PhasePoint.ID,
-        time: TimeInterval,
-        phase: TrancePhase
-    ) {
-        guard let index = draft.phases.firstIndex(where: { $0.id == id }) else { return }
-        let maxStartTime = max(duration - 0.001, 0)
-        draft.phases[index].startTime = max(0, min(maxStartTime, time))
-        draft.phases[index].phase = phase
-        normalizePhases()
+        guard !isAnalyzerReviewMode else { return }
+        transitionLabeling.moveBoundary(startingSegmentID: id, to: time)
+        labelingDidChange()
     }
 
     func setPhase(ofPointID id: PhasePoint.ID, to phase: TrancePhase) {
-        guard let index = draft.phases.firstIndex(where: { $0.id == id }) else { return }
-        draft.phases[index].phase = phase
-        normalizePhases()
+        guard !isAnalyzerReviewMode else { return }
+        transitionLabeling.assign(phase, toSegmentID: id)
+        labelingDidChange()
     }
 
     func deletePhasePoint(id: PhasePoint.ID) {
-        guard let index = draft.phases.firstIndex(where: { $0.id == id }) else { return }
-        draft.phases.remove(at: index)
-        normalizePhases()
+        guard !isAnalyzerReviewMode else { return }
+        transitionLabeling.removeBoundary(startingSegmentID: id)
+        labelingDidChange()
     }
 
     func selectPhase(id: UUID?) {
@@ -392,7 +852,7 @@ final class LabelingDetailEditor {
     }
 
     func loadTranscriptIfAvailable() async {
-        guard transcription == nil else { return }
+        guard !Task.isCancelled, transcription == nil else { return }
 
         if let bundled = BundledAudioTranscriptCatalog.shared.transcription(
             filename: draft.audioFilename,
@@ -464,22 +924,29 @@ final class LabelingDetailEditor {
             diagnosticsAreStale = true
             return
         }
-        guard !draft.phases.isEmpty else {
+        guard let labeledPhases = transitionLabeling.labeledPhases else {
             analyzerDiagnostics = nil
-            diagnosticsStatusMessage = "Add labeled phases to compare predictions against the analyzer."
+            diagnosticsStatusMessage = "Name every segment before comparing predictions against your labels."
             diagnosticsErrorMessage = nil
             diagnosticsAreStale = true
             return
         }
 
         isDiagnosticsLoading = true
+        diagnosticsProgress = 0
         diagnosticsErrorMessage = nil
-        diagnosticsStatusMessage = "Running analyzer comparison..."
-        defer { isDiagnosticsLoading = false }
+        diagnosticsStatusMessage = "Running analyzer comparison… 0%"
 
-        let draftSnapshot = draft
+        var draftSnapshot = draft
+        draftSnapshot.phases = labeledPhases
         let durationSnapshot = duration
-        let diagnosticsTask = Task.detached(priority: .userInitiated) {
+        let requestID = UUID()
+        diagnosticsRequestID = requestID
+        let progressHandler: @Sendable (Double) async -> Void = { [weak self] progress in
+            await self?.reportDiagnosticsProgress(progress, requestID: requestID)
+        }
+        let task: Task<AnalyzerDiagnostics?, Never> = Task.detached(priority: .userInitiated) {
+            guard !Task.isCancelled else { return nil }
             let knowledge = CorpusPhaseKnowledgeCache.shared.knowledge()
             let keywordAnalyzer = HypnosisPhaseAnalyzer(corpusKnowledge: knowledge)
             let wordTimestamps = HypnosisPhaseAnalyzer.approximateWordTimestamps(
@@ -490,10 +957,13 @@ final class LabelingDetailEditor {
                 transcription: transcription,
                 techniqueDetection: nil
             )
+            guard !Task.isCancelled else { return nil }
             let chunkedPhases = await ChunkedPhaseAnalyzer.analyze(
                 wordTimestamps: wordTimestamps,
-                duration: transcription.duration
+                duration: transcription.duration,
+                onProgress: progressHandler
             )
+            guard !Task.isCancelled else { return nil }
             let selection = keywordAnalyzer.selectPreferredPhases(
                 keywordPhases: keywordPhases,
                 chunkedPhases: chunkedPhases,
@@ -513,9 +983,43 @@ final class LabelingDetailEditor {
                 techniqueDetection: techniqueDetection
             )
         }
-        analyzerDiagnostics = await diagnosticsTask.value
+        diagnosticsTask = task
+        let result = await task.value
+        guard diagnosticsRequestID == requestID else { return }
+
+        diagnosticsTask = nil
+        diagnosticsRequestID = nil
+        isDiagnosticsLoading = false
+        diagnosticsProgress = nil
+        guard let result else {
+            diagnosticsStatusMessage = "Analyzer comparison cancelled."
+            return
+        }
+        analyzerDiagnostics = result
         diagnosticsStatusMessage = "Analyzer comparison ready."
         diagnosticsAreStale = false
+    }
+
+    func cancelAnalyzerDiagnostics() {
+        cancelAnalyzerDiagnostics(showStatus: true)
+    }
+
+    private func cancelAnalyzerDiagnostics(showStatus: Bool) {
+        diagnosticsTask?.cancel()
+        diagnosticsTask = nil
+        diagnosticsRequestID = nil
+        isDiagnosticsLoading = false
+        diagnosticsProgress = nil
+        if showStatus {
+            diagnosticsStatusMessage = "Analyzer comparison cancelled."
+        }
+    }
+
+    private func reportDiagnosticsProgress(_ progress: Double, requestID: UUID) {
+        guard diagnosticsRequestID == requestID, isDiagnosticsLoading else { return }
+        let boundedProgress = min(max(progress, 0), 1)
+        diagnosticsProgress = boundedProgress
+        diagnosticsStatusMessage = "Running analyzer comparison… \(Int((boundedProgress * 100).rounded()))%"
     }
 
     func generatePhaseSuggestions() async {
@@ -547,22 +1051,80 @@ final class LabelingDetailEditor {
         }
     }
 
-    func applyPhaseSuggestions() {
-        guard !suggestedPhaseSegments.isEmpty else {
-            suggestionStatusMessage = "Generate suggestions before applying them."
+    func analyzeSemanticWindows(
+        examples: [SemanticPhaseAnalyzer.Example]? = nil,
+        configuration: SemanticPhaseAnalyzer.Configuration = .init()
+    ) async {
+        guard let transcription else {
+            semanticPhaseAnalysis = nil
+            semanticPhaseStatusMessage = "Generate a transcript before comparing semantic windows."
+            semanticPhaseErrorMessage = nil
             return
         }
 
-        draft.phases = suggestedPhaseSegments.map { suggestion in
-            LabeledFile.LabeledPhase(
-                phase: suggestion.phase,
-                startTime: suggestion.startTime,
-                endTime: suggestion.endTime,
-                notes: suggestion.rationale
+        semanticPhaseAnalysisTask?.cancel()
+        let requestID = UUID()
+        semanticPhaseAnalysisRequestID = requestID
+        isSemanticPhaseAnalysisRunning = true
+        semanticPhaseErrorMessage = nil
+        semanticPhaseStatusMessage = "Comparing transcript meaning with hand-labeled examples…"
+
+        let corpusDirectory = corpus.analyzerDatasetDirectory.deletingLastPathComponent()
+        let fileID = fileID
+        let analysisTask = Task.detached(priority: .userInitiated) {
+            let resolvedExamples = try examples ?? SemanticPhaseExampleStore.load(
+                from: corpusDirectory,
+                excluding: fileID
             )
+            let analyzer = SemanticPhaseAnalyzer(
+                examples: resolvedExamples,
+                configuration: configuration
+            )
+            return try analyzer.analyze(transcription: transcription)
         }
-        suggestionStatusMessage = "Applied \(draft.phases.count) suggested phase boundaries."
-        normalizePhases()
+        semanticPhaseAnalysisTask = analysisTask
+
+        do {
+            let analysis = try await analysisTask.value
+            guard semanticPhaseAnalysisRequestID == requestID else { return }
+            semanticPhaseAnalysis = analysis
+            if analysis.exampleCount == 0 {
+                semanticPhaseStatusMessage = "No hand-labeled transcript examples are available yet."
+            } else if analysis.windows.isEmpty {
+                semanticPhaseStatusMessage = "No transcript windows could be compared."
+            } else {
+                semanticPhaseStatusMessage = "Compared \(analysis.windows.count) windows with \(analysis.exampleCount) hand-labeled examples."
+            }
+        } catch is CancellationError {
+            guard semanticPhaseAnalysisRequestID == requestID else { return }
+            semanticPhaseStatusMessage = nil
+        } catch {
+            guard semanticPhaseAnalysisRequestID == requestID else { return }
+            semanticPhaseStatusMessage = "Semantic-window analysis failed."
+            semanticPhaseErrorMessage = error.localizedDescription
+        }
+
+        if semanticPhaseAnalysisRequestID == requestID {
+            semanticPhaseAnalysisTask = nil
+            semanticPhaseAnalysisRequestID = nil
+            isSemanticPhaseAnalysisRunning = false
+        }
+    }
+
+    func cancelSemanticPhaseAnalysis() {
+        semanticPhaseAnalysisTask?.cancel()
+        semanticPhaseAnalysisTask = nil
+        semanticPhaseAnalysisRequestID = nil
+        isSemanticPhaseAnalysisRunning = false
+        semanticPhaseStatusMessage = nil
+    }
+
+    func jumpToSemanticSegment(_ segment: SemanticPhaseAnalyzer.Segment) {
+        seek(to: segment.startTime)
+        let fraction = segment.startTime / duration
+        let newStart = max(0, min(1 - viewSpan, fraction - viewSpan / 2))
+        viewStart = newStart
+        viewEnd = newStart + viewSpan
     }
 
     func jumpToSuggestedPhase(_ segment: SuggestedPhaseSegment) {
@@ -573,24 +1135,35 @@ final class LabelingDetailEditor {
         viewEnd = newStart + viewSpan
     }
 
-    func save() async {
-        guard !isSaving else { return }
-        isSaving = true
-        defer { isSaving = false }
-
-        do {
-            normalizePhases()
-            var toSave = draft
-            toSave.expectedContentType = .hypnosis
-            toSave.labeledAt = Date()
-            let saved = try await corpus.save(toSave)
-            draft = saved
-            syncSelectedPhase()
-            rebuildTranscriptInsights()
-            alertMessage = nil
-        } catch {
-            alertMessage = error.localizedDescription
+    @discardableResult
+    func save() async -> Bool {
+        guard !isSaving else { return false }
+        guard let labeledPhases = transitionLabeling.labeledPhases else {
+            alertMessage = transitionLabeling.readinessIssue?.message
+                ?? "The phase timeline is not ready to save."
+            return false
         }
+        autosaveTask?.cancel()
+        autosaveTask = nil
+        let work = makeWorkInProgress(labeledPhases: labeledPhases)
+        pendingWork = work
+        recoveryStore.stage(work, in: recoveryDirectory)
+        await persist(work, commitCompletedTimeline: true, presentsErrors: true)
+        return saveState == .saved && pendingWork == nil
+    }
+
+    func setExpectedFrequencyBand(_ band: LabeledFile.FrequencyBand) {
+        guard !isAnalyzerReviewMode,
+              draft.expectedFrequencyBand.lower != band.lower
+                || draft.expectedFrequencyBand.upper != band.upper else { return }
+        draft.expectedFrequencyBand = band
+        metadataDidChange()
+    }
+
+    func setLabelerNotes(_ notes: String) {
+        guard !isAnalyzerReviewMode, draft.labelerNotes != notes else { return }
+        draft.labelerNotes = notes
+        metadataDidChange()
     }
 
     func niceInterval(for visibleDuration: TimeInterval) -> TimeInterval {
@@ -626,6 +1199,10 @@ final class LabelingDetailEditor {
         }
     }
 
+    func phaseDepth(_ phase: TrancePhase?) -> Double {
+        phase.map(phaseDepth) ?? 0.5
+    }
+
     func phaseColor(_ phase: TrancePhase) -> Color {
         switch phase {
         case .preTalk, .induction: return .blue
@@ -642,76 +1219,150 @@ final class LabelingDetailEditor {
         }
     }
 
+    func phaseColor(_ phase: TrancePhase?) -> Color {
+        phase.map(phaseColor) ?? .secondary
+    }
+
+    func phaseDisplayName(_ phase: TrancePhase?) -> String {
+        phase?.displayName ?? "Unassigned"
+    }
+
     func keyboardShortcutLabel(for index: Int) -> String? {
         guard (0..<9).contains(index) else { return nil }
         return String(index + 1)
     }
 
-    private func normalizePhases() {
-        guard !draft.phases.isEmpty else {
-            syncSelectedPhase()
-            analyzerDiagnostics = nil
-            diagnosticsStatusMessage = nil
-            diagnosticsErrorMessage = nil
-            diagnosticsAreStale = true
-            rebuildTranscriptInsights()
-            return
-        }
-
-        draft.phases.sort { lhs, rhs in
-            if lhs.startTime == rhs.startTime {
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
-            return lhs.startTime < rhs.startTime
-        }
-
-        var normalized: [LabeledFile.LabeledPhase] = []
-        for phase in draft.phases {
-            let maxStartTime = max(duration - 0.001, 0)
-            let clampedStart = max(0, min(maxStartTime, phase.startTime))
-            if var previous = normalized.last, abs(previous.startTime - clampedStart) < 0.05 {
-                previous.phase = phase.phase
-                previous.notes = phase.notes
-                normalized[normalized.count - 1] = previous
-                continue
-            }
-
-            normalized.append(
-                LabeledFile.LabeledPhase(
-                    id: phase.id,
-                    phase: phase.phase,
-                    startTime: clampedStart,
-                    endTime: duration,
-                    notes: phase.notes
-                )
-            )
-        }
-
-        for index in normalized.indices {
-            let nextStart = normalized.indices.contains(index + 1) ? normalized[index + 1].startTime : duration
-            normalized[index].endTime = index + 1 < normalized.count
-                ? max(normalized[index].startTime + 0.001, nextStart)
-                : duration
-        }
-
-        draft.phases = normalized
+    private func labelingDidChange() {
         diagnosticsAreStale = true
+        analyzerDiagnostics = nil
+        diagnosticsStatusMessage = nil
+        diagnosticsErrorMessage = nil
         syncSelectedPhase()
         rebuildTranscriptInsights()
+        stageWorkInProgress()
+    }
+
+    private func metadataDidChange() {
+        diagnosticsAreStale = true
+        stageWorkInProgress()
+    }
+
+    private func stageWorkInProgress() {
+        let work = makeWorkInProgress()
+        pendingWork = work
+        recoveryStore.stage(work, in: recoveryDirectory)
+        saveState = .unsaved
+        saveFailureMessage = nil
+        scheduleAutosave(for: work)
+    }
+
+    private func scheduleAutosave(for work: LabelingWorkInProgress) {
+        autosaveTask?.cancel()
+        autosaveTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(600))
+            } catch {
+                return
+            }
+            guard let self, self.pendingWork?.revision == work.revision else { return }
+            await self.persist(work, commitCompletedTimeline: true, presentsErrors: false)
+        }
+    }
+
+    private func makeWorkInProgress(
+        labeledPhases: [LabeledFile.LabeledPhase]? = nil
+    ) -> LabelingWorkInProgress {
+        var file = draft
+        if let labeledPhases {
+            file.phases = labeledPhases
+        }
+        return LabelingWorkInProgress(
+            file: file,
+            labeling: transitionLabeling,
+            candidateReviews: candidateReviewRecords,
+            analyzerReviewBaseline: analyzerReviewBaseline
+        )
+    }
+
+    private func persistAnalyzerReviewState() {
+        let work = makeWorkInProgress()
+        recoveryStore.stage(work, in: recoveryDirectory)
+        analyzerReviewPersistenceTask?.cancel()
+        analyzerReviewPersistenceTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(200))
+                guard let self else { return }
+                try await self.recoveryStore.persist(work, in: self.recoveryDirectory)
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.alertMessage = "Could not save analyzer review: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func persist(
+        _ work: LabelingWorkInProgress,
+        commitCompletedTimeline: Bool,
+        presentsErrors: Bool
+    ) async {
+        guard pendingWork?.revision == work.revision else { return }
+        savingRevision = work.revision
+        isSaving = true
+        saveState = .saving
+
+        defer {
+            if savingRevision == work.revision {
+                savingRevision = nil
+                isSaving = false
+            }
+        }
+
+        do {
+            try await recoveryStore.persist(work, in: recoveryDirectory)
+
+            if commitCompletedTimeline,
+               let labeledPhases = work.labeling.labeledPhases {
+                var toSave = work.fileMetadata
+                toSave.phases = labeledPhases
+                toSave.expectedContentType = .hypnosis
+                toSave.labeledAt = work.updatedAt
+                let saved = try await corpus.save(toSave)
+
+                guard pendingWork?.revision == work.revision else { return }
+                draft = saved
+                pendingWork = nil
+                saveState = .saved
+                saveFailureMessage = nil
+                alertMessage = nil
+                syncSelectedPhase()
+                rebuildTranscriptInsights()
+            } else if pendingWork?.revision == work.revision {
+                saveState = .draftSaved
+                saveFailureMessage = nil
+            }
+        } catch {
+            guard pendingWork?.revision == work.revision else { return }
+            saveState = .failed
+            saveFailureMessage = error.localizedDescription
+            if presentsErrors {
+                alertMessage = error.localizedDescription
+            }
+        }
     }
 
     private func syncSelectedPhase() {
-        guard !draft.phases.isEmpty else {
+        guard !transitionLabeling.segments.isEmpty else {
             selectedPhaseID = nil
             return
         }
 
         if let selectedPhaseID,
-           draft.phases.contains(where: { $0.id == selectedPhaseID }) {
+           transitionLabeling.segments.contains(where: { $0.id == selectedPhaseID }) {
             return
         }
 
-        selectedPhaseID = draft.phases.first?.id
+        selectedPhaseID = transitionLabeling.segments.first?.id
     }
 
     private func suggestionConfidence(for segment: PhaseSegment) -> Double {
@@ -789,6 +1440,13 @@ final class LabelingDetailEditor {
         suggestedPhaseTimeline = nil
         suggestionErrorMessage = nil
         suggestionStatusMessage = "Use the phrase library to propose a phase timeline from this transcript."
+        semanticPhaseAnalysisTask?.cancel()
+        semanticPhaseAnalysisTask = nil
+        semanticPhaseAnalysisRequestID = nil
+        semanticPhaseAnalysis = nil
+        isSemanticPhaseAnalysisRunning = false
+        semanticPhaseErrorMessage = nil
+        semanticPhaseStatusMessage = "Run semantic windows to compare meaning with hand-labeled examples."
         rebuildTranscriptInsights()
     }
 
@@ -812,17 +1470,17 @@ final class LabelingDetailEditor {
         }
 
         let rawPhaseInsights: [UUID: PhaseTranscriptInsight] = Dictionary(
-            uniqueKeysWithValues: draft.phases.compactMap { phase in
+            uniqueKeysWithValues: transitionLabeling.segments.compactMap { segment in
                 guard let insight = Self.makeTranscriptInsight(
-                    id: phase.id,
-                    phase: phase.phase,
-                    startTime: phase.startTime,
-                    endTime: phase.endTime,
+                    id: segment.id,
+                    phase: segment.phase,
+                    startTime: segment.startTime,
+                    endTime: segment.endTime,
                     transcription: transcription
                 ) else {
                     return nil
                 }
-                return (phase.id, insight)
+                return (segment.id, insight)
             }
         )
 

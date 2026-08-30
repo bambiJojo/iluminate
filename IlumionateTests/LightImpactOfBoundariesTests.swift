@@ -392,17 +392,67 @@ struct LightImpactOfBoundariesTests {
                 )
             }
 
-            // What the shipping pipeline actually delivers: its own boundaries
-            // *and* its own labels. The comparisons above hand every
-            // segmentation the correct labels to isolate boundary error; this
-            // one does not, because a wrong label selects a different light
-            // behaviour entirely — decay, oscillation, or rise.
-            let incumbentPhases = keyword.analyze(segments: subject.segments, duration: subject.duration)
-            let asShipped = generator.generateSession(
+            // Preserve the historical benchmark row, which starts from segment-
+            // approximated word timing. Compare it with exact word timing both
+            // before and after technique evidence so the runtime delta has an
+            // attributable source.
+            let legacyKeywordPhases = keyword.analyze(
+                segments: subject.segments,
+                duration: subject.duration
+            )
+            let transcription = AudioTranscriptionResult(
+                fullText: subject.segments.map(\.text).joined(separator: " "),
+                segments: subject.segments,
+                duration: subject.duration,
+                detectedLanguage: "en"
+            )
+            let techniqueDetection = TechniqueDetector().detect(
+                wordTimestamps: subject.words,
+                segments: subject.segments,
+                prosodic: nil,
+                duration: subject.duration
+            )
+            let runtimePhases = keyword.analyze(
+                wordTimestamps: subject.words,
+                transcription: transcription,
+                techniqueDetection: techniqueDetection
+            )
+            let exactWordsPhases = keyword.analyze(
+                wordTimestamps: subject.words,
+                transcription: transcription,
+                techniqueDetection: nil
+            )
+            let legacyKeywordSession = generator.generateSession(
                 from: audioFile,
                 analysis: AnalysisFixtures.hypnosisAnalysis.with(
                     hypnosisMetadata: HypnosisMetadata(
-                        phases: incumbentPhases,
+                        phases: legacyKeywordPhases,
+                        inductionStyle: .permissive,
+                        estimatedTranceDeph: .medium,
+                        suggestionDensity: 0.5,
+                        languagePatterns: [],
+                        detectedTechniques: []
+                    )
+                )
+            )
+            let runtimeSession = generator.generateSession(
+                from: audioFile,
+                analysis: AnalysisFixtures.hypnosisAnalysis.with(
+                    hypnosisMetadata: HypnosisMetadata(
+                        phases: runtimePhases,
+                        inductionStyle: .permissive,
+                        estimatedTranceDeph: .medium,
+                        suggestionDensity: 0.5,
+                        languagePatterns: [],
+                        detectedTechniques: []
+                    )
+                )
+            )
+            let exactWordsSession = generator.generateSession(
+                from: audioFile,
+                analysis: AnalysisFixtures.hypnosisAnalysis.with(
+                    hypnosisMetadata: HypnosisMetadata(
+                        phases: exactWordsPhases,
                         inductionStyle: .permissive,
                         estimatedTranceDeph: .medium,
                         suggestionDensity: 0.5,
@@ -539,10 +589,24 @@ struct LightImpactOfBoundariesTests {
             lines.append(describe("incumbent", incumbent, incumbentBoundaries.count))
             lines.append(
                 describe(
-                    "AS SHIPPED",
-                    sample(asShipped, duration: subject.duration),
-                    incumbentPhases.count - 1
-                ) + "   ← own labels too"
+                    "LEGACY ROW",
+                    sample(legacyKeywordSession, duration: subject.duration),
+                    legacyKeywordPhases.count - 1
+                ) + "   ← segment-approximated word timing"
+            )
+            lines.append(
+                describe(
+                    "EXACT WORDS",
+                    sample(exactWordsSession, duration: subject.duration),
+                    exactWordsPhases.count - 1
+                ) + "   ← exact word timing, no technique evidence"
+            )
+            lines.append(
+                describe(
+                    "RUNTIME   ",
+                    sample(runtimeSession, duration: subject.duration),
+                    runtimePhases.count - 1
+                ) + "   ← shipping keyword fallback, no truth"
             )
             lines.append(
                 describe(
