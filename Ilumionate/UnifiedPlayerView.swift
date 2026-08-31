@@ -74,6 +74,15 @@ struct UnifiedPlayerView: View {
             } else {
                 minimalOverlay
                     .transition(.opacity)
+
+                if controlsVisibility.showsPersistentStopControl {
+                    PlayerPersistentStopControl(
+                        revealProgress: pullProgress,
+                        onStop: stopSession
+                    )
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .transition(.opacity)
+                }
             }
 
             // Layer 4: Pause overlay (only when controls are hidden so it doesn't block the play button)
@@ -304,14 +313,6 @@ struct UnifiedPlayerView: View {
                 Spacer()
             }
 
-            // Fades out as the pull begins — the affordance takes over the
-            // job of saying what to do.
-            Text("Swipe up to show controls")
-                .font(TranceTypography.caption)
-                .foregroundStyle(
-                    viewModel.secondaryLabelColor.opacity(0.5 * (1 - pullProgress))
-                )
-                .padding(.bottom, TranceSpacing.statusBar)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(.rect)
@@ -457,6 +458,11 @@ struct UnifiedPlayerView: View {
 
     private func finishSession() {
         viewModel.finishCompletedSession()
+        dismiss()
+    }
+
+    private func stopSession() {
+        viewModel.stopAll()
         dismiss()
     }
 }

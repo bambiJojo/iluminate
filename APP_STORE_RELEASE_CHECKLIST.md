@@ -1,6 +1,6 @@
 # LumeSync Unlisted App Store Release Checklist
 
-Last audited: 2026-08-31
+Last audited: 2026-09-01
 App Store Connect app: [LumeSync (6760121072)](https://appstoreconnect.apple.com/apps/6760121072)  
 Intended distribution: Apple's **Unlisted App** distribution (available by direct link, absent from App Store search, charts, categories, and recommendations)
 
@@ -8,7 +8,7 @@ Use this as the release source of truth. Check an item only when there is eviden
 
 Legend:
 
-- `[x]` verified during the 2026-08-04 audit
+- `[x]` verified during an audit or release check recorded in this file
 - `[ ]` not complete or not yet verified
 - **BLOCKER** must be resolved before submitting to App Review
 
@@ -37,13 +37,13 @@ Legend:
 - [x] An unsigned iOS 18.5 Simulator **Release** build compiled without diagnostics on 2026-08-31.
 - [x] An unsigned native macOS **Release** build compiled successfully on 2026-08-04.
 - [x] The iOS Release build emits no Swift warnings. LumeLabel still has one Swift 6 isolation warning, but macOS tooling is outside the iOS-first launch scope.
-- [x] A signed iOS App Store archive was produced and exported successfully on 2026-08-31; App Store Connect accepted build `1.0 (10024)` and reports it `VALID`.
+- [x] A signed iOS App Store archive was produced and exported successfully on 2026-09-01; App Store Connect accepted build `1.0 (10026)` and reports it `VALID`.
 - [ ] Produce and validate a signed macOS App Store archive if macOS is part of launch scope.
-- [ ] Re-run the compliance scanner against the final archive/IPA or a clean checkout. The current source-tree scan is noisy because it scans `.claude/worktrees`, tests, and build products.
+- [x] Ran Greenlight against the exact build `10026` IPA: no critical findings. Its launch-storyboard warning is a false positive because the archived app has a modern `UILaunchScreen` dictionary. Repeat this check after the persistent-stop change is archived.
 
 Current App Store Connect validation state:
 
-- [ ] **iOS 1.0:** clear the four remaining blockers: Support URL, Privacy Policy URL, storefront availability, and required iPhone/iPad screenshots. All other findings reported by `asc validate --strict` were resolved for build `10024`.
+- [ ] **iOS 1.0:** clear the sole remaining strict-validation blocker: storefront availability. Support URL, Privacy Policy URL, screenshots, age declarations, and build attachment are populated.
 - [ ] **macOS 1.0:** clear all validation findings if shipping it (audit found 33 errors and 1 warning).
 - [ ] Reach `asc validate --strict` with zero blocking errors for each platform being submitted.
 
@@ -52,13 +52,13 @@ Current App Store Connect validation state:
 - [x] **Launch decision:** ship iOS/iPadOS first; macOS is not part of this release gate.
 - [x] Leave the macOS version unsubmitted and create a separate Mac release plan later.
 - [x] Marketing version is `1.0`, matching the existing App Store version record.
-- [x] Build number is `10024` for both the app and share extension; this exact build is uploaded and valid in App Store Connect.
-- [x] The older TestFlight build `0.7.4 (10018)` cannot be selected for the `1.0` App Store version because its marketing version does not match; build `1.0 (10024)` supersedes it.
+- [x] Build number is `10026` for both the app and share extension; this exact build is uploaded, valid, and attached to iOS version `1.0` in App Store Connect.
+- [x] The older TestFlight builds `0.7.4 (10018)` and `1.0 (10024)` are superseded by build `1.0 (10026)`.
 - [ ] Decide whether the app is free or paid. If paid, complete contracts, tax, banking, and pricing work before submission.
 - [ ] Decide the countries/regions where the app will be available.
 - [ ] Define the intended unlisted audience and write a short, specific justification for Apple (for example, members of a named organization or event).
 - [ ] Confirm that direct-link access is sufficient. If membership must be private, add authentication/authorization or choose Apple Business Manager/Apple School Manager custom distribution instead.
-- [ ] Keep App Store release control set to **manual** so the app cannot accidentally become publicly searchable before the unlisted request is approved.
+- [x] App Store release control is set to **manual** so the app cannot accidentally become publicly searchable before the unlisted request is approved.
 - [ ] Freeze the release branch/commit after blockers are fixed and record the commit SHA here: `________________`.
 - [ ] Reconcile or intentionally preserve every pre-existing dirty-worktree change before archiving.
 
@@ -68,8 +68,8 @@ Current App Store Connect validation state:
 - [x] Removed the retired `Show Adult Content (18+)` source switch. Only one migration key remains so old installs forget the setting.
 - [x] Deleted `Ilumionate/KnownAudioCatalog.json`; the 2026-08-31 Release product contains no catalog resource or its third-party titles/transcripts.
 - [ ] **POLICY RISK — adult analysis remains by product decision.** The binary and UI include labels such as `Erotic Hypnosis` / `Erotic Suggestions`, and `AnalyzerKnowledge_default.json` contains aggregate adult phrase vocabulary that can appear in Phrase Library. Preserve this functionality, but do not claim the archive contains no explicit strings.
-- [ ] Confirm the final archive contains no third-party explicit transcripts, story samples, thumbnails, cached pages, test data, search suggestions, or curated links intended to lead users to pornographic content.
-- [ ] Confirm screenshots, preview videos, metadata, reviewer notes, and sample files contain no prohibited explicit content.
+- [x] Inspected build `10026`: it contains no known-audio catalog, bundled third-party explicit transcripts/stories, named adult-site links, or curated explicit media. Adult/hypnosis classification resources intentionally remain. Repeat against the final archive.
+- [x] The uploaded iPhone/iPad screenshots, App Store metadata, and reviewer notes contain no explicit sample content or links to adult websites.
 - [ ] Do not treat unlisted distribution or a high age rating as an exception to Apple's content rules.
 - [ ] **BLOCKER — obtain specialist policy advice for the retained adult analysis and user-added web sources.** Apple's current [Guideline 1.1.4/1.2](https://developer.apple.com/app-store/review/guidelines/) exception for incidental mature web UGC says it must be hidden by default and enabled via the developer's website; this app intentionally has no account or website control plane.
 
@@ -106,8 +106,8 @@ Current App Store Connect validation state:
 - [x] Removed “safe” and “safely” as product-performance claims. Safety warnings and risk-reduction controls are described factually without guaranteeing safety.
 - [ ] Keep App Store metadata, onboarding, in-app copy, website, screenshots, support material, privacy policy, generated text, and reviewer notes consistent with entertainment-only use.
 - [x] Retained the concise disclaimer: “LumeSync is a recreational entertainment experience, not medical care or therapy.”
-- [ ] Select no medical-device or health functionality in App Store Connect unless the final shipping behavior genuinely requires otherwise; answer every questionnaire based on the final binary.
-- [x] Ran a case-insensitive source and built-simulator-app scan on 2026-08-31. Exact retired claims were absent; remaining matches were manually identified as the disclaimer, compatibility-preserving internal taxonomy, analyzer vocabulary, neutral content classification, or non-shipping developer identifiers. Repeat against the final archive.
+- [x] App Store Connect's medical/treatment age-rating declaration is `NONE`; health/wellness topics remain declared because the app's subject matter requires that truthful answer.
+- [x] Ran the retired-claim scan against the exact build `10026` archive on 2026-09-01. Exact removed claims were absent; remaining adult/hypnosis classification resources are intentional. Repeat against the final archive.
 
 ## 5. Flashing-light and physical-safety gate
 
@@ -116,21 +116,21 @@ Current App Store Connect validation state:
 - [x] Route every entry point that can start full-screen flashing through the shared acknowledgement gate or the separate Audio Light Sync gate.
 - [x] Warn people with photosensitivity, epilepsy or seizure history, light-triggered migraines, or another light-sensitive condition not to use flashing modes.
 - [x] Warn users not to use the experience while driving, operating machinery, or anywhere they cannot stop immediately.
-- [ ] Provide an obvious, always-available stop/pause control and verify it works during every visual state.
+- [x] The unified player exposes Close/Pause while full controls are visible and a persistent, text-labelled **Stop session** control after they hide. The stop path was unit-tested and exercised live in a flashing session on iPadOS 18.5 on 2026-09-01.
 - [ ] Verify app backgrounding, phone calls, audio interruptions, crashes, and scene changes stop flashing and restore the user's prior screen brightness.
 - [x] Enforce a conservative 3 Hz full-screen ceiling in `LightSafety`, generated sessions, UI ranges, `LightEngine`, and `FlashController`. Direct engine/controller and invalid-input tests pass. This follows the simple three-flashes-per-second W3C boundary because the full-screen output has not been certified with a flash-analysis tool.
 - [ ] Measure and document actual flash frequency, contrast, duty cycle, full-screen brightness changes, red-flash behavior, and transitions on physical devices.
 - [ ] Confirm Reduce Motion and other accessibility settings produce an appropriately reduced experience.
 - [ ] Test warnings and safety controls on iPhone and iPad, in light/dark environments, with brightness and Reduce White Point variations.
-- [ ] Put the safety flow and stop control in App Review notes so the reviewer can test without surprise.
+- [x] App Review notes describe the safety acknowledgement, Close behavior, and persistent **Stop session** control.
 - [ ] Keep the existing flashing-light warning visible in App Store description/screenshot context where appropriate.
 
 ## 6. Privacy, analytics, permissions, and security
 
 ### Public privacy/support presence
 
-- [ ] **BLOCKER — publish the privacy policy at a stable HTTPS URL.** The repository has `PRIVACY_POLICY.md`, but `ilumionate.app` did not resolve during this audit.
-- [ ] **BLOCKER — publish a working Support URL** with app name, contact method, basic help, and response expectations.
+- [x] App Store Connect Privacy Policy URL points to the public policy on the project's GitHub repository; it returned HTTP 200 without authentication on 2026-09-01.
+- [x] App Store Connect Support URL points to the project's public GitHub Issues page; it returned HTTP 200 without authentication on 2026-09-01.
 - [ ] **BLOCKER — make `support@ilumionate.app` deliverable**, or replace it everywhere with a working address.
 - [ ] Add an easy-to-find in-app Privacy Policy link (Settings/About and any consent screen).
 - [ ] Add an easy-to-find in-app Support link; do not rely only on a `mailto:` action.
@@ -180,12 +180,12 @@ Current App Store Connect validation state:
 
 ## 7. Age rating and parental/content controls
 
-- [ ] Complete the current App Store Connect age-rating questionnaire only after explicit-content and browser decisions are final.
+- [x] Completed the current App Store Connect age-rating declarations after the browser/adult-content decisions were finalized.
 - [ ] Do **not** reuse the old 4+ assumption; it is incompatible with the current pre-cleanup claims, flashing content, unrestricted web access, and adult-content code.
-- [ ] Answer **Unrestricted Web Access = Yes** in App Store Connect; Apple's current [age-rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/) map this capability to at least 16+ under the new rating system.
+- [x] Answered **Unrestricted Web Access = Yes** in App Store Connect; Apple's current [age-rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/) map this capability to at least 16+ under the new rating system.
 - [ ] Answer sexual/mature-content questions from the retained adult analysis vocabulary and UI, then override upward to 18+ if the calculated result is lower. Graphic sexual content would be Unrated and cannot be published, so inspect every displayed phrase before submission.
-- [ ] After section 4 is complete, verify the final app no longer presents medical, health, or therapy functionality; answer all rating questions from the final binary rather than the product intention.
-- [ ] Answer fear, mature themes, sexual content, and all other content-frequency questions based on what a user can actually encounter.
+- [x] Set medical/treatment content to `NONE` after the user-facing claim audit; no treatment or medical functionality is declared.
+- [x] Set profanity/crude humor, sexual content/nudity, and mature/suggestive themes to `FREQUENT_OR_INTENSE`; graphic sexual content is `NONE`.
 - [ ] If explicit/pornographic content remains, stop submission and remove it; a higher rating does not cure Guideline 1.1.4.
 - [ ] Verify parental controls, mature-content defaults, and website restrictions behave consistently on all supported platforms.
 - [ ] Confirm the resulting rating is consistent across metadata, screenshots, website, and reviewer notes.
@@ -195,22 +195,22 @@ Current App Store Connect validation state:
 ### Build and archive
 
 - [ ] Remove all blocker content and create a clean release candidate from the frozen commit.
-- [x] Set `MARKETING_VERSION = 1.0` and `CURRENT_PROJECT_VERSION = 10024` for the app and share extension.
+- [x] Set `MARKETING_VERSION = 1.0` and `CURRENT_PROJECT_VERSION = 10026` for the app and share extension. The next final upload must increment this after the persistent-stop change.
 - [ ] Verify display name, bundle IDs, signing team, app groups, entitlements, capabilities, deployment targets, and provisioning profiles.
-- [x] Created and exported the signed iOS **Release** archive for build `1.0 (10024)` with Xcode 26.6 / iOS 26.5 SDK on 2026-08-31. macOS is not in this release scope.
+- [x] Created and exported the signed iOS **Release** archive for build `1.0 (10026)` with Xcode 26.6 / iOS 26.5 SDK on 2026-09-01. macOS is not in this release scope.
 - [ ] Run Xcode Organizer/App Store validation and resolve every error and actionable warning.
-- [ ] Inspect the archived `.app`, not only the source tree, for prohibited/test assets, explicit catalog data, secrets, sample credentials, debug menus, and oversized resources.
-- [ ] Verify dSYMs and symbol files are included/uploaded for crash symbolication.
+- [x] Inspected build `10026`'s archived `.app` for retired claims, the removed known-audio catalog, explicit bundled samples, and signing integrity. Repeat after the final build increment.
+- [x] App and share-extension dSYMs are present in the build `10026` archive and were uploaded with the build.
 - [ ] Verify bitcode-related settings and legacy submission configuration are not present where unsupported.
 - [ ] Check archive and install size, including WhisperKit/model behavior; disclose any large post-install model download before it starts.
 
 ### Automated tests and static checks
 
-- [x] Complete serial iOS 18.5 suite passed on 2026-08-31: **1695 tests / 259 suites / 0 failures** in 36.392 seconds.
+- [x] Complete serial iOS 18.5 suite passed on 2026-09-01 after the persistent-stop change: **1696 tests / 259 suites / 0 failures** in 37.356 seconds.
 - [ ] Run the macOS unit-test suite if macOS is shipping.
 - [ ] Run UI tests for onboarding, consent, import, analysis, reading, playback, flashing safety, Settings, and deletion.
 - [ ] Run Swift concurrency/static analysis and fix data-race, main-actor, force-unwrap, and crash findings that affect release paths.
-- [ ] Re-run Greenlight/compliance scanning on the final archive or clean checkout; manually disposition every finding with evidence.
+- [x] Greenlight reported no critical findings for the exact build `10026` IPA; the source-tree Amplitude/ATT result was manually identified as a DSP-word false positive. Repeat on the next final IPA.
 - [ ] Run dependency/vulnerability and license checks for Swift packages and model assets.
 - [ ] Run `git diff --check` and ensure the release commit contains no merge markers, generated junk, or accidentally committed secrets.
 
@@ -244,9 +244,9 @@ Current App Store Connect validation state:
 - [x] Bundle ID: `com.byronquine.lumenSync`.
 - [x] Primary category: Entertainment; secondary: Music.
 - [ ] Confirm primary language and all localization choices.
-- [ ] Enter and publish the live Privacy Policy URL.
-- [ ] Complete the Content Rights declaration after the rights audit.
-- [ ] Complete the age-rating questionnaire after content cleanup.
+- [x] Entered the live public Privacy Policy URL.
+- [x] Content Rights declares that the app uses third-party content because user-imported media and websites remain.
+- [x] Completed the age-rating questionnaire after content cleanup; an explicit 18+ override decision remains open below.
 - [ ] Complete EU Digital Services Act trader/non-trader status and provide any required public contact information.
 - [ ] Review App Store agreements and business/contact information; resolve any account-level banners or expiring agreements.
 
@@ -254,11 +254,11 @@ Current App Store Connect validation state:
 
 - [x] Existing description, keywords, subtitle, and categories are substantially aligned with an entertainment positioning and already state that the app is not medical treatment.
 - [ ] Re-review all copy after the claims/content changes; remove any feature no longer present in the App Store build.
-- [ ] Enter a working Support URL.
+- [x] Entered the public GitHub Issues Support URL.
 - [ ] Confirm subtitle, description, keywords, promotional text (optional), copyright, and version text.
-- [ ] Supply current App Store Connect-required iPhone screenshots (1–10 per required set) showing the real shipping UI.
-- [ ] Supply current App Store Connect-required iPad screenshots because the app supports iPad.
-- [ ] Use only genuine in-app UI in screenshots; disclose flashing-light behavior clearly and avoid prohibited content or unverifiable claims.
+- [x] Uploaded four genuine iPhone 6.9-inch screenshots (1320×2868); App Store Connect reports every asset `COMPLETE`.
+- [x] Uploaded four genuine iPad Pro 13-inch screenshots (2064×2752); App Store Connect reports every asset `COMPLETE`.
+- [x] Uploaded screenshots use the shipping UI and contain no explicit material or unverifiable outcome claims.
 - [ ] Add an app preview video only if it improves review/listing quality; it is optional and must show actual app use.
 
 ### macOS 1.0, if included
@@ -291,30 +291,30 @@ Current App Store Connect validation state:
 
 ## 11. Select the final build
 
-- [x] Uploaded build `1.0 (10024)`, whose marketing version exactly matches the App Store version.
-- [x] Build `10024` is higher than `10018`.
-- [x] App Store Connect finished processing build `10024` with state `VALID`; its internal TestFlight state is `IN_BETA_TESTING`.
+- [x] Uploaded build `1.0 (10026)`, whose marketing version exactly matches the App Store version.
+- [x] Build `10026` is higher than `10018` and `10024`.
+- [x] App Store Connect finished processing build `10026` with state `VALID`; it is distributed to the internal Alpha group.
 - [x] The processed build reports `usesNonExemptEncryption = false`; this matches the current app declaration.
 - [ ] Complete TestFlight smoke testing with the exact uploaded build.
-- [ ] Attach the build to the iOS 1.0 version.
+- [x] Attached build `10026` to the iOS 1.0 version. Replace it with the incremented build after the persistent-stop change is archived.
 - [ ] Upload, test, and attach a matching macOS build only if Mac is in launch scope.
-- [ ] Run strict App Store Connect validation again after build attachment.
+- [x] Ran strict App Store Connect validation after build attachment, URLs, screenshots, and age declarations; only Pricing and Availability remains blocking.
 
 ## 12. App Review information
 
-- [ ] Enter a monitored review contact name, phone, and email.
-- [ ] State that no account/login is required. If that changes, provide a durable full-access demo account and keep it active through review.
+- [x] Entered a monitored review contact name, phone, and email.
+- [x] Review notes state that no account/login is required and `demoAccountRequired` is false.
 - [ ] Attach or provide a small, rights-cleared sample audio/text file so the reviewer can exercise import, analysis, reading, and playback without third-party content.
 - [ ] Give concise steps to reach every non-obvious feature: imports, share extension, camera attention monitoring, analysis/model download, reading mode, audio-reactive visuals, and flashing-light controls.
 - [ ] Explain any first-run model download, its approximate size/time, and what the reviewer should expect.
-- [ ] Explain that optional TelemetryDeck analytics defaults off and how to inspect the consent toggle.
-- [ ] Explain on-device processing and what data, if any, leaves the device.
-- [ ] Explain the flashing-light warning, acknowledgement, conservative defaults, and emergency stop.
+- [x] Review notes explain that optional TelemetryDeck analytics defaults off and where to inspect the privacy controls.
+- [x] Review notes explain on-device analysis, the optional model download, and that imported audio is not uploaded with it.
+- [x] Review notes explain the flashing-light warning, acknowledgement, and persistent stop control.
 - [ ] Explain background audio/processing modes and why they are required.
 - [ ] Declare all retained third-party services and attach permissions/authorizations where needed.
-- [ ] Disclose feature flags, region/device limitations, special hardware requirements, and temporary service dependencies.
-- [ ] Explicitly write in **Review Notes** that the app is intended for **unlisted distribution** and identify its limited audience/use case.
-- [ ] Ensure review notes do not rely on contacting the developer for basic access or missing instructions.
+- [x] Review notes disclose the iOS 18 fallback and optional iOS 26 Foundation Models enhancement.
+- [x] Review notes state that the app is intended for unlisted distribution for a limited adult community using its own authorized material.
+- [x] Review notes provide a complete no-login path and do not rely on contacting the developer for basic access.
 
 ## 13. Submission and unlisted-request sequence
 

@@ -25,6 +25,14 @@ struct PlayerControlsVisibilityTests {
         #expect(v.isVisible == true)
     }
 
+    @Test("Hidden controls leave the persistent stop control available")
+    func hiddenControlsLeavePersistentStopAvailable() {
+        let v = PlayerControlsVisibility()
+        v.hideNow()
+
+        #expect(v.showsPersistentStopControl)
+    }
+
     @Test("Auto-hide is suppressed while the drawer is open")
     func drawerSuppressesHide() {
         let v = PlayerControlsVisibility()

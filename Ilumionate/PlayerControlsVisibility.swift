@@ -62,6 +62,11 @@ final class PlayerControlsVisibility {
     /// Whether auto-hide is currently allowed.
     var canAutoHide: Bool { !isDrawerOpen && !isPaused && !voiceOverActive() }
 
+    /// The compact player surface must keep a one-tap exit available whenever
+    /// the full transport controls are hidden. This is especially important
+    /// for modes that change the whole screen's brightness.
+    var showsPersistentStopControl: Bool { !isVisible }
+
     /// User touched the screen: show controls and restart the idle timer.
     func registerInteraction() {
         withAnimation(LiminalMotion.fade) { isVisible = true }
