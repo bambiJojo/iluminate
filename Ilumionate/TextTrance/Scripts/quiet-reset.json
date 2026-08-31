@@ -6,7 +6,7 @@
   "supportedArcs": ["fullText", "handoff"],
   "language": "en",
   "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
-  "summary": "A practical nervous-system reset that moves from visual attention into body ease, balanced breathing, and a calm return or optional handoff.",
+  "summary": "A paced reading that moves from visual attention into quiet imagery and a calm return or optional handoff.",
   "segments": [
     {
       "phase": "induction",
@@ -25,7 +25,7 @@
     },
     {
       "phase": "suggestions",
-      "text": "In this calmer state, you can remember that a reset does not erase responsibility. It makes responsibility easier to meet. When the system is quieter, the next choice can be clearer. When the breath is smoother, the next sentence can be kinder. When the body is supported, the mind can stop spending energy on unnecessary alarm. You can return to this pattern during the day with one small pause. Feel support. Release the jaw. Let one breath finish. Then choose the next useful action. That is enough. A reset can be brief and still be real. A little regulation now can change the shape of the next hour.",
+      "text": "In this quieter scene, a reset does not erase responsibility. It simply leaves one task in the center while the others wait at the edge. Feel the support of the chair. Release the jaw. Let one breath finish. Then picture the next useful action. The pattern can be brief: support, breath, next step. For this reading, that is enough.",
       "pacing": { "baseWPM": 92 }
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "phase": "suggestions",
-      "text": "Let the reset include permission to continue imperfectly. A calm nervous system does not require a perfect day. It only needs chances to return. You can return after a hard conversation. You can return after a mistake. You can return after a rush of emotion. Returning is not starting over from nothing. Returning is using the path again because the path still works. Support, breath, release, next step. Support, breath, release, next step. The sequence stays simple so it can meet you anywhere. Even when the reset is small, it can interrupt a larger pattern and give the next choice more room.",
+      "text": "Let the reset include permission to continue imperfectly. In the scene, you can return after a hard conversation, a mistake, or a rush of emotion. Returning is not starting over from nothing. It is simply using the same sequence again: support, breath, release, next step. Support, breath, release, next step. Picture the quiet room once more. The chairs are in place, the papers are stacked, and the cup has been moved to the sink. One task waits in the center. The others remain on their shelves. Nothing in the room needs to hurry. The words stay simple while the reading continues, and the next line arrives only after this one has had its moment on the screen.",
       "pacing": { "baseWPM": 90 }
     },
     {

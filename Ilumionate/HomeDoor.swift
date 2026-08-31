@@ -42,7 +42,7 @@ enum HomeDoor: String, CaseIterable, Identifiable, Sendable {
         case .listen:  "Your audio, light-synced"
         case .read:    "Scripts, paced"
         case .visuals: "A wordless field"
-        case .pulse:   "Flash entrainment"
+        case .pulse:   "Adjustable flash patterns"
         }
     }
 

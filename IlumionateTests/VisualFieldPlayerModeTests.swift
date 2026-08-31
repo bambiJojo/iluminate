@@ -121,9 +121,10 @@ struct VisualFieldPlayerModeTests {
     func countdownCopyFitsAWatchedSession() {
         #expect(mode().countdownHoldMessage == nil)
         #expect(mode().countdownIntroMessage.localizedStandardContains("close your eyes") == false)
-        // The listened modes keep their established copy.
+        // Flashing modes use a neutral hold rather than implying that closing
+        // the eyes prevents exposure.
         #expect(PlayerMode.colorPulse(frequency: 10, intensity: 0.5)
-            .countdownHoldMessage == "Close your eyes")
+            .countdownHoldMessage == "Ready")
     }
 
     // MARK: - BinauralSettings

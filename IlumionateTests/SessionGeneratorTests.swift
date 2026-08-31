@@ -10,6 +10,40 @@ import Testing
 import Foundation
 @testable import Ilumionate
 
+@Suite("Full-screen flash ceiling")
+@MainActor
+struct LightSafetyTests {
+    @Test("Requested rates never exceed three visible flashes per second")
+    func clampsRequestedRates() {
+        #expect(LightSafety.clampFlashHz(0.5) == 0.5)
+        #expect(LightSafety.clampFlashHz(3.0) == 3.0)
+        #expect(LightSafety.clampFlashHz(10.0) == 3.0)
+        #expect(LightSafety.clampFlashHz(40.0) == 3.0)
+    }
+
+    @Test("Invalid and non-positive input cannot destabilize the oscillator")
+    func normalizesInvalidRates() {
+        #expect(LightSafety.clampFlashHz(.infinity) == LightSafety.maxFlashHz)
+        #expect(LightSafety.clampFlashHz(.nan) == LightSafety.maxFlashHz)
+        #expect(LightSafety.clampFlashHz(0) == 0.1)
+        #expect(LightSafety.clampFlashHz(-10) == 0.1)
+    }
+
+    @Test("Both full-screen rendering engines enforce the ceiling at input")
+    func enginesEnforceCeiling() {
+        let engine = LightEngine()
+        engine.targetFrequency = 40
+        #expect(engine.targetFrequency == LightSafety.maxFlashHz)
+
+        let controller = FlashController(
+            frequency: 40,
+            intensity: 1,
+            pattern: .square
+        )
+        #expect(controller.frequency == LightSafety.maxFlashHz)
+    }
+}
+
 // MARK: - FrequencyRangeForPhase
 
 @MainActor
@@ -25,21 +59,24 @@ struct FrequencyRangeForPhaseTests {
             #expect(range.lowerBound < range.upperBound,
                 "\(phase.rawValue): lowerBound must be < upperBound")
             #expect(range.lowerBound >= 0.5, "\(phase.rawValue) lower bound below 0.5 Hz")
-            #expect(range.upperBound <= 40.0, "\(phase.rawValue) upper bound above 40 Hz")
+            #expect(
+                range.upperBound <= LightSafety.maxFlashHz,
+                "\(phase.rawValue) upper bound exceeds the full-screen flash ceiling"
+            )
         }
     }
 
-    @Test func deepStatesPhasesAreBelowTenHz() {
+    @Test func quieterPhasesUseTheLowerPartOfTheVisualRange() {
         for phase in [HypnosisMetadata.Phase.therapy, .deepening] {
             let range = LightScorePhaseTargeting.frequencyRange(for: phase)
-            #expect(range.upperBound <= 10.0,
-                "\(phase.rawValue) upper bound must be ≤10 Hz (theta region)")
+            #expect(range.upperBound <= 2.0)
         }
     }
 
-    @Test func emergenceIsInAlphaOrHigher() {
+    @Test func emergenceUsesTheFastPartOfTheVisualRange() {
         let range = LightScorePhaseTargeting.frequencyRange(for: .emergence)
-        #expect(range.lowerBound >= 7.0, "emergence must start in alpha/theta-alpha boundary")
+        #expect(range.lowerBound >= 2.0)
+        #expect(range.upperBound <= LightSafety.maxFlashHz)
     }
 }
 
@@ -73,9 +110,9 @@ struct TargetFrequencyForPhaseTests {
     }
 
     @Test func configMaxClamps() {
-        let tight = SessionGenerator.GenerationConfig(maxFrequency: 5.0)
+        let tight = SessionGenerator.GenerationConfig(maxFrequency: 1.5)
         let target = targetFrequency(for: .preTalk, config: tight)
-        #expect(target <= 5.0, "target must be clamped to config.maxFrequency")
+        #expect(target <= 1.5, "target must be clamped to config.maxFrequency")
     }
 
     private func targetFrequency(
@@ -203,7 +240,7 @@ struct AdvancedSessionStrategyTests {
     private let gen = SessionGenerator()
     private let config = SessionGenerator.GenerationConfig.default
 
-    @Test func broadBrainwaveRangeUsesPreferredCenterInsteadOfLowerBound() {
+    @Test func broadFrequencyRangeIsLimitedAtTheVisualOutputBoundary() {
         let analysis = AnalysisResult(
             mood: .meditative,
             energyLevel: 0.2,
@@ -218,7 +255,7 @@ struct AdvancedSessionStrategyTests {
 
         let moments = gen.generateBrainwaveSession(analysis: analysis, duration: 600, config: config)
 
-        #expect(abs((moments.first?.frequency ?? 0) - 7.83) < 0.05)
+        #expect(moments.first?.frequency == LightSafety.maxFlashHz)
     }
 
     @Test func hypnosisFromPhasesCanSkipEmergenceRamp() {
@@ -281,12 +318,12 @@ struct ConfusionTechniqueLightResponseTests {
             .sorted { $0.time < $1.time }
         #expect(overlay.count == 4)
         #expect(overlay.dropLast().allSatisfy { $0.waveform == .noiseModulatedSine })
-        #expect(overlay.allSatisfy { abs($0.frequency - 7.0) <= 0.45 })
+        #expect(overlay.allSatisfy { abs($0.frequency - 2.0) <= 0.45 })
         #expect(overlay.allSatisfy { $0.intensity <= 0.40 })
 
         let restored = try #require(overlay.last)
         #expect(restored.time == 38)
-        #expect(restored.frequency == 7.0)
+        #expect(restored.frequency == 2.0)
         #expect(restored.intensity == 0.40)
         #expect(restored.waveform == .softPulse)
         #expect(restored.bilateral == true)
@@ -343,7 +380,7 @@ struct ConfusionTechniqueLightResponseTests {
         [
             LightMoment(
                 time: 0,
-                frequency: 7.0,
+                frequency: 2.0,
                 intensity: 0.40,
                 waveform: .softPulse,
                 bilateral: true,
@@ -351,7 +388,7 @@ struct ConfusionTechniqueLightResponseTests {
             ),
             LightMoment(
                 time: 100,
-                frequency: 7.0,
+                frequency: 2.0,
                 intensity: 0.40,
                 waveform: .softPulse,
                 bilateral: true,

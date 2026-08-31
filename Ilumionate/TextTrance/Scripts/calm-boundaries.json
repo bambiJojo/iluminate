@@ -6,7 +6,7 @@
   "supportedArcs": ["fullText", "handoff"],
   "language": "en",
   "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
-  "summary": "A grounded self-suggestion session for saying yes and no from a calm, centered place.",
+  "summary": "A reflective self-suggestion session about saying yes and no from a calm, centered place.",
   "segments": [
     {
       "phase": "induction",
@@ -15,7 +15,7 @@
     },
     {
       "phase": "deepening",
-      "text": "Imagine standing inside a circle drawn in warm light. The circle is not a wall. It is a clear edge. You can see through it. You can connect across it. You can choose what crosses it. The body may recognize this as relief. The shoulders do not have to rise. The jaw does not have to brace. The breath does not have to become shallow. A calm boundary lets the nervous system stay available while the answer becomes clear. You can stand in the circle and listen inwardly. What is mine? What is not mine? What is a yes? What is a no? What needs more time?",
+      "text": "Imagine standing inside a circle drawn in warm light. The circle is not a wall. It is a clear edge. You can see through it. You can connect across it. You can choose what crosses it. Within this scene, the shoulders can remain low. The jaw does not have to brace. The breath can continue at its own pace while the answer becomes clear. You can stand in the circle and listen inwardly. What is mine? What is not mine? What is a yes? What is a no? What needs more time?",
       "pacing": { "baseWPM": 98 }
     },
     {

@@ -18,15 +18,15 @@
 
 import SwiftUI
 
-// MARK: - Brainwave Category
+// MARK: - Pattern Category
 
 enum BrainwaveCategory: String, CaseIterable, Identifiable {
     var id: String { rawValue }
-    case sleep  = "Sleep"
-    case focus  = "Focus"
-    case energy = "Energy"
-    case relax  = "Relax"
-    case trance = "Trance"
+    case sleep  = "Very Slow"
+    case focus  = "Medium"
+    case energy = "Fast"
+    case relax  = "Slow"
+    case trance = "Full Range"
 
     var emoji: String {
         switch self {
@@ -51,11 +51,11 @@ enum BrainwaveCategory: String, CaseIterable, Identifiable {
     /// Average frequency of the first moment that determines which category a session belongs to
     var frequencyRange: ClosedRange<Double> {
         switch self {
-        case .sleep:  return 0.5...4.0    // Delta
-        case .relax:  return 4.0...8.0    // Theta
-        case .focus:  return 8.0...14.0   // Alpha
-        case .energy: return 14.0...30.0  // Beta
-        case .trance: return 0.5...40.0   // All
+        case .sleep:  return 0.5...1.0
+        case .relax:  return 1.0...1.5
+        case .focus:  return 1.5...2.0
+        case .energy: return 2.0...3.0
+        case .trance: return LightSafety.flashFrequencyRange
         }
     }
 }

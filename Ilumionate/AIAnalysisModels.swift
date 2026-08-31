@@ -12,39 +12,40 @@ import FoundationModels
 
 // MARK: - AVE System Prompt
 
-/// Science-grounded system prompt for the Foundation Models session.
-/// Accurate brainwave targets and hypnosis phase structure dramatically
-/// improve classification accuracy and session quality downstream.
+/// Structural system prompt for the Foundation Models session.
+/// Accurate pacing and hypnosis-phase detection improve classification and
+/// keep generated light changes aligned with the source audio.
 nonisolated enum AVESystemPrompt {
 
     /// Compact instructions for transcript classification.
     /// Covers the decisions the structured-output schema requires while leaving
     /// enough context for the generated response itself.
     static let minimalInstructions = """
-    You classify audio content for a light therapy system.
+    You classify audio content for a synchronized light-pattern system.
     Also create a concise, specific library title and 1–6 short themes. Only name a creator when supported by the filename, embedded context, or transcript; otherwise return an empty creator.
     Content types: hypnosis, meditation, music, guidedImagery, affirmations, unknown.
-    Frequency targets: hypnosis 4–8 Hz, meditation 6–8 Hz, music 8–18 Hz, affirmations 9–11 Hz.
+    Default visual-pattern ranges: hypnosis 0.7–1.8 Hz, meditation 0.8–1.6 Hz,
+    music 1.5–3 Hz, affirmations 1.2–2 Hz. Never exceed 3 Hz. These are
+    media-control parameters only.
     Phases (hypnosis only): pre_talk, induction, deepening, therapy, suggestions, erotic_suggestions, brainwashing, post_hypnotic_conditioning, emergence.
     Techniques/modifiers, not phases: fractionation, confusion.
     Color temperature: deep states 2200–2800 K, alpha 3000–4000 K, alert 4500–6500 K.
     """
 
     static let instructions = """
-    You are an expert in audiovisual entrainment (AVE), neuroscience, and light therapy.
-    Your analysis directly drives a real-time light entrainment system, so precision matters.
+    You analyze audio structure for a system that renders synchronized light patterns.
+    Treat frequency, intensity, and colour temperature strictly as visual control
+    parameters. Do not make medical, therapeutic, neurological, sleep, stress, mood,
+    cognition, performance, or other health-outcome claims.
 
-    BRAINWAVE BANDS (memorize these — they determine light frequency recommendations):
-    • Delta 0.5–4 Hz: Deep NREM sleep, regeneration, growth hormone release
-    • Theta 4–8 Hz: Hypnagogic zone, deep meditation, unconscious reprogramming,
-      peak suggestibility. 4–6 Hz = deepest trance. 7.83 Hz = Schumann resonance (ideal
-      for meditation). The Peniston Protocol targets 5–7 Hz for trauma/addiction work.
-    • Alpha 8–12 Hz: Relaxed wakefulness. 10 Hz = serotonin production, anti-anxiety.
-      The "quiet mind" state. Upper alpha (10–12 Hz) = learning readiness.
-    • SMR 12–15 Hz: Calm body, alert mind. Thalamic noise-filtering. Focus/study state.
-    • Beta 15–30 Hz: Active thinking. 15–20 Hz = optimal focus. >20 Hz = stress/anxiety.
-    • Gamma 40 Hz: Thalamocortical binding, consciousness, peak performance.
-      MIT research: 40 Hz reduces amyloid plaques in Alzheimer's.
+    LIGHT-PATTERN RATE BANDS:
+    • 0.5–1 Hz: very slow pulses
+    • 1–1.5 Hz: slow pulses
+    • 1.5–2 Hz: medium pulses
+    • 2–2.5 Hz: fast pulses
+    • 2.5–3 Hz: very fast pulses
+    Choose rates from the source's pacing and explicit frequency framing. Describe
+    observable timing and colour changes only; never attribute physiological effects.
 
     HYPNOSIS PHASE DETECTION — identify these in order when present:
     1. pre_talk: Rapport building, expectation setting, normalizing hypnosis
@@ -52,7 +53,7 @@ nonisolated enum AVESystemPrompt {
     3. deepening: Counting down, descending imagery ("going deeper"), staircase/levator cues.
        Fractionation cycles and confusion language are techniques inside induction/deepening,
        not standalone phases.
-    4. therapy: The main therapeutic content — metaphors, re-framing, passive trance work
+    4. therapy: The persisted label for metaphor, reframing, and passive trance material
     5. suggestions: Direct or indirect behavioral/belief suggestions
     6. erotic_suggestions: Sensual, arousal, submission, pleasure-linked hypnotic suggestions
     7. brainwashing: Repetitive indoctrination loops, identity overwrite, mantra-style programming
@@ -68,13 +69,12 @@ nonisolated enum AVESystemPrompt {
     • unknown: Cannot be determined from available information
 
     COLOR TEMPERATURE TARGETS:
-    • Deep states (theta/delta): 2200–2800 K (warm amber/red — avoids blue-light alerting)
+    • Slower or quieter sections: 2200–2800 K (warm amber/red)
     • Alpha: 3000–4000 K (neutral warm)
-    • Alert/emergence: 4500–6500 K (cool white/blue — activates melanopsin pathway)
+    • Faster or active sections: 4500–6500 K (cool white/blue)
 
     SESSION ARC PRINCIPLE:
-    All sessions must start in beta (15–18 Hz) and end by returning to beta.
-    Never recommend jumping directly to theta — the brain needs the beta→alpha→theta arc.
+    Begin and end with moderate rates, use gradual changes, and avoid abrupt jumps.
 
     --- FEW-SHOT EXAMPLES ---
 
@@ -82,13 +82,13 @@ nonisolated enum AVESystemPrompt {
     contentType: hypnosis
     mood: relaxing
     energyLevel: 0.15
-    frequencyLower: 4.0
-    frequencyUpper: 8.0
+    frequencyLower: 0.7
+    frequencyUpper: 1.3
     intensity: 0.5
     colorTemperature: 2600
-    recommendedPreset: Deep Theta Hypnosis
+    recommendedPreset: Slow Hypnosis Pattern
     summary: A classic Ericksonian induction with permissive language, descending staircase deepener,
-      passive trance section, and gentle awakening. Light targets mid-theta (4–6 Hz) at peak depth.
+      passive trance section, and gentle awakening. The light pattern slows below 1 Hz in the quietest section.
     phases: [pre_talk 0–120s, induction 120–300s, deepening 300–600s,
              therapy 600–1260s, suggestions 1260–1560s, post_hypnotic_conditioning 1560–1740s, emergence 1740–1800s]
     tranceDepthCurve: [0.1, 0.28, 0.5, 0.72, 0.84, 0.78, 0.58, 0.22]
@@ -97,13 +97,13 @@ nonisolated enum AVESystemPrompt {
     contentType: meditation
     mood: meditative
     energyLevel: 0.2
-    frequencyLower: 6.0
-    frequencyUpper: 8.0
+    frequencyLower: 0.8
+    frequencyUpper: 1.4
     intensity: 0.45
     colorTemperature: 3200
-    recommendedPreset: Theta-Alpha Meditation
+    recommendedPreset: Slow Meditation Pattern
     summary: Body-scan guided meditation with breath focus and present-moment awareness.
-      No induction structure. Light targets 7–8 Hz theta-alpha border (Schumann resonance zone).
+      No induction structure. The light pattern uses a steady, slow rate through the central section.
     phases: []
     tranceDepthCurve: [0.1, 0.4, 0.65, 0.7, 0.55, 0.3]
 
@@ -111,13 +111,13 @@ nonisolated enum AVESystemPrompt {
     contentType: music
     mood: energizing
     energyLevel: 0.75
-    frequencyLower: 14.0
-    frequencyUpper: 18.0
+    frequencyLower: 2.0
+    frequencyUpper: 3.0
     intensity: 0.85
     colorTemperature: 5500
-    recommendedPreset: High-Beta Energizer
-    summary: High-energy electronic music with driving rhythm. Light targets beta (15–18 Hz)
-      to enhance alertness and performance. Warm-up and cool-down segments soften the arc.
+    recommendedPreset: Active Music Pattern
+    summary: High-energy electronic music with a driving rhythm. The light pattern uses 2–3 Hz
+      during active sections, with slower opening and closing segments to soften the arc.
     phases: []
     tranceDepthCurve: [0.2, 0.5, 0.85, 0.9, 0.8, 0.5, 0.25]
     """
@@ -126,7 +126,7 @@ nonisolated enum AVESystemPrompt {
 // MARK: - AI Response Structures
 
 @available(iOS 26.0, macOS 26.0, *)
-@Generable(description: "Analysis of audio content for light therapy session generation")
+@Generable(description: "Analysis of audio content for synchronized light-pattern generation")
 struct AIAnalysisResponse {
 
     @Guide(description: "A concise, specific library title based on the content. Do not include creator or duration.")
@@ -155,16 +155,17 @@ struct AIAnalysisResponse {
 
     @Guide(description: """
         Lower bound of the target frequency range in Hz.
-        Base this on content type: hypnosis induction 8–12, deep theta 4–6,
-        meditation 6–8, affirmations 9–11, music follows energy.
-        """, .range(0.5...40.0))
+        Base this on content type: hypnosis 0.7–1.8, meditation 0.8–1.6,
+        affirmations 1.2–2, and music 1.5–3.
+        """, .range(0.5...3.0))
     var frequencyLower: Double
 
     @Guide(description: """
         Upper bound of the target frequency range in Hz.
         Must be greater than frequencyLower.
-        Examples: theta 4–8, alpha 8–12, SMR 12–15, beta 15–30.
-        """, .range(0.5...40.0))
+        Never exceed 3 Hz. Examples: quiet 0.5–1, slow 1–1.5,
+        medium 1.5–2, fast 2–2.5, very fast 2.5–3.
+        """, .range(0.5...3.0))
     var frequencyUpper: Double
 
     @Guide(description: "Suggested light intensity from 0.0 to 1.0", .range(0.0...1.0))
@@ -172,7 +173,8 @@ struct AIAnalysisResponse {
 
     @Guide(description: """
         Recommended color temperature in Kelvin.
-        Deep theta/delta: 2200–2800. Alpha: 3000–4000. Alert/focus: 4500–6500.
+        Slow/quiet sections: 2200–2800. Midrange sections: 3000–4000.
+        Fast/active sections: 4500–6500.
         """, .range(2000...6500))
     var colorTemperature: Double
 
@@ -195,10 +197,10 @@ struct AIAnalysisResponse {
         """, .count(3...12))
     var tranceDepthCurve: [Double]
 
-    @Guide(description: "A brief 2–3 sentence summary of the content and recommended light approach")
+    @Guide(description: "A brief 2–3 sentence summary of the content and observable light timing. Do not claim medical, therapeutic, neurological, sleep, stress, mood, cognition, performance, or health outcomes.")
     var summary: String
 
-    @Guide(description: "Descriptive preset name, e.g. 'Deep Theta Hypnosis' or 'Energizing Alpha'")
+    @Guide(description: "Descriptive preset name based on observable pacing, e.g. 'Slow Hypnosis Pattern' or 'Active Music Pattern'")
     var recommendedPreset: String
 }
 
@@ -206,9 +208,9 @@ struct AIAnalysisResponse {
 /// Using `@Generable` on the enum eliminates fragile string matching in session generation —
 /// the model can only output one of these six canonical values.
 enum LightAction: String, Codable, Sendable {
-    /// Guide the brain deeper into trance / lower-frequency entrainment.
+    /// Move to a slower light-pattern rate for a deeper hypnosis section.
     case deepen
-    /// Increase alertness and energy with higher-frequency entrainment.
+    /// Move to a faster light-pattern rate for an active section.
     case energize
     /// Shift to warmer amber/red color temperature for deeper states.
     case warm

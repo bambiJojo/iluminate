@@ -15,7 +15,11 @@ import SwiftUI
 @MainActor
 @Observable
 final class MindMachineModel: Sendable {
-    var frequency: Double = 10.0        // Hz
+    private var frequencyStorage: Double = LightSafety.maxFlashHz
+    var frequency: Double {      // Hz
+        get { frequencyStorage }
+        set { frequencyStorage = LightSafety.clampFlashHz(newValue) }
+    }
     var intensity: Double = 0.75        // 0.0 to 1.0
     var colorTemperature: Int = 3000     // Kelvin
     var selectedPattern: LightPattern = .sine
@@ -67,20 +71,20 @@ final class MindMachineModel: Sendable {
 
     var brainwaveZone: String {
         switch frequency {
-        case 0.5..<4: return "Delta"
-        case 4..<8: return "Theta"
-        case 8..<12: return "Alpha"
-        case 12..<30: return "Beta"
-        default: return "Gamma"
+        case 0.5..<1.0: return "Very Slow"
+        case 1.0..<1.5: return "Slow"
+        case 1.5..<2.0: return "Medium"
+        case 2.0..<2.5: return "Fast"
+        default: return "Very Fast"
         }
     }
 
     var brainwaveColor: Color {
         switch frequency {
-        case 0.5..<4: return .bwDelta
-        case 4..<8: return .bwTheta
-        case 8..<12: return .bwAlpha
-        case 12..<30: return .bwBeta
+        case 0.5..<1.0: return .bwDelta
+        case 1.0..<1.5: return .bwTheta
+        case 1.5..<2.0: return .bwAlpha
+        case 2.0..<2.5: return .bwBeta
         default: return .bwGamma
         }
     }
@@ -90,11 +94,11 @@ final class MindMachineModel: Sendable {
     /// tint agrees with the model's brainwaveColor.
     var moodCategory: BrainwaveCategory {
         switch frequency {
-        case 0.5..<4:   return .sleep   // delta  → bwDelta
-        case 4..<8:     return .relax   // theta  → bwTheta
-        case 8..<14:    return .focus   // alpha  → bwAlpha
-        case 14..<30:   return .energy  // beta   → bwBeta
-        default:        return .trance  // gamma  → bwGamma
+        case 0.5..<1.0: return .sleep
+        case 1.0..<1.5: return .relax
+        case 1.5..<2.0: return .focus
+        case 2.0..<2.5: return .energy
+        default:        return .trance
         }
     }
 

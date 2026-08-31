@@ -6,7 +6,7 @@
   "supportedArcs": ["fullText", "handoff"],
   "language": "en",
   "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
-  "summary": "A grounded self-suggestion session for calm confidence, future pacing, and carrying steadiness into ordinary action.",
+  "summary": "A reflective self-suggestion session about confidence, future pacing, and ordinary action.",
   "segments": [
     {
       "phase": "induction",
@@ -40,7 +40,7 @@
     },
     {
       "phase": "suggestions",
-      "text": "Let the feeling become more specific now. Confidence can show up as making the call, opening the file, asking the question, taking the pause, or letting a silence remain unfilled. It can show up as repairing quickly instead of hiding. It can show up as receiving useful feedback without turning it into a story about your worth. Every ordinary expression of steadiness teaches the mind that confidence is something you do, not something you wait to feel.",
+      "text": "Let the idea become more specific now. In this reading, confidence can look like making the call, opening the file, asking the question, taking the pause, or letting a silence remain unfilled. It can look like repairing quickly instead of hiding, or receiving useful feedback without turning it into a story about your worth. These are concrete images of confidence as action rather than something you wait to feel.",
       "pacing": { "baseWPM": 90 }
     },
     {

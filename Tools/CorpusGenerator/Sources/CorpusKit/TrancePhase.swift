@@ -122,7 +122,7 @@ public enum TrancePhase: String, Codable, Sendable, CaseIterable {
         case .fractionation: return "Fractionation"
         case .deepening: return "Deepening"
         case .confusion: return "Confusion"
-        case .therapy: return "Therapeutic Work"
+        case .therapy: return "Content Work"
         case .suggestions: return "Suggestions"
         case .eroticSuggestions: return "Erotic Suggestions"
         case .brainwashing: return "Brainwashing"

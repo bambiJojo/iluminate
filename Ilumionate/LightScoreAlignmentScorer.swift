@@ -76,7 +76,11 @@ struct LightScoreAlignmentScorer: Sendable {
         config: SessionGenerator.GenerationConfig
     ) -> Double {
         guard let phases = analysis.hypnosisMetadata?.phases, !phases.isEmpty else {
-            return scoreAgainstSuggestedRange(session: session, analysis: analysis)
+            return scoreAgainstSuggestedRange(
+                session: session,
+                analysis: analysis,
+                config: config
+            )
         }
 
         let samples = phases.flatMap { phaseSamples(for: $0) }
@@ -205,16 +209,31 @@ struct LightScoreAlignmentScorer: Sendable {
         return scoreable.isEmpty ? sorted : scoreable
     }
 
-    private func scoreAgainstSuggestedRange(session: LightSession, analysis: AnalysisResult) -> Double {
+    private func scoreAgainstSuggestedRange(
+        session: LightSession,
+        analysis: AnalysisResult,
+        config: SessionGenerator.GenerationConfig
+    ) -> Double {
         guard !session.light_score.isEmpty else { return 0 }
-        let range = analysis.suggestedFrequencyRange
+        let suggested = analysis.suggestedFrequencyRange
+        let first = clamp(
+            suggested.lowerBound,
+            lower: config.minFrequency,
+            upper: config.maxFrequency
+        )
+        let second = clamp(
+            suggested.upperBound,
+            lower: config.minFrequency,
+            upper: config.maxFrequency
+        )
+        let range = min(first, second)...max(first, second)
         let moments = rangeScoringMoments(session: session, analysis: analysis)
         let scores = moments.map { moment -> Double in
             if range.contains(moment.frequency) { return 1.0 }
             let miss = moment.frequency < range.lowerBound
                 ? range.lowerBound - moment.frequency
                 : moment.frequency - range.upperBound
-            let tolerance = max(1.0, (range.upperBound - range.lowerBound) * 0.5)
+            let tolerance = max(0.25, (range.upperBound - range.lowerBound) * 0.5)
             return clamp(1.0 - miss / tolerance, lower: 0, upper: 1)
         }
         return scores.reduce(0, +) / Double(scores.count)

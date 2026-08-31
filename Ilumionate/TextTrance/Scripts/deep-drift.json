@@ -6,7 +6,7 @@
   "supportedArcs": ["fullText", "handoff"],
   "language": "en",
   "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
-  "summary": "A slow relaxation session that moves from screen fixation into body heaviness, quiet imagery, and a calm return or optional handoff.",
+  "summary": "A slow, atmospheric reading that moves from screen fixation into quiet imagery and a gentle return or optional handoff.",
   "segments": [
     {
       "phase": "induction",
@@ -25,7 +25,7 @@
     },
     {
       "phase": "suggestions",
-      "text": "In this quiet, you can learn the feeling of release. The body learns that it can let go before it is exhausted. The mind learns that stillness can be useful, not empty. You can return to this state by remembering the first breath of this session: a breath that says nothing is required right now. Calm becomes familiar. Familiar becomes easy. Easy becomes available. When your day becomes crowded, some part of you can remember this lake, this rhythm, this simple permission to loosen one layer at a time. You do not have to solve everything before resting. Rest can be the place where clear choices begin. The nervous system can take a smoother path. The next breath can be enough. The next small release can be enough. A little calm can grow into more calm.",
+      "text": "Stay with the image of the quiet lake and the feeling of release described here. Nothing is required right now. The surface moves slowly, and the pauses leave room between one thought and the next. When the day feels crowded, you can picture this lake again: the dark water, the even rhythm, and the invitation to loosen one layer at a time. You do not have to solve everything before resting. The next breath can be enough for this moment. The next small release can be enough. Let the scene remain simple and unhurried.",
       "pacing": { "baseWPM": 92 }
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "phase": "suggestions",
-      "text": "Let the calm become ordinary enough to trust. It does not have to feel dramatic. A quieter jaw is enough. A slower breath is enough. One less layer of effort is enough. You can notice the difference between useful responsibility and unnecessary tightening. Useful responsibility has direction. Unnecessary tightening only repeats itself. Here, the body can learn that direction is possible without strain. The mind can learn that softness is not the same as giving up. Softness can be the way you conserve strength. Softness can make room for better timing, kinder choices, and a steadier return to what matters. The session keeps teaching this simple pattern: release first, then respond.",
+      "text": "Let the calm in this scene feel ordinary rather than dramatic. A quieter jaw is enough. A slower breath is enough. One less layer of effort is enough. Notice the contrast between useful responsibility and unnecessary tightening. Useful responsibility has direction. Unnecessary tightening only repeats itself. The scene offers a simple pattern to imagine: release first, then respond. Stay with that pattern for another line, another breath, and another small pause.",
       "pacing": { "baseWPM": 92 }
     },
     {

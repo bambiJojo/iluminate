@@ -263,7 +263,7 @@ struct PhaseLegendRow: View {
         case .fractionation:return "Fractionate"
         case .deepening:    return "Deepening"
         case .confusion:    return "Confusion"
-        case .therapy:      return "Therapy"
+        case .therapy:      return "Content"
         case .suggestions:  return "Suggestions"
         case .eroticSuggestions: return "Erotic"
         case .brainwashing: return "Brainwash"

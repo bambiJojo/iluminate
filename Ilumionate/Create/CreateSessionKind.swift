@@ -39,7 +39,7 @@ enum CreateSessionKind: String, CaseIterable, Identifiable, Sendable {
 
     var summary: String {
         switch self {
-        case .flash:       return "Full-screen entrainment flash"
+        case .flash:       return "Full-screen flashing pattern"
         case .colourPulse: return "Slow colour breathing"
         case .bilateral:   return "Independent left and right fields"
         case .visualField: return "A wordless hypnotic field"

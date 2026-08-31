@@ -17,7 +17,7 @@ struct CreateControlTray: View {
     @State private var dragStart: [CreateControlSlot: Double] = [:]
 
     private static let unitMapper = DragValueMapper(range: 0...1)
-    private static let frequencyMapper = DragValueMapper(range: 0.5...40.0)
+    private static let frequencyMapper = DragValueMapper(range: LightSafety.flashFrequencyRange)
     private static let strengthMapper =
         DragValueMapper(range: VisualModulation.opacityBand)
 
@@ -80,7 +80,8 @@ struct CreateControlTray: View {
             return (visual.clampedOpacity - band.lowerBound)
                 / (band.upperBound - band.lowerBound)
         case .frequency:
-            return (light.frequency - 0.5) / 39.5
+            let range = LightSafety.flashFrequencyRange
+            return (light.frequency - range.lowerBound) / (range.upperBound - range.lowerBound)
         case .intensity:
             return light.intensity
         case .warmth:
@@ -194,7 +195,7 @@ struct CreateControlTray: View {
         case .frequency:
             let start = begin(slot, current: light.frequency)
             let new = Self.frequencyMapper.value(from: start, translation: translation)
-            tick(from: light.frequency, to: new, in: 0.5...40.0)
+            tick(from: light.frequency, to: new, in: LightSafety.flashFrequencyRange)
             light.frequency = new
 
         case .intensity:

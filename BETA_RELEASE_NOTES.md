@@ -1,147 +1,54 @@
-# Ilumionate Beta - Version 1.0.0 (Build 1001)
+# LumeSync 1.0 TestFlight Notes
 
-## 🎉 Welcome to the Ilumionate Beta!
+LumeSync is an audio and reading player with synchronized, adjustable visual
+patterns. This release candidate supports iPhone and iPad on iOS 18 or later.
 
-Ilumionate is an innovative light therapy app that uses photoentrainment to promote relaxation, enhance focus, and improve well-being through synchronized light patterns.
+## What to test
 
-## ✨ What's New in This Beta
+- Complete onboarding and confirm the flashing-light warning is clear.
+- Import an MP3 or M4A file, run local analysis, and play the resulting visual
+  session.
+- Import a text document or add a website of your choice, then save and read a
+  page in the Reader.
+- Create a custom visual session and verify that play, pause, and stop remain
+  easy to reach.
+- Enable and disable anonymous analytics in Settings. It must remain off until
+  you opt in.
+- Relaunch the app and confirm that imported content, progress, and settings are
+  preserved.
 
-### 🚀 Core Features
-- **Light Therapy Sessions**: 12 pre-built sessions for different purposes (relaxation, focus, meditation)
-- **Custom Audio Analysis**: Import your own audio files and generate personalized light sessions
-- **Bilateral Stimulation**: Advanced bilateral mode for enhanced therapeutic effects
-- **Playlist Management**: Create and manage custom playlists of sessions
-- **Real-time Light Engine**: High-performance visual entrainment with multiple waveforms
+User-provided hypnosis and mature-content classification remain supported. The
+app does not include or recommend a directory of adult websites, stories, or
+audio. Only import content you are authorized to use.
 
-### 🎯 New in This Release
-- **Complete Onboarding Flow**: 6-step introduction with a gentle 3-minute welcome session
-- **Improved Text Readability**: Enhanced UI with better contrast and readable text
-- **Enhanced Crash Prevention**: Robust error handling and memory management
-- **Performance Optimizations**: Smoother animations and reduced memory footprint
-- **Anonymous Usage Analytics**: This build includes anonymous, opt-out usage analytics (no personal data, no content, no tracking) to help us learn which features are useful. You can turn it off any time in **Settings ▸ Privacy & Data ▸ Anonymous Usage Analytics**.
+## iOS 18 and iOS 26
 
-### 🧠 AI-Powered Features
-- **Content Analysis**: Automatic analysis of audio content (hypnosis, meditation, music)
-- **Smart Session Generation**: AI-driven light pattern creation based on audio characteristics
-- **Adaptive Parameters**: Sessions that adjust to your content's mood and energy
+The complete reader, library, player, custom visual tools, and local audio
+analysis work on iOS 18. On iOS 26, compatible devices can additionally use
+Apple's on-device Foundation Models during analysis. On iOS 18, LumeSync uses
+local keyword, metadata, and audio heuristics instead.
 
-## 🔍 What We're Testing
+## Privacy
 
-### Primary Focus Areas
-1. **Onboarding Experience**: Is the introduction clear and helpful?
-2. **Session Performance**: Do light sessions run smoothly without crashes?
-3. **Audio Integration**: How well does audio analysis and sync work?
-4. **User Interface**: Is the app intuitive and visually appealing?
-5. **Memory Stability**: Does the app handle extended use without issues?
+Audio, transcripts, documents, reading history, and generated session data stay
+on the device. Optional TelemetryDeck analytics are off by default and do not
+include imported content, filenames, transcripts, or reading-source URLs.
 
-### Known Issues
-- Some complex gradients may cause performance impacts on older devices
-- WhisperKit audio transcription requires device with sufficient RAM
-- Light intensity may need calibration based on ambient lighting
+## Visual-safety reminder
 
-## 🧪 Testing Scenarios
+Some modes display flashing or rapidly changing patterns. Do not use flashing
+modes if you have photosensitivity, epilepsy, or a history of seizures. Stop
+immediately if you feel unwell. Do not use the app while driving or operating
+machinery.
 
-### Basic Testing
-1. Complete the onboarding flow
-2. Try the welcome session (3 minutes)
-3. Explore pre-built sessions in the library
-4. Test basic playback controls (play, pause, stop)
+LumeSync is a recreational entertainment experience, not medical care or
+therapy.
 
-### Advanced Testing
-1. Import personal audio files (.m4a or .mp3)
-2. Generate custom sessions from your audio
-3. Create and manage playlists
-4. Test bilateral mode sessions
-5. Experiment with different session types
+## Feedback
 
-### Edge Cases to Test
-1. What happens with very long audio files?
-2. How does the app handle phone calls during sessions?
-3. Can you switch between sessions quickly?
-4. Does the app work well in low-light environments?
+Please send feedback through TestFlight and include:
 
-## 📱 Device Compatibility
-
-### Minimum Requirements
-- **iOS**: 18.0 or later (Due to iOS 26 beta SDK - will be lowered for release)
-- **Device**: iPhone 12 or later, iPad (9th generation) or later
-- **Storage**: 100MB free space
-- **RAM**: 4GB recommended for optimal performance
-
-### Optimal Experience
-- **Device**: iPhone 14 Pro or later
-- **Environment**: Darkened room for maximum light therapy effectiveness
-- **Audio**: Headphones recommended for audio sessions
-
-## ⚠️ Important Beta Notes
-
-### Privacy & Data
-- No personal data is transmitted to external servers
-- All AI analysis happens on-device
-- Session history is stored locally only
-- Optional analytics are anonymous and aggregated
-
-### Safety Considerations
-- **Photosensitive Epilepsy**: Do not use if you have epilepsy or photosensitive conditions
-- **Eye Strain**: Take breaks every 20-30 minutes during longer sessions
-- **Medical Conditions**: Consult your doctor before use if you have medical conditions
-
-### Battery Usage
-- Light therapy sessions are intensive and will drain battery faster
-- Recommend keeping device plugged in during longer sessions
-- Background app refresh may be limited to conserve battery
-
-## 📋 Feedback Priorities
-
-### What We Most Want to Know
-1. **Crashes or Freezes**: Any app stability issues
-2. **Performance**: Lag, stuttering, or slow responses
-3. **User Experience**: Confusing or frustrating interactions
-4. **Session Quality**: How effective do the light sessions feel?
-5. **Feature Requests**: What's missing that you'd love to see?
-
-### How to Report Issues
-- Use TestFlight feedback directly in the app
-- Be specific about device model and iOS version
-- Include steps to reproduce any issues
-- Describe what you expected vs. what happened
-
-## 🗺️ Roadmap Preview
-
-### Coming Soon
-- **Apple Watch Integration**: Session controls and biometric monitoring
-- **Custom Waveforms**: Create your own light patterns
-- **Social Features**: Share playlists and sessions
-- **Advanced Analytics**: Detailed session insights and progress tracking
-- **Accessibility Improvements**: Enhanced support for assistive technologies
-
-### Under Consideration
-- **Background Audio**: Continue audio sessions when app is backgrounded
-- **Siri Integration**: Voice control for sessions
-- **Widget Support**: Quick access from home screen
-- **Apple Health Integration**: Export session data to Health app
-
-## 🎯 Success Metrics
-
-We consider this beta successful if:
-- [ ] 90%+ of users complete onboarding
-- [ ] 80%+ of sessions complete without crashes
-- [ ] Average session rating > 4.0/5.0
-- [ ] Memory usage remains stable during extended use
-- [ ] Users successfully create custom sessions from their audio
-
-## 💬 Community
-
-Join our beta community:
-- **Feedback**: Use TestFlight's built-in feedback system
-- **Discussions**: Share experiences with other beta testers
-- **Updates**: Watch for new beta builds (we aim for weekly updates)
-
-Thank you for being part of the Ilumionate beta journey! Your feedback is invaluable in making this the best light therapy app possible.
-
----
-
-**Version**: 1.0.0 Beta (Build 1001)
-**Release Date**: March 5, 2026
-**Test Duration**: 4 weeks
-**Next Build**: Expected March 12, 2026
+- Device model and iOS version
+- The feature you were using
+- Clear reproduction steps for a crash, freeze, or incorrect result
+- A screenshot when it does not expose private imported content

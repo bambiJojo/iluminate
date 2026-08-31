@@ -67,6 +67,7 @@ struct IlumionateApp: App {
         // Credentials from the retired SoundCloud integration outlive the code
         // that read them. See ERRORS.md ERR-020.
         AppSettingsManager.purgeRetiredStreamingCredentials()
+        AppSettingsManager.migrateLegacyProfileGoalCopy()
         UsageAnalytics.configure()
         #if os(macOS)
         BackgroundAnalysisScheduler.shared.register()

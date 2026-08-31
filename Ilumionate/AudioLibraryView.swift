@@ -28,7 +28,7 @@ struct AudioLibraryView: View {
         case eroticHypnosis = "Erotic Hypnosis"
         case sleepHypnosis = "Sleep Hypnosis"
         case meditation = "Meditation"
-        case brainwave = "Brainwave"
+        case brainwave = "Frequency Audio"
         case asmr = "ASMR"
         case music = "Music"
         case guided = "Guided"

@@ -185,6 +185,21 @@ enum AppSettingsManager {
         }
     }
 
+    /// Replaces only the three goal labels written by older onboarding builds.
+    /// User-entered profile goals are left untouched.
+    nonisolated static func migrateLegacyProfileGoalCopy(
+        defaults: UserDefaults = .standard
+    ) {
+        let replacements = [
+            "Deep Relaxation": "Gentle Wind-down",
+            "Better Sleep": "Night Session",
+            "Focus & Productivity": "Focused Time"
+        ]
+        guard let stored = defaults.string(forKey: Key.profileGoal),
+              let replacement = replacements[stored] else { return }
+        defaults.set(replacement, forKey: Key.profileGoal)
+    }
+
     static func resetPreferences(
         defaults: UserDefaults = .standard,
         resetAnalysisPreferences: Bool = true

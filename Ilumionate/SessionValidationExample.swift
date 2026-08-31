@@ -63,7 +63,7 @@ class SessionValidationExample {
         // Analyze
         let analysis = SessionDiagnostics.analyzeSession(session)
         print("ANALYSIS:")
-        print("  Effectiveness: \(analysis.estimatedEntrainmentEffectiveness.emoji) \(analysis.estimatedEntrainmentEffectiveness.rawValue)")
+        print("  Pattern score: \(analysis.estimatedEntrainmentEffectiveness.emoji) \(analysis.estimatedEntrainmentEffectiveness.rawValue)")
         print("  Frequency range: \(String(format: "%.1f", analysis.frequencyRange.min)) - \(String(format: "%.1f", analysis.frequencyRange.max)) Hz")
         print("  Average frequency: \(String(format: "%.1f", analysis.averageFrequency)) Hz")
         print("  Intensity range: \(String(format: "%.2f", analysis.intensityRange.min)) - \(String(format: "%.2f", analysis.intensityRange.max))")
@@ -136,7 +136,7 @@ class SessionValidationExample {
         // Analyze
         let analysis = SessionDiagnostics.analyzeSession(session)
         print("ANALYSIS:")
-        print("  Effectiveness: \(analysis.estimatedEntrainmentEffectiveness.emoji) \(analysis.estimatedEntrainmentEffectiveness.rawValue)")
+        print("  Pattern score: \(analysis.estimatedEntrainmentEffectiveness.emoji) \(analysis.estimatedEntrainmentEffectiveness.rawValue)")
         print("  Frequency: \(String(format: "%.1f", analysis.frequencyRange.min))-\(String(format: "%.1f", analysis.frequencyRange.max)) Hz (avg: \(String(format: "%.1f", analysis.averageFrequency)))")
         print("  Intensity: \(String(format: "%.2f", analysis.intensityRange.min))-\(String(format: "%.2f", analysis.intensityRange.max)) (avg: \(String(format: "%.2f", analysis.averageIntensity)))")
         print("  Features: Bilateral=\(analysis.hasBilateral), ColorTemp=\(analysis.hasColorTemperature), CustomRamps=\(analysis.hasCustomRamps)")
@@ -196,7 +196,7 @@ class SessionValidationExample {
         }
 
         let analysis = SessionDiagnostics.analyzeSession(session)
-        print("Effectiveness: \(analysis.estimatedEntrainmentEffectiveness.emoji) \(analysis.estimatedEntrainmentEffectiveness.rawValue)")
+        print("Pattern score: \(analysis.estimatedEntrainmentEffectiveness.emoji) \(analysis.estimatedEntrainmentEffectiveness.rawValue)")
 
         if !analysis.suggestions.isEmpty {
             print("\nSUGGESTIONS:")

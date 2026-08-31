@@ -89,7 +89,7 @@ final class UnifiedPlayerViewModel {
         didSet { flashController?.bilateralDriftRate = bilateralDriftRate }
     }
     var bilateralDriftProgress: Double { flashController?.bilateralDriftProgress ?? 0.0 }
-    var flashFrequency: Double = 10.0
+    var flashFrequency: Double = LightSafety.maxFlashHz
     var flashColorTemperature: Int = 3000
 
     // MARK: - Visual Field State
@@ -205,7 +205,7 @@ final class UnifiedPlayerViewModel {
         )
 
         if case .flashMode(let freq, _, let colorTemp, _, _, _, _, _) = mode {
-            flashFrequency = freq
+            flashFrequency = LightSafety.clampFlashHz(freq)
             flashColorTemperature = colorTemp
             bilateralMode = mindMachineMode == .bilateral
         }
@@ -1336,7 +1336,7 @@ final class UnifiedPlayerViewModel {
         if progress < 0.2 {
             currentPhase = "Induction Phase"
         } else if progress < 0.8 {
-            currentPhase = "Entrainment Phase"
+            currentPhase = "Pattern Phase"
         } else {
             currentPhase = "Integration Phase"
         }

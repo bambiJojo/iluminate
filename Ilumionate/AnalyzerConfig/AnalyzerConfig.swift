@@ -23,7 +23,7 @@ nonisolated enum CorpusSourceProfile: String, CaseIterable, Codable, Identifiabl
         case .general:
             return "General"
         case .therapeutic:
-            return "Therapeutic"
+            return "Meditation / General"
         case .eroticConditioning:
             return "Erotic / Conditioning"
         case .sourceDiagnostic:
@@ -36,7 +36,7 @@ nonisolated enum CorpusSourceProfile: String, CaseIterable, Codable, Identifiabl
         case .general:
             return "Keeps adult source packs present but damped for broad hypnosis analysis."
         case .therapeutic:
-            return "Suppresses adult source packs for meditation, therapeutic, and general wellness content."
+            return "Dampens adult source packs for meditation and general non-erotic content."
         case .eroticConditioning:
             return "Boosts adult conditioning source packs for erotic hypnosis and post-hypnotic language."
         case .sourceDiagnostic:
@@ -49,7 +49,7 @@ nonisolated enum CorpusSourceProfile: String, CaseIterable, Codable, Identifiabl
         case .general:
             return "slider.horizontal.3"
         case .therapeutic:
-            return "cross.case.fill"
+            return "leaf.fill"
         case .eroticConditioning:
             return "sparkles"
         case .sourceDiagnostic:
@@ -353,7 +353,8 @@ nonisolated struct AnalyzerConfig: Codable, Sendable {
         }
 
         func band(for contentType: AnalysisResult.ContentType) -> FrequencyBand {
-            frequencyBands[contentType.rawValue] ?? FrequencyBand(lower: 8.0, upper: 12.0)
+            frequencyBands[contentType.rawValue]
+                ?? FrequencyBand(lower: 1.5, upper: 2.0)
         }
 
         func phaseBand(for phase: HypnosisMetadata.Phase) -> FrequencyBand? {

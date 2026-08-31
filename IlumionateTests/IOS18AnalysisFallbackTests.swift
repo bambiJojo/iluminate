@@ -57,6 +57,6 @@ struct IOS18AnalysisFallbackTests {
         #expect(result.usedKeywordFallback)
         #expect(result.contentType == .meditation)
         #expect(result.keyMoments.count >= 4)
-        #expect(result.suggestedFrequencyRange == 6.0...8.0)
+        #expect(result.suggestedFrequencyRange == 0.8...1.6)
     }
 }

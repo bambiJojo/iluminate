@@ -40,11 +40,11 @@ struct PortalRecommenderTests {
     func picksMatchingSession() {
         let sleepy = LightSession(
             session_name: "Delta Drift", duration_sec: 600,
-            light_score: [LightMoment(time: 0, frequency: 2.0, intensity: 0.5, waveform: .sine)]
+            light_score: [LightMoment(time: 0, frequency: 0.75, intensity: 0.5, waveform: .sine)]
         )
         let focusy = LightSession(
             session_name: "Alpha Focus", duration_sec: 600,
-            light_score: [LightMoment(time: 0, frequency: 10.0, intensity: 0.5, waveform: .sine)]
+            light_score: [LightMoment(time: 0, frequency: 1.75, intensity: 0.5, waveform: .sine)]
         )
         let pick = PortalRecommender.recommend(from: [focusy, sleepy], forHour: 23)
         #expect(pick?.session_name == "Delta Drift")

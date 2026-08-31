@@ -14,7 +14,7 @@ struct PulseOrb: View {
     @State private var opacity: Double = 0.6
 
     private var animationDuration: Double {
-        1.0 / frequency
+        1.0 / LightSafety.clampFlashHz(frequency)
     }
 
     var body: some View {
@@ -74,18 +74,18 @@ struct PulseOrb: View {
             .ignoresSafeArea()
 
         VStack(spacing: 40) {
-            Text("Alpha (10 Hz)")
+            Text("Fast Pattern (3 Hz)")
                 .font(TranceTypography.sectionTitle)
                 .foregroundStyle(.textPrimary)
 
-            PulseOrb(frequency: 10.0)
+            PulseOrb(frequency: 3.0)
                 .frame(width: 200, height: 200)
 
-            Text("Theta (6 Hz)")
+            Text("Slow Pattern (1 Hz)")
                 .font(TranceTypography.sectionTitle)
                 .foregroundStyle(.textPrimary)
 
-            PulseOrb(frequency: 6.0)
+            PulseOrb(frequency: 1.0)
                 .frame(width: 200, height: 200)
         }
     }

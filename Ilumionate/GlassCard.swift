@@ -43,7 +43,7 @@ struct GlassCard<Content: View>: View {
                     .frame(width: 120, height: 30)
 
                 VStack(alignment: .leading) {
-                    Text("Deep Sleep Induction")
+                    Text("Example Session")
                         .font(TranceTypography.body)
                         .foregroundStyle(.textPrimary)
                     Text("18:24 remaining")

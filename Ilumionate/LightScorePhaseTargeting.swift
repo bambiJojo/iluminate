@@ -126,16 +126,16 @@ enum LightScorePhaseTargeting {
 
     static func frequencyRange(for phase: HypnosisMetadata.Phase) -> ClosedRange<Double> {
         switch phase {
-        case .preTalk, .induction: return 8.0...12.0
-        case .fractionation: return 6.5...9.5
-        case .deepening, .confusion: return 5.0...8.0
-        case .therapy: return 4.5...6.5
-        case .suggestions: return 5.0...7.0
-        case .eroticSuggestions: return 3.5...5.5
-        case .brainwashing: return 4.0...5.8
-        case .conditioning: return 5.5...7.5
-        case .emergence: return 8.0...14.0
-        case .transitional: return 6.0...10.0
+        case .preTalk, .induction: return 2.2...3.0
+        case .fractionation: return 1.8...2.6
+        case .deepening, .confusion: return 1.2...2.0
+        case .therapy: return 0.7...1.3
+        case .suggestions: return 1.0...1.6
+        case .eroticSuggestions: return 0.5...1.2
+        case .brainwashing: return 0.5...1.0
+        case .conditioning: return 1.2...1.8
+        case .emergence: return 2.2...3.0
+        case .transitional: return 1.5...2.2
         }
     }
 

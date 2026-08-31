@@ -214,7 +214,7 @@ struct OnboardingView: View {
                     .font(TranceTypography.screenTitle)
                     .foregroundStyle(.primary)
                 
-                Text("Your personal hypnosis audio player and mind machine for deep relaxation and transformation.")
+                Text("Your personal hypnosis audio and reading app for synchronized light, colour, and bilateral visual patterns.")
                     .font(TranceTypography.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -326,14 +326,14 @@ struct OnboardingView: View {
                     .font(TranceTypography.screenTitle)
                     .foregroundStyle(.primary)
                 
-                Text("This app uses flashing lights and visual patterns as part of the brainwave entrainment process.")
+                Text("This app uses flashing lights and animated visual patterns.")
                     .font(TranceTypography.body.bold())
                     .multilineTextAlignment(.center)
                 
                 VStack(alignment: .leading, spacing: 12) {
-                    warningBullet("Do NOT use this app if you have a history of epilepsy or seizures.")
-                    warningBullet("Close your eyes during light sessions. The light will penetrate your eyelids.")
-                    warningBullet("Hold the screen 6-12 inches from your face.")
+                    warningBullet("Do not use flashing modes if you have photosensitivity, epilepsy or a history of seizures, light-triggered migraines, or another light-sensitive condition.")
+                    warningBullet("Stop immediately if you experience discomfort, dizziness, nausea, headache, visual disturbance, confusion, or any unusual symptom.")
+                    warningBullet("Do not use while driving, operating machinery, or anywhere you cannot stop immediately.")
                 }
                 .padding(.top, 10)
                 .padding(.horizontal, 10)

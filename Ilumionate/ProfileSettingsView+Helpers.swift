@@ -317,7 +317,7 @@ extension ProfileSettingsView {
                                     .frame(width: 24)
                                     .padding(.top, 2)
                                 TextField(
-                                    "Wellness goal (e.g. reduce anxiety)",
+                                    "Session goal (e.g. unwind or stay present)",
                                     text: $draftGoal,
                                     axis: .vertical
                                 )
@@ -387,10 +387,10 @@ extension ProfileSettingsView {
 
                         GlassCard(label: "About") {
                             Text(
-                                "LumeSync is a personal hypnosis audio player and mind machine " +
-                                "designed to help you achieve deep relaxation and transformative " +
-                                "trance states using light and sound. Created with love for " +
-                                "wellness explorers."
+                                "LumeSync is a personal hypnosis audio and reading app that pairs " +
+                                "content you choose with adjustable light, colour, bilateral, and " +
+                                "audio-synchronized visual patterns. LumeSync is a recreational " +
+                                "entertainment experience, not medical care or therapy."
                             )
                             .font(TranceTypography.body)
                             .foregroundStyle(Color.textSecondary)
@@ -416,11 +416,11 @@ extension ProfileSettingsView {
 
     func categoryColor(for category: String) -> Color {
         switch category {
-        case "Sleep":  .bwDelta
-        case "Relax":  .bwTheta
-        case "Focus":  .bwAlpha
-        case "Energy": .bwBeta
-        case "Trance": .bwGamma
+        case "Very Slow", "Sleep":  .bwDelta
+        case "Slow", "Relax":       .bwTheta
+        case "Medium", "Focus":     .bwAlpha
+        case "Fast", "Energy":      .bwBeta
+        case "Full Range", "Trance": .bwGamma
         default:       .roseGold
         }
     }

@@ -103,7 +103,7 @@
     "minChunks": 6,
     "maxChunks": 60,
     "maxConcurrentRequests": 2,
-    "systemInstructions": "You are a hypnosis session analyst. Classify a short transcript segment into the light-control phase expressed by its current meaning.\n\nTARGET PHASES:\n- induction: orientation, rapport, comfort setup, explanation, eye closure, breathing, initial relaxation\n- fractionation: deliberate repeated waking or opening followed by dropping back into trance\n- deepening: sinking, drifting, descending, body scans, counts down, confusion used to deepen\n- suggestions: therapeutic work, imagery, metaphor, reframing, direct commands, belief shifts, erotic suggestion work\n- brainwashing: sustained repeated indoctrination, identity overwrite, obedience, or mantra loops\n- post_hypnotic_conditioning: triggers, anchors, future responses, future pacing, or instructions that persist after the session\n- emergence: explicit waking, counting up, re-orientation, alertness, and returning to the room\n\nSEQUENCE RULES:\n- Session position is a soft prior, not a substitute for meaning.\n- Real sessions may return from suggestions to deepening and may move both ways between suggestions and post_hypnotic_conditioning. Classify the current segment; do not force a one-way progression.\n- Early rapport and explanation map to induction. Confusion maps to deepening. General therapeutic and erotic work maps to suggestions.\n- Fractionation requires a repeated up/down trance cycle, not one isolated waking word.\n- Brainwashing requires sustained repetitive identity or obedience language, not one strong command.\n- Emit emergence only for explicit waking or re-orientation. Music, credits, an outro, or a non-waking closing remains in the preceding active phase.\n\nRespond with ONLY one raw phase value from this set: induction, fractionation, deepening, suggestions, brainwashing, post_hypnotic_conditioning, emergence.\nNo explanation, no punctuation, no other text.",
+    "systemInstructions": "You are a hypnosis session analyst. Classify a short transcript segment into the light-control phase expressed by its current meaning.\n\nTARGET PHASES:\n- induction: orientation, rapport, comfort setup, explanation, eye closure, breathing, initial relaxation\n- fractionation: deliberate repeated waking or opening followed by dropping back into trance\n- deepening: sinking, drifting, descending, body scans, counts down, confusion used to deepen\n- suggestions: imagery, metaphor, reframing, direct commands, belief shifts, erotic suggestion work\n- brainwashing: sustained repeated indoctrination, identity overwrite, obedience, or mantra loops\n- post_hypnotic_conditioning: triggers, anchors, future responses, future pacing, or instructions that persist after the session\n- emergence: explicit waking, counting up, re-orientation, alertness, and returning to the room\n\nSEQUENCE RULES:\n- Session position is a soft prior, not a substitute for meaning.\n- Real sessions may return from suggestions to deepening and may move both ways between suggestions and post_hypnotic_conditioning. Classify the current segment; do not force a one-way progression.\n- Early rapport and explanation map to induction. Confusion maps to deepening. General metaphor, reframing, and erotic work maps to suggestions.\n- Fractionation requires a repeated up/down trance cycle, not one isolated waking word.\n- Brainwashing requires sustained repetitive identity or obedience language, not one strong command.\n- Emit emergence only for explicit waking or re-orientation. Music, credits, an outro, or a non-waking closing remains in the preceding active phase.\n\nRespond with ONLY one raw phase value from this set: induction, fractionation, deepening, suggestions, brainwashing, post_hypnotic_conditioning, emergence.\nNo explanation, no punctuation, no other text.",
     "fewShotExamples": []
   },
 
@@ -166,28 +166,28 @@
 
   "sessionGeneration": {
     "frequencyBands": {
-      "hypnosis": { "lower": 0.5, "upper": 10.0 },
-      "meditation": { "lower": 4.0, "upper": 12.0 },
-      "affirmations": { "lower": 9.0, "upper": 11.0 },
-      "music": { "lower": 8.0, "upper": 18.0 },
-      "guidedImagery": { "lower": 4.0, "upper": 10.0 },
-      "eroticHypnosis": { "lower": 0.5, "upper": 8.0 },
-      "brainwave": { "lower": 1.0, "upper": 40.0 },
-      "asmr": { "lower": 6.0, "upper": 10.0 },
-      "sleepHypnosis": { "lower": 0.5, "upper": 4.0 },
-      "unknown": { "lower": 8.0, "upper": 12.0 }
+      "hypnosis": { "lower": 0.7, "upper": 1.8 },
+      "meditation": { "lower": 0.8, "upper": 1.6 },
+      "affirmations": { "lower": 1.2, "upper": 2.0 },
+      "music": { "lower": 1.5, "upper": 3.0 },
+      "guidedImagery": { "lower": 0.8, "upper": 1.8 },
+      "eroticHypnosis": { "lower": 0.5, "upper": 1.4 },
+      "brainwave": { "lower": 0.5, "upper": 3.0 },
+      "asmr": { "lower": 0.8, "upper": 1.6 },
+      "sleepHypnosis": { "lower": 0.5, "upper": 1.0 },
+      "unknown": { "lower": 1.5, "upper": 2.0 }
     },
     "phaseFrequencyBands": {
-      "induction":                  { "lower": 8.0,  "upper": 12.0 },
-      "fractionation":              { "lower": 6.5,  "upper": 9.5  },
-      "deepening":                  { "lower": 5.0,  "upper": 8.0  },
-      "therapy":                    { "lower": 4.5,  "upper": 6.5  },
-      "suggestions":                { "lower": 5.0,  "upper": 7.0  },
-      "erotic_suggestions":         { "lower": 3.5,  "upper": 5.5  },
-      "brainwashing":               { "lower": 4.0,  "upper": 5.8  },
-      "post_hypnotic_conditioning": { "lower": 5.5,  "upper": 7.5  },
-      "emergence":                  { "lower": 8.0,  "upper": 14.0 },
-      "transitional":               { "lower": 6.0,  "upper": 10.0 }
+      "induction":                  { "lower": 2.2, "upper": 3.0 },
+      "fractionation":              { "lower": 1.8, "upper": 2.6 },
+      "deepening":                  { "lower": 1.2, "upper": 2.0 },
+      "therapy":                    { "lower": 0.7, "upper": 1.3 },
+      "suggestions":                { "lower": 1.0, "upper": 1.6 },
+      "erotic_suggestions":         { "lower": 0.5, "upper": 1.2 },
+      "brainwashing":               { "lower": 0.5, "upper": 1.0 },
+      "post_hypnotic_conditioning": { "lower": 1.2, "upper": 1.8 },
+      "emergence":                  { "lower": 2.2, "upper": 3.0 },
+      "transitional":               { "lower": 1.5, "upper": 2.2 }
     },
     "transitionSmoothingSeconds": 5.0,
     "intensityCurve": "gradual"

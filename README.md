@@ -1,7 +1,7 @@
 # LumeSync
 
-LumeSync is a native SwiftUI app for synchronized audio, reading, and visual
-photoentrainment sessions. iOS and macOS are first-class targets built from the
+LumeSync is a native SwiftUI app for synchronized audio, reading, and adjustable
+visual-pattern sessions. iOS and macOS are first-class targets built from the
 same feature code.
 
 ## Supported platforms

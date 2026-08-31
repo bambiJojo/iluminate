@@ -71,7 +71,7 @@ struct WaveformView: View {
                 WaveformView(samples: sampleData1)
                     .frame(height: 60)
 
-                Text("Deep Sleep Induction - Dr. Sarah Mitchell")
+                Text("Example Audio")
                     .font(TranceTypography.body)
                     .foregroundStyle(.textPrimary)
             }

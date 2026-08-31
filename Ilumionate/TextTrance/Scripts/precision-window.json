@@ -6,11 +6,11 @@
   "supportedArcs": ["fullText"],
   "language": "en",
   "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
-  "summary": "A focused, eyes-open session for preparing a clean work interval with relaxed precision.",
+  "summary": "An eyes-open reading that imagines a quiet, clearly bounded work interval.",
   "segments": [
     {
       "phase": "induction",
-      "text": "Let attention gather at the center of the screen. This is a precision window: small, clear, and calm. The rest of the room can remain available without becoming important. Breath continues. Shoulders stay loose. The words arrive one at a time, and each one gives the mind a simple place to return. You do not have to fight distraction. Fighting uses the same energy you need for focus. Instead, notice the movement away and return to the window. Return is the repetition. Return is the training. Every return makes the channel cleaner. The eyes read. The body settles. The mind comes back to center.",
+      "text": "Let attention gather at the center of the screen. This is a precision window: small, clear, and calm. The rest of the room can remain available without becoming important. Breath continues. Shoulders stay loose. The words arrive one at a time, and each one gives the mind a simple place to return. You do not have to fight distraction. Instead, notice the movement away and return to the window. Return is part of the pattern. The eyes read. The body settles. The next word comes back to center.",
       "pacing": { "baseWPM": 162 }
     },
     {
@@ -25,7 +25,7 @@
     },
     {
       "phase": "suggestions",
-      "text": "Let the body support precision without tension. The face can stay relaxed. The hands can stay easy. The breath can stay low and regular. This matters because tension pretends to be concentration, but it spends energy without adding accuracy. Real focus can feel steady, almost quiet. It knows when to narrow and when to pause. It knows that a brief pause can protect the quality of the next action. You can work with this rhythm: narrow, act, pause, return. Narrow, act, pause, return. The rhythm is simple enough to remember and flexible enough to use.",
+      "text": "Let the body remain comfortable inside the imagined interval. The face can stay relaxed. The hands can stay easy. The breath can continue at its own pace. Picture the rhythm as steady and almost quiet, narrowing for one action and pausing before the next. Narrow, act, pause, return. Narrow, act, pause, return. The words repeat the shape of the scene.",
       "pacing": { "baseWPM": 128 }
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "phase": "suggestions",
-      "text": "Decide now how you will handle interruption. If the interruption is urgent, you can pause cleanly and write the restart point. If it is not urgent, you can let it wait outside the window. If it comes from inside the mind, you can name it briefly and return. This plan removes argument from the moment. You already know what to do. Protect the window, protect the restart, and keep the next action visible. At the end of the interval, close it deliberately. Save the work. Note the next step. Let completion train the mind to trust focused time. Even a short protected window can change the day because it proves that attention can be directed, recovered, and completed.",
+      "text": "Imagine how you would handle an interruption. If it is urgent, pause and write the restart point. If it is not urgent, let it wait outside the window. If it comes from inside the mind, name it briefly and return. Keep the window, the restart, and the next visible action in the scene. Place the tools you need inside the window: one document, one tab, one page, one clear starting point. Everything else can remain outside its edge for now. Picture the first action, the pause between actions, and the note that marks where to resume. At the end of the imagined interval, close it deliberately. Save the work. Note the next step. Let the screen, the room, and the next word all remain present as the picture gains a clear beginning, a middle, and an ending. The boundary is simply a line in the scene, drawn around one chosen piece of time. Give that line a colour, a shape, and a quiet place on the imagined desk.",
       "pacing": { "baseWPM": 130 }
     },
     {

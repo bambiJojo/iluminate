@@ -92,6 +92,31 @@ struct MindMachineModeFlagTests {
         let mode = PlayerMode.colorPulse(frequency: 10, intensity: 0.5)
         #expect(mode.hasMindMachineToggle == false)
     }
+
+    @Test("Every mode that starts the flashing-light engine requires acknowledgement")
+    func flashingModesRequireSafetyWarning() {
+        let session = PlayerMode.session(session: makeSession(), audioFile: makeAudioFile())
+        let playlist = PlayerMode.playlist(playlist: Playlist(name: "Evening"))
+        let flash = PlayerMode.flashMode(
+            frequency: 10,
+            intensity: 0.5,
+            colorTemperature: 3_000,
+            pattern: .sine,
+            binauralEnabled: false,
+            binauralCarrier: 200,
+            binauralVolume: 0.5
+        )
+
+        #expect(session.requiresSafetyWarning)
+        #expect(playlist.requiresSafetyWarning)
+        #expect(flash.requiresSafetyWarning)
+        #expect(PlayerMode.colorPulse(frequency: 10, intensity: 0.5).requiresSafetyWarning)
+        #expect(PlayerMode.audioLight(audioFile: makeAudioFile()).requiresSafetyWarning == false)
+        #expect(
+            PlayerMode.visualField(settings: .standard, audioFile: nil, binaural: nil)
+                .requiresSafetyWarning == false
+        )
+    }
 }
 
 @MainActor

@@ -17,14 +17,14 @@ struct SessionGenerationIntegrationTests {
 
     // MARK: - Hypnosis
 
-    @Test func hypnosis_sessionHasEmergence() {
+    @Test func hypnosis_sessionReturnsToFastEndOfVisibleRange() {
         let session = generator.generateSession(
             from: AnalysisFixtures.audioFile(duration: 300),
             analysis: AnalysisFixtures.hypnosisAnalysis
         )
         let lastFrequency = session.light_score.last?.frequency ?? 0
-        #expect(lastFrequency >= 10.0,
-                "Emergence should bring frequency back to ≥10 Hz; got \(lastFrequency) Hz")
+        #expect(lastFrequency == LightSafety.maxFlashHz,
+                "The ending should return to the visible release ceiling; got \(lastFrequency) Hz")
     }
 
     @Test func hypnosis_sessionHasMoments() {
@@ -35,14 +35,14 @@ struct SessionGenerationIntegrationTests {
         #expect(session.light_score.isEmpty == false)
     }
 
-    @Test func hypnosis_firstMomentIsHighFrequency() {
+    @Test func hypnosis_firstMomentUsesFastVisibleRate() {
         let session = generator.generateSession(
             from: AnalysisFixtures.audioFile(duration: 300),
             analysis: AnalysisFixtures.hypnosisAnalysis
         )
         let firstFrequency = session.light_score.first?.frequency ?? 0
-        #expect(firstFrequency >= 10.0,
-                "Session should open in beta/alpha range (≥10 Hz); got \(firstFrequency) Hz")
+        #expect(firstFrequency >= 2.5 && firstFrequency <= LightSafety.maxFlashHz,
+                "The opening should use the fast end of the visible range; got \(firstFrequency) Hz")
     }
 
     // MARK: - Meditation

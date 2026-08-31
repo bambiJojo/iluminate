@@ -6,11 +6,11 @@
   "supportedArcs": ["fullText"],
   "language": "en",
   "source": { "kind": "bundled", "generator": "hand-authored", "reviewed": true },
-  "summary": "A read-through focus session for sharpening attention without pushing into eye-closed depth.",
+  "summary": "An eyes-open reading built around choosing and returning to a single point of attention.",
   "segments": [
     {
       "phase": "induction",
-      "text": "Bring your attention to this exact word. Then this one. Then this one. Focus does not have to arrive all at once. It can assemble itself from small accurate moments. Let the edges of the screen become quiet while the center becomes more important. You are not trying to block the world. You are choosing a signal and letting the signal become clear. Breath stays easy. Face relaxed. Shoulders steady. The gaze can be soft and precise at the same time. If your mind moves away, you do not need to criticize it. Simply notice the movement and return to the next word. Return is the skill. Return is the repetition that builds attention. Every return teaches the mind where to come back.",
+      "text": "Bring your attention to this exact word. Then this one. Then this one. Let the edges of the screen become quiet while the center becomes more important. You are not trying to block the world. You are choosing a signal and letting the signal become clear. Breath stays easy. Face relaxed. Shoulders steady. The gaze can be soft and precise at the same time. If your mind moves away, you do not need to criticize it. Simply notice the movement and return to the next word. Returning is part of the exercise. Each return places the next word at the center again.",
       "pacing": { "baseWPM": 168 }
     },
     {
@@ -30,7 +30,7 @@
     },
     {
       "phase": "suggestions",
-      "text": "Now rehearse the next useful window of time. It does not need to be perfect. It only needs a beginning, a middle, and an honest finish. At the beginning, you choose one target and place it in front of the mind. In the middle, you return to it as many times as needed. At the finish, you notice what was completed and let that completion count. This is how attention becomes reliable. Not by refusing distraction forever, but by practicing clean recovery. The next time you sit down to work, the body can remember this posture: steady breath, relaxed face, quiet hands, clear signal. The work can become smaller than the worry around it. Smaller, simpler, reachable, and ready to start.",
+      "text": "Now imagine the next useful window of time. It does not need to be perfect. It only needs a beginning, a middle, and an honest finish. At the beginning, choose one target and place it in front of the mind. In the middle, return to it as many times as needed. At the finish, notice what was completed and let that completion count. This is the structure of the exercise: choose, return, and finish. Picture a steady breath, relaxed face, quiet hands, and a clear signal. The work in this imagined window is smaller than the worry around it. Smaller, simpler, reachable, and ready to start.",
       "pacing": { "baseWPM": 138 }
     },
     {
@@ -40,7 +40,7 @@
     },
     {
       "phase": "emergence",
-      "text": "Let the signal remain while the room becomes fully present again. Notice the hands. Notice the breath. Notice the next thing you intend to do after this session. Give it a simple name. Hold that name for one more breath. In a moment, you can move directly into it with a clear head and a steady body. Count upward: one, present; two, organized; three, ready; four, focused; five, begin.",
+      "text": "Let the signal remain while the room becomes fully present again. Notice the hands. Notice the breath. Notice the next thing you intend to do after this session. Give it a simple name. Hold that name for one more breath. Count upward: one, present; two, organized; three, ready; four, attentive; five, begin.",
       "pacing": { "baseWPM": 164 }
     }
   ]

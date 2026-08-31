@@ -5,8 +5,7 @@
 //  High-precision flash controller using CADisplayLink.
 //  Bilateral mode uses a slowly oscillating phase offset instead of a fixed 180°
 //  alternation — signals start in sync, drift apart to full alternation, then
-//  converge back.  This "drift" pattern avoids the habituation that comes from
-//  constant fixed-offset stimulation (Herrmann 2001; Siever 2003).
+//  converge back.
 //
 
 import SwiftUI
@@ -32,7 +31,11 @@ final class FlashController: Sendable {
     var sessionDuration: TimeInterval = 0
 
     // Config
-    var frequency: Double
+    private var frequencyStorage: Double
+    var frequency: Double {
+        get { frequencyStorage }
+        set { frequencyStorage = LightSafety.clampFlashHz(newValue) }
+    }
     var intensity: Double
     var pattern: MindMachineModel.LightPattern
     var bilateralMode: Bool = false {
@@ -66,7 +69,7 @@ final class FlashController: Sendable {
     #endif
 
     init(frequency: Double, intensity: Double, pattern: MindMachineModel.LightPattern) {
-        self.frequency = frequency
+        self.frequencyStorage = LightSafety.clampFlashHz(frequency)
         self.intensity = intensity
         self.pattern = pattern
     }

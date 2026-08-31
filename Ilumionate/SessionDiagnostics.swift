@@ -25,7 +25,7 @@ struct SessionDiagnostics {
         }
 
         if session.duration_sec < 10 {
-            warnings.append("Very short session (<10s) may not provide effective entrainment")
+            warnings.append("Very short session (<10s) contains little light-pattern timeline data")
         }
 
         if session.duration_sec > 3600 {
@@ -56,9 +56,10 @@ struct SessionDiagnostics {
                 warnings.append("Moment \(index) has very high frequency (>100 Hz)")
             }
 
-            // Optimal entrainment range is typically 1-40 Hz
-            if moment.frequency > 40 {
-                warnings.append("Moment \(index) frequency \(moment.frequency) Hz is above typical entrainment range (1-40 Hz)")
+            if moment.frequency > LightSafety.maxFlashHz {
+                warnings.append(
+                    "Moment \(index) requests \(moment.frequency) Hz; visible output will be limited to \(LightSafety.maxFlashHz) Hz"
+                )
             }
 
             // Check intensity range
@@ -105,7 +106,8 @@ struct SessionDiagnostics {
             warnings.append("Multiple moments at the same time - only one will be used")
         }
 
-        // Check for very rapid frequency changes (potential seizure risk)
+        // Check for abrupt requested-rate changes. The renderer still applies
+        // the independent full-screen flash ceiling at output.
         let sortedMoments = session.light_score.sorted { $0.time < $1.time }
         for i in 1..<sortedMoments.count {
             let prev = sortedMoments[i-1]
@@ -202,7 +204,7 @@ struct SessionDiagnostics {
         }
 
         if avgFreq < 5 {
-            suggestions.append("Low average frequency - entrainment may be less effective")
+            suggestions.append("Low average frequency - verify that the slow pulse pattern is intentional")
         }
 
         return SessionAnalysis(
@@ -227,11 +229,10 @@ struct SessionDiagnostics {
     ) -> EntrainmentEffectiveness {
         var score = 0
 
-        // Optimal frequency range (8-13 Hz for alpha, 1-40 Hz overall)
-        if avgFrequency >= 8 && avgFrequency <= 13 {
-            score += 2 // Alpha range
-        } else if avgFrequency >= 1 && avgFrequency <= 40 {
-            score += 1 // General entrainment range
+        // Reward moments already inside the visible release range. The
+        // renderer applies the same ceiling independently at output.
+        if avgFrequency >= 0.5 && avgFrequency <= LightSafety.maxFlashHz {
+            score += 2
         }
 
         // Good intensity (0.4-0.8 is ideal)

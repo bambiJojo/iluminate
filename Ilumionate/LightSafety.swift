@@ -10,16 +10,18 @@
 
 import Foundation
 
-/// Seizure-safety limits for the light entrainment / flash path.
+/// Conservative limits for the full-screen flashing-light path.
 enum LightSafety {
     /// Hard upper bound for any flash/strobe frequency, in Hz.
     ///
-    /// Matches the documented generation safety max (`SessionGenerator`'s
-    /// `GenerationConfig.maxFrequency = 40`). The Harding/photosensitive-epilepsy
-    /// guidance treats the ~3–60 Hz band as the high-risk flash range; capping at
-    /// 40 Hz keeps the engine input below the most reactive part of that band.
-    /// This is the strictest documented value in the app — do not raise it.
-    static let maxFlashHz: Double = 40.0
+    /// W3C WCAG 2.3.2 disallows more than three flashes in any one-second
+    /// period regardless of brightness or area. The app uses large/full-screen
+    /// fields and has not been certified with a flash-analysis tool, so this
+    /// simple, testable ceiling is the release boundary. Do not raise it based
+    /// on a warning or a claimed physiological effect.
+    static let maxFlashHz: Double = 3.0
+
+    static let flashFrequencyRange: ClosedRange<Double> = 0.5...maxFlashHz
 
     /// Clamp a requested flash/strobe frequency to the safe range.
     /// Frequencies are also floored at a small positive value so the period

@@ -112,6 +112,19 @@ struct AppSettingsManagerTests {
     }
 
     @Test
+    func migrateLegacyProfileGoalCopy_replacesOnlyOldOnboardingLabels() throws {
+        let defaults = try makeDefaults()
+
+        defaults.set("Better Sleep", forKey: AppSettingsManager.Key.profileGoal)
+        AppSettingsManager.migrateLegacyProfileGoalCopy(defaults: defaults)
+        #expect(defaults.string(forKey: AppSettingsManager.Key.profileGoal) == "Night Session")
+
+        defaults.set("My own private goal", forKey: AppSettingsManager.Key.profileGoal)
+        AppSettingsManager.migrateLegacyProfileGoalCopy(defaults: defaults)
+        #expect(defaults.string(forKey: AppSettingsManager.Key.profileGoal) == "My own private goal")
+    }
+
+    @Test
     func clearAllData_removesStoredContentAndDocuments() async throws {
         let defaults = try makeDefaults()
         let documentsDirectory = try makeDirectory()

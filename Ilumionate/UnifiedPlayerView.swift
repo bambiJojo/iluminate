@@ -208,7 +208,7 @@ struct UnifiedPlayerView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Light Sync uses rapidly flashing light patterns. If you have photosensitive epilepsy or are sensitive to flashing lights, do not enable this feature.")
+            Text("Light Sync can display rapid flashing or brightness changes. Do not enable it if you have photosensitivity, epilepsy or a history of seizures, light-triggered migraines, or another light-sensitive condition. Stop immediately if you feel unwell. Do not use while driving or operating machinery.")
         }
     }
 

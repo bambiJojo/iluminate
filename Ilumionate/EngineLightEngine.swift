@@ -25,7 +25,7 @@ private final class DisplayLinkProxy: NSObject {
     }
 }
 
-/// Drives the visual entrainment loop using CADisplayLink.
+/// Drives the visual-pattern loop using CADisplayLink.
 ///
 /// CADisplayLink runs on the main run loop. All oscillator math executes
 /// inline on the display callback — it is pure arithmetic and takes
@@ -108,7 +108,7 @@ final class LightEngine {
 
     /// The instantaneous frequency being output (may differ from targetFrequency
     /// during a ramp).
-    private(set) var currentFrequency: Double = 10.0
+    private(set) var currentFrequency: Double = LightSafety.maxFlashHz
 
     /// Current color temperature in Kelvin (2000-6500).
     /// nil = neutral white, 2000 = warm amber, 6500 = cool blue-white
@@ -132,7 +132,7 @@ final class LightEngine {
 
     // MARK: - Adaptive Refresh Rate
 
-    /// Calculate optimal refresh rate based on current therapeutic frequencies
+    /// Calculate an efficient refresh rate for the current visual pattern.
     /// Uses 8x oversampling minimum for smooth waveform rendering
     private func calculateOptimalRefreshRate() -> Int {
         // `currentBilateralOffset` is a PHASE offset, not a frequency one —
@@ -141,10 +141,10 @@ final class LightEngine {
         // Treating it as a frequency delta here modelled a per-eye rate that
         // never exists, inflating the required refresh and quietly eroding the
         // power saving this function is here to produce.
-        let maxTherapeuticFreq = currentFrequency
+        let maximumPatternRate = LightSafety.clampFlashHz(currentFrequency)
 
         // Minimum 8 samples per cycle for smooth waveforms
-        let minRequiredRefresh = maxTherapeuticFreq * 8.0
+        let minRequiredRefresh = maximumPatternRate * 8.0
 
         // Clamp between 30Hz (minimum for flicker-free) and 120Hz (maximum hardware)
         let optimalRefresh = max(30.0, min(120.0, minRequiredRefresh))
@@ -176,7 +176,7 @@ final class LightEngine {
             )
 
             let efficiencyText = powerEfficiencyGain > 0 ? String(format: " (%.1f%% power savings)", powerEfficiencyGain) : ""
-            Log.engine.info("🔄 Adaptive refresh rate: \(optimalRate)Hz (therapeutic: \(String(format: "%.1f", self.currentFrequency))Hz)\(efficiencyText)")
+            Log.engine.info("🔄 Adaptive refresh rate: \(optimalRate)Hz (pattern: \(String(format: "%.1f", self.currentFrequency))Hz)\(efficiencyText)")
         }
     }
 
@@ -205,11 +205,13 @@ final class LightEngine {
 
     // MARK: - Configuration
 
-    /// Desired entrainment frequency in Hz.
+    /// Desired visual-pattern frequency in Hz.
     /// In normal use the phase accumulator tracks this directly each frame.
     /// Call `rampTo(_:duration:curve:)` for a smooth programmatic transition.
-    var targetFrequency: Double = 10.0 {
-        didSet { targetFrequency = LightSafety.clampFlashHz(targetFrequency) }
+    private var targetFrequencyStorage: Double = LightSafety.maxFlashHz
+    var targetFrequency: Double {
+        get { targetFrequencyStorage }
+        set { targetFrequencyStorage = LightSafety.clampFlashHz(newValue) }
     }
 
     /// Smoothly transition to a new frequency over a given duration.
@@ -412,7 +414,7 @@ final class LightEngine {
         isDrivingOutput = true
 
         Log.engine.info("🚀 Light engine driving output at adaptive refresh rate: \(self.targetRefreshRate)Hz")
-        Log.engine.info("   Therapeutic frequency: \(String(format: "%.1f", self.currentFrequency))Hz")
+        Log.engine.info("   Light pattern frequency: \(String(format: "%.1f", self.currentFrequency))Hz")
     }
 
     /// Tear down the CADisplayLink. Sole owner of `isDrivingOutput` going false.
@@ -607,18 +609,19 @@ final class LightEngine {
         let clampedMultiplier = max(0.1, min(userBrightnessMultiplier, 1.0))
         maximumBrightness = max(0.0, min(1.0, state.intensity * clampedMultiplier))
 
-        guard abs(state.frequency - currentFrequency) > 0.01 else { return }
+        let visualFrequency = LightSafety.clampFlashHz(state.frequency)
+        guard abs(visualFrequency - currentFrequency) > 0.01 else { return }
         if let rampDur = state.rampDuration {
             activeRamp = FrequencyRamp(
                 fromFrequency: currentFrequency,
-                toFrequency: state.frequency,
+                toFrequency: visualFrequency,
                 duration: rampDur,
                 curve: rampCurve
             )
         } else if activeRamp == nil {
             activeRamp = FrequencyRamp(
                 fromFrequency: currentFrequency,
-                toFrequency: state.frequency,
+                toFrequency: visualFrequency,
                 duration: rampDuration,
                 curve: rampCurve
             )
@@ -627,7 +630,8 @@ final class LightEngine {
 
     /// Advances the active frequency ramp or tracks the target directly.
     private func advanceFrequency(deltaTime: Double) {
-        let baseFrequency = sessionPlayer?.currentState().frequency ?? targetFrequency
+        let requestedFrequency = sessionPlayer?.currentState().frequency ?? targetFrequency
+        let baseFrequency = LightSafety.clampFlashHz(requestedFrequency)
         guard activeRamp != nil else {
             currentFrequency = baseFrequency
             return

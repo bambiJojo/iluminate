@@ -43,7 +43,7 @@ Legend:
 
 Current App Store Connect validation state:
 
-- [ ] **iOS 1.0:** clear all validation findings (audit found 29 errors and 1 warning).
+- [ ] **iOS 1.0:** clear the four remaining blockers: Support URL, Privacy Policy URL, storefront availability, and required iPhone/iPad screenshots. All other findings reported by `asc validate --strict` were resolved for build `10024`.
 - [ ] **macOS 1.0:** clear all validation findings if shipping it (audit found 33 errors and 1 warning).
 - [ ] Reach `asc validate --strict` with zero blocking errors for each platform being submitted.
 
@@ -83,7 +83,7 @@ Current App Store Connect validation state:
 - [ ] **BLOCKER — direct audio URL and generic playlist-track downloads still save third-party media.** Apple Guideline 5.2.3 requires explicit authorization from those sources; a user rights acknowledgement alone does not establish source authorization.
 - [x] Reader web access is retained as user-managed Custom Sources: no websites are preloaded or recommended, navigation is limited to HTTP(S), downloads/non-displayable responses are blocked, and importing requires a separate rights acknowledgement on the visible current page.
 - [ ] Set App Store Connect **Content Rights** truthfully:
-  - [ ] Select that the app uses third-party content if any third-party content/service remains.
+  - [x] Selected that the app uses third-party content because user-added web sources and imported media remain.
   - [ ] Select that it does not only after the final rights audit proves that statement.
 - [ ] Add authorization documents and explanatory notes to App Review when a retained service could appear to violate Guideline 5.2.2 or 5.2.3.
 - [ ] Verify app name, icon, screenshots, metadata, and domains do not infringe another party's trademarks or copyrights.
@@ -91,34 +91,34 @@ Current App Store Connect validation state:
 ## 4. Recreational positioning and claim removal
 
 - [x] **Product decision:** LumeSync is purely recreational/entertainment software. It does not provide medical care, therapy, diagnosis, treatment, prevention, health monitoring, or guaranteed mental/physical outcomes.
-- [ ] **BLOCKER — remove every user-facing medical, therapy, wellness-treatment, or physiological-effect claim.** We will not retain or attempt to substantiate such claims.
-- [ ] Remove or replace these audited examples:
-  - [ ] “syncing your brainwaves” for “deep restorative sleep”
-  - [ ] “synchronize your brain, safely guiding your mental state”
-  - [ ] “washing away stress”
-  - [ ] “light therapy” and “therapy recommendations”
-  - [ ] treatment-like session labels such as `Anxiety Dissolve` and `Insomnia`
-  - [ ] claims such as “serotonin production,” “anti-anxiety,” “optimal focus,” “healing,” “entrainment,” or named frequency bands causing a particular state
-- [ ] Audit and rewrite user-visible strings in at least `Models/OnboardingData.swift`, `welcome_introduction.json`, `AnalyzerView.swift`, `AnalysisStatusBar.swift`, `AnalysisStatusOverlay.swift`, `AnalyzerConfig/AnalyzerConfig.swift`, `AnalysisPreferences.swift`, `LightSession+Metadata.swift`, bundled session JSON, and any generated-analysis output.
+- [x] Removed user-facing medical, therapy-treatment, and physiological-effect claims while preserving hypnosis and mature-content classification features.
+- [x] Removed or replaced these audited examples:
+  - [x] “syncing your brainwaves” for “deep restorative sleep”
+  - [x] “synchronize your brain, safely guiding your mental state”
+  - [x] “washing away stress”
+  - [x] “light therapy” and “therapy recommendations”
+  - [x] treatment-like session labels such as `Anxiety Dissolve` and `Insomnia`
+  - [x] claims such as “serotonin production,” “anti-anxiety,” “optimal focus,” “healing,” “entrainment,” or named frequency bands causing a particular state
+- [x] Audited and rewrote user-visible onboarding, analysis preferences/status, generated-analysis prompts and fallbacks, session metadata, bundled session names, and bundled text scripts.
 - [ ] Ensure internal enum/phase names such as `therapy` or `brainwave` never leak into UI, accessibility labels, notifications, logs shown to users, exported files, generated copy, or App Review screenshots. Rename internal terminology where that is the safest way to prevent leakage.
-- [ ] Describe only observable features: user-selected audio playback, audio-reactive visuals, adjustable light patterns, reading tools, and recreational sessions.
-- [ ] Do not claim that a frequency, binaural beat, visual pattern, hypnosis feature, or session changes brainwaves, sleep, stress, anxiety, focus, mood, health, or mental state.
-- [ ] Do not use “safe” or “safely” as a product-performance claim. Safety warnings and risk-reduction controls may be described factually without guaranteeing safety.
+- [x] Describe only observable features: user-selected audio playback, audio-reactive visuals, adjustable light patterns, reading tools, and recreational sessions.
+- [x] Removed claims that a frequency, binaural beat, visual pattern, hypnosis feature, or session changes brainwaves, sleep, stress, anxiety, focus, mood, health, or mental state.
+- [x] Removed “safe” and “safely” as product-performance claims. Safety warnings and risk-reduction controls are described factually without guaranteeing safety.
 - [ ] Keep App Store metadata, onboarding, in-app copy, website, screenshots, support material, privacy policy, generated text, and reviewer notes consistent with entertainment-only use.
-- [ ] Retain a concise disclaimer: “LumeSync is a recreational entertainment experience, not medical care or therapy.” Do not rely on the disclaimer to neutralize conflicting claims elsewhere.
+- [x] Retained the concise disclaimer: “LumeSync is a recreational entertainment experience, not medical care or therapy.”
 - [ ] Select no medical-device or health functionality in App Store Connect unless the final shipping behavior genuinely requires otherwise; answer every questionnaire based on the final binary.
-- [ ] Run a final case-insensitive release-string scan for `therapy`, `therapeutic`, `medical`, `treat`, `diagnose`, `cure`, `prevent`, `healing`, `anxiety`, `insomnia`, `brainwave`, `entrainment`, and similar claims, then manually review every match.
+- [x] Ran a case-insensitive source and built-simulator-app scan on 2026-08-31. Exact retired claims were absent; remaining matches were manually identified as the disclaimer, compatibility-preserving internal taxonomy, analyzer vocabulary, neutral content classification, or non-shipping developer identifiers. Repeat against the final archive.
 
 ## 5. Flashing-light and physical-safety gate
 
-- [ ] **BLOCKER — complete a documented photosensitivity/seizure-risk review of every flashing or brightness-changing mode.** Apple may reject apps that risk physical harm.
-- [ ] Require a clear first-use safety acknowledgement before any flashing feature can start.
-- [ ] Show an immediately visible warning at every entry point that can start flashing, not only during onboarding.
-- [ ] Warn people with epilepsy, seizure history, photosensitivity, migraines, or related concerns not to use flashing modes without appropriate medical guidance.
-- [ ] Warn users not to use the experience while driving, operating machinery, or in another unsafe setting.
+- [x] Completed a code-path review of every mode that drives `LightEngine` or `FlashController`; tests require each path to have a safety gate. Physical-device flash measurement remains a blocker below.
+- [x] Require a clear first-use safety acknowledgement before any flashing feature can start. Audio Light Sync has a separate acknowledgement because it starts with lights disabled.
+- [x] Route every entry point that can start full-screen flashing through the shared acknowledgement gate or the separate Audio Light Sync gate.
+- [x] Warn people with photosensitivity, epilepsy or seizure history, light-triggered migraines, or another light-sensitive condition not to use flashing modes.
+- [x] Warn users not to use the experience while driving, operating machinery, or anywhere they cannot stop immediately.
 - [ ] Provide an obvious, always-available stop/pause control and verify it works during every visual state.
 - [ ] Verify app backgrounding, phone calls, audio interruptions, crashes, and scene changes stop flashing and restore the user's prior screen brightness.
-- [ ] Verify conservative default intensity/frequency values and enforce safe upper bounds in `LightSafety` and all alternate visual engines.
+- [x] Enforce a conservative 3 Hz full-screen ceiling in `LightSafety`, generated sessions, UI ranges, `LightEngine`, and `FlashController`. Direct engine/controller and invalid-input tests pass. This follows the simple three-flashes-per-second W3C boundary because the full-screen output has not been certified with a flash-analysis tool.
 - [ ] Measure and document actual flash frequency, contrast, duty cycle, full-screen brightness changes, red-flash behavior, and transitions on physical devices.
 - [ ] Confirm Reduce Motion and other accessibility settings produce an appropriately reduced experience.
 - [ ] Test warnings and safety controls on iPhone and iPad, in light/dark environments, with brightness and Reduce White Point variations.
@@ -206,7 +206,7 @@ Current App Store Connect validation state:
 
 ### Automated tests and static checks
 
-- [x] Complete serial iOS 18.5 suite passed on 2026-08-31: **1687 tests / 257 suites / 0 failures** in 36.304 seconds.
+- [x] Complete serial iOS 18.5 suite passed on 2026-08-31: **1695 tests / 259 suites / 0 failures** in 36.392 seconds.
 - [ ] Run the macOS unit-test suite if macOS is shipping.
 - [ ] Run UI tests for onboarding, consent, import, analysis, reading, playback, flashing safety, Settings, and deletion.
 - [ ] Run Swift concurrency/static analysis and fix data-race, main-actor, force-unwrap, and crash findings that affect release paths.

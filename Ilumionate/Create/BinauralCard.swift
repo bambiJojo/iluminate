@@ -108,31 +108,31 @@ struct BinauralCard: View {
 
     private func brainwaveZoneName(for frequency: Double) -> String {
         switch frequency {
-        case 0.5..<4:   return "Delta"
-        case 4..<8:     return "Theta"
-        case 8..<12:    return "Alpha"
-        case 12..<30:   return "Beta"
-        default:        return "Gamma"
+        case 0.5..<1.0: return "Very Slow"
+        case 1.0..<1.5: return "Slow"
+        case 1.5..<2.0: return "Medium"
+        case 2.0..<2.5: return "Fast"
+        default:        return "Very Fast"
         }
     }
 
     private func brainwaveZoneColor(for frequency: Double) -> Color {
         switch frequency {
-        case 0.5..<4:   return .bwDelta
-        case 4..<8:     return .bwTheta
-        case 8..<12:    return .bwAlpha
-        case 12..<30:   return .bwBeta
+        case 0.5..<1.0: return .bwDelta
+        case 1.0..<1.5: return .bwTheta
+        case 1.5..<2.0: return .bwAlpha
+        case 2.0..<2.5: return .bwBeta
         default:        return .bwGamma
         }
     }
 
     private func binauralDescription(for frequency: Double) -> String {
         switch frequency {
-        case 0.5..<4:   return "Deep sleep / recovery"
-        case 4..<8:     return "Hypnosis / creativity"
-        case 8..<12:    return "Calm focus / relaxation"
-        case 12..<30:   return "Alert concentration"
-        default:        return "Peak cognition"
+        case 0.5..<1.0: return "Very slow beat"
+        case 1.0..<1.5: return "Slow beat"
+        case 1.5..<2.0: return "Midrange beat"
+        case 2.0..<2.5: return "Fast beat"
+        default:        return "Very fast beat"
         }
     }
 }

@@ -1,7 +1,7 @@
 {
   "displayName": "Welcome Introduction",
   "duration": 180.0,
-  "description": "A gentle 3-minute introduction to light therapy with breathing guidance and progressive relaxation",
+  "description": "A gentle 3-minute introduction to synchronized light, breathing cues, and adjustable visual patterns",
   "category": "introduction",
   "difficulty": "beginner",
   "tags": ["introduction", "breathing", "relaxation", "beginner"],
@@ -52,7 +52,7 @@
       "intensity": 0.6,
       "waveform": "sine",
       "bilateral": false,
-      "description": "Light focus enhancement"
+      "description": "Brighter light pattern"
     },
     {
       "time": 60.0,
@@ -60,7 +60,7 @@
       "intensity": 0.7,
       "waveform": "sine",
       "bilateral": false,
-      "description": "Optimal entrainment"
+      "description": "Steady pulse pattern"
     },
     {
       "time": 75.0,

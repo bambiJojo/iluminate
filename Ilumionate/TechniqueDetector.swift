@@ -734,7 +734,7 @@ private nonisolated extension TechniqueDetector {
                 techniques.append(HypnoticTechnique(
                     technique: "deliberate_pause",
                     timestamp: pause.startTime,
-                    description: "Deliberate therapeutic pause (\(Int(pause.duration))s) after: \"\(preceding)\"",
+                    description: "Deliberate long pause (\(Int(pause.duration))s) after: \"\(preceding)\"",
                     suggestedLightSync: "gentle_frequency_dip"
                 ))
                 markers.append(LinguisticMarker(

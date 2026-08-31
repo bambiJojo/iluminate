@@ -48,7 +48,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>LumeSync uses the front camera during the reader only when attention check is enabled, so the reader can pause while you are not looking at the screen.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>LumeSync uses speech recognition to transcribe your audio files and generate personalized light therapy sessions based on the content.</string>
+	<string>LumeSync uses speech recognition to transcribe your audio files and create synchronized light patterns based on their timing and content.</string>
 	<key>TelemetryDeckAppID</key>
 	<string>$(TELEMETRYDECK_APP_ID)</string>
 	<key>UIApplicationSceneManifest</key>

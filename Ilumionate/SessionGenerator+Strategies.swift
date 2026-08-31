@@ -2,17 +2,9 @@
 //  SessionGenerator+Strategies.swift
 //  Ilumionate
 //
-//  Per-content-type session generation strategies grounded in audiovisual
-//  entrainment (AVE) research. All sessions follow the canonical arc:
-//    Beta entrance → Alpha descent → Theta hold → Alpha emergence → Beta return
-//
-//  Scientific references baked in:
-//  • SSVEP works through closed eyelids at 8–10% transmission.
-//  • Theta 4–8 Hz is the hypnagogic sweet spot (strongest thalamic resonance).
-//  • 10 Hz alpha is most studied for relaxation; 40 Hz gamma for cognition.
-//  • Bilateral mode (0.5 phase offset) at 4–12 Hz promotes interhemispheric coherence.
-//  • Warm color (2200–2800 K) for deep states; cool (4500–6500 K) for alerting/emergence.
-//  • noiseModulatedSine prevents neural habituation on long holds.
+//  Per-content-type light-score generation strategies. Historical strategy
+//  values are normalized by LightScorePostProcessor and the renderer's
+//  independent full-screen flash ceiling before reaching visible output.
 //
 
 import Foundation

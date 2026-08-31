@@ -107,6 +107,6 @@ struct VisualFieldAudioTests {
         light.frequency = 18
 
         #expect(store.binaural.beatFrequency == 4)
-        #expect(light.binauralSettings.beatFrequency == 18)
+        #expect(light.binauralSettings.beatFrequency == LightSafety.maxFlashHz)
     }
 }

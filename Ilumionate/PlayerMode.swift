@@ -189,29 +189,29 @@ enum PlayerMode: Identifiable {
     ///
     /// Reads as a standalone sentence because the threshold has no numerals
     /// for it to lead into. It still sits above the count on the VoiceOver
-    /// fallback, where "Close your eyes and relax" followed by "3" is fine.
+    /// fallback.
     var countdownIntroMessage: String {
         switch self {
         case .visualField: return "Soften your gaze"
-        default: return "Close your eyes and relax"
+        default: return "Get comfortable"
         }
     }
 
     /// The line held on screen after the count, or nil to begin immediately.
     ///
-    /// Nil for the visual field: it is watched, not listened to with eyes
-    /// shut, so "Close your eyes" would be an instruction to miss the session.
+    /// Nil for the visual field because it begins as soon as the opening arc
+    /// completes. Other modes keep a short neutral hold before playback.
     var countdownHoldMessage: String? {
         switch self {
         case .visualField: return nil
-        default: return "Close your eyes"
+        default: return "Ready"
         }
     }
 
     var requiresSafetyWarning: Bool {
         switch self {
-        case .flashMode, .colorPulse: return true
-        default: return false
+        case .session, .flashMode, .colorPulse, .playlist: return true
+        case .audioLight, .visualField: return false
         }
     }
 

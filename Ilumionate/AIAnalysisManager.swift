@@ -355,7 +355,7 @@ actor AIAnalysisManager {
         let durationStr = formatDuration(audioFile.duration)
 
         let prompt = """
-        Analyze this audio file for light therapy session generation.
+        Analyze this audio file for synchronized light-pattern generation.
 
         Audio Characteristics:
         - Duration: \(durationStr)
@@ -368,8 +368,10 @@ actor AIAnalysisManager {
         - Medium tempo (60–100 BPM) + varied energy → likely guided imagery or music
         - High tempo (>100 BPM) + high energy → likely music
 
-        Classify the content type and recommend light therapy parameters accordingly.
-        For the frequency range, target the appropriate brainwave band for the content type.
+        Classify the content type and recommend observable light-pattern parameters accordingly.
+        For the frequency range, match the source's pacing and any explicit frequency framing.
+        Do not make medical, therapeutic, neurological, sleep, stress, mood, cognition,
+        performance, or other health-outcome claims.
         """
 
         await onProgress(ProgressInfo(progress: 0.5, message: "Analyzing audio features..."))
@@ -817,25 +819,25 @@ private extension AIAnalysisManager {
         let mood: AnalysisResult.Mood
         switch contentType {
         case .hypnosis:
-            freqRange = 4.0...8.0;   intensity = 0.50; colorTemp = 2600; mood = .relaxing
+            freqRange = 0.7...1.8;   intensity = 0.50; colorTemp = 2600; mood = .relaxing
         case .meditation:
-            freqRange = 6.0...8.0;   intensity = 0.45; colorTemp = 3200; mood = .meditative
+            freqRange = 0.8...1.6;   intensity = 0.45; colorTemp = 3200; mood = .meditative
         case .affirmations:
-            freqRange = 9.0...11.0;  intensity = 0.55; colorTemp = 3500; mood = .uplifting
+            freqRange = 1.2...2.0;   intensity = 0.55; colorTemp = 3500; mood = .uplifting
         case .guidedImagery:
-            freqRange = 7.0...10.0;  intensity = 0.50; colorTemp = 3000; mood = .relaxing
+            freqRange = 0.8...1.8;   intensity = 0.50; colorTemp = 3000; mood = .relaxing
         case .music:
-            freqRange = 12.0...18.0; intensity = 0.75; colorTemp = 5000; mood = .energizing
+            freqRange = 1.5...3.0;   intensity = 0.75; colorTemp = 5000; mood = .energizing
         case .eroticHypnosis:
-            freqRange = 2.0...6.0;   intensity = 0.45; colorTemp = 2400; mood = .relaxing
+            freqRange = 0.5...1.4;   intensity = 0.45; colorTemp = 2400; mood = .relaxing
         case .brainwave:
-            freqRange = 1.0...40.0;  intensity = 0.50; colorTemp = 4000; mood = .meditative
+            freqRange = 0.5...3.0;   intensity = 0.50; colorTemp = 4000; mood = .meditative
         case .asmr:
-            freqRange = 7.0...9.0;   intensity = 0.35; colorTemp = 3200; mood = .relaxing
+            freqRange = 0.8...1.6;   intensity = 0.35; colorTemp = 3200; mood = .relaxing
         case .sleepHypnosis:
-            freqRange = 0.5...4.0;   intensity = 0.35; colorTemp = 2200; mood = .relaxing
+            freqRange = 0.5...1.0;   intensity = 0.35; colorTemp = 2200; mood = .relaxing
         case .unknown:
-            freqRange = 8.0...12.0;  intensity = 0.50; colorTemp = 3500; mood = .neutral
+            freqRange = 1.5...2.0;   intensity = 0.50; colorTemp = 3500; mood = .neutral
         }
         let momentCount = max(4, min(8, Int(duration / 120.0) + 2))
         let interval = duration / Double(momentCount + 1)
@@ -855,7 +857,7 @@ private extension AIAnalysisManager {
         } else {
             hypnosisMetadata = nil
         }
-        let presetName = contentType == .unknown ? "Alpha Relaxation" : "\(contentType.displayName) Session"
+        let presetName = contentType == .unknown ? "Medium Pattern" : "\(contentType.displayName) Session"
         let result = AnalysisResult(
             mood: mood,
             energyLevel: contentType == .music ? 0.75 : 0.2,

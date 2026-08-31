@@ -13,21 +13,22 @@ extension LightSession {
     // MARK: - Frequency Analysis
 
     /// Median frequency across all light-score moments (representative of the
-    /// session's primary entrainment target rather than the highest peak).
+    /// session's primary light-pattern rate rather than the highest peak).
     var dominantFrequency: Double {
-        let sorted = light_score.map(\.frequency).sorted()
-        guard !sorted.isEmpty else { return 10.0 }
+        let sorted = light_score.map { LightSafety.clampFlashHz($0.frequency) }.sorted()
+        guard !sorted.isEmpty else { return LightSafety.maxFlashHz }
         return sorted[sorted.count / 2]
     }
 
-    // MARK: - Brainwave Category
+    // MARK: - Pattern Category
 
     var brainwaveCategory: BrainwaveCategory {
         switch dominantFrequency {
-        case 0.5..<4:  return .sleep
-        case 4..<8:    return .relax
-        case 8..<14:   return .focus
-        default:       return .trance
+        case 0.5..<1.0: return .sleep
+        case 1.0..<1.5: return .relax
+        case 1.5..<2.0: return .focus
+        case 2.0..<2.5: return .energy
+        default:        return .trance
         }
     }
 
@@ -35,23 +36,23 @@ extension LightSession {
 
     var tagline: String {
         let name = displayName.lowercased()
-        if name.contains("peniston")    { return "Alpha-Theta Protocol" }
-        if name.contains("schumann")    { return "7.83 Hz Earth Resonance" }
-        if name.contains("gamma")       { return "40 Hz Neural Clarity" }
-        if name.contains("smr")         { return "Sleep Architecture" }
-        if name.contains("anxiety")     { return "Beta to Theta Descent" }
-        if name.contains("hypnagogic")  { return "Waking Dream State" }
-        if name.contains("defrag")      { return "Beta Cycling Protocol" }
-        if name.contains("bilateral")   { return "EMDR-Inspired" }
-        if name.contains("delta")       { return "Deep Recovery" }
-        if name.contains("creativity")  { return "Divergent Thinking" }
-        if name.contains("sunrise")     { return "Circadian Awakening" }
-        if name.contains("hypnosis")    { return "Elman Induction Arc" }
-        if name.contains("relax")       { return "Theta Descent" }
-        if name.contains("focus")       { return "Alpha-Beta Clarity" }
-        if name.contains("restoration") { return "Slow-Wave Recovery" }
-        if name.contains("threshold")   { return "Hypnagogic State" }
-        return brainwaveCategory.rawValue + " Entrainment"
+        if name.contains("peniston")    { return "Alpha–Theta Frequency Arc" }
+        if name.contains("schumann")    { return "7.83 Hz Pulse Pattern" }
+        if name.contains("gamma")       { return "Fast Pulse Pattern" }
+        if name.contains("smr")         { return "Layered Pulse Pattern" }
+        if name.contains("anxiety")     { return "Descending Frequency Arc" }
+        if name.contains("hypnagogic")  { return "Slow Frequency Descent" }
+        if name.contains("defrag")      { return "Cycling Frequency Pattern" }
+        if name.contains("bilateral")   { return "Alternating Left–Right Pattern" }
+        if name.contains("delta")       { return "Low-Frequency Pattern" }
+        if name.contains("creativity")  { return "Variable Frequency Arc" }
+        if name.contains("sunrise")     { return "Rising Frequency Arc" }
+        if name.contains("hypnosis")    { return "Audio-Synchronized Hypnosis Arc" }
+        if name.contains("relax")       { return "Slow Frequency Descent" }
+        if name.contains("focus")       { return "Midrange Frequency Pattern" }
+        if name.contains("restoration") { return "Low-Frequency Pattern" }
+        if name.contains("threshold")   { return "Slow Frequency Descent" }
+        return brainwaveCategory.rawValue + " Frequency Pattern"
     }
 
     // MARK: - Icon

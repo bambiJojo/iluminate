@@ -9,10 +9,8 @@ import Testing
 
 /// The copy shown while a session opens.
 ///
-/// It used to lead into a numeral — "Close your eyes and relax in… 3" — and
-/// the threshold removed the numeral. These pin the reword, because a line
-/// that dangles into nothing is the kind of thing that reads fine in a diff
-/// and looks broken on a screen.
+/// These pin the neutral opening copy because it must stand alone and must not
+/// imply that closing the eyes prevents exposure to flashing light.
 struct SessionOpeningCopyTests {
 
     private var field: PlayerMode {
@@ -49,10 +47,6 @@ struct SessionOpeningCopyTests {
 
     @Test("Every mode still says something while the session opens")
     func introCopyIsNeverEmpty() {
-        // The arc is wordless; the screen is not. Whether the user's eyes are
-        // closed changes what a photoentrainment session does, so this copy
-        // is functional, not decorative — it must not be dropped for a purer
-        // aesthetic.
         for mode in allModes {
             #expect(mode.countdownIntroMessage.isEmpty == false)
         }
@@ -64,9 +58,11 @@ struct SessionOpeningCopyTests {
         #expect(field.countdownHoldMessage == nil)
     }
 
-    @Test("Eyes-closed modes still hold the instruction after the arc")
-    func lightModesHoldTheInstruction() {
-        #expect(flash.countdownHoldMessage == "Close your eyes")
-        #expect(pulse.countdownHoldMessage == "Close your eyes")
+    @Test("Flashing modes use a neutral hold after the arc")
+    func lightModesUseNeutralHold() {
+        #expect(flash.countdownHoldMessage == "Ready")
+        #expect(pulse.countdownHoldMessage == "Ready")
+        #expect(flash.countdownIntroMessage.localizedStandardContains("close your eyes") == false)
+        #expect(pulse.countdownIntroMessage.localizedStandardContains("close your eyes") == false)
     }
 }

@@ -28,7 +28,7 @@ nonisolated enum AudioContentType: String, Codable, Sendable, CaseIterable {
         case .guidedImagery: return "Guided Imagery"
         case .affirmations: return "Affirmations"
         case .eroticHypnosis: return "Erotic Hypnosis"
-        case .brainwave: return "Brainwave"
+        case .brainwave: return "Frequency Audio"
         case .asmr: return "ASMR"
         case .sleepHypnosis: return "Sleep Hypnosis"
         case .unknown: return "Unknown"

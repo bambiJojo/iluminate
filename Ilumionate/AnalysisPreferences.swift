@@ -18,17 +18,17 @@ enum FrequencyProfile: String, CaseIterable, Codable, Sendable {
 
     var displayName: String {
         switch self {
-        case .conservative: "Conservative (0.5–15 Hz)"
-        case .standard:     "Standard (0.5–30 Hz)"
-        case .deep:         "Deep (0.5–40 Hz)"
+        case .conservative: "Gentle (0.5–1 Hz)"
+        case .standard:     "Balanced (0.5–2 Hz)"
+        case .deep:         "Full (0.5–3 Hz)"
         }
     }
 
     var description: String {
         switch self {
-        case .conservative: "Gentle entrainment, ideal for beginners"
-        case .standard:     "Full brainwave range for most content"
-        case .deep:         "Extended range including gamma waves"
+        case .conservative: "Limits generated light patterns to one pulse per second"
+        case .standard:     "Allows generated light patterns up to two pulses per second"
+        case .deep:         "Allows the full supported range up to three pulses per second"
         }
     }
 
@@ -36,9 +36,9 @@ enum FrequencyProfile: String, CaseIterable, Codable, Sendable {
 
     var maxFrequency: Double {
         switch self {
-        case .conservative: 15.0
-        case .standard:     30.0
-        case .deep:         40.0
+        case .conservative: 1.0
+        case .standard:     2.0
+        case .deep:         LightSafety.maxFlashHz
         }
     }
 }
@@ -95,9 +95,9 @@ enum ColorTempMode: String, CaseIterable, Codable, Sendable {
     var description: String {
         switch self {
         case .auto:    "Analysis selects the best temperature"
-        case .warm:    "Relaxing, ideal for sleep & deep trance"
+        case .warm:    "Warm amber tones for low-key sessions"
         case .neutral: "Balanced for general use"
-        case .cool:    "Alerting, ideal for focus & energy"
+        case .cool:    "Cooler tones for brighter sessions"
         }
     }
 
@@ -125,11 +125,11 @@ enum ContentHint: String, CaseIterable, Codable, Sendable {
     var displayName: String {
         switch self {
         case .none:        "Auto-detect"
-        case .hypnosis:    "Hypnosis / Hypnotherapy"
+        case .hypnosis:    "Hypnosis"
         case .eroticHypnosis: "Erotic / Conditioning"
         case .meditation:  "Meditation / Mindfulness"
         case .affirmation: "Affirmations"
-        case .sleepAid:    "Sleep Aid"
+        case .sleepAid:    "Sleep / Wind-down"
         case .energizing:  "Energizing / Focus"
         }
     }
@@ -150,7 +150,7 @@ enum ContentHint: String, CaseIterable, Codable, Sendable {
         switch self {
         case .none: nil
         case .hypnosis:
-            "This content is likely hypnosis or hypnotherapy. Pay close attention to " +
+            "This content is likely hypnosis. Pay close attention to " +
             "induction language, deepening techniques, post-hypnotic suggestions, and emergence cues."
         case .eroticHypnosis:
             "This content is likely erotic hypnosis or conditioning. Pay close attention to " +
@@ -162,11 +162,11 @@ enum ContentHint: String, CaseIterable, Codable, Sendable {
             "This content contains affirmations. Optimize light patterns for the " +
             "repetitive, suggestion-based rhythm of affirmation delivery."
         case .sleepAid:
-            "This content is designed to aid sleep. Bias recommendations toward slow " +
-            "delta frequencies (0.5–4 Hz), low intensity, and warm color temperatures."
+            "This content uses sleep or wind-down language. Match its slow pacing with " +
+            "low-intensity light patterns and warm color temperatures."
         case .energizing:
-            "This content is energizing or focus-oriented. Bias toward beta frequencies " +
-            "(14–30 Hz), higher intensity, and cooler color temperatures."
+            "This content uses energetic or focus-oriented pacing. Match it with faster " +
+            "light patterns, higher intensity, and cooler color temperatures."
         }
     }
 }

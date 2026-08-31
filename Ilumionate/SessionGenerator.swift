@@ -2,15 +2,14 @@
 //  SessionGenerator.swift
 //  Ilumionate
 //
-//  Generates synchronized light therapy sessions from audio analysis.
-//  Session design is grounded in audiovisual entrainment (AVE) research.
+//  Generates synchronized light-pattern sessions from audio analysis.
 //  See SessionGenerator+Strategies.swift for per-content-type implementations.
 //
 
 import Foundation
 import os
 
-/// Generates synchronized light therapy sessions from audio analysis.
+/// Generates synchronized light-pattern sessions from audio analysis.
 @MainActor
 @Observable
 class SessionGenerator {
@@ -28,7 +27,7 @@ class SessionGenerator {
     struct GenerationConfig {
         var intensityMultiplier: Double = 1.0
         var minFrequency: Double = 0.5
-        var maxFrequency: Double = 40.0
+        var maxFrequency: Double = LightSafety.maxFlashHz
         var transitionSmoothness: Double = 0.8
         var colorTemperatureOverride: Double?
         var bilateralMode: Bool = false
@@ -36,7 +35,7 @@ class SessionGenerator {
         nonisolated init(
             intensityMultiplier: Double = 1.0,
             minFrequency: Double = 0.5,
-            maxFrequency: Double = 40.0,
+            maxFrequency: Double = LightSafety.maxFlashHz,
             transitionSmoothness: Double = 0.8,
             colorTemperatureOverride: Double? = nil,
             bilateralMode: Bool = false
@@ -134,19 +133,19 @@ class SessionGenerator {
 
     // MARK: - Emergence Guard
     //
-    // Ensures no session ends below 10 Hz without a proper ramp back.
-    // Abrupt session endings at theta cause disorientation.
+    // Gives sessions a gradual visual-rate ramp before the final moment.
 
     func ensureEmergence(
         moments: inout [LightMoment],
         duration: TimeInterval,
         config: GenerationConfig
     ) {
-        guard let lastMoment = moments.last, lastMoment.frequency < 10.0 else { return }
+        guard let lastMoment = moments.last,
+              lastMoment.frequency < config.maxFrequency - 0.01 else { return }
 
         let rampDuration = min(
             duration - lastMoment.time,
-            max(30.0, (10.0 - lastMoment.frequency) * 10.0)
+            max(30.0, (config.maxFrequency - lastMoment.frequency) * 20.0)
         )
         let step = rampDuration / 3.0
         let startTime = lastMoment.time
@@ -154,19 +153,21 @@ class SessionGenerator {
 
         moments.append(LightMoment(
             time: startTime + step,
-            frequency: lastMoment.frequency + 2.0,
+            frequency: lastMoment.frequency
+                + (config.maxFrequency - lastMoment.frequency) / 3.0,
             intensity: 0.35 * mul,
             waveform: .sine,
             color_temperature: 3000))
         moments.append(LightMoment(
             time: startTime + step * 2,
-            frequency: lastMoment.frequency + 4.0,
+            frequency: lastMoment.frequency
+                + (config.maxFrequency - lastMoment.frequency) * 2.0 / 3.0,
             intensity: 0.28 * mul,
             waveform: .sine,
             color_temperature: 3800))
         moments.append(LightMoment(
             time: duration,
-            frequency: 12.0,
+            frequency: config.maxFrequency,
             intensity: 0.22 * mul,
             waveform: .sine,
             color_temperature: 4500))
