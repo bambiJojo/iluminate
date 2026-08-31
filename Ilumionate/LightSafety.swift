@@ -19,14 +19,14 @@ enum LightSafety {
     /// fields and has not been certified with a flash-analysis tool, so this
     /// simple, testable ceiling is the release boundary. Do not raise it based
     /// on a warning or a claimed physiological effect.
-    static let maxFlashHz: Double = 3.0
+    nonisolated static let maxFlashHz: Double = 3.0
 
-    static let flashFrequencyRange: ClosedRange<Double> = 0.5...maxFlashHz
+    nonisolated static let flashFrequencyRange: ClosedRange<Double> = 0.5...maxFlashHz
 
     /// Clamp a requested flash/strobe frequency to the safe range.
     /// Frequencies are also floored at a small positive value so the period
     /// (`1 / frequency`) never divides by zero.
-    static func clampFlashHz(_ frequency: Double) -> Double {
+    nonisolated static func clampFlashHz(_ frequency: Double) -> Double {
         guard frequency.isFinite else { return maxFlashHz }
         return max(0.1, min(frequency, maxFlashHz))
     }
