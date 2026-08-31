@@ -191,12 +191,14 @@ class AudioAnalyzer: Sendable {
     // MARK: - Actor-Isolated Components
 
     private let whisperManager = WhisperManager()
+    private let transcriptResolver: AudioTranscriptResolver
     private var currentTask: Task<AudioTranscriptionResult, Error>?
     private var currentTranscriptionID: UUID?
 
     // MARK: - Initialization
 
-    init() {
+    init(transcriptCatalog: BundledAudioTranscriptCatalog = .shared) {
+        self.transcriptResolver = AudioTranscriptResolver(catalog: transcriptCatalog)
         // Keep the large WhisperKit model unloaded until transcription is
         // requested. `transcribe` and `prepareModel` both initialize it through
         // the actor-isolated manager before use.
@@ -217,7 +219,7 @@ class AudioAnalyzer: Sendable {
         let trace = PerformanceTrace.begin("Transcription")
         defer { PerformanceTrace.end(trace) }
 
-        return try await AudioTranscriptResolver().transcribe(
+        return try await transcriptResolver.transcribe(
             filename: audioFile.filename,
             duration: audioFile.duration
         ) {

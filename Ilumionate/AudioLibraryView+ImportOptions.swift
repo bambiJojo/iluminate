@@ -1,142 +1,48 @@
 // AudioLibraryView+ImportOptions.swift
 // Ilumionate
-//
 
 import SwiftUI
 
 extension AudioLibraryView {
-
-    // MARK: - Import Options Section (shown in confirmation dialog via toolbar + button)
-    // Full import card kept here for potential future "onboarding import" use.
-
     var importOptionsSection: some View {
         GlassCard(label: "Add Audio") {
-            VStack(spacing: TranceSpacing.inner) {
-                // --- Import from File (Primary) ---
-                Button {
-                    acquisition.importFromFiles()
-                } label: {
-                    HStack(spacing: TranceSpacing.list) {
-                        Image(systemName: "folder.fill")
-                            .font(.title2)
-                            .frame(width: 28)
+            Button {
+                acquisition.importFromFiles()
+            } label: {
+                HStack(spacing: TranceSpacing.list) {
+                    Image(systemName: "folder.fill")
+                        .font(.title2)
+                        .frame(width: 28)
+                        .foregroundStyle(.white)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Import from Files")
+                            .font(TranceTypography.body)
+                            .fontWeight(.semibold)
                             .foregroundStyle(.white)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Import from File")
-                                .font(TranceTypography.body)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.white)
-
-                            Text("Choose MP3, M4A, or WAV files")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "arrow.right")
-                            .font(.caption.weight(.semibold))
+                        Text("Choose audio you have permission to use")
+                            .font(TranceTypography.caption)
                             .foregroundStyle(.white.opacity(0.8))
                     }
-                    .padding(.horizontal, TranceSpacing.card)
-                    .padding(.vertical, TranceSpacing.card)
-                    .background(
-                        LinearGradient(
-                            colors: [.roseGold, .roseDeep],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
-                    .shadow(color: Color.roseGold.opacity(0.30), radius: 8, x: 0, y: 4)
+
+                    Spacer()
+
+                    Image(systemName: "arrow.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.8))
                 }
-
-                // --- Import from Web (Secondary) ---
-                Button {
-                    acquisition.importFromURL()
-                } label: {
-                    HStack(spacing: TranceSpacing.list) {
-                        Group {
-                            if acquisition.isDownloading {
-                                ProgressView()
-                                    .tint(.roseGold)
-                            } else {
-                                Image(systemName: "link.icloud.fill")
-                                    .font(.title2)
-                            }
-                        }
-                        .frame(width: 28)
-                        .foregroundStyle(.roseGold)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(acquisition.isDownloading ? "Downloading..." : "Import from Web")
-                                .font(TranceTypography.body)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.textPrimary)
-
-                            Text(acquisition.isDownloading ? "Saving to your library..." : "Paste a link to an audio file")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(.textSecondary)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "arrow.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.textLight)
-                    }
-                    .padding(.horizontal, TranceSpacing.card)
-                    .padding(.vertical, TranceSpacing.card)
-                    .background(
-                        RoundedRectangle(cornerRadius: TranceRadius.button)
-                            .fill(Color.roseGold.opacity(0.08))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: TranceRadius.button)
-                                    .strokeBorder(Color.roseGold.opacity(0.35), lineWidth: 1)
-                            )
+                .padding(.horizontal, TranceSpacing.card)
+                .padding(.vertical, TranceSpacing.card)
+                .background(
+                    LinearGradient(
+                        colors: [.roseGold, .roseDeep],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
-                }
-                .disabled(acquisition.isDownloading)
-
-                // --- Browse the Web (Tertiary) ---
-                Button {
-                    acquisition.browseTheWeb()
-                } label: {
-                    HStack(spacing: TranceSpacing.list) {
-                        Image(systemName: "safari.fill")
-                            .font(.title2)
-                            .frame(width: 28)
-                            .foregroundStyle(.textSecondary)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Browse the Web")
-                                .font(TranceTypography.body)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.textPrimary)
-
-                            Text("Find & download audio in-app")
-                                .font(TranceTypography.caption)
-                                .foregroundStyle(.textSecondary)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "arrow.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.textLight)
-                    }
-                    .padding(.horizontal, TranceSpacing.card)
-                    .padding(.vertical, TranceSpacing.card)
-                    .background(
-                        RoundedRectangle(cornerRadius: TranceRadius.button)
-                            .fill(Color.glassBorder.opacity(0.12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: TranceRadius.button)
-                                    .strokeBorder(Color.glassBorder.opacity(0.35), lineWidth: 1)
-                            )
-                    )
-                }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: TranceRadius.button))
+                .shadow(color: Color.roseGold.opacity(0.30), radius: 8, x: 0, y: 4)
             }
         }
         .padding(.horizontal, TranceSpacing.screen)

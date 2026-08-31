@@ -17,27 +17,18 @@ struct TextTranceRootView: View {
     @State private var progressStore = ReaderProgressStore.shared
     @State private var sourceStore = ReadingSourceStore.shared
     @State private var scripts: [TranceScript] = []
-    @State private var showingWebImport = false
     @State private var showingDocumentImporter = false
     @State private var showingReadingSources = false
     @State private var showingHistory = false
+    @State private var selectedReadingSource: ReadingSource?
     @State private var documentImportState: DocumentImportState = .idle
     @State private var importedSetupScript: TranceScript?
     @State private var pendingHistoryScript: TranceScript?
-    @State private var browsingSource: BrowsingSource?
     @State private var activeQuickStartSession: TextTranceSession?
     @State private var quickStartIndex = 0
     @State private var handledQuickStartTrigger = 0
 
     private let presetStore = ReaderPresetStore.shared
-
-    // Mirrors the Settings toggle that gates adult (18+) sources.
-    @AppStorage("nsfwSourcesEnabled") private var nsfwEnabled = false
-
-    private struct BrowsingSource: Identifiable {
-        let id = UUID()
-        let source: ReadingSource
-    }
 
     var body: some View {
         NavigationStack {
@@ -49,10 +40,10 @@ struct TextTranceRootView: View {
                 quickStartPlan: quickStartPlan,
                 importState: documentImportState,
                 onImportFile: { showingDocumentImporter = true },
-                onLoadWebsite: { showingWebImport = true },
+                onManageSources: { showingReadingSources = true },
                 onResume: { script in importedSetupScript = script },
                 onSeeAllHistory: { showingHistory = true },
-                onOpenSource: { source in browsingSource = BrowsingSource(source: source) },
+                onOpenSource: { source in selectedReadingSource = source },
                 onSeeAllSources: { showingReadingSources = true },
                 onOpenDocument: openDocument,
                 onDeleteDocument: deleteDocument,
@@ -72,16 +63,10 @@ struct TextTranceRootView: View {
                 }
             }
             .navigationDestination(isPresented: $showingReadingSources) {
-                ReadingSourceDirectoryView(store: .shared) { script in
-                    insertImportedScript(script)
-                    importedSetupScript = script
-                }
-            }
-        }
-        .sheet(isPresented: $showingWebImport) {
-            WebTextImportSheet { script in
-                insertImportedScript(script)
-                importedSetupScript = script
+                ReadingSourceDirectoryView(
+                    store: sourceStore,
+                    onOpenSource: { source in selectedReadingSource = source }
+                )
             }
         }
         .sheet(isPresented: $showingHistory, onDismiss: openPendingHistoryScript) {
@@ -89,22 +74,17 @@ struct TextTranceRootView: View {
                 pendingHistoryScript = script
             }
         }
-        .platformFullScreenCover(item: $browsingSource) { destination in
-            SafariBrowserView(
-                url: destination.source.url,
-                suggestedTitle: destination.source.title,
-                allowsImport: destination.source.canImport,
-                onImported: { script in
-                    insertImportedScript(script)
-                    importedSetupScript = script
-                }
-            )
-        }
         .platformFullScreenCover(
             item: $activeQuickStartSession,
             onDismiss: handleQuickStartDismiss
         ) { session in
             TextTrancePlayerView(session: session, startIndex: quickStartIndex)
+        }
+        .platformFullScreenCover(item: $selectedReadingSource) { source in
+            ReadingSourceBrowserView(source: source) { script in
+                insertImportedScript(script)
+                importedSetupScript = script
+            }
         }
         .fileImporter(
             isPresented: $showingDocumentImporter,
@@ -132,11 +112,8 @@ struct TextTranceRootView: View {
         }
     }
 
-    /// Curated + custom sources, with adult sources hidden unless enabled.
     private var visibleSources: [ReadingSource] {
-        sourceStore.sources(in: nil).filter { source in
-            nsfwEnabled || source.contentRating != .adultOnly
-        }
+        sourceStore.customSources
     }
 
     private var historyItems: [ReaderHistoryItem] {

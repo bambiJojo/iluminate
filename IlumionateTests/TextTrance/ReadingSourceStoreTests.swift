@@ -1,5 +1,7 @@
+//
 //  ReadingSourceStoreTests.swift
 //  IlumionateTests
+//
 
 import Foundation
 import Testing
@@ -7,93 +9,120 @@ import Testing
 
 @MainActor
 struct ReadingSourceStoreTests {
+    @Test func freshStoreContainsNoSources() throws {
+        let (defaults, key) = try makeDefaults()
+        let store = ReadingSourceStore(defaults: defaults, storageKey: key)
 
-    @Test func curatedSourcesHaveStableSafeShape() {
-        let sources = ReadingSourceCatalog.curatedSources
-        let allSourcesAreCurated = sources.allSatisfy { $0.isCurated }
-        let allSourcesUseWebURLs = sources.allSatisfy { source in
-            let scheme = source.url.scheme?.lowercased()
-            return scheme == "https" || scheme == "http"
-        }
-
-        #expect(sources.count >= 5)
-        #expect(Set(sources.map(\.id)).count == sources.count)
-        #expect(allSourcesAreCurated)
-        #expect(allSourcesUseWebURLs)
+        #expect(store.customSources.isEmpty)
+        #expect(store.allSources.isEmpty)
     }
 
-    @Test func customSourceNormalizesAndPersists() throws {
-        let defaults = makeDefaults()
-        let key = "readingSources"
+    @Test func customSourceNormalizesPersistsAndAllowsExplicitImport() throws {
+        let (defaults, key) = try makeDefaults()
         let store = ReadingSourceStore(defaults: defaults, storageKey: key)
 
         let source = try store.addCustomSource(
-            title: " Example Scripts ",
+            title: " My Reading Site ",
             urlString: "Example.com/stories/",
-            summary: " Personal source "
+            summary: " Private note "
         )
 
-        #expect(source.title == "Example Scripts")
+        #expect(source.title == "My Reading Site")
         #expect(source.url.absoluteString == "https://example.com/stories/")
-        #expect(source.summary == "Personal source")
+        #expect(source.summary == "Private note")
         #expect(source.category == .userAdded)
         #expect(source.isCurated == false)
+        #expect(source.canImport)
 
         let reloaded = ReadingSourceStore(defaults: defaults, storageKey: key)
         #expect(reloaded.customSources.count == 1)
-        #expect(reloaded.customSources[0].url.absoluteString == "https://example.com/stories/")
+        #expect(reloaded.customSources.first?.url == source.url)
+        #expect(reloaded.customSources.first?.canImport == true)
     }
 
-    @Test func duplicateCustomURLIsRejectedAcrossCuratedAndCustomSources() throws {
-        let store = ReadingSourceStore(defaults: makeDefaults(), storageKey: "readingSources")
+    @Test func duplicateAndNonWebSourcesAreRejected() throws {
+        let (defaults, key) = try makeDefaults()
+        let store = ReadingSourceStore(defaults: defaults, storageKey: key)
 
         try store.addCustomSource(title: "One", urlString: "https://example.com")
-        #expect(throws: ReadingSourceStoreError.duplicateURL) {
-            try store.addCustomSource(title: "Two", urlString: "https://example.com/")
-        }
-        #expect(throws: ReadingSourceStoreError.duplicateURL) {
-            try store.addCustomSource(title: "Gutenberg Copy", urlString: "https://www.gutenberg.org")
-        }
-    }
 
-    @Test func invalidURLsAreRejected() {
-        let store = ReadingSourceStore(defaults: makeDefaults(), storageKey: "readingSources")
-
+        #expect(throws: ReadingSourceStoreError.duplicateURL) {
+            try store.addCustomSource(title: "Two", urlString: "https://EXAMPLE.com/")
+        }
         #expect(throws: ReadingSourceStoreError.emptyTitle) {
-            try store.addCustomSource(title: "   ", urlString: "https://example.com")
+            try store.addCustomSource(title: "   ", urlString: "https://example.net")
         }
         #expect(throws: ReadingSourceStoreError.invalidURL) {
-            try store.addCustomSource(title: "Bad", urlString: "   ")
+            try store.addCustomSource(title: "Empty", urlString: "   ")
         }
-        #expect(throws: ReadingSourceStoreError.unsupportedScheme) {
-            try store.addCustomSource(title: "FTP", urlString: "ftp://example.com")
-        }
-        // Scheme-bypass regression: dangerous non-http(s) schemes must not slip through.
-        #expect(throws: ReadingSourceStoreError.unsupportedScheme) {
-            try store.addCustomSource(title: "JS", urlString: "javascript:alert(1)")
-        }
-        #expect(throws: ReadingSourceStoreError.unsupportedScheme) {
-            try store.addCustomSource(title: "Data", urlString: "data:text/html,<script>")
-        }
-        #expect(throws: ReadingSourceStoreError.unsupportedScheme) {
-            try store.addCustomSource(title: "File", urlString: "file:///etc/passwd")
+        for address in [
+            "javascript:alert(1)",
+            "data:text/html,content",
+            "file:///private/story.txt",
+            "ftp://example.net/story"
+        ] {
+            #expect(throws: ReadingSourceStoreError.unsupportedScheme) {
+                try store.addCustomSource(title: "Unsupported", urlString: address)
+            }
         }
     }
 
-    @Test func deletingCustomSourceDoesNotAffectCuratedSources() throws {
-        let store = ReadingSourceStore(defaults: makeDefaults(), storageKey: "readingSources")
-        let source = try store.addCustomSource(title: "One", urlString: "https://example.com")
+    @Test func deletingOneSourceLeavesTheOthersUntouched() throws {
+        let (defaults, key) = try makeDefaults()
+        let store = ReadingSourceStore(defaults: defaults, storageKey: key)
+        let first = try store.addCustomSource(title: "First", urlString: "first.example")
+        let second = try store.addCustomSource(title: "Second", urlString: "second.example")
 
-        store.deleteCustomSource(id: source.id)
+        store.deleteCustomSource(id: first.id)
 
-        #expect(store.customSources.isEmpty)
-        #expect(store.allSources.count == ReadingSourceCatalog.curatedSources.count)
+        #expect(store.customSources.map(\.id) == [second.id])
     }
 
-    private func makeDefaults() -> UserDefaults {
+    @Test func legacyCustomLinksBecomeImportableWithoutAddingCatalogEntries() throws {
+        let (defaults, key) = try makeDefaults()
+        let legacyURL = try #require(URL(string: "https://legacy.example/story"))
+        let legacy = ReadingSource(
+            id: "custom-legacy",
+            title: "Legacy Source",
+            url: legacyURL,
+            category: .userAdded,
+            summary: "",
+            licenseKind: .userProvided,
+            licenseNote: "",
+            contentNote: "",
+            importPolicy: .linkOnly,
+            contentRating: .mixed,
+            isCurated: false,
+            addedDate: Date(timeIntervalSince1970: 100)
+        )
+        defaults.set(try JSONEncoder().encode([legacy]), forKey: key)
+
+        let store = ReadingSourceStore(defaults: defaults, storageKey: key)
+
+        #expect(store.customSources.first?.id == legacy.id)
+        #expect(store.customSources.first?.canImport == true)
+        #expect(ReadingSourceCatalog.curatedSources.isEmpty)
+    }
+
+    @Test func searchUsesTitleNoteAndAddress() throws {
+        let (defaults, key) = try makeDefaults()
+        let store = ReadingSourceStore(defaults: defaults, storageKey: key)
+        try store.addCustomSource(
+            title: "Evening Reading",
+            urlString: "library.example/collection",
+            summary: "A PRIVATE note"
+        )
+
+        #expect(ReadingSourceSearch.filter(store.customSources, query: "evening").count == 1)
+        #expect(ReadingSourceSearch.filter(store.customSources, query: "private").count == 1)
+        #expect(ReadingSourceSearch.filter(store.customSources, query: "collection").count == 1)
+        #expect(ReadingSourceSearch.filter(store.customSources, query: "missing").isEmpty)
+    }
+
+    private func makeDefaults() throws -> (UserDefaults, String) {
         let suiteName = "ReadingSourceStoreTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+        return (defaults, "readingSourceCustomLinks")
     }
 }

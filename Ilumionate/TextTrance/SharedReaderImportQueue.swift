@@ -92,7 +92,6 @@ enum SharedReaderImportQueue {
 struct SharedReaderImportCoordinator {
     var importedStore: ImportedTranceScriptStore = .shared
     var documentStore: ReadingDocumentStore = .shared
-    var importer: WebReadableTextImporter = WebReadableTextImporter()
 
     func drainPendingImports() async -> SharedReaderImportResult {
         let items = SharedReaderImportQueue.pendingItems()
@@ -105,15 +104,11 @@ struct SharedReaderImportCoordinator {
             do {
                 switch item.kind {
                 case .webURL:
-                    guard let rawURL = item.sourceURLString else {
-                        throw WebReadableTextImportError.invalidURL
-                    }
-                    let script = try await importer.importScript(
-                        from: rawURL,
-                        title: item.title ?? "",
-                        theme: .focus
-                    )
-                    try importedStore.save(script)
+                    // Remove URL items left by pre-release builds. The App Store
+                    // release accepts files and shared text, never webpage downloads.
+                    imported.append(item)
+                    result.failureMessages.append("Web links are not imported in this version.")
+                    continue
                 case .file:
                     guard let fileName = item.fileName else {
                         throw ReadingDocumentImportError.unsupportedFileType
@@ -141,7 +136,7 @@ struct SharedReaderImportCoordinator {
     private func script(fromPlainTextItem item: SharedReaderImportItem) throws -> TranceScript {
         let text = (item.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard ReadingDocumentImporter.wordCount(in: text) >= 8 else {
-            throw WebReadableTextImportError.noReadableText
+            throw SharedReaderImportError.noReadableText
         }
 
         return TranceScript(
@@ -153,7 +148,7 @@ struct SharedReaderImportCoordinator {
             theme: .focus,
             supportedArcs: [.fullText],
             language: "en",
-            source: ScriptSource(kind: .importedWeb, generator: item.sourceURLString, reviewed: false),
+            source: ScriptSource(kind: .importedDocument, generator: nil, reviewed: false),
             summary: "Share Sheet text import.",
             segments: [
                 TranceScriptSegment(
@@ -165,5 +160,13 @@ struct SharedReaderImportCoordinator {
                 )
             ]
         )
+    }
+}
+
+private enum SharedReaderImportError: LocalizedError {
+    case noReadableText
+
+    var errorDescription: String? {
+        "The shared text does not contain enough readable words."
     }
 }

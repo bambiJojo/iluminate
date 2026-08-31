@@ -32,9 +32,6 @@ struct LibraryAddMenu: View {
             Button("Import from URL", systemImage: "link") {
                 acquisition.importFromURL()
             }
-            Button("Browse the Web", systemImage: "globe") {
-                acquisition.browseTheWeb()
-            }
         }
 
         Section("Playlists") {

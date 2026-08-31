@@ -159,7 +159,6 @@
 				HypnosisPhaseAnalyzer.swift,
 				HypnosisPhaseKeywords.swift,
 				HypnosisPhraseLexicons.swift,
-				KnownAudioCatalog.json,
 				Logging.swift,
 				LongFormTranscription.swift,
 				PerformanceTrace.swift,
@@ -191,6 +190,7 @@
 			membershipExceptions = (
 				"Info-macOS.plist",
 				Info.plist,
+				KnownAudioCatalog.json,
 			);
 			target = 795944022F38010900907305 /* Ilumionate */;
 		};
@@ -923,7 +923,7 @@
 				CODE_SIGN_ENTITLEMENTS = Ilumionate/Ilumionate.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Ilumionate/IlumionateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10022;
+				CURRENT_PROJECT_VERSION = 10023;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -941,7 +941,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.7.8;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -971,7 +971,7 @@
 				CODE_SIGN_ENTITLEMENTS = Ilumionate/Ilumionate.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Ilumionate/IlumionateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10022;
+				CURRENT_PROJECT_VERSION = 10023;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -989,7 +989,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.7.8;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -1286,7 +1286,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = IlumionateShareExtension/IlumionateShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10022;
+				CURRENT_PROJECT_VERSION = 10023;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
@@ -1296,7 +1296,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.7.8;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -1321,7 +1321,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = IlumionateShareExtension/IlumionateShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10022;
+				CURRENT_PROJECT_VERSION = 10023;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
@@ -1331,7 +1331,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.7.8;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.byronquine.lumenSync.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

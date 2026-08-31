@@ -1,10 +1,11 @@
+//
 //  ReadingSourceStore.swift
 //  Ilumionate
 //
-//  Persists user-added reading source links. Curated sources are static so app
-//  updates can revise them without migrating user data.
+//  Local persistence for websites the user explicitly adds to Reader.
 
 import Foundation
+import Observation
 
 enum ReadingSourceStoreError: LocalizedError, Equatable {
     case emptyTitle
@@ -15,13 +16,13 @@ enum ReadingSourceStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .emptyTitle:
-            return "Add a source name."
+            "Add a source name."
         case .invalidURL:
-            return "Enter a valid website address."
+            "Enter a valid website address."
         case .unsupportedScheme:
-            return "Use an http or https link."
+            "Use an http or https website."
         case .duplicateURL:
-            return "That source is already in your list."
+            "That website is already in Custom Sources."
         }
     }
 }
@@ -36,32 +37,39 @@ final class ReadingSourceStore {
     private let defaults: UserDefaults
     private let storageKey: String
 
-    init(defaults: UserDefaults = .standard, storageKey: String = "readingSourceCustomLinks") {
+    init(
+        defaults: UserDefaults = .standard,
+        storageKey: String = "readingSourceCustomLinks"
+    ) {
         self.defaults = defaults
         self.storageKey = storageKey
         load()
     }
 
     var allSources: [ReadingSource] {
-        ReadingSourceCatalog.curatedSources + customSources.sorted { lhs, rhs in
-            (lhs.addedDate ?? .distantPast) > (rhs.addedDate ?? .distantPast)
-        }
+        customSources
     }
 
     func sources(in category: ReadingSourceCategory?) -> [ReadingSource] {
-        guard let category else { return allSources }
-        return allSources.filter { $0.category == category }
+        guard let category else { return customSources }
+        return customSources.filter { $0.category == category }
     }
 
     @discardableResult
-    func addCustomSource(title rawTitle: String,
-                         urlString rawURL: String,
-                         summary rawSummary: String = "") throws -> ReadingSource {
+    func addCustomSource(
+        title rawTitle: String,
+        urlString rawURL: String,
+        summary rawSummary: String = ""
+    ) throws -> ReadingSource {
         let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { throw ReadingSourceStoreError.emptyTitle }
+        guard title.isEmpty == false else {
+            throw ReadingSourceStoreError.emptyTitle
+        }
 
         let url = try Self.normalizedURL(from: rawURL)
-        guard !containsURL(url) else { throw ReadingSourceStoreError.duplicateURL }
+        guard containsURL(url) == false else {
+            throw ReadingSourceStoreError.duplicateURL
+        }
 
         let source = ReadingSource(
             id: "custom-\(UUID().uuidString)",
@@ -70,21 +78,22 @@ final class ReadingSourceStore {
             category: .userAdded,
             summary: rawSummary.trimmingCharacters(in: .whitespacesAndNewlines),
             licenseKind: .userProvided,
-            licenseNote: "User-added link. Review site terms before importing or redistributing text.",
+            licenseNote: "Only import content you created or have permission to save.",
             contentNote: "Private custom source.",
-            importPolicy: .linkOnly,
+            importPolicy: .userInitiatedImport,
             contentRating: .mixed,
             isCurated: false,
-            addedDate: Date()
+            addedDate: .now
         )
-        customSources.append(source)
+        customSources.insert(source, at: 0)
+        sortSources()
         persist()
         UsageAnalytics.shared.readingSourceImported()
         return source
     }
 
-    func deleteCustomSource(id: String) {
-        customSources.removeAll { $0.id == id && !$0.isCurated }
+    func deleteCustomSource(id: ReadingSource.ID) {
+        customSources.removeAll { $0.id == id }
         persist()
     }
 
@@ -93,30 +102,12 @@ final class ReadingSourceStore {
         persist()
     }
 
-    private func containsURL(_ url: URL) -> Bool {
-        let normalized = Self.comparisonKey(for: url)
-        return allSources.contains { Self.comparisonKey(for: $0.url) == normalized }
-    }
-
-    private func load() {
-        guard let data = defaults.data(forKey: storageKey),
-              let decoded = try? JSONDecoder().decode([ReadingSource].self, from: data) else {
-            return
-        }
-        customSources = decoded.filter { !$0.isCurated }
-    }
-
-    private func persist() {
-        guard let data = try? JSONEncoder().encode(customSources) else { return }
-        defaults.set(data, forKey: storageKey)
-    }
-
     static func normalizedURL(from rawValue: String) throws -> URL {
         let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { throw ReadingSourceStoreError.invalidURL }
+        guard value.isEmpty == false else {
+            throw ReadingSourceStoreError.invalidURL
+        }
 
-        // If the raw input already declares a scheme, reject anything that isn't
-        // http(s) BEFORE the "no ://" heuristic can disguise it as a host.
         if let explicitScheme = URLComponents(string: value)?.scheme?.lowercased() {
             guard explicitScheme == "http" || explicitScheme == "https" else {
                 throw ReadingSourceStoreError.unsupportedScheme
@@ -124,12 +115,13 @@ final class ReadingSourceStore {
         }
 
         let normalized = value.contains("://") ? value : "https://\(value)"
-
         guard var components = URLComponents(string: normalized),
               let scheme = components.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = components.host?.lowercased(),
-              !host.isEmpty else {
+              host.isEmpty == false,
+              components.user == nil,
+              components.password == nil else {
             throw ReadingSourceStoreError.invalidURL
         }
 
@@ -142,14 +134,64 @@ final class ReadingSourceStore {
     }
 
     static func comparisonKey(for url: URL) -> String {
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+        guard var components = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+        ) else {
             return url.absoluteString.lowercased()
         }
         components.scheme = components.scheme?.lowercased()
         components.host = components.host?.lowercased()
+        components.fragment = nil
         if components.path == "/" {
             components.path = ""
         }
         return (components.url?.absoluteString ?? url.absoluteString).lowercased()
+    }
+
+    private func containsURL(_ url: URL) -> Bool {
+        let key = Self.comparisonKey(for: url)
+        return customSources.contains { Self.comparisonKey(for: $0.url) == key }
+    }
+
+    private func load() {
+        guard let data = defaults.data(forKey: storageKey),
+              let decoded = try? JSONDecoder().decode([ReadingSource].self, from: data) else {
+            customSources = []
+            return
+        }
+
+        var seenURLs: Set<String> = []
+        customSources = decoded.compactMap { stored in
+            guard stored.isCurated == false,
+                  let url = try? Self.normalizedURL(from: stored.url.absoluteString) else {
+                return nil
+            }
+            let key = Self.comparisonKey(for: url)
+            guard seenURLs.insert(key).inserted else { return nil }
+
+            var migrated = stored
+            migrated.url = url
+            migrated.category = .userAdded
+            migrated.licenseKind = .userProvided
+            migrated.licenseNote = "Only import content you created or have permission to save."
+            migrated.contentNote = "Private custom source."
+            migrated.importPolicy = .userInitiatedImport
+            migrated.isCurated = false
+            return migrated
+        }
+        sortSources()
+        persist()
+    }
+
+    private func sortSources() {
+        customSources.sort { lhs, rhs in
+            (lhs.addedDate ?? .distantPast) > (rhs.addedDate ?? .distantPast)
+        }
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(customSources) else { return }
+        defaults.set(data, forKey: storageKey)
     }
 }

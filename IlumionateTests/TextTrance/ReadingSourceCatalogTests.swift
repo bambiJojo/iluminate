@@ -8,8 +8,6 @@ import Testing
 @MainActor
 struct ReadingSourceCatalogTests {
 
-    // MARK: Gate logic
-
     private static func makeSource(
         rating: ReadingSourceContentRating,
         importPolicy: ReadingSourceImportPolicy = .linkOnly
@@ -30,28 +28,6 @@ struct ReadingSourceCatalogTests {
         )
     }
 
-    @Test func adultSourceUnconfirmedRequestsConfirmation() {
-        let source = Self.makeSource(rating: .adultOnly)
-        #expect(openAction(for: source, adultConfirmed: false) == .confirmAdult(source.url))
-    }
-
-    @Test func adultSourceConfirmedBrowsesDirectly() {
-        let source = Self.makeSource(rating: .adultOnly)
-        #expect(openAction(for: source, adultConfirmed: true) == .browse(source.url))
-    }
-
-    @Test func generalSourceBrowsesRegardlessOfConfirmation() {
-        let source = Self.makeSource(rating: .general)
-        #expect(openAction(for: source, adultConfirmed: false) == .browse(source.url))
-        #expect(openAction(for: source, adultConfirmed: true) == .browse(source.url))
-    }
-
-    @Test func mixedSourceBrowsesRegardlessOfConfirmation() {
-        let source = Self.makeSource(rating: .mixed)
-        #expect(openAction(for: source, adultConfirmed: false) == .browse(source.url))
-        #expect(openAction(for: source, adultConfirmed: true) == .browse(source.url))
-    }
-
     @Test(arguments: [
         (ReadingSourceImportPolicy.linkOnly, false),
         (.userInitiatedImport, true),
@@ -62,85 +38,8 @@ struct ReadingSourceCatalogTests {
         #expect(source.canImport == expected)
     }
 
-    // MARK: New adult directories
-
-    private static let newAdultIDs = [
-        "mc-stories",
-        "spirals-nightclub",
-        "nimja-hypno",
-        "literotica-mc",
-        "warpmymind",
-        "hypnohub",
-        "hypnotube-stories",
-        "reddit-hypnautimagery"
-    ]
-
-    @Test func newAdultDirectoriesArePresent() {
-        let ids = Set(ReadingSourceCatalog.curatedSources.map(\.id))
-        for id in Self.newAdultIDs {
-            #expect(ids.contains(id), "missing curated source: \(id)")
-        }
-    }
-
-    /// Adult text-story sites whose prose extracts cleanly: import is enabled
-    /// (behind the 18+ gate) so the in-app browser shows its Read button.
-    private static let importableAdultIDs: Set<String> = [
-        "mc-stories",
-        "spirals-nightclub",
-        "literotica-mc",
-        "warpmymind",
-        "hypnotube-stories"
-    ]
-
-    /// Structurally messy adult sources (imageboard, script builder, Reddit)
-    /// stay link-only — browse, but no import.
-    private static let linkOnlyAdultIDs: Set<String> = [
-        "nimja-hypno",
-        "hypnohub",
-        "reddit-hypnautimagery"
-    ]
-
-    @Test func everyNewAdultDirectoryIsAdultRated() {
-        let byID = Dictionary(
-            uniqueKeysWithValues: ReadingSourceCatalog.curatedSources.map { ($0.id, $0) }
-        )
-        for id in Self.newAdultIDs {
-            #expect(byID[id]?.contentRating == .adultOnly, "\(id) should be adultOnly")
-        }
-    }
-
-    @Test func adultDirectoriesUseTheExpectedImportPolicy() {
-        let byID = Dictionary(
-            uniqueKeysWithValues: ReadingSourceCatalog.curatedSources.map { ($0.id, $0) }
-        )
-        // The two policy sets must exactly partition the new adult directories.
-        #expect(Self.importableAdultIDs.union(Self.linkOnlyAdultIDs) == Set(Self.newAdultIDs))
-
-        for id in Self.importableAdultIDs {
-            #expect(byID[id]?.importPolicy == .userInitiatedImport, "\(id) should allow import")
-            #expect(byID[id]?.canImport == true, "\(id) should be importable")
-        }
-        for id in Self.linkOnlyAdultIDs {
-            #expect(byID[id]?.importPolicy == .linkOnly, "\(id) should stay linkOnly")
-            #expect(byID[id]?.canImport == false, "\(id) should not be importable")
-        }
-    }
-
-    @Test func everyCuratedSourceHasWebURL() {
-        for source in ReadingSourceCatalog.curatedSources {
-            let scheme = source.url.scheme?.lowercased()
-            #expect(scheme == "https" || scheme == "http", "\(source.id) has non-web URL")
-            #expect(source.url.host(percentEncoded: false)?.isEmpty == false, "\(source.id) has empty host")
-        }
-    }
-
-    @Test func fragileAdultDirectoriesUseVerifiedLandingPages() {
-        let byID = Dictionary(
-            uniqueKeysWithValues: ReadingSourceCatalog.curatedSources.map { ($0.id, $0) }
-        )
-
-        #expect(byID["spirals-nightclub"]?.url.absoluteString == "https://www.spiralsnightclub.com/")
-        #expect(byID["literotica-mc"]?.url.absoluteString == "https://www.literotica.com/c/mind-control")
-        #expect(byID["hypnohub"]?.url.absoluteString == "https://hypnohub.net/index.php?page=post&s=list&tags=story")
+    @Test func shippingCatalogContainsNoBuiltInWebsites() {
+        #expect(ReadingSourceCatalog.curatedSources.isEmpty)
+        #expect(ReadingSourceCatalog.curatedIDs.isEmpty)
     }
 }

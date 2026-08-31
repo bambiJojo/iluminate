@@ -652,8 +652,8 @@ struct AnalyzerOptimizerTests {
     func preparedTranscriptCacheReplacesStaleGeneratedTextForRecognizedAudio() async throws {
         let cacheDirectory = try makeTempDirectory()
         let file = makeLabeledFile(
-            originalFilename: "10 Bambi Awakens.mp3",
-            storedAudioFilename: "bambi-awakens.mp3",
+            originalFilename: KnownAudioCatalogFixtures.recognizedFilename,
+            storedAudioFilename: "example-reviewed-session.mp3",
             phases: [
                 .init(phase: .emergence, startTime: 0, endTime: 600)
             ]
@@ -686,11 +686,14 @@ struct AnalyzerOptimizerTests {
             options: .atomic
         )
 
-        let cache = AnalyzerTranscriptCache(cacheDirectory: cacheDirectory)
+        let cache = AnalyzerTranscriptCache(
+            cacheDirectory: cacheDirectory,
+            bundledTranscriptCatalog: KnownAudioCatalogFixtures.bundledTranscriptCatalog
+        )
         let result = try await cache.transcription(for: example)
 
         #expect(result.fullText != stale.fullText)
-        #expect(result.fullText.hasPrefix("Soon it will be time for you to awaken Bambi"))
+        #expect(result.fullText == KnownAudioCatalogFixtures.expectedTranscript)
     }
 
     @Test

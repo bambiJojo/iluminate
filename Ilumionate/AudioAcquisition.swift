@@ -2,8 +2,8 @@
 //  AudioAcquisition.swift
 //  Ilumionate
 //
-//  The three ways audio enters the library — the Files picker, a direct URL,
-//  and the in-app browser — as one model any screen can host.
+//  The two ways audio enters the library — the Files picker and a direct URL —
+//  as one model any screen can host.
 //
 //  These used to live inside `AudioLibraryView` as view state plus a pair of
 //  extension methods, which is why Library could not offer them without opening
@@ -26,7 +26,6 @@ final class AudioAcquisition {
 
     var showingFileImporter = false
     var showingURLPrompt = false
-    var showingBrowser = false
 
     var urlInput = ""
     var isDownloading = false
@@ -50,10 +49,6 @@ final class AudioAcquisition {
         showingURLPrompt = true
     }
 
-    func browseTheWeb() {
-        TranceHaptics.shared.light()
-        showingBrowser = true
-    }
 
     // MARK: - Files
 
@@ -201,7 +196,7 @@ private struct AudioAcquisitionModifier: ViewModifier {
                 if acquisition.isDownloading {
                     Text("Downloading... Please wait.")
                 } else {
-                    Text("Enter a stable URL pointing directly to an MP3, M4A, or WAV file.")
+                    Text("Enter a stable URL pointing directly to an MP3, M4A, or WAV file. Only download audio you created or have permission and source authorization to save.")
                 }
             }
             .alert(
@@ -215,17 +210,12 @@ private struct AudioAcquisitionModifier: ViewModifier {
             } message: {
                 if let message = acquisition.errorMessage { Text(message) }
             }
-            .sheet(isPresented: $acquisition.showingBrowser) {
-                InAppBrowserView { file in
-                    acquisition.adopt(file)
-                }
-            }
     }
 }
 
 extension View {
-    /// Hosts the Files picker, the URL prompt and the in-app browser for an
-    /// `AudioAcquisition`. Attach once per screen that offers audio import.
+    /// Hosts the Files picker and the URL prompt for an `AudioAcquisition`.
+    /// Attach once per screen that offers audio import.
     func audioAcquisition(_ acquisition: AudioAcquisition) -> some View {
         modifier(AudioAcquisitionModifier(acquisition: acquisition))
     }

@@ -27,7 +27,7 @@ struct TextTranceLibraryView: View {
     let quickStartPlan: ReaderQuickStartPlan?
     let importState: DocumentImportState
     let onImportFile: () -> Void
-    let onLoadWebsite: () -> Void
+    let onManageSources: () -> Void
     let onResume: (TranceScript) -> Void
     let onSeeAllHistory: () -> Void
     let onOpenSource: (ReadingSource) -> Void
@@ -46,7 +46,7 @@ struct TextTranceLibraryView: View {
                 VStack(alignment: .leading, spacing: TranceSpacing.cardMargin) {
                     LibraryHeader(
                         onImportFile: onImportFile,
-                        onLoadWebsite: onLoadWebsite
+                        onManageSources: onManageSources
                     )
                     .padding(.horizontal, TranceSpacing.screen)
 
@@ -89,7 +89,7 @@ struct TextTranceLibraryView: View {
                     }
 
                     if !sources.isEmpty {
-                        SectionHeader(title: "Sites", onSeeAll: onSeeAllSources)
+                        SectionHeader(title: "Custom Sources", onSeeAll: onSeeAllSources)
                             .padding(.horizontal, TranceSpacing.screen)
                         SourceCarousel(sources: sources, onOpen: onOpenSource)
                     }
@@ -107,7 +107,7 @@ struct TextTranceLibraryView: View {
 /// "Reader" title with the + menu that gathers the import actions.
 private struct LibraryHeader: View {
     let onImportFile: () -> Void
-    let onLoadWebsite: () -> Void
+    let onManageSources: () -> Void
 
     var body: some View {
         HStack {
@@ -119,7 +119,11 @@ private struct LibraryHeader: View {
 
             Menu {
                 Button("Import File", systemImage: "doc.badge.plus", action: onImportFile)
-                Button("Load Website", systemImage: "square.and.arrow.down", action: onLoadWebsite)
+                Button(
+                    "Manage Custom Sources",
+                    systemImage: "globe",
+                    action: onManageSources
+                )
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 17, weight: .semibold))
@@ -546,112 +550,6 @@ private struct ScriptThemeIcon: View {
     }
 }
 
-struct WebTextImportSheet: View {
-    let importer: WebReadableTextImporter
-    let onImported: (TranceScript) -> Void
-
-    @State private var urlString = ""
-    @State private var title = ""
-    @State private var importState: ImportState = .idle
-
-    @Environment(\.dismiss) private var dismiss
-
-    init(importer: WebReadableTextImporter = WebReadableTextImporter(),
-         onImported: @escaping (TranceScript) -> Void) {
-        self.importer = importer
-        self.onImported = onImported
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Page") {
-                    TextField("URL", text: $urlString)
-                        .platformURLKeyboard()
-                        .platformNeverAutocapitalized()
-                        .platformAutocorrectionDisabled()
-                    TextField("Title", text: $title)
-                        .platformWordsAutocapitalized()
-                }
-
-                Section {
-                    Button {
-                        Task { await importPage() }
-                    } label: {
-                        HStack(spacing: TranceSpacing.icon) {
-                            if importState.isImporting {
-                                ProgressView()
-                                    .tint(Color.bgDeep)
-                            } else {
-                                Image(systemName: "text.page.badge.magnifyingglass")
-                            }
-                            Text(importState.isImporting ? "Reading" : "Read")
-                        }
-                        .font(.headline)
-                        .foregroundStyle(Color.bgDeep)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 46)
-                        .background(
-                            LinearGradient(
-                                colors: [.roseGold, .roseDeep],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            in: RoundedRectangle(cornerRadius: TranceRadius.button)
-                        )
-                        .opacity(importDisabled ? 0.48 : 1)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(importDisabled)
-                    .accessibilityLabel(importState.isImporting ? "Reading webpage" : "Read webpage")
-                }
-
-                if case .failed(let message) = importState {
-                    Section {
-                        Text(message)
-                            .font(TranceTypography.caption)
-                            .foregroundStyle(.red)
-                    }
-                }
-            }
-            .navigationTitle("Import Webpage")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .disabled(importState.isImporting)
-                }
-            }
-        }
-    }
-
-    private var importDisabled: Bool {
-        importState.isImporting || urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func importPage() async {
-        importState = .importing
-        do {
-            let script = try await importer.importScript(from: urlString, title: title)
-            onImported(script)
-            dismiss()
-        } catch {
-            importState = .failed(error.localizedDescription)
-        }
-    }
-
-    private enum ImportState: Equatable {
-        case idle
-        case importing
-        case failed(String)
-
-        var isImporting: Bool {
-            if case .importing = self { return true }
-            return false
-        }
-    }
-}
-
 #Preview {
     NavigationStack {
         TextTranceLibraryView(
@@ -662,7 +560,7 @@ struct WebTextImportSheet: View {
             quickStartPlan: nil,
             importState: .idle,
             onImportFile: {},
-            onLoadWebsite: {},
+            onManageSources: {},
             onResume: { _ in },
             onSeeAllHistory: {},
             onOpenSource: { _ in },

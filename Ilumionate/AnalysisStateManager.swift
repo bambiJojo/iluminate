@@ -83,7 +83,8 @@ class AnalysisStateManager {
     private init(
         progressStore: AnalysisProgressStore = .shared,
         preferences: AnalysisPreferences? = nil,
-        cacheURL: URL = AnalysisStateManager.cacheURL
+        cacheURL: URL = AnalysisStateManager.cacheURL,
+        knownAudioCatalog: KnownAudioCatalog = .shared
     ) {
         self.analysisCoordinator = AnalysisCoordinator()
         self.audioAnalyzer = AudioAnalyzer()
@@ -91,6 +92,7 @@ class AnalysisStateManager {
         self.progressStore = progressStore
         self.preferences = preferences ?? .shared
         self.analysisCacheURL = cacheURL
+        self.knownAudioCatalog = knownAudioCatalog
         self.scheduleBackgroundAnalysis = { audioFiles in
             BackgroundAnalysisScheduler.shared.schedule(for: audioFiles)
         }
@@ -111,6 +113,7 @@ class AnalysisStateManager {
         stageOverlapOverride: Bool? = nil,
         watchdogPolicy: AnalysisWatchdogPolicy = AnalysisWatchdogPolicy(),
         eagerlyLoadsCache: Bool = true,
+        knownAudioCatalog: KnownAudioCatalog = .shared,
         scheduleBackgroundAnalysis: @escaping @MainActor ([AudioFile]) -> Void = { audioFiles in
             BackgroundAnalysisScheduler.shared.schedule(for: audioFiles)
         }
@@ -124,6 +127,7 @@ class AnalysisStateManager {
         self.progressStore = progressStore
         self.preferences = preferences ?? .shared
         self.analysisCacheURL = cacheURL
+        self.knownAudioCatalog = knownAudioCatalog
         self.scheduleBackgroundAnalysis = scheduleBackgroundAnalysis
         if eagerlyLoadsCache {
             loadCachedResultsSynchronously()
@@ -141,6 +145,7 @@ class AnalysisStateManager {
     private let progressStore: AnalysisProgressStore
     private let preferences: AnalysisPreferences
     private let analysisCacheURL: URL
+    private let knownAudioCatalog: KnownAudioCatalog
     private let scheduleBackgroundAnalysis: @MainActor ([AudioFile]) -> Void
     private var automaticProcessingTask: Task<Void, Never>?
     @ObservationIgnored private var quarantinedAttemptID: UUID?
@@ -467,7 +472,7 @@ class AnalysisStateManager {
     private func completeReviewedCatalogAnalysisIfAvailable(
         _ audioFile: AudioFile
     ) async -> Bool {
-        guard let completed = KnownAudioCatalog.shared.reviewedCompletion(
+        guard let completed = knownAudioCatalog.reviewedCompletion(
             for: audioFile
         ) else {
             return false

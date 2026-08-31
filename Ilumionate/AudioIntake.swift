@@ -101,9 +101,9 @@ final class AudioIntake {
             data: leadingBytes
         ) {
             PerformanceTrace.end(validationTrace)
-            Log.audio.info(
-                "❌ Rejected non-audio download from \(sourceURL.absoluteString): \(rejection)"
-            )
+            // A user-supplied URL can contain sensitive path/query data. Keep
+            // it out of logs; the rejection itself is sufficient to diagnose.
+            Log.audio.info("❌ Rejected non-audio download: \(rejection)")
             UsageAnalytics.shared.errorOccurred(.audioURLServerRejected)
             throw rejection
         }

@@ -70,10 +70,6 @@ final class ShareViewController: UIViewController {
                     result.append(fileItem)
                     continue
                 }
-                if let urlItem = try await urlImportItem(from: provider, title: title) {
-                    result.append(urlItem)
-                    continue
-                }
                 if let textItem = try await textImportItem(from: provider, title: title) {
                     result.append(textItem)
                     continue
@@ -82,23 +78,6 @@ final class ShareViewController: UIViewController {
         }
 
         return result
-    }
-
-    private func urlImportItem(from provider: NSItemProvider, title: String?) async throws -> ShareImportItem? {
-        guard provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) else { return nil }
-        let item = try await provider.loadItem(typeIdentifier: UTType.url.identifier)
-        let url = normalizedURL(from: item)
-        guard let url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
-        return ShareImportItem(
-            id: UUID().uuidString,
-            kind: .webURL,
-            title: title,
-            sourceURLString: url.absoluteString,
-            fileName: nil,
-            originalFilename: nil,
-            text: nil,
-            createdAt: Date()
-        )
     }
 
     private func textImportItem(from provider: NSItemProvider, title: String?) async throws -> ShareImportItem? {

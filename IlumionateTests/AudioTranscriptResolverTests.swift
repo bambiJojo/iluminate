@@ -18,16 +18,19 @@ struct AudioTranscriptResolverTests {
             detectedLanguage: "en"
         )
 
-        let transcription = try await AudioTranscriptResolver().transcribe(
-            filename: "01 - Instant Bimbo Sleepdoll.mp3",
-            duration: 1_200
+        let resolver = AudioTranscriptResolver(
+            catalog: KnownAudioCatalogFixtures.bundledTranscriptCatalog
+        )
+        let transcription = try await resolver.transcribe(
+            filename: KnownAudioCatalogFixtures.recognizedFilename,
+            duration: 120
         ) {
             fallbackCallCount += 1
             return fallback
         }
 
         #expect(fallbackCallCount == 0)
-        #expect(transcription.fullText.count > 1_000)
+        #expect(transcription.fullText == KnownAudioCatalogFixtures.expectedTranscript)
     }
 
     @Test
@@ -55,16 +58,19 @@ struct AudioTranscriptResolverTests {
     @Test
     func audioAnalyzerReturnsBundledTranscriptWithoutReadingAudioFile() async throws {
         let nonexistentKnownFile = AudioFile(
-            filename: "01 - Instant Bimbo Sleepdoll.mp3",
-            duration: 1_200,
+            filename: KnownAudioCatalogFixtures.recognizedFilename,
+            duration: 120,
             fileSize: 0
         )
 
-        let transcription = try await AudioAnalyzer().transcribe(
+        let analyzer = AudioAnalyzer(
+            transcriptCatalog: KnownAudioCatalogFixtures.bundledTranscriptCatalog
+        )
+        let transcription = try await analyzer.transcribe(
             audioFile: nonexistentKnownFile
         )
 
-        #expect(transcription.fullText.count > 1_000)
-        #expect(transcription.duration == 1_200)
+        #expect(transcription.fullText == KnownAudioCatalogFixtures.expectedTranscript)
+        #expect(transcription.duration == 120)
     }
 }

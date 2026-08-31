@@ -203,11 +203,12 @@ struct BackgroundAnalysisTests {
             analyzer: analyzer,
             progressStore: store,
             cacheURL: cacheURL,
+            knownAudioCatalog: KnownAudioCatalogFixtures.knownAudioCatalog,
             scheduleBackgroundAnalysis: { _ in }
         )
         let audioFile = AudioFile(
-            filename: "04 Giggledoll.mp3",
-            duration: 394.031,
+            filename: KnownAudioCatalogFixtures.recognizedFilename,
+            duration: 120,
             fileSize: 1_024
         )
 

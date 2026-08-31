@@ -1,9 +1,8 @@
+//
 //  ReadableWebTextExtractor.swift
 //  Ilumionate
 //
-//  Converts user-approved webpage HTML into plain reader text before it can
-//  become a Text Trance script segment. This is intentionally fetch-free:
-//  source eligibility, terms review, and persistence stay outside this type.
+//  Generic, fetch-free conversion of user-approved webpage HTML into reader text.
 
 import Foundation
 #if canImport(UIKit)
@@ -16,14 +15,11 @@ enum ReadableWebTextExtractionError: LocalizedError, Equatable {
     case noReadableText
 
     var errorDescription: String? {
-        switch self {
-        case .noReadableText:
-            return "No readable article text was found."
-        }
+        "No readable story text was found on this page."
     }
 }
 
-enum ReadableWebTextExtractor {
+nonisolated enum ReadableWebTextExtractor {
     private static let minimumWordCount = 8
 
     static func extract(fromHTML html: String) throws -> String {
@@ -31,7 +27,7 @@ enum ReadableWebTextExtractor {
         let fragment = bestReadableFragment(in: cleanedHTML)
             ?? bodyFragment(in: cleanedHTML)
             ?? cleanedHTML
-        let text = normalize(plainText(fromHTMLFragment: truncateHTMLAtBoilerplate(fragment)))
+        let text = normalize(plainText(fromHTMLFragment: fragment))
 
         guard wordCount(in: text) >= minimumWordCount else {
             throw ReadableWebTextExtractionError.noReadableText
@@ -56,7 +52,7 @@ enum ReadableWebTextExtractor {
         }
 
         let title = normalize(plainText(fromHTMLFragment: titleHTML))
-            .replacingOccurrences(of: "\n", with: " ")
+            .replacing("\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? nil : title
     }
@@ -72,17 +68,14 @@ enum ReadableWebTextExtractor {
             in: result
         )
 
-        let chromeTerms = #"advert(?:isement|ising)?|(?<![a-z0-9])ads?(?![a-z0-9])|ad[-_ ]?(?:container|banner|slot|unit)|advanced[-_ ]?ads|awac|banner|cookie|consent|modal|newsletter|subscribe|share|social|sidebar|related|recommend|comments?|comment[-_ ]?(?:form|reply)|reply|respond|promo|sponsor|breadcrumb|pagination|nav|menu|widget"#
-        // Never treat the document's structural containers as chrome: theme
-        // classes routinely tack chrome-ish tokens (e.g. "has-sidebar") onto
-        // <body>/<html>, and the lazy backreference match would then delete the
-        // entire page body along with the article.
+        let chromeTerms = #"advert(?:isement|ising)?|(?<![a-z0-9])ads?(?![a-z0-9])|ad[-_ ]?(?:container|banner|slot|unit)|banner|cookie|consent|modal|newsletter|subscribe|share|social|sidebar|related|recommend|comments?|comment[-_ ]?(?:form|reply)|reply|respond|promo|sponsor|breadcrumb|pagination|nav|menu|widget"#
         let chromeAttributePattern =
-            #"<(?!(?:body|html)\b)([a-z][a-z0-9]*)\b(?=[^>]*(?:class|id|role|aria-label)\s*=\s*["'][^"']*(?:"# +
-            chromeTerms +
-            #")[^"']*["'])[^>]*>[\s\S]*?<\s*/\s*\1\s*>"#
+            #"<(?!(?:body|html)\b)([a-z][a-z0-9]*)\b(?=[^>]*(?:class|id|role|aria-label)\s*=\s*["'][^"']*(?:"#
+            + chromeTerms
+            + #")[^"']*["'])[^>]*>[\s\S]*?<\s*/\s*\1\s*>"#
 
-        // A few passes handle simple nested chrome such as an ad inside a modal.
+        // Several passes handle simple nested chrome without treating a theme's
+        // body/html class as grounds to remove the whole document.
         for _ in 0..<3 {
             let next = replacing(pattern: chromeAttributePattern, in: result)
             if next == result { break }
@@ -94,7 +87,7 @@ enum ReadableWebTextExtractor {
     private static func bestReadableFragment(in html: String) -> String? {
         let candidateGroups: [(pattern: String, specificity: Int)] = [
             (
-                #"<([a-z][a-z0-9]*)\b(?=[^>]*(?:role|itemprop|class|id)\s*=\s*["'][^"']*(?:articlebody|article-body|article_content|article-text|entry-content|single-content|post-content|post_content|post-body|story-body|story_content|chapter|readable|script-content|main-content|body-content)[^"']*["'])[^>]*>[\s\S]*?<\s*/\s*\1\s*>"#,
+                #"<([a-z][a-z0-9]*)\b(?=[^>]*(?:role|itemprop|class|id)\s*=\s*["'][^"']*(?:articlebody|article-body|article_content|article-text|entry-content|single-content|post-content|post_content|post-body|story-body|story_content|chapter|readable|main-content|body-content)[^"']*["'])[^>]*>[\s\S]*?<\s*/\s*\1\s*>"#,
                 260
             ),
             (#"<article\b[^>]*>[\s\S]*?</article>"#, 190),
@@ -105,17 +98,15 @@ enum ReadableWebTextExtractor {
             )
         ]
 
-        let scoredCandidates = candidateGroups.flatMap { group in
-            fragments(matching: group.pattern, in: html).compactMap { fragment -> (html: String, score: Int)? in
-                let score = readableScore(for: fragment, specificity: group.specificity)
-                guard score > Int.min else { return nil }
-                return (fragment, score)
+        return candidateGroups
+            .flatMap { group in
+                fragments(matching: group.pattern, in: html).compactMap { fragment in
+                    let score = readableScore(for: fragment, specificity: group.specificity)
+                    return score == Int.min ? nil : (html: fragment, score: score)
+                }
             }
-        }
-
-        return scoredCandidates.max { lhs, rhs in
-            lhs.score < rhs.score
-        }?.html
+            .max { $0.score < $1.score }?
+            .html
     }
 
     private static func bodyFragment(in html: String) -> String? {
@@ -138,73 +129,24 @@ enum ReadableWebTextExtractor {
         return decodeHTMLEntities(result)
     }
 
-    private static func truncateHTMLAtBoilerplate(_ html: String) -> String {
-        let markers = [
-            "Return to Free Hypnosis Scripts",
-            "Search For Hypnosis",
-            "Could you help us",
-            "Did we help you",
-            "Leave a Reply",
-            "Recent Comments"
-        ]
-
-        let lowercased = html.lowercased()
-        let markerIndexes = markers.compactMap { marker -> String.Index? in
-            lowercased.range(of: marker.lowercased())?.lowerBound
-        }
-
-        guard let firstIndex = markerIndexes.min() else {
-            return html
-        }
-        return String(html[..<firstIndex])
-    }
-
     private static func normalize(_ text: String) -> String {
-        let spaced = text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-            .replacingOccurrences(of: "\u{00a0}", with: " ")
-
-        let lines = truncateAtBoilerplate(
-            spaced
+        let lines = text
+            .replacing("\r\n", with: "\n")
+            .replacing("\r", with: "\n")
+            .replacing("\u{00a0}", with: " ")
             .components(separatedBy: .newlines)
             .map { collapseSpaces(in: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .filter { !isChromeLine($0) }
-        )
+            .filter { $0.isEmpty == false }
+            .filter { isChromeLine($0) == false }
 
         return lines.joined(separator: "\n\n")
     }
 
-    private static func truncateAtBoilerplate(_ lines: [String]) -> [String] {
-        let markers = [
-            "return to free hypnosis scripts",
-            "search for hypnosis",
-            "could you help us",
-            "did we help you",
-            "leave a reply",
-            "recent comments",
-            "your email address will not be published",
-            "comment *",
-            "name *",
-            "email *",
-            "save my name",
-            "disclaimer:"
-        ]
-
-        guard let markerIndex = lines.firstIndex(where: { line in
-            let folded = line.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-                .lowercased()
-            return markers.contains { folded.contains($0) }
-        }) else {
-            return lines
-        }
-        return Array(lines.prefix(markerIndex))
-    }
-
     private static func isChromeLine(_ line: String) -> Bool {
-        let folded = line.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .lowercased()
+        let folded = line.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        ).lowercased()
         let shortChromeTerms = [
             "home", "menu", "search", "login", "log in", "sign in", "sign up",
             "subscribe", "newsletter", "share", "advertisement", "privacy",
@@ -217,24 +159,22 @@ enum ReadableWebTextExtractor {
     }
 
     private static func readableScore(for html: String, specificity: Int) -> Int {
-        let truncatedHTML = truncateHTMLAtBoilerplate(html)
-        let text = normalize(plainText(fromHTMLFragment: truncatedHTML))
+        let text = normalize(plainText(fromHTMLFragment: html))
         let words = wordCount(in: text)
         guard words >= minimumWordCount else { return Int.min }
 
         let paragraphCount = fragments(
             matching: #"<\s*(p|blockquote|li|pre)\b[^>]*>"#,
-            in: truncatedHTML
+            in: html
         ).count
         let linkCount = fragments(
             matching: #"<\s*a\b[^>]*>[\s\S]*?<\s*/\s*a\s*>"#,
-            in: truncatedHTML
+            in: html
         ).count
         let formControlCount = fragments(
             matching: #"<\s*(input|textarea|select|button|form)\b"#,
-            in: truncatedHTML
+            in: html
         ).count
-        let boilerplatePenalty = boilerplateMarkerCount(in: truncatedHTML) * 45
         let headingOnlyPenalty = looksLikeHeadingOnly(text) ? 500 : 0
 
         return words
@@ -242,36 +182,15 @@ enum ReadableWebTextExtractor {
             + min(paragraphCount, 12) * 12
             - linkCount * 8
             - formControlCount * 30
-            - boilerplatePenalty
             - headingOnlyPenalty
-    }
-
-    private static func boilerplateMarkerCount(in html: String) -> Int {
-        let folded = html.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .lowercased()
-        let markers = [
-            "leave a reply",
-            "recent comments",
-            "comment-form",
-            "search for hypnosis",
-            "make money online",
-            "advertisement",
-            "newsletter",
-            "subscribe"
-        ]
-        return markers.reduce(0) { total, marker in
-            folded.contains(marker) ? total + 1 : total
-        }
     }
 
     private static func looksLikeHeadingOnly(_ text: String) -> Bool {
         let lines = text
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        guard lines.count <= 2 else { return false }
-        return wordCount(in: text) < 20
+            .filter { $0.isEmpty == false }
+        return lines.count <= 2 && wordCount(in: text) < 20
     }
 
     private static func decodeHTMLEntities(_ text: String) -> String {
@@ -297,7 +216,7 @@ enum ReadableWebTextExtractor {
     }
 
     private static func wordCount(in text: String) -> Int {
-        text.split { !$0.isLetter && !$0.isNumber }.count
+        text.split { $0.isLetter == false && $0.isNumber == false }.count
     }
 
     private static func replacing(

@@ -52,11 +52,16 @@ actor AnalyzerTranscriptCache {
     }
 
     private let cacheDirectory: URL
+    private let bundledTranscriptCatalog: BundledAudioTranscriptCatalog
     private var preparedCache: [String: PreparedTranscription] = [:]
     private var inFlightPreparedTasks: [String: Task<PreparedTranscription, Error>] = [:]
 
-    init(cacheDirectory: URL) {
+    init(
+        cacheDirectory: URL,
+        bundledTranscriptCatalog: BundledAudioTranscriptCatalog = .shared
+    ) {
         self.cacheDirectory = cacheDirectory
+        self.bundledTranscriptCatalog = bundledTranscriptCatalog
     }
 
     func transcription(
@@ -86,7 +91,8 @@ actor AnalyzerTranscriptCache {
             try await Self.loadOrBuildPreparedTranscription(
                 for: example,
                 transcribe: transcribe,
-                cacheURL: cacheURL
+                cacheURL: cacheURL,
+                bundledTranscriptCatalog: bundledTranscriptCatalog
             )
         }
         inFlightPreparedTasks[cacheKey] = task
@@ -112,9 +118,10 @@ actor AnalyzerTranscriptCache {
     private nonisolated static func loadOrBuildPreparedTranscription(
         for example: AnalyzerOptimizationDataset.Example,
         transcribe: (@Sendable (AnalyzerOptimizationDataset.Example) async throws -> AudioTranscriptionResult)?,
-        cacheURL: URL
+        cacheURL: URL,
+        bundledTranscriptCatalog: BundledAudioTranscriptCatalog
     ) async throws -> PreparedTranscription {
-        if let official = BundledAudioTranscriptCatalog.shared.transcription(
+        if let official = bundledTranscriptCatalog.transcription(
             filename: example.originalFilename,
             duration: example.duration
         ) {

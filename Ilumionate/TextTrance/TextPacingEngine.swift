@@ -121,7 +121,7 @@ struct TextPacingSettings: Sendable {
 enum TextPacingEngine {
     /// WPM used when a segment omits an explicit pacing hint, before the
     /// depth-derived slowdown is applied.
-    static let defaultBaseWPM: Double = 150
+    nonisolated static let defaultBaseWPM: Double = 150
     /// Slowest depth factor (applied at max trance depth) for depth-derived pace.
     static let deepeningFloor: Double = 0.55
 

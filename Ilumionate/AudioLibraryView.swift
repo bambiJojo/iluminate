@@ -313,8 +313,6 @@ struct AudioLibraryView: View {
             }
             .confirmationDialog("Add to Sessions", isPresented: $showingAddSheet, titleVisibility: .visible) {
                 Button("Import from Files") { acquisition.importFromFiles() }
-                Button("Import from URL") { acquisition.importFromURL() }
-                Button("Browse the Web") { acquisition.browseTheWeb() }
                 Button("Cancel", role: .cancel) {}
             }
             .onChange(of: isSelectionMode) { _, newValue in

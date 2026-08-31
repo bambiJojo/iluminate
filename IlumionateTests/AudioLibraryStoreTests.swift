@@ -129,8 +129,10 @@ struct AudioLibraryStoreTests {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
 
-        let url = fixture.documentsURL.appending(path: "04 Giggledoll.mp3")
-        try Data("test audio placeholder".utf8).write(to: url)
+        let url = fixture.documentsURL.appending(
+            path: KnownAudioCatalogFixtures.recognizedFilename
+        )
+        try Data([0x49, 0x44, 0x33, 0x04]).write(to: url)
         let existing = AudioFile(
             filename: url.lastPathComponent,
             duration: 394.031,
@@ -141,17 +143,18 @@ struct AudioLibraryStoreTests {
         let files = await AudioLibraryStore.loadRepairingStoredFiles(
             storage: fixture.storage,
             documentsURL: fixture.documentsURL,
-            managedAudioURL: fixture.managedAudioURL
+            managedAudioURL: fixture.managedAudioURL,
+            knownAudioCatalog: KnownAudioCatalogFixtures.knownAudioCatalog
         )
         let recognized = try #require(files.first)
 
         #expect(recognized.isAnalyzed)
         #expect(recognized.analysisResult?.expertAnalysis?.verdict == .productionReady)
-        #expect(recognized.trackMetadata?.preferredTitle == "Giggledoll")
+        #expect(recognized.trackMetadata?.preferredTitle == KnownAudioCatalogFixtures.title)
         #expect(
             AudioLibraryStore.load(storage: fixture.storage)
                 .first?.analysisResult?.recommendedPreset
-                == "Giggledoll — Gold Light Score"
+                == "\(KnownAudioCatalogFixtures.title) — Gold Light Score"
         )
     }
 

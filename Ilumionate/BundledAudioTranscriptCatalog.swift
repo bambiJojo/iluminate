@@ -14,6 +14,10 @@ nonisolated struct BundledAudioTranscriptCatalog: Sendable {
 
     private let entries: [Entry]
 
+    init(entries: [Entry]) {
+        self.entries = entries
+    }
+
     init(
         bundle: Bundle = .main,
         resourceName: String = "KnownAudioCatalog"
@@ -161,7 +165,7 @@ nonisolated struct BundledAudioTranscriptCatalog: Sendable {
         let entries: [Entry]
     }
 
-    private struct Entry: Decodable {
+    struct Entry: Decodable, Sendable {
         let title: String
         let aliases: [String]
         let transcript: String

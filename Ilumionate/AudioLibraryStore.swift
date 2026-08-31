@@ -31,7 +31,8 @@ nonisolated enum AudioLibraryStore {
     nonisolated static func loadRepairingStoredFiles(
         storage: AudioLibraryStorage = .standard,
         documentsURL: URL = .documentsDirectory,
-        managedAudioURL: URL = AppStoragePaths.managedAudio
+        managedAudioURL: URL = AppStoragePaths.managedAudio,
+        knownAudioCatalog: KnownAudioCatalog = .shared
     ) async -> [AudioFile] {
         let trace = PerformanceTrace.begin("Library Refresh")
         defer { PerformanceTrace.end(trace) }
@@ -44,7 +45,8 @@ nonisolated enum AudioLibraryStore {
         )
         _ = await persistence.reconcileRepair(
             repair,
-            storage: storage
+            storage: storage,
+            knownAudioCatalog: knownAudioCatalog
         )
         if !repair.addedFiles.isEmpty {
             Log.audio.info("📦 Registered \(repair.addedFiles.count) audio file(s) discovered in Documents")
@@ -52,7 +54,8 @@ nonisolated enum AudioLibraryStore {
         return await persistence.migrateLegacyAudio(
             storage: storage,
             documentsURL: documentsURL,
-            managedAudioURL: managedAudioURL
+            managedAudioURL: managedAudioURL,
+            knownAudioCatalog: knownAudioCatalog
         )
     }
 
@@ -355,8 +358,11 @@ nonisolated enum AudioLibraryStore {
         }
     }
 
-    fileprivate static func needsCatalogHydration(_ audioFile: AudioFile) -> Bool {
-        guard let entry = KnownAudioCatalog.shared.match(audioFile: audioFile)?.entry else {
+    fileprivate static func needsCatalogHydration(
+        _ audioFile: AudioFile,
+        knownAudioCatalog: KnownAudioCatalog
+    ) -> Bool {
+        guard let entry = knownAudioCatalog.match(audioFile: audioFile)?.entry else {
             return false
         }
 
@@ -430,7 +436,8 @@ private actor AudioLibraryPersistence {
     func migrateLegacyAudio(
         storage: AudioLibraryStorage,
         documentsURL: URL,
-        managedAudioURL: URL
+        managedAudioURL: URL,
+        knownAudioCatalog: KnownAudioCatalog
     ) -> [AudioFile] {
         var files = decode(storage) ?? []
         let fileManager = FileManager.default
@@ -539,7 +546,8 @@ private actor AudioLibraryPersistence {
     /// remaining stale-snapshot window during a library refresh.
     func reconcileRepair(
         _ repair: AudioLibraryStore.LibraryRepair,
-        storage: AudioLibraryStorage
+        storage: AudioLibraryStorage,
+        knownAudioCatalog: KnownAudioCatalog
     ) -> [AudioFile] {
         var files = decode(storage) ?? []
         let repairedByID = Dictionary(
@@ -565,8 +573,11 @@ private actor AudioLibraryPersistence {
             didChange = true
         }
 
-        for index in files.indices where AudioLibraryStore.needsCatalogHydration(files[index]) {
-            guard let reviewed = KnownAudioCatalog.shared.applyingReviewedAnalysis(
+        for index in files.indices where AudioLibraryStore.needsCatalogHydration(
+            files[index],
+            knownAudioCatalog: knownAudioCatalog
+        ) {
+            guard let reviewed = knownAudioCatalog.applyingReviewedAnalysis(
                 to: files[index]
             ) else {
                 continue

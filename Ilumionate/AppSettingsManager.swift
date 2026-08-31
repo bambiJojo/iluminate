@@ -25,7 +25,9 @@ enum AppSettingsManager {
         static let focusSpots = "focusSpots"
         static let mindMachineEnabled = "mindMachineEnabled"
         static let listeningHistoryEnabled = "listeningHistoryEnabled"
-        static let nsfwSourcesEnabled = "nsfwSourcesEnabled"
+        /// Retired content-directory preference. Kept only so reset can remove
+        /// values written by pre-release builds; the App Store build never reads it.
+        static let retiredMatureSourcesEnabled = "nsfwSourcesEnabled"
         /// Retired library key. Kept only so reset can clear pre-migration data;
         /// current library reads and writes go through `AudioLibraryStore`.
         static let audioFiles = "audioFiles"
@@ -202,7 +204,7 @@ enum AppSettingsManager {
         defaults.removeObject(forKey: Key.focusSpots)
         defaults.set(true, forKey: Key.mindMachineEnabled)
         defaults.set(false, forKey: Key.listeningHistoryEnabled)
-        defaults.set(false, forKey: Key.nsfwSourcesEnabled)
+        defaults.removeObject(forKey: Key.retiredMatureSourcesEnabled)
 
         let retiredKeys = [
             Key.sessionNotifications,

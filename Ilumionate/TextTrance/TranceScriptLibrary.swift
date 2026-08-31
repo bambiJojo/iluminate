@@ -10,7 +10,7 @@ import os
 
 enum TranceScriptLibrary {
 
-    static let currentSchemaVersion = 1
+    nonisolated static let currentSchemaVersion = 1
     private static let bundledScriptsSubdirectory = "TextTrance/Scripts"
 
     enum LibraryError: LocalizedError {
