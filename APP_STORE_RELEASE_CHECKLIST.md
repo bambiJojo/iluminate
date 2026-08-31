@@ -1,6 +1,6 @@
 # LumeSync Unlisted App Store Release Checklist
 
-Last audited: 2026-08-04  
+Last audited: 2026-08-31
 App Store Connect app: [LumeSync (6760121072)](https://appstoreconnect.apple.com/apps/6760121072)  
 Intended distribution: Apple's **Unlisted App** distribution (available by direct link, absent from App Store search, charts, categories, and recommendations)
 
@@ -16,7 +16,8 @@ Legend:
 
 ## Recommended working order
 
-1. Remove or license the explicit and third-party content/download features.
+1. Remove unlicensed bundled content and unauthorized third-party download paths; retain the
+   user-requested adult analysis features and disclose/rate them accurately.
 2. Publish working privacy and support pages, then add them inside the app.
 3. Remove medical/therapy positioning and complete the flashing-light safety review.
 4. Freeze the launch scope/version and complete device QA.
@@ -33,9 +34,9 @@ Legend:
 - [x] The privacy manifest declares no tracking and includes required-reason API declarations.
 - [x] `ITSAppUsesNonExemptEncryption` is currently `false`.
 - [x] Xcode/SDK meet Apple's current upload requirement (Xcode 26.6, iOS 26.5 SDK observed).
-- [x] An unsigned iOS Simulator **Release** build compiled successfully on 2026-08-04.
+- [x] An unsigned iOS 18.5 Simulator **Release** build compiled without diagnostics on 2026-08-31.
 - [x] An unsigned native macOS **Release** build compiled successfully on 2026-08-04.
-- [ ] Resolve the Swift concurrency warnings emitted by the Release build, particularly in `PlaylistLinkBrowserView.swift` and `LibraryBrowseFilter.swift`.
+- [x] The iOS Release build emits no Swift warnings. LumeLabel still has one Swift 6 isolation warning, but macOS tooling is outside the iOS-first launch scope.
 - [ ] Produce and validate a signed App Store archive; a simulator build is not submission evidence.
 - [ ] Produce and validate a signed macOS App Store archive if macOS is part of launch scope.
 - [ ] Re-run the compliance scanner against the final archive/IPA or a clean checkout. The current source-tree scan is noisy because it scans `.claude/worktrees`, tests, and build products.
@@ -48,10 +49,10 @@ Current App Store Connect validation state:
 
 ## 1. Lock the launch plan
 
-- [ ] **BLOCKER — choose launch platforms:** ship iOS/iPadOS first (recommended), or include macOS in the initial submission.
-- [ ] If shipping iOS/iPadOS first, leave the macOS version unsubmitted and create a separate Mac release plan.
-- [ ] **BLOCKER — choose the marketing version.** Recommended: change the app to `1.0` to match the existing App Store version record.
-- [ ] Increment the build number above the uploaded build `10018` and use a consistent version/build across the app and share extension.
+- [x] **Launch decision:** ship iOS/iPadOS first; macOS is not part of this release gate.
+- [x] Leave the macOS version unsubmitted and create a separate Mac release plan later.
+- [x] Marketing version is `1.0`, matching the existing App Store version record.
+- [x] Build number is `10023` (above uploaded build `10018`) for both the app and share extension.
 - [ ] Note that the existing TestFlight build `0.7.4 (10018)` is valid and beta-review approved but cannot be selected for the `1.0` App Store version because its marketing version does not match.
 - [ ] Decide whether the app is free or paid. If paid, complete contracts, tax, banking, and pricing work before submission.
 - [ ] Decide the countries/regions where the app will be available.
@@ -63,23 +64,24 @@ Current App Store Connect validation state:
 
 ## 2. Explicit content and App Review policy
 
-- [ ] **BLOCKER — remove the curated adult/pornographic source directory from the App Store build.** `ReadingSource.swift` currently links directly to erotic-hypnosis and pornographic sites.
-- [ ] **BLOCKER — remove the in-app `Show Adult Content (18+)` switch and any code path that enables those sources.** An 18+ acknowledgement does not make pornographic material acceptable under App Review Guideline 1.1.4.
-- [ ] **BLOCKER — remove or replace `Ilumionate/KnownAudioCatalog.json`.** The audited iOS and macOS Release apps both bundle this 811 KB catalog, and it contains explicit third-party sexual transcripts and metadata.
-- [ ] Confirm the final archive contains no explicit transcripts, sample text, thumbnails, cached pages, test data, search suggestions, or links intended to lead users to pornographic content.
+- [x] Removed the curated reading-source directory. `ReadingSourceCatalog.curatedSources` is empty and the app contains no named adult-story sites or site adapters.
+- [x] Removed the retired `Show Adult Content (18+)` source switch. Only one migration key remains so old installs forget the setting.
+- [x] Deleted `Ilumionate/KnownAudioCatalog.json`; the 2026-08-31 Release product contains no catalog resource or its third-party titles/transcripts.
+- [ ] **POLICY RISK — adult analysis remains by product decision.** The binary and UI include labels such as `Erotic Hypnosis` / `Erotic Suggestions`, and `AnalyzerKnowledge_default.json` contains aggregate adult phrase vocabulary that can appear in Phrase Library. Preserve this functionality, but do not claim the archive contains no explicit strings.
+- [ ] Confirm the final archive contains no third-party explicit transcripts, story samples, thumbnails, cached pages, test data, search suggestions, or curated links intended to lead users to pornographic content.
 - [ ] Confirm screenshots, preview videos, metadata, reviewer notes, and sample files contain no prohibited explicit content.
 - [ ] Do not treat unlisted distribution or a high age rating as an exception to Apple's content rules.
-- [ ] If users can still encounter mature material incidentally through general web access, hide it by default, add suitable controls, and document the exact behavior for review. Obtain specialist policy advice before relying on the narrow web-content exception.
+- [ ] **BLOCKER — obtain specialist policy advice for the retained adult analysis and user-added web sources.** Apple's current [Guideline 1.1.4/1.2](https://developer.apple.com/app-store/review/guidelines/) exception for incidental mature web UGC says it must be hidden by default and enabled via the developer's website; this app intentionally has no account or website control plane.
 
 ## 3. Third-party content, intellectual property, and downloads
 
 - [ ] **BLOCKER — inventory every third-party item shipped or accessed:** transcripts, audio, scripts, titles, creator names, metadata, artwork, icons, fonts, websites, APIs, and model assets.
 - [ ] Record the license or written permission for every retained third-party asset and keep proof ready for App Review.
 - [ ] Remove third-party transcripts or metadata for which redistribution rights cannot be demonstrated.
-- [ ] Review the BambiCloud playlist importer/downloader and obtain written authorization for downloading/streaming its media, or remove/disable the flow in the App Store build.
-- [ ] Review SoundCloud integration against SoundCloud's current developer and content terms; obtain any required authorization or remove/disable it.
-- [ ] Review the in-app browser's arbitrary audio download/import behavior. Remove the ability to save third-party media unless the relevant service and rights holder explicitly authorize it.
-- [ ] Decide whether to remove or tightly restrict the general-purpose browser. If retained, test navigation safety, download restrictions, fraudulent/deceptive pages, and external-link handling.
+- [x] Removed the named BambiCloud integration, schemas, fixtures, and curated host knowledge. Generic playlist parsing remains.
+- [x] Removed the SoundCloud integration; startup only deletes credentials left by older builds.
+- [ ] **BLOCKER — direct audio URL and generic playlist-track downloads still save third-party media.** Apple Guideline 5.2.3 requires explicit authorization from those sources; a user rights acknowledgement alone does not establish source authorization.
+- [x] Reader web access is retained as user-managed Custom Sources: no websites are preloaded or recommended, navigation is limited to HTTP(S), downloads/non-displayable responses are blocked, and importing requires a separate rights acknowledgement on the visible current page.
 - [ ] Set App Store Connect **Content Rights** truthfully:
   - [ ] Select that the app uses third-party content if any third-party content/service remains.
   - [ ] Select that it does not only after the final rights audit proves that statement.
@@ -171,7 +173,7 @@ Current App Store Connect validation state:
 - [ ] Verify sensitive user content is stored with appropriate iOS/macOS file protection and excluded from backups where appropriate.
 - [ ] Review logs, crash reports, and analytics payloads to ensure they never contain transcript text, local filenames, imported URLs, credentials, tokens, or other sensitive content.
 - [ ] Audit Keychain handling and remove any bundled API keys, developer credentials, test accounts, or secrets.
-- [ ] Remove `NSAllowsArbitraryLoadsInWebContent` or document why it is narrowly necessary; prefer HTTPS and a restricted navigation policy.
+- [x] `NSAllowsArbitraryLoadsInWebContent` is retained and documented as necessary only for HTTP sites the user explicitly adds. Reader navigation is restricted to HTTP(S), begins at the exact saved URL, and blocks downloads; HTTPS is the default when a scheme is omitted.
 - [ ] Verify SoundCloud or other credentials are never logged, included in screenshots, sent to unrelated services, or left in plaintext storage.
 - [ ] Confirm `BGTaskSchedulerPermittedIdentifiers`, background modes (`audio`, `processing`), app groups, camera, network, and file entitlements are all required and used exactly as declared.
 - [ ] Document why export compliance is exempt/non-exempt and confirm `ITSAppUsesNonExemptEncryption = false` remains accurate for the final binary and dependencies.
@@ -180,7 +182,8 @@ Current App Store Connect validation state:
 
 - [ ] Complete the current App Store Connect age-rating questionnaire only after explicit-content and browser decisions are final.
 - [ ] Do **not** reuse the old 4+ assumption; it is incompatible with the current pre-cleanup claims, flashing content, unrestricted web access, and adult-content code.
-- [ ] If the general-purpose browser remains, answer **Unrestricted Web Access = Yes**.
+- [ ] Answer **Unrestricted Web Access = Yes** in App Store Connect; Apple's current [age-rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/) map this capability to at least 16+ under the new rating system.
+- [ ] Answer sexual/mature-content questions from the retained adult analysis vocabulary and UI, then override upward to 18+ if the calculated result is lower. Graphic sexual content would be Unrated and cannot be published, so inspect every displayed phrase before submission.
 - [ ] After section 4 is complete, verify the final app no longer presents medical, health, or therapy functionality; answer all rating questions from the final binary rather than the product intention.
 - [ ] Answer fear, mature themes, sexual content, and all other content-frequency questions based on what a user can actually encounter.
 - [ ] If explicit/pornographic content remains, stop submission and remove it; a higher rating does not cure Guideline 1.1.4.
@@ -203,7 +206,7 @@ Current App Store Connect validation state:
 
 ### Automated tests and static checks
 
-- [ ] Run the complete iOS unit-test suite in Release-compatible conditions and record the result/date.
+- [x] Complete serial iOS 18.5 suite passed on 2026-08-31: **1687 tests / 257 suites / 0 failures** in 36.304 seconds.
 - [ ] Run the macOS unit-test suite if macOS is shipping.
 - [ ] Run UI tests for onboarding, consent, import, analysis, reading, playback, flashing safety, Settings, and deletion.
 - [ ] Run Swift concurrency/static analysis and fix data-race, main-actor, force-unwrap, and crash findings that affect release paths.

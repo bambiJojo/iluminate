@@ -326,6 +326,11 @@ Its sibling `stalledContentAnalysisIsTerminalized()` passed on all three.
 > truncated run, so it could not catch this. That gap is unchanged — it simply has no known
 > trigger now. If an iOS run ever looks green with an implausibly low case count again, compare
 > it against the macOS count (1799 as of 2026-08-28) before trusting it.
+>
+> **Update 2026-08-31:** ERR-028 is resolved. iOS Simulator runs are serial by default,
+> the remaining queue wait is bounded, and the wrapper reports the Swift Testing case
+> count correctly. The complete iOS 18.5 run executed 1687 tests in 257 suites with zero
+> failures; the ERR-021 watchdog remains fast in the same run.
 
 **Where**
 `IlumionateTests/AnalysisInactivityWatchdogTests.swift:63` — the test.
@@ -2114,6 +2119,40 @@ evidence; do not spend time re-testing either. If it recurs, capture
 `SWBBuildService` process, plus whether Xcode was mid-build, *before* killing
 anything — that is the state this entry still lacks.
 
+**Update 2026-08-31 — the concurrent-build hypothesis is now confirmed, directly.**
+
+Two builds in this repository were caught overlapping, and the failure reproduced exactly as
+predicted:
+
+```
+error: unable to attach DB: error: accessing build database
+".../Ilumionate-fwlqysdnkmshbpbljbqkyywkkhar/Build/Intermediates.noindex/XCBuildData/build.db":
+database is locked Possibly there are two concurrent builds running in the same filesystem
+location.
+	Testing cancelled because the build failed.
+```
+
+`ps` at that moment showed a second `xcodebuild` owned by another session:
+
+```
+xcodebuild -scheme Ilumionate -project Ilumionate.xcodeproj -quiet
+  -destination platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5
+  -only-testing:IlumionateTests/StagedAnalysisPipelineTests ... -parallel-testing-enabled NO test
+```
+
+So the mechanism is not a wedged debug session at all: **two agents sharing one DerivedData**.
+A stale lock also persists briefly after the winning build exits — a retry with no `xcodebuild`
+running at all failed once, then succeeded on the next attempt.
+
+This does not fully explain the original symptom (a hang with no second build visible), so the
+entry stays open. But any future occurrence should check `ps -eo pid,etime,command | grep
+xcodebuild` **first**, and wait rather than kill: the competing build may be another agent's
+legitimate work.
+
+Mitigation, not yet applied: give each session its own `-derivedDataPath`, or serialise builds
+behind a lock file. See also ERR-028, which is the same "two things contending for one
+machine" family.
+
 ## ERR-023 — ePub import reads the entire file into memory with no size cap
 
 **Date discovered:** 2026-08-28
@@ -2293,3 +2332,380 @@ Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' \
 3. **The attachments still contain transcript excerpts.** Moving them narrows who
    can read them; it does not reduce what they hold. Stripping the excerpts was the
    alternative option and was not taken.
+
+---
+
+## ERR-027 — The uncommitted release cleanup leaves five tests and the LumeLabel build broken
+
+- **Date discovered:** 2026-08-30
+- **Status:** completed 2026-08-31
+- **Severity:** high
+- **Area:** build, tests, analysis pipeline
+
+**Symptom**
+Five tests fail identically on both platforms, and the `LumeLabel` scheme does not build:
+
+```
+error: The file "KnownAudioCatalog.json" couldn't be opened because there is no
+such file. (in target 'LumeLabel' from project 'Ilumionate')
+** BUILD FAILED **
+```
+
+```
+Failing tests:
+	AnalyzerOptimizerTests.preparedTranscriptCacheReplacesStaleGeneratedTextForRecognizedAudio()
+	AudioLibraryStoreTests.loadingLibraryAutomaticallyAppliesRecognizedGoldReview()
+	AudioTranscriptResolverTests.audioAnalyzerReturnsBundledTranscriptWithoutReadingAudioFile()
+	AudioTranscriptResolverTests.knownFilenameUsesBundledTranscriptWithoutCallingFallback()
+	BackgroundAnalysisTests.recognizedGoldTrackBypassesTranscriptionAndGenericAI()
+```
+
+These are the *only* failures in the repository. Serial full runs on 2026-08-30 measured
+1607 tests / 246 suites on macOS and 1608 / 246 on iOS 18.5; both produced exactly this set
+and nothing else.
+
+**Where**
+- `Ilumionate/KnownAudioCatalog.json` — deleted in the working tree, not committed.
+- `Ilumionate.xcodeproj/project.pbxproj:162` — `KnownAudioCatalog.json` is still an
+  opt-*in* `membershipException` for the `LumeLabel` target. `LumeLabel` does not own the
+  `Ilumionate` folder, so for that target an exception means *included*, the opposite of
+  its meaning at line 194 (the `Ilumionate` target, where it means *excluded*). The cleanup
+  excluded the resource from the app and the share extension but left LumeLabel opted in to
+  a file that no longer exists.
+- `IlumionateTests/AudioTranscriptResolverTests.swift:22` — asserts
+  `"01 - Instant Bimbo Sleepdoll.mp3"` resolves without the fallback transcriber.
+- `IlumionateTests/AudioLibraryStoreTests.swift:132` — asserts `"04 Giggledoll.mp3"` loads
+  already `isAnalyzed`.
+- `Ilumionate/AnalysisStateManager.swift:470,687` and `Ilumionate/SessionDetailView.swift:37`
+  — the production readers of `KnownAudioCatalog.shared`.
+
+**Reproduction**
+```bash
+xcodebuild -project Ilumionate.xcodeproj -scheme LumeLabel \
+    -destination 'platform=macOS,arch=arm64' build
+
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' \
+    -only-testing:IlumionateTests -parallel-testing-enabled NO
+```
+
+**Root cause**
+The uncommitted App Store release cleanup deletes `KnownAudioCatalog.json` on purpose — it
+bundled explicit third-party transcripts and metadata, and the handoff for that work says to
+keep it deleted. Every failing test asserts behavior that only exists when a specific
+third-party track is *recognized* by that catalog, so with an empty catalog each one now
+takes the generic path. `KnownAudioCatalogTests.swift` was updated by that cleanup; these
+five were missed, as was LumeLabel's target membership.
+
+Nothing here is a defect in the product code. `KnownAudioCatalog` degrades correctly to an
+empty catalog — `init(bundle:resourceName:)` at `Ilumionate/KnownAudioCatalog.swift:32`
+tolerates the missing resource.
+
+**Already done**
+`Ilumionate/DiscoveredAudioSheet.swift` was a third instance of the same
+deleted-a-feature-but-not-all-of-it pattern and **was** deleted as part of unblocking
+verification. It referenced `DiscoveredAudioLink`, whose only definition went away with
+`Ilumionate/AudioLinkDiscovery.swift`, so the app target did not compile at all:
+
+```
+Ilumionate/DiscoveredAudioSheet.swift:15:17: error: cannot find type 'DiscoveredAudioLink' in scope
+```
+
+It was introduced by commit `d2a6131` alongside audio-link discovery and had no remaining
+references anywhere in the repository, so removing it was the completion of that deletion
+rather than a new decision. The build break was total and blocked every test run, which is
+why it was fixed on the spot instead of only being logged.
+
+That three separate leftovers have now surfaced from the same cleanup means the sweep was
+not exhaustive. Assume more exist and check before trusting a green build.
+
+**A fourth, found 2026-08-30 while auditing import paths:** `AudioIntake.downloadAudio(from:)`
+and `AudioIntake.downloadAudio(_:)` (`Ilumionate/AudioIntake.swift:59,66`) now have **zero**
+production callers and **zero** test coverage — the remote-download UI that called them was
+deleted. The supporting `downloadFilename(for:suggestedFilename:contentType:leadingBytes:)`
+and the `IntakeOrigin.url` case are dead with them. Unlike `DiscoveredAudioSheet.swift` this
+still compiles, so nothing surfaces it. It is the only remaining code that performs a
+`URLSession.download` of user audio, so leaving it in ships a network path the UI cannot
+reach; removing it is the tidier end state, but it is the cleanup's call, not a bug fix.
+
+**Proposed fix**
+Not attempted — this is inside another in-flight change and the resolution is a product
+decision, not a mechanical one.
+
+1. **LumeLabel** — decide whether the labelling app keeps catalog-backed features. If not,
+   drop `KnownAudioCatalog.json` from the `LumeLabel` exception set at
+   `project.pbxproj:162`. If yes, it needs its own non-shipping fixture; do not restore the
+   deleted resource to satisfy a build.
+2. **The five tests** — they encode "this specific bundled track is recognized", which is
+   exactly what the cleanup removed. Either delete them alongside the catalog, or rewrite
+   them against an injected test catalog so they assert the *recognition mechanism* rather
+   than the presence of particular third-party content. The second is preferable:
+   `AnalysisStateManager` and `AudioLibraryStore` genuinely branch on recognition, and that
+   branch would otherwise lose all coverage.
+
+**Risks / blockers**
+- Do **not** resolve any of this by restoring `KnownAudioCatalog.json`. Its deletion is
+  deliberate and is part of the App Store release decision.
+- Deleting the tests outright removes the only coverage of the recognized-track bypass in
+  `AnalysisStateManager` and of `loadRepairingStoredFiles` applying a gold review.
+- The worktree is intentionally dirty (roughly 16.7k deletions across 56 paths). Do not
+  reset, stash, or wholesale-checkout it while resolving this.
+
+**Resolution** _(2026-08-31)_
+
+- Removed `KnownAudioCatalog.json` from LumeLabel's membership exceptions without restoring
+  the deleted shipping resource. The LumeLabel scheme builds again.
+- Added injectable `KnownAudioCatalog` and `BundledAudioTranscriptCatalog` dependencies at
+  each recognition seam. The five tests now use a small neutral synthetic catalog, keeping
+  coverage of recognized-track behavior without depending on third-party titles or text.
+- The iOS 18.5 full suite now passes all 1687 tests in 257 suites. A Release app build also
+  contains no `KnownAudioCatalog.json` resource.
+
+---
+
+## ERR-028 — Parallel testing on the iOS simulator aborts the suite after ~70 of 1608 cases
+
+- **Date discovered:** 2026-08-30
+- **Status:** completed 2026-08-31
+- **Severity:** high
+- **Area:** tests, build
+
+**Symptom**
+`Scripts/run-tests.sh` against an iOS Simulator destination stops early. One async
+analysis-pipeline test burns its full `.timeLimit(.minutes(1))`, and the rest of the suite
+never runs. Three consecutive runs on 2026-08-30 aborted at 91, 67, and 70 executed cases
+against a real total of 1608, and **a different test hung each time**:
+
+| Run | Executed | Test that hit 60.000 s |
+|---|---|---|
+| 1 | 70 | `AnalysisInactivityWatchdogTests/stalledTranscriptionIsTerminalizedExactlyOnce()` |
+| 2 | 91 | `StagedAnalysisPipelineTests/keepsWhisperPrefetchOutOfContentAnalysis()` |
+| 3 | 67 | `AnalysisInactivityWatchdogTests/stalledContentAnalysisIsTerminalized()` |
+
+Every one of them passes in isolation in well under a tenth of a second. Adding
+`-parallel-testing-enabled NO` makes the whole suite run to completion in **38 seconds**.
+
+The clearest tell in the log is trivial tests reporting absurd durations — under parallel
+load, `SteadyLightPreferenceTests/resetRestoresTheDefault()` reported 17.843 seconds.
+
+**Where**
+`Scripts/run-tests.sh` — does not set `-parallel-testing-enabled`, so xcodebuild's default
+(on, with simulator clones) applies.
+The tests that hang are the ones that drive `AnalysisStateManager` through a real queue:
+`IlumionateTests/AnalysisInactivityWatchdogTests.swift:63`,
+`IlumionateTests/AnalysisInactivityWatchdogTests.swift` (`stalledContentAnalysisIsTerminalized`),
+`IlumionateTests/StagedAnalysisPipelineTests.swift:13`. The last has an unbounded
+`await probe.waitForActiveAnalysis()` at line 49 whose comment accepts an indefinite wait by
+design — under this failure mode that is what converts slowness into a suite-wide abort.
+
+**Reproduction**
+```bash
+# Aborts after ~70 cases, rotating which test hangs:
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5' \
+    -only-testing:IlumionateTests
+
+# Completes, 1608 tests in 38s:
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5' \
+    -only-testing:IlumionateTests -parallel-testing-enabled NO
+```
+
+**Root cause**
+Unknown in mechanism; established in shape. It is *not* a return of ERR-021 — that fix
+holds, and `stalledTranscriptionIsTerminalizedExactlyOnce` measures 0.063 s in isolation on
+iOS 18.5, matching the 0.05 s recorded when ERR-021 was closed. The failing test is not
+fixed; it is whichever queue-driving test happens to be scheduled while several simulator
+clones contend for the machine, which is why it moves between runs.
+
+The first of the three runs above was self-inflicted — the macOS and iOS full suites were
+running concurrently over one DerivedData. Runs 2 and 3 had the machine to themselves and
+still aborted, so contention between the simulator clones alone is sufficient.
+
+This is the same family as ERR-001 (timing tests failing under full-suite parallel load) and
+is plausibly the same underlying condition as the still-open ERR-022.
+
+**Proposed fix**
+Short term, make `Scripts/run-tests.sh` pass `-parallel-testing-enabled NO` for iOS
+Simulator destinations unless the caller sets it. The suite takes 38 seconds serially, so
+parallelism is buying nothing and costing correctness.
+
+Longer term, the real defect is that a slow test aborts the run instead of failing one case.
+Replace the remaining unbounded waits in the queue-driving tests with the bounded
+`waitUntil(_:polls:interval:)` helper introduced for ERR-021 — `StagedAnalysisPipelineTests`
+line 49 is the known remaining one — so overload produces a named failure rather than
+silence.
+
+**Risks / blockers**
+- **This invalidates a note left on ERR-021.** That entry says `Scripts/run-tests.sh` guards
+  against zero tests but not a truncated run, and that the gap "has no known trigger now."
+  It has one again. Until the script is fixed, an iOS run is only trustworthy if its case
+  count is compared against the macOS count — 1607 on macOS and 1608 on iOS 18.5 as of
+  2026-08-30.
+- Serializing hides genuine concurrency bugs that parallel execution would expose. It is a
+  workaround for the harness, not a fix for the tests.
+
+**Resolution** _(2026-08-31)_
+
+`Scripts/run-tests.sh` now adds `-parallel-testing-enabled NO` for iOS Simulator
+destinations unless the caller explicitly chooses otherwise. The remaining unbounded wait
+in `StagedAnalysisPipelineTests` was replaced with the shared sleeping, bounded
+`waitUntil` helper, so a regression reports what timed out instead of silently consuming
+the suite limit. ERR-030's counter fix makes the serial result auditable.
+
+Verified with the wrapper's default behavior: 1687 tests in 257 suites passed on iOS 18.5
+in 36.304 seconds, and the wrapper reported `Executed 1687 test case(s).`.
+
+---
+
+## ERR-029 — Release scanners walk `.claude/worktrees` and report findings that are not in the app
+
+- **Date discovered:** 2026-08-30
+- **Status:** identified
+- **Severity:** medium
+- **Area:** build, release process, tooling
+
+**Symptom**
+A Greenlight release scan raised a **critical** App Tracking Transparency finding, reporting
+an "Amplitude" analytics SDK and a missing ATT prompt. Neither exists. The finding came from
+two compounding mistakes: the scan walked eight stale git worktrees nested inside the repo,
+and it matched the substring `amplitude` in ordinary signal-processing code.
+
+Acting on it would have been actively harmful — adding an ATT prompt for tracking the app
+does not do contradicts the shipped privacy manifest and invites its own review problem.
+
+Verified against the tracked sources on 2026-08-30:
+
+| Check | Result |
+|---|---|
+| Amplitude SDK in `Package.resolved` | absent — the only analytics dependency is TelemetryDeck |
+| `ATTrackingManager` / `AppTrackingTransparency` / `NSUserTrackingUsageDescription` / `advertisingIdentifier` | no occurrences in any tracked source |
+| `NSPrivacyTracking` | `false` |
+| `NSPrivacyTrackingDomains` | empty |
+| `NSPrivacyCollectedDataTypeProductInteraction` | `Linked: false`, `Tracking: false`, purpose `AppFunctionality` |
+
+All eleven `amplitude` matches are audio/visual maths, not analytics:
+`EngineWaveforms.swift`, `AudioEnergyAnalyzer.swift`, `BinauralBeatsEngine.swift`,
+`FlashController.swift`, `DesignSystem/WaveformShape.swift`, `Visuals/VisualModulation.swift`,
+`Visuals/VisualFieldLayer.swift`, `Visuals/VisualFieldSettings.swift`,
+`TextTrance/ReadingVisualModulator.swift`, `SessionGenerator+Strategies.swift`,
+`PlaylistArtworkMotifs.swift`.
+
+**Where**
+`.git/info/exclude:14` — `.claude/worktrees/` is excluded there, so the worktrees are
+invisible to `git status` but fully visible to any tool that walks the filesystem. That
+asymmetry is the whole bug: the directory looks clean to a human and dirty to a scanner.
+
+Eight worktrees, 364 MB, nested under the repository root:
+
+| Worktree | Size | Last modified | HEAD |
+|---|---|---|---|
+| `stoic-lalande-0fdf75` | 111M | 2026-07-27 | `106443c` |
+| `affectionate-mendeleev-bbb64d` | 15M | 2026-08-01 | `4d67489` |
+| `gallant-germain-fc28e2` | 16M | 2026-08-06 | `4d67489` |
+| `interesting-stonebraker-532e78` | 15M | 2026-08-08 | `4d67489` |
+| `nifty-darwin-4dee0a` | 15M | 2026-08-08 | `4d67489` |
+| `objective-taussig-d3d816` | 16M | 2026-08-08 | `4d67489` |
+| `hungry-chaplygin-7bc482` | 15M | 2026-08-09 | `4d67489` |
+| `laughing-stonebraker-c802ab` | 161M | 2026-08-11 | `eb31262` |
+
+Repository HEAD is `14c9a98`, so every one of them is pinned 3–5 weeks behind.
+
+**Reproduction**
+```bash
+git worktree list                      # eight entries under .claude/worktrees
+git status --short | grep -c worktrees # 0 — excluded, so invisible here
+grep -ril amplitude .                  # matches worktree copies plus DSP code
+```
+
+**Root cause**
+Two independent defects in the scan, both outside the app:
+
+1. **Scope.** The scanner treats the working directory as the shipping surface. It is not.
+   The worktrees contain deleted-from-`release/1.0` code — the BambiCloud playlist subsystem,
+   `InAppBrowserView.swift`, audio-link discovery — that cannot appear in an archive.
+2. **Matching.** `amplitude` was matched as a substring rather than as a resolved
+   dependency, so waveform maths read as an analytics SDK.
+
+**Already done**
+Nothing changed in the app, and nothing should be. This entry exists to stop the finding
+being re-raised and to record that the false positive was checked rather than dismissed.
+
+The same stale worktrees corrupted ordinary work on the same day: a repo-wide grep for
+`BundledAudioTranscriptCatalog` returned *only* worktree hits, briefly implying the type had
+been deleted from the app when it had not. Any `grep -r` from the repository root is
+affected, not just release tooling.
+
+**Proposed fix**
+Point the final scan at a **clean archive** — an `xcodebuild archive` output or
+`git archive HEAD` export — rather than the working directory. That fixes the scope defect at
+the source and needs no repository change.
+
+If in-place scanning must be supported, exclude `.claude/worktrees/` in the scanner's own
+configuration. Do not rely on `.gitignore`/`.git/info/exclude`; the tool already demonstrates
+it does not read them.
+
+**Risks / blockers**
+- **Do not prune the worktrees to make this go away.** All eight are fully merged into
+  `release/1.0` (zero commits not already in the branch), but every one carries uncommitted
+  source edits — 1 to 9 files each, including real changes to `AudioLibraryStore.swift`,
+  `TrainingCorpusManager.swift`, `TrancePhase.swift`, and untracked new tests such as
+  `CreatorProvenanceTests.swift` and `ManualClock.swift`. Deleting them destroys abandoned
+  in-flight work that exists nowhere else. Removing them is a separate, deliberate decision.
+- Suppressing the ATT rule wholesale would hide a genuine future regression. The
+  `APP_STORE_RELEASE_CHECKLIST.md:148` condition is the one that matters: re-audit if an
+  advertising, attribution, or tracking SDK is ever added. Scope the scan instead of
+  silencing the rule.
+
+---
+
+## ERR-030 — `run-tests.sh` counted zero tests on every serial run, and failed a passing suite
+
+- **Date discovered:** 2026-08-30
+- **Status:** completed
+- **Severity:** medium
+- **Area:** tests, build
+
+**Symptom**
+A fully passing run exited 1:
+
+```
+􁁛 Test run with 10 tests in 1 suite passed after 0.015 seconds.
+error: xcodebuild reported success but ran 0 test cases.
+```
+
+Quieter and worse: every serial run reported `Executed 0 test case(s).` regardless of how
+many ran. The iOS and macOS full-suite runs recorded earlier the same day printed that line
+while Swift Testing reported 1604 and 1607 tests.
+
+**Where**
+`Scripts/run-tests.sh` — the `executed` count fed both the zero-test guard and the closing
+summary.
+
+**Root cause**
+xcodebuild emits two mutually exclusive formats. Parallel runs print XCTest-style
+`Test case '...' passed on 'Clone 1 of ...'` lines; serial runs
+(`-parallel-testing-enabled NO`) print Swift Testing's own output and **no** `Test case`
+lines at all. The guard counted only the first, so serial runs always measured zero.
+
+It stayed hidden because the guard only fires when `status -eq 0`. Every earlier serial run
+had real failures, so a non-zero status short-circuited it. The first serial run where
+everything passed exposed it.
+
+Confirmed mutually exclusive before fixing, so summing cannot double-count:
+
+| Log | `Test case` lines | `Test run with` lines |
+|---|---|---|
+| parallel iOS full suite | 70 | 0 |
+| serial iOS full suite | 0 | 1 |
+| serial single suite | 0 | 1 |
+
+**Resolution**
+`executed` now adds Swift Testing's `Test run with <n> tests in <n> suites` count to the
+`Test case` count. Verified both directions:
+
+- Passing serial run now reports `Executed 10 test case(s).` and exits 0.
+- A deliberately unmatched filter
+  (`-only-testing:IlumionateTests/GenericPlaylistJSONTests/noSuchTest`) still exits 1 with
+  the zero-test error, so the ERR-002 protection this guard exists for is intact.
+
+**Still outstanding**
+The truncated-run gap named in ERR-021 and ERR-028 is untouched. This fixes the *count*, not
+the case where a hung test aborts a run partway through.
