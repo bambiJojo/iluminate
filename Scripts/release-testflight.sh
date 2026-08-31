@@ -176,17 +176,25 @@ json_next_build_number() {
 
 json_internal_group() {
   /usr/bin/ruby -rjson -e '
+    requested = ARGV.first.to_s
     json = JSON.parse(STDIN.read)
     groups = json.is_a?(Hash) ? Array(json["data"]) : []
-    preferred = groups.find do |group|
-      name = group.dig("attributes", "name").to_s.downcase
-      ["internal testing", "internal testers"].include?(name)
+    selected = if requested.empty?
+      preferred = groups.find do |group|
+        name = group.dig("attributes", "name").to_s.downcase
+        ["internal testing", "internal testers"].include?(name)
+      end
+      preferred || groups.first
+    else
+      groups.find do |group|
+        group["id"] == requested || group.dig("attributes", "name") == requested
+      end
     end
-    selected = preferred || groups.first
     exit 2 unless selected
     name = selected.dig("attributes", "name") || "internal group"
-    puts "#{selected.fetch("id")}|#{name}"
-  '
+    all_builds = selected.dig("attributes", "hasAccessToAllBuilds") == true
+    puts "#{selected.fetch("id")}|#{name}|#{all_builds}"
+  ' "$1"
 }
 
 while (( $# > 0 )); do
@@ -257,18 +265,18 @@ next_build="$(/bin/echo -n "${next_build_json}" | json_next_build_number)"
 
 group_id=""
 group_name=""
+group_has_access_to_all_builds="false"
 if (( use_group )); then
-  if [[ -n "${requested_group}" ]]; then
-    group_id="${requested_group}"
-    group_name="${requested_group}"
+  internal_groups_json="$(asc testflight groups list --app "${app_id}" --internal --paginate --output json)"
+  if group_record="$(/bin/echo -n "${internal_groups_json}" | json_internal_group "${requested_group}")"; then
+    group_id="${group_record%%|*}"
+    group_details="${group_record#*|}"
+    group_name="${group_details%%|*}"
+    group_has_access_to_all_builds="${group_details##*|}"
+  elif [[ -n "${requested_group}" ]]; then
+    fail "No internal TestFlight group matched: ${requested_group}"
   else
-    internal_groups_json="$(asc testflight groups list --app "${app_id}" --internal --paginate --output json)"
-    if group_record="$(/bin/echo -n "${internal_groups_json}" | json_internal_group)"; then
-      group_id="${group_record%%|*}"
-      group_name="${group_record##*|}"
-    else
-      /bin/echo "warning: no internal TestFlight group found; the build will be uploaded without group assignment" >&2
-    fi
+    /bin/echo "warning: no internal TestFlight group found; the build will be uploaded without group assignment" >&2
   fi
 fi
 
@@ -277,7 +285,11 @@ fi
 /bin/echo "  Version: ${current_version} -> ${next_version}"
 /bin/echo "  Build: ${current_build} -> ${next_build}"
 if [[ -n "${group_name}" ]]; then
-  /bin/echo "  Internal group: ${group_name}"
+  if [[ "${group_has_access_to_all_builds}" == "true" ]]; then
+    /bin/echo "  Internal group: ${group_name} (automatic access to all builds)"
+  else
+    /bin/echo "  Internal group: ${group_name}"
+  fi
 else
   /bin/echo "  Internal group: none"
 fi
@@ -294,15 +306,15 @@ versions_changed=0
 upload_committed=0
 
 rollback_if_needed() {
-  local status=$?
-  if (( status != 0 && versions_changed && ! upload_committed )); then
+  local exit_code=$?
+  if (( exit_code != 0 && versions_changed && ! upload_committed )); then
     /bin/echo "Release failed before upload; restoring project version values." >&2
     set_project_versions "${next_version}" "${current_version}" "${next_build}" "${current_build}" || true
   fi
-  if (( status != 0 )); then
+  if (( exit_code != 0 )); then
     /bin/echo "Release artifacts remain at: ${release_directory}" >&2
   fi
-  exit "${status}"
+  exit "${exit_code}"
 }
 trap rollback_if_needed EXIT
 
@@ -344,7 +356,9 @@ asc builds wait \
   --fail-on-invalid \
   --output table
 
-if [[ -n "${group_id}" ]]; then
+if [[ "${group_has_access_to_all_builds}" == "true" ]]; then
+  /bin/echo "Internal group ${group_name} already receives every valid build automatically."
+elif [[ -n "${group_id}" ]]; then
   asc builds add-groups \
     --app "${app_id}" \
     --build-number "${next_build}" \

@@ -37,7 +37,7 @@ Legend:
 - [x] An unsigned iOS 18.5 Simulator **Release** build compiled without diagnostics on 2026-08-31.
 - [x] An unsigned native macOS **Release** build compiled successfully on 2026-08-04.
 - [x] The iOS Release build emits no Swift warnings. LumeLabel still has one Swift 6 isolation warning, but macOS tooling is outside the iOS-first launch scope.
-- [ ] Produce and validate a signed App Store archive; a simulator build is not submission evidence.
+- [x] A signed iOS App Store archive was produced and exported successfully on 2026-08-31; App Store Connect accepted build `1.0 (10024)` and reports it `VALID`.
 - [ ] Produce and validate a signed macOS App Store archive if macOS is part of launch scope.
 - [ ] Re-run the compliance scanner against the final archive/IPA or a clean checkout. The current source-tree scan is noisy because it scans `.claude/worktrees`, tests, and build products.
 
@@ -52,8 +52,8 @@ Current App Store Connect validation state:
 - [x] **Launch decision:** ship iOS/iPadOS first; macOS is not part of this release gate.
 - [x] Leave the macOS version unsubmitted and create a separate Mac release plan later.
 - [x] Marketing version is `1.0`, matching the existing App Store version record.
-- [x] Build number is `10023` (above uploaded build `10018`) for both the app and share extension.
-- [ ] Note that the existing TestFlight build `0.7.4 (10018)` is valid and beta-review approved but cannot be selected for the `1.0` App Store version because its marketing version does not match.
+- [x] Build number is `10024` for both the app and share extension; this exact build is uploaded and valid in App Store Connect.
+- [x] The older TestFlight build `0.7.4 (10018)` cannot be selected for the `1.0` App Store version because its marketing version does not match; build `1.0 (10024)` supersedes it.
 - [ ] Decide whether the app is free or paid. If paid, complete contracts, tax, banking, and pricing work before submission.
 - [ ] Decide the countries/regions where the app will be available.
 - [ ] Define the intended unlisted audience and write a short, specific justification for Apple (for example, members of a named organization or event).
@@ -195,9 +195,9 @@ Current App Store Connect validation state:
 ### Build and archive
 
 - [ ] Remove all blocker content and create a clean release candidate from the frozen commit.
-- [ ] Set final `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` for app and extensions.
+- [x] Set `MARKETING_VERSION = 1.0` and `CURRENT_PROJECT_VERSION = 10024` for the app and share extension.
 - [ ] Verify display name, bundle IDs, signing team, app groups, entitlements, capabilities, deployment targets, and provisioning profiles.
-- [ ] Create signed **Release** archives for every submitted platform using the current required Xcode/SDK.
+- [x] Created and exported the signed iOS **Release** archive for build `1.0 (10024)` with Xcode 26.6 / iOS 26.5 SDK on 2026-08-31. macOS is not in this release scope.
 - [ ] Run Xcode Organizer/App Store validation and resolve every error and actionable warning.
 - [ ] Inspect the archived `.app`, not only the source tree, for prohibited/test assets, explicit catalog data, secrets, sample credentials, debug menus, and oversized resources.
 - [ ] Verify dSYMs and symbol files are included/uploaded for crash symbolication.
@@ -291,10 +291,10 @@ Current App Store Connect validation state:
 
 ## 11. Select the final build
 
-- [ ] Upload a new build whose marketing version exactly matches the App Store version (`1.0` if following the recommendation).
-- [ ] Use a build number higher than `10018`.
-- [ ] Wait for processing and resolve export compliance, privacy manifest, signing, asset, or SDK warnings.
-- [ ] Confirm the processed build reports `usesNonExemptEncryption = false` only if the documented exemption remains correct.
+- [x] Uploaded build `1.0 (10024)`, whose marketing version exactly matches the App Store version.
+- [x] Build `10024` is higher than `10018`.
+- [x] App Store Connect finished processing build `10024` with state `VALID`; its internal TestFlight state is `IN_BETA_TESTING`.
+- [x] The processed build reports `usesNonExemptEncryption = false`; this matches the current app declaration.
 - [ ] Complete TestFlight smoke testing with the exact uploaded build.
 - [ ] Attach the build to the iOS 1.0 version.
 - [ ] Upload, test, and attach a matching macOS build only if Mac is in launch scope.
