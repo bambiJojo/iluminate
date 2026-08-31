@@ -224,7 +224,7 @@ struct LibraryView: View {
             }
             .audioAcquisition(acquisition)
             .sheet(item: $playlistImportRequest) { request in
-                BambiCloudPlaylistImportView(
+                PlaylistImportView(
                     audioFiles: request.audioFiles,
                     initialLink: request.initialLink,
                     onImport: { imported in upsertPlaylist(imported) }

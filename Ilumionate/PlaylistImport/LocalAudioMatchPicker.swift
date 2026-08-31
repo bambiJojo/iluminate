@@ -6,7 +6,7 @@
 import SwiftUI
 
 struct LocalAudioMatchPicker: View {
-    let track: BambiCloudPlaylist.Track
+    let track: SourcePlaylistTrack
     let audioFiles: [AudioFile]
     let suggestedAudioFileIDs: [AudioFile.ID]
     let selectedAudioFileID: AudioFile.ID?
@@ -58,7 +58,7 @@ struct LocalAudioMatchPicker: View {
             .platformInsetGroupedListStyle()
             .scrollContentBackground(.hidden)
             .background(Color.bgPrimary)
-            .navigationTitle(track.name)
+            .navigationTitle(track.title)
             .platformInlineNavigationTitle()
             .searchable(text: $searchText, prompt: "Search local audio")
             .toolbar {

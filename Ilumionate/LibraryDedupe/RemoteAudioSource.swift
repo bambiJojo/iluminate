@@ -18,5 +18,15 @@ nonisolated struct RemoteAudioSource: Codable, Sendable, Equatable {
     let trackID: String
     let url: URL
 
-    static let bambiCloudService = "bambicloud"
+    /// Namespaces a track identifier by publisher.
+    ///
+    /// Derived from the address rather than looked up in a table of known
+    /// services: the app deliberately has no notion of which sites exist, and a
+    /// user can import from any of them. Over-splitting is harmless — two
+    /// namespaces for one publisher only means provenance stops corroborating a
+    /// duplicate, and the content fingerprint still catches it.
+    static func service(for url: URL) -> String {
+        guard let host = url.host()?.lowercased(), !host.isEmpty else { return "" }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
 }

@@ -35,10 +35,11 @@ struct DuplicateAudioIndexTests {
     }
 
     private func bambiSource(_ trackID: String) -> RemoteAudioSource {
-        RemoteAudioSource(
-            service: RemoteAudioSource.bambiCloudService,
+        let url = URL(string: "https://cdn.example.com/\(trackID).mp3")!
+        return RemoteAudioSource(
+            service: RemoteAudioSource.service(for: url),
             trackID: trackID,
-            url: URL(string: "https://cdn.bambicloud.com/\(trackID).mp3")!
+            url: url
         )
     }
 

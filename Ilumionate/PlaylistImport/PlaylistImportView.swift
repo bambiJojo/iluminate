@@ -9,11 +9,11 @@ enum PlaylistImportContentRoute: Equatable {
     }
 }
 
-struct BambiCloudPlaylistImportView: View {
+struct PlaylistImportView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var model: BambiCloudPlaylistImportViewModel
-    @State private var selectingRow: BambiCloudPlaylistImportPlan.Row?
+    @State private var model: PlaylistImportViewModel
+    @State private var selectingRow: PlaylistImportPlan.Row?
 
     private let onImport: (Playlist) -> Void
 
@@ -22,7 +22,7 @@ struct BambiCloudPlaylistImportView: View {
         initialLink: String? = nil,
         onImport: @escaping (Playlist) -> Void
     ) {
-        let model = BambiCloudPlaylistImportViewModel(
+        let model = PlaylistImportViewModel(
             availableAudioFiles: audioFiles
         )
         if let initialLink {
@@ -41,11 +41,11 @@ struct BambiCloudPlaylistImportView: View {
                     hasPlan: model.plan != nil
                 ) {
                 case .linkEntry:
-                    BambiCloudPlaylistLinkEntryView(model: model)
+                    PlaylistLinkEntryView(model: model)
 
                 case .review:
                     if let plan = model.plan {
-                        BambiCloudPlaylistReviewView(
+                        PlaylistReviewView(
                             plan: plan,
                             audioFiles: model.availableAudioFiles,
                             isDownloading: model.isDownloading,

@@ -13,27 +13,24 @@ import Testing
 
 @MainActor
 struct DuplicateTrackPlaylistTests {
-    private func playlistRepeatingATrack() throws -> BambiCloudPlaylist {
+    private func playlistRepeatingATrack() throws -> SourcePlaylist {
         let playlistID = UUID()
         let repeatedTrackID = UUID()
         let json = """
         {"playlists":[{"uuid":"\(playlistID.uuidString)","name":"Repeats","files":[
         {"uuid":"\(repeatedTrackID.uuidString)","name":"Fuck Doll","duration":600000,
-         "audioURL":"https://cdn.bambicloud.com/dup.mp3","trackNum":0},
+         "audioURL":"https://cdn.example.com/dup.mp3","trackNum":0},
         {"uuid":"\(UUID().uuidString)","name":"Something Else","duration":300000,
-         "audioURL":"https://cdn.bambicloud.com/other.mp3","trackNum":1},
+         "audioURL":"https://cdn.example.com/other.mp3","trackNum":1},
         {"uuid":"\(repeatedTrackID.uuidString)","name":"Fuck Doll","duration":600000,
-         "audioURL":"https://cdn.bambicloud.com/dup.mp3","trackNum":2}
+         "audioURL":"https://cdn.example.com/dup.mp3","trackNum":2}
         ]}]}
         """
-        return try BambiCloudPlaylist.decode(
-            from: Data(json.utf8),
-            expectedID: playlistID
-        )
+        return try GenericPlaylistJSON.playlist(from: Data(json.utf8))
     }
 
-    private func plan() throws -> BambiCloudPlaylistImportPlan {
-        BambiCloudPlaylistImporter().makePlan(
+    private func plan() throws -> PlaylistImportPlan {
+        PlaylistImporter().makePlan(
             for: try playlistRepeatingATrack(),
             availableAudioFiles: []
         )
@@ -58,7 +55,7 @@ struct DuplicateTrackPlaylistTests {
     @Test func selectingOnARepeatUpdatesThatRowOnly() throws {
         var plan = try plan()
         let file = AudioFile(filename: "Fuck Doll.mp3", duration: 600, fileSize: 10)
-        plan = BambiCloudPlaylistImporter().makePlan(
+        plan = PlaylistImporter().makePlan(
             for: try playlistRepeatingATrack(),
             availableAudioFiles: [file]
         )
@@ -83,7 +80,7 @@ struct DuplicateTrackPlaylistTests {
         let firstRowID = try #require(plan.rows.first?.id)
         plan.adopt(downloadedFile: downloaded, forRow: firstRowID)
 
-        let repeatedRows = plan.rows.filter { $0.track.name == "Fuck Doll" }
+        let repeatedRows = plan.rows.filter { $0.track.title == "Fuck Doll" }
         #expect(repeatedRows.count == 2)
         #expect(repeatedRows.allSatisfy { $0.selectedAudioFileID == downloaded.id })
         #expect(repeatedRows.allSatisfy { $0.status == .downloaded })

@@ -1,21 +1,21 @@
 //
-//  BambiCloudPlaylistReviewView.swift
+//  PlaylistReviewView.swift
 //  Ilumionate
 //
 
 import SwiftUI
 
-struct BambiCloudPlaylistReviewView: View {
-    let plan: BambiCloudPlaylistImportPlan
+struct PlaylistReviewView: View {
+    let plan: PlaylistImportPlan
     let audioFiles: [AudioFile]
-    let isDownloading: (BambiCloudPlaylistImportPlan.Row.ID) -> Bool
-    let downloadError: (BambiCloudPlaylistImportPlan.Row.ID) -> String?
-    let onChoose: (BambiCloudPlaylistImportPlan.Row) -> Void
-    let onDownload: (BambiCloudPlaylistImportPlan.Row) -> Void
+    let isDownloading: (PlaylistImportPlan.Row.ID) -> Bool
+    let downloadError: (PlaylistImportPlan.Row.ID) -> String?
+    let onChoose: (PlaylistImportPlan.Row) -> Void
+    let onDownload: (PlaylistImportPlan.Row) -> Void
     /// Binds a likely-duplicate row to the library file it matched.
-    let onUseExisting: (BambiCloudPlaylistImportPlan.Row, AudioFile.ID) -> Void
+    let onUseExisting: (PlaylistImportPlan.Row, AudioFile.ID) -> Void
     /// Fetches a fresh copy despite the likely match.
-    let onDownloadAnyway: (BambiCloudPlaylistImportPlan.Row) -> Void
+    let onDownloadAnyway: (PlaylistImportPlan.Row) -> Void
     let onDownloadAll: () -> Void
     let onStartOver: () -> Void
 
@@ -23,7 +23,7 @@ struct BambiCloudPlaylistReviewView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                    Text(plan.sourcePlaylist.name)
+                    Text(plan.sourcePlaylist.title)
                         .font(TranceTypography.sectionTitle)
                         .foregroundStyle(.textPrimary)
 
@@ -41,7 +41,7 @@ struct BambiCloudPlaylistReviewView: View {
 
             Section {
                 ForEach(plan.rows) { row in
-                    BambiCloudPlaylistMatchRow(
+                    PlaylistMatchRow(
                         row: row,
                         selectedAudioFile: selectedAudioFile(for: row),
                         isDownloading: isDownloading(row.id),
@@ -62,7 +62,7 @@ struct BambiCloudPlaylistReviewView: View {
                     .font(TranceTypography.caption)
                     .foregroundStyle(.textSecondary)
             } footer: {
-                Text("Only matched files are added. Downloads come from the playlist publisher's own copy and are saved to your library.")
+                Text("Only matched files are added automatically. Download a publisher-hosted track only when you have permission and source authorization to save it.")
                     .font(TranceTypography.caption)
                     .foregroundStyle(.textLight)
             }
@@ -82,7 +82,7 @@ struct BambiCloudPlaylistReviewView: View {
                     .buttonStyle(.plain)
                     .listRowBackground(Color.bgCard)
                 } footer: {
-                    Text("Fetches each missing track from the publisher and adds it to your library.")
+                    Text("Fetches each missing track from the publisher. Continue only if you have permission and source authorization to save every track.")
                         .font(TranceTypography.caption)
                         .foregroundStyle(.textLight)
                 }
@@ -116,14 +116,14 @@ struct BambiCloudPlaylistReviewView: View {
     }
 
     private func possibleDuplicate(
-        for row: BambiCloudPlaylistImportPlan.Row
+        for row: PlaylistImportPlan.Row
     ) -> AudioFile? {
         guard case .possibleDuplicate(let id) = row.status else { return nil }
         return audioFiles.first { $0.id == id }
     }
 
     private func selectedAudioFile(
-        for row: BambiCloudPlaylistImportPlan.Row
+        for row: PlaylistImportPlan.Row
     ) -> AudioFile? {
         guard let selectedAudioFileID = row.selectedAudioFileID else {
             return nil

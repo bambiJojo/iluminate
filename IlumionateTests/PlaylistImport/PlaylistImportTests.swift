@@ -1,5 +1,5 @@
 //
-//  BambiCloudPlaylistImportTests.swift
+//  PlaylistImportTests.swift
 //  IlumionateTests
 //
 
@@ -8,7 +8,7 @@ import Testing
 @testable import Ilumionate
 
 @MainActor
-struct BambiCloudPlaylistImportTests {
+struct PlaylistImportTests {
     @Test func emptyLibraryCanStartPlaylistImport() {
         let route = PlaylistImportContentRoute.resolve(hasPlan: false)
 
@@ -19,26 +19,6 @@ struct BambiCloudPlaylistImportTests {
         let route = PlaylistImportContentRoute.resolve(hasPlan: true)
 
         #expect(route == .review)
-    }
-
-    @Test func sharedPlaylistLinkProducesPublicAPIRequest() throws {
-        let link = try BambiCloudPlaylistLink(
-            "https://bambicloud.com/playlist/69b12112-e603-428a-aeb5-9f204481da13"
-        )
-
-        #expect(link.playlistID.uuidString.lowercased() == "69b12112-e603-428a-aeb5-9f204481da13")
-        #expect(
-            link.apiURL.absoluteString
-                == "https://api.bambicloud.com/playlists?uuid=69b12112-e603-428a-aeb5-9f204481da13"
-        )
-    }
-
-    @Test func lookalikeHostIsRejectedBeforeAnyNetworkRequest() {
-        #expect(throws: PlaylistLinkImportError.unsupportedLink) {
-            try BambiCloudPlaylistLink(
-                "https://bambicloud.com.attacker.example/playlist/69b12112-e603-428a-aeb5-9f204481da13"
-            )
-        }
     }
 
     @Test func publicAPIResponsePreservesTrackOrderAndConvertsDurations() throws {
@@ -74,13 +54,10 @@ struct BambiCloudPlaylistImportTests {
             """.utf8
         )
 
-        let playlist = try BambiCloudPlaylist.decode(
-            from: data,
-            expectedID: playlistID
-        )
+        let playlist = try GenericPlaylistJSON.playlist(from: data)
 
-        #expect(playlist.name == "Shared Journey")
-        #expect(playlist.tracks.map(\.name) == ["First Track", "Second Track"])
+        #expect(playlist.title == "Shared Journey")
+        #expect(playlist.tracks.map(\.title) == ["First Track", "Second Track"])
         #expect(playlist.tracks.map(\.duration) == [876, 1_390])
     }
 
@@ -91,13 +68,17 @@ struct BambiCloudPlaylistImportTests {
               "playlists": [{
                 "uuid": "69b12112-e603-428a-aeb5-9f204481da13",
                 "name": "Fetched Journey",
-                "files": []
+                "files": [{
+                  "uuid": "c311778b-d79b-4f3a-8729-3474cda134b4",
+                  "name": "Opening Track",
+                  "duration": 162000
+                }]
               }]
             }
             """.utf8
         )
         let responseURL = try #require(
-            URL(string: "https://api.bambicloud.com/playlists")
+            URL(string: "https://api.example.com/playlists")
         )
         let response = try #require(
             HTTPURLResponse(
@@ -107,16 +88,19 @@ struct BambiCloudPlaylistImportTests {
                 headerFields: nil
             )
         )
-        let client = BambiCloudPlaylistClient { request in
-            #expect(request.url?.host() == "api.bambicloud.com")
+        let client = PlaylistSourceClient { requestURL in
+            #expect(requestURL.host() == "api.example.com")
             return (data, response)
         }
 
-        let playlist = try await client.fetchPlaylist(
-            from: "https://bambicloud.com/playlist/69b12112-e603-428a-aeb5-9f204481da13"
+        // The address the user pastes is the address that is fetched. Deriving
+        // a data endpoint from a page address was site knowledge and is gone.
+        let result = try await client.playlist(
+            at: "https://api.example.com/playlists?uuid=69b12112-e603-428a-aeb5-9f204481da13"
         )
 
-        #expect(playlist.name == "Fetched Journey")
+        #expect(result.playlist.title == "Fetched Journey")
+        #expect(result.sourceURL.host() == "api.example.com")
     }
 
     @Test func importerKeepsRemoteOrderAndUsesOnlyMatchedLocalAudio() throws {
@@ -157,7 +141,7 @@ struct BambiCloudPlaylistImportTests {
             )
         ]
 
-        let plan = BambiCloudPlaylistImporter().makePlan(
+        let plan = PlaylistImporter().makePlan(
             for: remotePlaylist,
             availableAudioFiles: localFiles
         )
@@ -192,7 +176,7 @@ struct BambiCloudPlaylistImportTests {
             userTitle: "Instant Bimbo Sleepdoll"
         )
 
-        var plan = BambiCloudPlaylistImporter().makePlan(
+        var plan = PlaylistImporter().makePlan(
             for: remotePlaylist,
             availableAudioFiles: [first, second]
         )
@@ -210,7 +194,7 @@ struct BambiCloudPlaylistImportTests {
     private func decodePlaylist(
         name: String,
         tracks: [(id: String, name: String, duration: Int)]
-    ) throws -> BambiCloudPlaylist {
+    ) throws -> SourcePlaylist {
         let playlistID = try #require(
             UUID(uuidString: "69b12112-e603-428a-aeb5-9f204481da13")
         )
@@ -235,10 +219,7 @@ struct BambiCloudPlaylistImportTests {
             }
             """.utf8
         )
-        return try BambiCloudPlaylist.decode(
-            from: data,
-            expectedID: playlistID
-        )
+        return try GenericPlaylistJSON.playlist(from: data)
     }
 
     // The user's actual complaint: a second playlist sharing tracks with the
@@ -250,26 +231,28 @@ struct BambiCloudPlaylistImportTests {
             """
             {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"Second",
              "files":[{"uuid":"\(trackID.uuidString.lowercased())","name":"Shared Track",
-             "duration":600000,"audioURL":"https://cdn.bambicloud.com/shared.mp3","trackNum":1}]}]}
+             "duration":600000,"audioURL":"https://cdn.example.com/shared.mp3","trackNum":1}]}]}
             """.utf8
         )
-        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+        let playlist = try GenericPlaylistJSON.playlist(from: data)
 
         var owned = AudioFile(
             filename: "Something The Matcher Will Never Guess.mp3",
             duration: 600,
             fileSize: 5_000_000
         )
+        let sharedURL = try #require(URL(string: "https://cdn.example.com/shared.mp3"))
         owned.remoteSource = RemoteAudioSource(
-            service: RemoteAudioSource.bambiCloudService,
+            service: RemoteAudioSource.service(for: sharedURL),
             trackID: trackID.uuidString,
-            url: try #require(URL(string: "https://cdn.bambicloud.com/shared.mp3"))
+            url: sharedURL
         )
 
-        let model = BambiCloudPlaylistImportViewModel(
+        let model = PlaylistImportViewModel(
             availableAudioFiles: [owned],
             downloader: PlaylistTrackDownloader(
-                documentsURL: URL.temporaryDirectory
+                documentsURL: URL.temporaryDirectory,
+                playlistSource: URL(string: "https://api.example.com/list.json")
             ) { _ in
                 Issue.record("A track already in the library was downloaded again")
                 throw PlaylistTrackDownloadError.networkUnavailable
@@ -277,7 +260,7 @@ struct BambiCloudPlaylistImportTests {
             isAutoAnalyseEnabled: { false }
         )
         model.adoptPlanForTesting(
-            BambiCloudPlaylistImporter().makePlan(
+            PlaylistImporter().makePlan(
                 for: playlist,
                 availableAudioFiles: [owned]
             )
@@ -303,12 +286,12 @@ struct BambiCloudPlaylistImportTests {
             ]}]}
             """.utf8
         )
-        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+        let playlist = try GenericPlaylistJSON.playlist(from: data)
 
         let first = AudioFile(filename: "01 Bambi Sleep.mp3", duration: 600, fileSize: 1)
         let second = AudioFile(filename: "02 Bambi Sleep.mp3", duration: 600, fileSize: 2)
 
-        let plan = BambiCloudPlaylistImporter().makePlan(
+        let plan = PlaylistImporter().makePlan(
             for: playlist,
             availableAudioFiles: [first, second]
         )
@@ -325,11 +308,11 @@ struct BambiCloudPlaylistImportTests {
             {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
              {"uuid":"\(UUID().uuidString)","name":"Bambi Sleep — Uniform Acceptance",
               "duration":600000,
-              "audioURL":"https://cdn.bambicloud.com/bs-uniform-acceptance.mp3","trackNum":1}
+              "audioURL":"https://cdn.example.com/bs-uniform-acceptance.mp3","trackNum":1}
             ]}]}
             """.utf8
         )
-        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+        let playlist = try GenericPlaylistJSON.playlist(from: data)
 
         let local = AudioFile(
             filename: "bs-uniform-acceptance.mp3",
@@ -337,7 +320,7 @@ struct BambiCloudPlaylistImportTests {
             fileSize: 1
         )
 
-        let plan = BambiCloudPlaylistImporter().makePlan(
+        let plan = PlaylistImporter().makePlan(
             for: playlist,
             availableAudioFiles: [local]
         )
@@ -351,11 +334,11 @@ struct BambiCloudPlaylistImportTests {
             """
             {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
              {"uuid":"\(UUID().uuidString)","name":"Renamed Beyond Recognition","duration":600000,
-              "audioURL":"https://cdn.bambicloud.com/x.mp3","trackNum":1}
+              "audioURL":"https://cdn.example.com/x.mp3","trackNum":1}
             ]}]}
             """.utf8
         )
-        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+        let playlist = try GenericPlaylistJSON.playlist(from: data)
 
         // Same byte size and duration — strong, but not conclusive.
         let owned = AudioFile(
@@ -364,13 +347,14 @@ struct BambiCloudPlaylistImportTests {
             fileSize: 5_000_000
         )
 
-        let model = BambiCloudPlaylistImportViewModel(
+        let model = PlaylistImportViewModel(
             availableAudioFiles: [owned],
             downloader: PlaylistTrackDownloader(
                 documentsURL: URL.temporaryDirectory,
+                playlistSource: URL(string: "https://api.example.com/list.json"),
                 probe: { _ in
                     (Data(), URLResponse(
-                        url: URL(string: "https://cdn.bambicloud.com/x.mp3")!,
+                        url: URL(string: "https://cdn.example.com/x.mp3")!,
                         mimeType: nil,
                         expectedContentLength: 5_000_000,
                         textEncodingName: nil
@@ -383,7 +367,7 @@ struct BambiCloudPlaylistImportTests {
             isAutoAnalyseEnabled: { false }
         )
         model.adoptPlanForTesting(
-            BambiCloudPlaylistImporter().makePlan(
+            PlaylistImporter().makePlan(
                 for: playlist,
                 availableAudioFiles: [owned]
             )
@@ -403,12 +387,12 @@ struct BambiCloudPlaylistImportTests {
             """
             {"playlists":[{"uuid":"\(playlistID.uuidString.lowercased())","name":"P","files":[
              {"uuid":"\(UUID().uuidString)","name":"Renamed Beyond Recognition","duration":600000,
-              "audioURL":"https://cdn.bambicloud.com/x.mp3","trackNum":1}]}]}
+              "audioURL":"https://cdn.example.com/x.mp3","trackNum":1}]}]}
             """.utf8
         )
-        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+        let playlist = try GenericPlaylistJSON.playlist(from: data)
 
-        var plan = BambiCloudPlaylistImporter().makePlan(
+        var plan = PlaylistImporter().makePlan(
             for: playlist,
             availableAudioFiles: [owned]
         )
@@ -436,12 +420,12 @@ struct BambiCloudPlaylistImportTests {
             ]}]}
             """.utf8
         )
-        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+        let playlist = try GenericPlaylistJSON.playlist(from: data)
 
         let first = AudioFile(filename: "01 Rapid Induction.mp3", duration: 162, fileSize: 1)
         let second = AudioFile(filename: "02 Bubble Induction.mp3", duration: 300, fileSize: 2)
 
-        let plan = BambiCloudPlaylistImporter().makePlan(
+        let plan = PlaylistImporter().makePlan(
             for: playlist,
             availableAudioFiles: [first, second]
         )

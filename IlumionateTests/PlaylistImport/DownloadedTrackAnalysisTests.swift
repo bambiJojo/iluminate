@@ -17,7 +17,7 @@ struct DownloadedTrackAnalysisTests {
         let json = """
         {"playlists":[{"uuid":"\(playlistID.uuidString)","name":"P","files":[
         {"uuid":"\(UUID().uuidString)","name":"\(trackName)","duration":600000,
-         "audioURL":"https://cdn.bambicloud.com/x.mp3","trackNum":0}]}]}
+         "audioURL":"https://cdn.example.com/x.mp3","trackNum":0}]}]}
         """
         return (Data(json.utf8), playlistID)
     }
@@ -26,11 +26,14 @@ struct DownloadedTrackAnalysisTests {
         documents: URL,
         autoAnalyse: Bool,
         onQueue: @escaping @MainActor (AudioFile) -> Void
-    ) throws -> (BambiCloudPlaylistImportViewModel, BambiCloudPlaylistImportPlan.Row) {
+    ) throws -> (PlaylistImportViewModel, PlaylistImportPlan.Row) {
         let (data, playlistID) = playlistJSON(trackName: "Fuck Doll")
-        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: playlistID)
+        let playlist = try GenericPlaylistJSON.playlist(from: data)
 
-        let downloader = PlaylistTrackDownloader(documentsURL: documents) { url in
+        let downloader = PlaylistTrackDownloader(
+            documentsURL: documents,
+            playlistSource: URL(string: "https://example.com/list.json")
+        ) { url in
             let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
             try Data(repeating: 7, count: 128).write(to: temp)
             let response = HTTPURLResponse(
@@ -42,14 +45,14 @@ struct DownloadedTrackAnalysisTests {
             return (temp, response)
         }
 
-        let model = BambiCloudPlaylistImportViewModel(
+        let model = PlaylistImportViewModel(
             availableAudioFiles: [],
             downloader: downloader,
             isAutoAnalyseEnabled: { autoAnalyse },
             analysisQueue: { audioFile in onQueue(audioFile) }
         )
 
-        let plan = BambiCloudPlaylistImporter().makePlan(
+        let plan = PlaylistImporter().makePlan(
             for: playlist,
             availableAudioFiles: []
         )

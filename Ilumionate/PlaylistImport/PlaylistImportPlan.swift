@@ -1,5 +1,5 @@
 //
-//  BambiCloudPlaylistImportPlan.swift
+//  PlaylistImportPlan.swift
 //  Ilumionate
 //
 
@@ -7,7 +7,7 @@ import Foundation
 
 /// A reviewable mapping from remote playlist tracks to audio already in the
 /// user's library.
-struct BambiCloudPlaylistImportPlan {
+struct PlaylistImportPlan {
     struct Row: Identifiable {
         /// Raw type deliberately absent: `.possibleDuplicate` carries the
         /// library file it may duplicate, and `rawValue` had no readers.
@@ -27,13 +27,13 @@ struct BambiCloudPlaylistImportPlan {
         /// keying rows by track collapses those into one — SwiftUI renders
         /// undefined results and every per-row action hits only the first copy.
         let id = UUID()
-        let track: BambiCloudPlaylist.Track
+        let track: SourcePlaylistTrack
         var status: Status
         var selectedAudioFileID: AudioFile.ID?
         let suggestedAudioFileIDs: [AudioFile.ID]
     }
 
-    let sourcePlaylist: BambiCloudPlaylist
+    let sourcePlaylist: SourcePlaylist
     private(set) var availableAudioFiles: [AudioFile]
     var rows: [Row]
 
@@ -139,7 +139,7 @@ struct BambiCloudPlaylistImportPlan {
         guard !items.isEmpty else { return nil }
 
         return Playlist(
-            name: sourcePlaylist.name,
+            name: sourcePlaylist.title,
             items: items,
             smartTransitions: true
         )

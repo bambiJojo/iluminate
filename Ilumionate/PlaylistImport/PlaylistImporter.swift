@@ -1,5 +1,5 @@
 //
-//  BambiCloudPlaylistImporter.swift
+//  PlaylistImporter.swift
 //  Ilumionate
 //
 
@@ -9,11 +9,11 @@ import Foundation
 ///
 /// A duration match can strengthen a title match but is never sufficient by
 /// itself. Each local file is automatically selected at most once.
-struct BambiCloudPlaylistImporter {
+struct PlaylistImporter {
     func makePlan(
-        for playlist: BambiCloudPlaylist,
+        for playlist: SourcePlaylist,
         availableAudioFiles: [AudioFile]
-    ) -> BambiCloudPlaylistImportPlan {
+    ) -> PlaylistImportPlan {
         var automaticallyUsedIDs = Set<AudioFile.ID>()
         let rows = playlist.tracks.map { track in
             let candidates = rankedCandidates(
@@ -27,7 +27,7 @@ struct BambiCloudPlaylistImporter {
             let runnerUpScore = selectable.dropFirst().first?.score ?? 0
             let margin = (best?.score ?? 0) - runnerUpScore
 
-            let status: BambiCloudPlaylistImportPlan.Row.Status
+            let status: PlaylistImportPlan.Row.Status
             let selectedID: AudioFile.ID?
             if let best, best.score >= 0.98, margin >= 0.04 {
                 status = .exact
@@ -47,7 +47,7 @@ struct BambiCloudPlaylistImporter {
                 automaticallyUsedIDs.insert(selectedID)
             }
 
-            return BambiCloudPlaylistImportPlan.Row(
+            return PlaylistImportPlan.Row(
                 track: track,
                 status: status,
                 selectedAudioFileID: selectedID,
@@ -55,7 +55,7 @@ struct BambiCloudPlaylistImporter {
             )
         }
 
-        return BambiCloudPlaylistImportPlan(
+        return PlaylistImportPlan(
             sourcePlaylist: playlist,
             availableAudioFiles: availableAudioFiles,
             rows: rows
@@ -63,7 +63,7 @@ struct BambiCloudPlaylistImporter {
     }
 
     func rankedAudioFiles(
-        for track: BambiCloudPlaylist.Track,
+        for track: SourcePlaylistTrack,
         availableAudioFiles: [AudioFile]
     ) -> [AudioFile] {
         rankedCandidates(
@@ -74,7 +74,7 @@ struct BambiCloudPlaylistImporter {
     }
 
     private func rankedCandidates(
-        for track: BambiCloudPlaylist.Track,
+        for track: SourcePlaylistTrack,
         availableAudioFiles: [AudioFile]
     ) -> [Candidate] {
         availableAudioFiles
@@ -94,10 +94,10 @@ struct BambiCloudPlaylistImporter {
     }
 
     private func matchScore(
-        track: BambiCloudPlaylist.Track,
+        track: SourcePlaylistTrack,
         audioFile: AudioFile
     ) -> Double {
-        let remoteTitle = AudioTitleNormalizer.normalize(track.name)
+        let remoteTitle = AudioTitleNormalizer.normalize(track.title)
         guard remoteTitle.count >= 4 else { return 0 }
         guard !hasTrackNumberConflict(track: track, audioFile: audioFile) else { return 0 }
 
@@ -159,17 +159,18 @@ struct BambiCloudPlaylistImporter {
     /// loser to `.missing` — where it gets downloaded as a duplicate.
     ///
     /// Only leading digits on both sides are compared. `track.trackNumber` is
-    /// deliberately not consulted: BambiCloud numbers from zero, so treating it
-    /// as the remote position made every `01 …` file conflict with the track it
-    /// belongs to and rejected an entire numbered library at once.
+    /// deliberately not consulted: sources disagree about whether the first
+    /// track is 0 or 1, and treating a zero-based position as the printed
+    /// number made every `01 …` file conflict with the track it belongs to,
+    /// rejecting an entire numbered library at once.
     private func hasTrackNumberConflict(
-        track: BambiCloudPlaylist.Track,
+        track: SourcePlaylistTrack,
         audioFile: AudioFile
     ) -> Bool {
         let localNumber = AudioTitleNormalizer.leadingTrackNumber(audioFile.filename)
             ?? AudioTitleNormalizer.leadingTrackNumber(audioFile.displayName)
         guard let localNumber,
-              let remoteNumber = AudioTitleNormalizer.leadingTrackNumber(track.name) else {
+              let remoteNumber = AudioTitleNormalizer.leadingTrackNumber(track.title) else {
             return false
         }
 
@@ -197,7 +198,7 @@ struct BambiCloudPlaylistImporter {
         // The whole remote title appearing inside a longer local name is the
         // prefix/suffix case, and is nearly as strong as an exact match.
         if remoteTokens.isSubset(of: localTokens) {
-            return 0.90
+            return 0.94
         }
 
         let commonCount = remoteTokens.intersection(localTokens).count

@@ -147,11 +147,13 @@ struct PlaylistLinkBrowserView: View {
         .background(.ultraThinMaterial)
     }
 
-    /// Only a link the importer can actually resolve arms the Import button, so
-    /// the user finds out here rather than after dismissing the browser.
+    /// Any web page can be handed to the importer. Whether it *is* a playlist
+    /// is decided by what the address returns, not by its shape — the importer
+    /// has no list of known services to check against — so this only rules out
+    /// addresses that could never be fetched.
     private var isPlaylistPage: Bool {
         guard let currentURL else { return false }
-        return (try? BambiCloudPlaylistLink(currentURL.absoluteString)) != nil
+        return (try? PlaylistSourceURL.normalized(currentURL.absoluteString)) != nil
     }
 
     private var displayTitle: String {
@@ -162,7 +164,7 @@ struct PlaylistLinkBrowserView: View {
     private var subtitle: String {
         guard let currentURL else { return "Loading…" }
         if isPlaylistPage {
-            return "Playlist link ready to import"
+            return "Tap Import to read this address as a playlist"
         }
         return currentURL.host(percentEncoded: false) ?? currentURL.absoluteString
     }

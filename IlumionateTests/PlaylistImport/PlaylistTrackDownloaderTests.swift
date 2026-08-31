@@ -13,7 +13,7 @@ struct PlaylistTrackDownloaderTests {
         name: String = "Rapid Induction",
         audioURL: String?,
         duration: Double = 162_000
-    ) throws -> BambiCloudPlaylist.Track {
+    ) throws -> SourcePlaylistTrack {
         let audioField = audioURL.map { "\"audioURL\": \"\($0)\"," } ?? ""
         let json = """
         {"playlists":[{"uuid":"\(UUID().uuidString)","name":"P","files":[
@@ -26,7 +26,7 @@ struct PlaylistTrackDownloaderTests {
         )
         let playlists = try #require(envelopeID["playlists"] as? [[String: Any]])
         let uuid = try #require(UUID(uuidString: playlists[0]["uuid"] as! String))
-        let playlist = try BambiCloudPlaylist.decode(from: data, expectedID: uuid)
+        let playlist = try GenericPlaylistJSON.playlist(from: data)
         return try #require(playlist.tracks.first)
     }
 
@@ -39,7 +39,8 @@ struct PlaylistTrackDownloaderTests {
     @Test func trackWithoutAudioURLReportsNoSource() async throws {
         let track = try makeTrack(audioURL: nil)
         let downloader = PlaylistTrackDownloader(
-            documentsURL: try temporaryDirectory()
+            documentsURL: try temporaryDirectory(),
+            playlistSource: URL(string: "https://example.com/list.json")
         ) { _ in
             Issue.record("Download attempted with no source")
             throw PlaylistTrackDownloadError.networkUnavailable
@@ -50,10 +51,27 @@ struct PlaylistTrackDownloaderTests {
         }
     }
 
+    @Test("With no known playlist source, nothing is downloadable")
+    func unknownPlaylistSourceRefusesEverything() async throws {
+        let track = try makeTrack(audioURL: "https://cdn.example.com/a.mp3")
+        let downloader = PlaylistTrackDownloader(
+            documentsURL: try temporaryDirectory(),
+            playlistSource: nil
+        ) { _ in
+            Issue.record("Download attempted with no playlist source")
+            throw PlaylistTrackDownloadError.networkUnavailable
+        }
+
+        await #expect(throws: PlaylistTrackDownloadError.unsupportedSource) {
+            try await downloader.download(track)
+        }
+    }
+
     @Test func offDomainSourceIsRefusedWithoutRequesting() async throws {
         let track = try makeTrack(audioURL: "https://cdn.evil.example/track.mp3")
         let downloader = PlaylistTrackDownloader(
-            documentsURL: try temporaryDirectory()
+            documentsURL: try temporaryDirectory(),
+            playlistSource: URL(string: "https://example.com/list.json")
         ) { _ in
             Issue.record("Download attempted for an off-domain source")
             throw PlaylistTrackDownloadError.networkUnavailable
@@ -66,10 +84,11 @@ struct PlaylistTrackDownloaderTests {
 
     @Test func lookalikeHostIsRefused() async throws {
         let track = try makeTrack(
-            audioURL: "https://bambicloud.com.attacker.example/track.mp3"
+            audioURL: "https://example.com.attacker.example/track.mp3"
         )
         let downloader = PlaylistTrackDownloader(
-            documentsURL: try temporaryDirectory()
+            documentsURL: try temporaryDirectory(),
+            playlistSource: URL(string: "https://example.com/list.json")
         ) { _ in
             Issue.record("Download attempted for a lookalike host")
             throw PlaylistTrackDownloadError.networkUnavailable
@@ -81,9 +100,10 @@ struct PlaylistTrackDownloaderTests {
     }
 
     @Test func plainHTTPSourceIsRefused() async throws {
-        let track = try makeTrack(audioURL: "http://cdn.bambicloud.com/track.mp3")
+        let track = try makeTrack(audioURL: "http://cdn.example.com/track.mp3")
         let downloader = PlaylistTrackDownloader(
-            documentsURL: try temporaryDirectory()
+            documentsURL: try temporaryDirectory(),
+            playlistSource: URL(string: "https://example.com/list.json")
         ) { _ in
             Issue.record("Download attempted over plain http")
             throw PlaylistTrackDownloadError.networkUnavailable
@@ -100,11 +120,14 @@ struct PlaylistTrackDownloaderTests {
         let documents = try temporaryDirectory()
         let track = try makeTrack(
             name: "Bubble Induction",
-            audioURL: "https://cdn.bambicloud.com/abc.mp3"
+            audioURL: "https://cdn.example.com/abc.mp3"
         )
         let payload = Data(repeating: 0, count: 2_048)
 
-        let downloader = PlaylistTrackDownloader(documentsURL: documents) { url in
+        let downloader = PlaylistTrackDownloader(
+            documentsURL: documents,
+            playlistSource: URL(string: "https://example.com/list.json")
+        ) { url in
             let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
             try payload.write(to: temp)
             let response = HTTPURLResponse(
@@ -137,9 +160,12 @@ struct PlaylistTrackDownloaderTests {
 
         let track = try makeTrack(
             name: "Bubble Induction",
-            audioURL: "https://cdn.bambicloud.com/abc.mp3"
+            audioURL: "https://cdn.example.com/abc.mp3"
         )
-        let downloader = PlaylistTrackDownloader(documentsURL: documents) { url in
+        let downloader = PlaylistTrackDownloader(
+            documentsURL: documents,
+            playlistSource: URL(string: "https://example.com/list.json")
+        ) { url in
             let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
             try Data(repeating: 1, count: 32).write(to: temp)
             let response = HTTPURLResponse(
@@ -167,10 +193,13 @@ struct PlaylistTrackDownloaderTests {
     /// A large file is no longer refused outright — it asks, reporting the size.
     @Test func oversizedTrackAsksForConfirmationInsteadOfFailing() async throws {
         let documents = try temporaryDirectory()
-        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/abc.mp3")
+        let track = try makeTrack(audioURL: "https://cdn.example.com/abc.mp3")
         let hugeByteCount: Int64 = 400_000_000
 
-        let downloader = PlaylistTrackDownloader(documentsURL: documents) { url in
+        let downloader = PlaylistTrackDownloader(
+            documentsURL: documents,
+            playlistSource: URL(string: "https://example.com/list.json")
+        ) { url in
             let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
             try Data(repeating: 0, count: 64).write(to: temp)
             let response = HTTPURLResponse(
@@ -196,10 +225,13 @@ struct PlaylistTrackDownloaderTests {
         let documents = try temporaryDirectory()
         let track = try makeTrack(
             name: "Bambi Therapy Pretty in Pink",
-            audioURL: "https://cdn.bambicloud.com/abc.mp3"
+            audioURL: "https://cdn.example.com/abc.mp3"
         )
 
-        let downloader = PlaylistTrackDownloader(documentsURL: documents) { url in
+        let downloader = PlaylistTrackDownloader(
+            documentsURL: documents,
+            playlistSource: URL(string: "https://example.com/list.json")
+        ) { url in
             let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
             try Data(repeating: 0, count: 64).write(to: temp)
             let response = HTTPURLResponse(
@@ -223,9 +255,10 @@ struct PlaylistTrackDownloaderTests {
     }
 
     @Test func expectedSizeReadsContentLengthWithoutFetching() async throws {
-        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/abc.mp3")
+        let track = try makeTrack(audioURL: "https://cdn.example.com/abc.mp3")
         let downloader = PlaylistTrackDownloader(
             documentsURL: try temporaryDirectory(),
+            playlistSource: URL(string: "https://example.com/list.json"),
             probe: { request in
                 #expect(request.httpMethod == "HEAD")
                 let response = HTTPURLResponse(
@@ -247,9 +280,10 @@ struct PlaylistTrackDownloaderTests {
     }
 
     @Test func serverErrorSurfacesAsNetworkFailure() async throws {
-        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/abc.mp3")
+        let track = try makeTrack(audioURL: "https://cdn.example.com/abc.mp3")
         let downloader = PlaylistTrackDownloader(
-            documentsURL: try temporaryDirectory()
+            documentsURL: try temporaryDirectory(),
+            playlistSource: URL(string: "https://example.com/list.json")
         ) { url in
             let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
             try Data().write(to: temp)
@@ -269,10 +303,13 @@ struct PlaylistTrackDownloaderTests {
 
     @Test("A saved download carries its fingerprint and its provenance")
     func savedDownloadCarriesIdentity() async throws {
-        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/a.mp3")
+        let track = try makeTrack(audioURL: "https://cdn.example.com/a.mp3")
         let documents = try temporaryDirectory()
 
-        let downloader = PlaylistTrackDownloader(documentsURL: documents) { _ in
+        let downloader = PlaylistTrackDownloader(
+            documentsURL: documents,
+            playlistSource: URL(string: "https://example.com/list.json")
+        ) { _ in
             let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
             try Data("audio-bytes".utf8).write(to: temp)
             return (temp, URLResponse())
@@ -284,9 +321,9 @@ struct PlaylistTrackDownloaderTests {
         }
 
         #expect(audioFile.contentFingerprint?.count == 64)
-        #expect(audioFile.remoteSource?.service == RemoteAudioSource.bambiCloudService)
-        #expect(audioFile.remoteSource?.trackID == track.id.uuidString)
-        #expect(audioFile.remoteSource?.url.absoluteString == "https://cdn.bambicloud.com/a.mp3")
+        #expect(audioFile.remoteSource?.service == "cdn.example.com")
+        #expect(audioFile.remoteSource?.trackID == track.id)
+        #expect(audioFile.remoteSource?.url.absoluteString == "https://cdn.example.com/a.mp3")
     }
 
     // The whole point of the feature: identical bytes must not become a second
@@ -294,11 +331,14 @@ struct PlaylistTrackDownloaderTests {
     // already created "Rapid Induction (1).mp3" before anything could object.
     @Test("Downloading content the library already holds writes nothing")
     func identicalContentIsNotSavedTwice() async throws {
-        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/a.mp3")
+        let track = try makeTrack(audioURL: "https://cdn.example.com/a.mp3")
         let documents = try temporaryDirectory()
         let payload = Data("audio-bytes".utf8)
 
-        let downloader = PlaylistTrackDownloader(documentsURL: documents) { _ in
+        let downloader = PlaylistTrackDownloader(
+            documentsURL: documents,
+            playlistSource: URL(string: "https://example.com/list.json")
+        ) { _ in
             let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
             try payload.write(to: temp)
             return (temp, URLResponse())
@@ -326,10 +366,13 @@ struct PlaylistTrackDownloaderTests {
 
     @Test("A distinct track still saves normally")
     func distinctContentStillSaves() async throws {
-        let track = try makeTrack(audioURL: "https://cdn.bambicloud.com/a.mp3")
+        let track = try makeTrack(audioURL: "https://cdn.example.com/a.mp3")
         let documents = try temporaryDirectory()
 
-        let downloader = PlaylistTrackDownloader(documentsURL: documents) { _ in
+        let downloader = PlaylistTrackDownloader(
+            documentsURL: documents,
+            playlistSource: URL(string: "https://example.com/list.json")
+        ) { _ in
             let temp = URL.temporaryDirectory.appending(path: UUID().uuidString)
             try Data("unique-bytes".utf8).write(to: temp)
             return (temp, URLResponse())

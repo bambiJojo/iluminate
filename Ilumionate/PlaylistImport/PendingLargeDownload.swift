@@ -33,14 +33,14 @@ struct PendingLargeDownload: Identifiable {
         switch scope {
         case .row:
             if let size {
-                return "This track is \(size). Download it to your library?"
+                return "This track is \(size). Download it only if you have permission and source authorization to save it."
             }
-            return "The size of this track is unknown. Download it to your library?"
+            return "The size is unknown. Download only if you have permission and source authorization to save this track."
         case .allMissing(let trackCount):
             if let size {
-                return "Downloading \(trackCount) tracks will use about \(size). Continue?"
+                return "Downloading \(trackCount) tracks will use about \(size). Continue only if you are authorized to save every track."
             }
-            return "Download \(trackCount) tracks to your library?"
+            return "Download \(trackCount) tracks only if you are authorized to save every one."
         }
     }
 }

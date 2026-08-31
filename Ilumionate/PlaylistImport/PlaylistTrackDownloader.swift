@@ -26,7 +26,19 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
     typealias Loader = @Sendable (URL) async throws -> (URL, URLResponse)
     typealias Prober = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
-    private static let allowedHostSuffix = "bambicloud.com"
+    /// Tracks must come from the same publisher as the playlist the user chose.
+    ///
+    /// This replaces a hardcoded site allowlist. The protection is the same —
+    /// a playlist response cannot redirect the download at an arbitrary server
+    /// — but it is now expressed relative to the source the *user* supplied,
+    /// so the app ships no knowledge of any particular service.
+    ///
+    /// Compared on the registrable domain (the last two labels), because media
+    /// is routinely served from a sibling host such as `cdn.` while the
+    /// playlist itself comes from `api.`. That is a deliberate loosening: a
+    /// publisher serving media from an unrelated domain is refused with
+    /// `unsupportedSource` rather than silently downloaded.
+    private let allowedDomain: String?
     /// Above this the user is asked before the bytes are spent, rather than
     /// being refused. There is no ceiling once they have said yes.
     static let confirmationThresholdBytes: Int64 = 100_000_000
@@ -36,26 +48,43 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
     private let probe: Prober
     private let documentsURL: URL
 
-    init(session: URLSession = .shared, documentsURL: URL = AppStoragePaths.managedAudio) {
+    init(
+        playlistSource: URL?,
+        session: URLSession = .shared,
+        documentsURL: URL = AppStoragePaths.managedAudio
+    ) {
         load = { try await session.download(from: $0) }
         probe = { try await session.data(for: $0) }
         self.documentsURL = documentsURL
+        allowedDomain = playlistSource.flatMap(Self.registrableDomain(of:))
     }
 
     init(
         documentsURL: URL,
+        playlistSource: URL? = nil,
         probe: @escaping Prober = { _ in (Data(), URLResponse()) },
         load: @escaping Loader
     ) {
         self.documentsURL = documentsURL
         self.probe = probe
         self.load = load
+        allowedDomain = playlistSource.flatMap(Self.registrableDomain(of:))
+    }
+
+    /// The last two labels of a host. Not a public-suffix lookup, so it is
+    /// approximate for multi-part suffixes; erring toward *refusing* a download
+    /// is the safe direction, and the user sees a named error either way.
+    static func registrableDomain(of url: URL) -> String? {
+        guard let host = url.host()?.lowercased(), !host.isEmpty else { return nil }
+        let labels = host.split(separator: ".")
+        guard labels.count >= 2 else { return host }
+        return labels.suffix(2).joined(separator: ".")
     }
 
     /// Asks the CDN how big the file is without fetching it, so the user can be
     /// told what a large download will cost before it starts. Returns nil when
     /// the server does not say.
-    func expectedSize(of track: BambiCloudPlaylist.Track) async throws -> Int64? {
+    func expectedSize(of track: SourcePlaylistTrack) async throws -> Int64? {
         let source = try validatedSource(for: track)
 
         var request = URLRequest(url: source, timeoutInterval: 15)
@@ -78,7 +107,7 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
     /// first, so a file the user already had was written a second time as
     /// "Name (1).mp3" before anything had a chance to object.
     func download(
-        _ track: BambiCloudPlaylist.Track,
+        _ track: SourcePlaylistTrack,
         allowingLargeFile: Bool = false,
         existing: DuplicateAudioIndex = DuplicateAudioIndex([])
     ) async throws -> PlaylistTrackDownloadOutcome {
@@ -120,8 +149,8 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
 
         let fingerprint = AudioFingerprintService.computeFingerprint(for: temporaryURL)
         let remoteSource = RemoteAudioSource(
-            service: RemoteAudioSource.bambiCloudService,
-            trackID: track.id.uuidString,
+            service: RemoteAudioSource.service(for: source),
+            trackID: track.id,
             url: source
         )
 
@@ -131,7 +160,7 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
                 contentFingerprint: fingerprint,
                 fileSize: byteCount,
                 duration: track.duration,
-                title: track.name
+                title: track.title
             )
         )
         // Only a conclusive verdict discards bytes already paid for. A merely
@@ -166,14 +195,19 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
     }
 
     private func validatedSource(
-        for track: BambiCloudPlaylist.Track
+        for track: SourcePlaylistTrack
     ) throws -> URL {
         guard let audioURL = track.audioURL else {
             throw PlaylistTrackDownloadError.noSourceAvailable
         }
+        // Fail closed. An unknown playlist source means there is nothing to
+        // check the track against, and "allow everything" is the wrong answer
+        // to that question — it would silently retire the protection whenever
+        // the source failed to resolve.
         guard audioURL.scheme?.lowercased() == "https",
-              let host = audioURL.host()?.lowercased(),
-              host == Self.allowedHostSuffix || host.hasSuffix(".\(Self.allowedHostSuffix)")
+              let allowedDomain,
+              let domain = Self.registrableDomain(of: audioURL),
+              domain == allowedDomain
         else {
             throw PlaylistTrackDownloadError.unsupportedSource
         }
@@ -183,7 +217,7 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
     /// Prefers the track's own title so the importer's title matching can find
     /// this file again on a later import.
     private func uniqueDestination(
-        for track: BambiCloudPlaylist.Track,
+        for track: SourcePlaylistTrack,
         source: URL
     ) -> URL {
         let sourceExtension = source.pathExtension.lowercased()
@@ -191,7 +225,7 @@ nonisolated struct PlaylistTrackDownloader: Sendable {
             ? sourceExtension
             : "mp3"
 
-        var safeName = track.name
+        var safeName = track.title
             .replacing(/[\/\\:]+/, with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if safeName.isEmpty {

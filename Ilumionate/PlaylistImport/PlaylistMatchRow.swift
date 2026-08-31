@@ -1,12 +1,12 @@
 //
-//  BambiCloudPlaylistMatchRow.swift
+//  PlaylistMatchRow.swift
 //  Ilumionate
 //
 
 import SwiftUI
 
-struct BambiCloudPlaylistMatchRow: View {
-    let row: BambiCloudPlaylistImportPlan.Row
+struct PlaylistMatchRow: View {
+    let row: PlaylistImportPlan.Row
     let selectedAudioFile: AudioFile?
     let isDownloading: Bool
     let downloadError: String?
@@ -33,7 +33,7 @@ struct BambiCloudPlaylistMatchRow: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                    Text(row.track.name)
+                    Text(row.track.title)
                         .font(TranceTypography.body)
                         .foregroundStyle(.textPrimary)
 
@@ -79,7 +79,7 @@ struct BambiCloudPlaylistMatchRow: View {
                     .buttonStyle(.bordered)
                     .tint(.roseGold)
                     .disabled(isDownloading)
-                    .accessibilityLabel("Download \(row.track.name) from the publisher")
+                    .accessibilityLabel("Download \(row.track.title) from the publisher")
                 }
             }
 

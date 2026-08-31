@@ -78,19 +78,42 @@ struct AudioFileIdentityEqualityTests {
         #expect(a != b)
     }
 
+    @Test("The service namespace is derived from the URL, not a fixed list")
+    func serviceIsDerivedFromTheHost() throws {
+        let url = try #require(URL(string: "https://cdn.example.com/one.mp3"))
+
+        #expect(RemoteAudioSource.service(for: url) == "cdn.example.com")
+    }
+
+    @Test("A leading www is not a different publisher")
+    func serviceIgnoresWWW() throws {
+        let bare = try #require(URL(string: "https://example.com/a.mp3"))
+        let prefixed = try #require(URL(string: "https://www.example.com/a.mp3"))
+
+        #expect(RemoteAudioSource.service(for: bare) == RemoteAudioSource.service(for: prefixed))
+    }
+
+    @Test("Different publishers get different namespaces")
+    func distinctHostsDoNotCollide() throws {
+        let one = try #require(URL(string: "https://a.example/x.mp3"))
+        let two = try #require(URL(string: "https://b.example/x.mp3"))
+
+        #expect(RemoteAudioSource.service(for: one) != RemoteAudioSource.service(for: two))
+    }
+
     @Test("Files differing only in provenance are not equal")
     func provenanceParticipatesInEquality() throws {
         var a = makeFile()
         var b = a
         a.remoteSource = RemoteAudioSource(
-            service: RemoteAudioSource.bambiCloudService,
+            service: RemoteAudioSource.service(for: try #require(URL(string: "https://cdn.example.com/one.mp3"))),
             trackID: "one",
-            url: try #require(URL(string: "https://cdn.bambicloud.com/one.mp3"))
+            url: try #require(URL(string: "https://cdn.example.com/one.mp3"))
         )
         b.remoteSource = RemoteAudioSource(
-            service: RemoteAudioSource.bambiCloudService,
+            service: RemoteAudioSource.service(for: try #require(URL(string: "https://cdn.example.com/two.mp3"))),
             trackID: "two",
-            url: try #require(URL(string: "https://cdn.bambicloud.com/two.mp3"))
+            url: try #require(URL(string: "https://cdn.example.com/two.mp3"))
         )
 
         #expect(a != b)

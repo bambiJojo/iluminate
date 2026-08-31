@@ -27,7 +27,10 @@ nonisolated struct DuplicateAudioIndex: Sendable {
 
     func verdict(for candidate: DuplicateAudioCandidate) -> DuplicateAudioVerdict {
         if let source = candidate.remoteSource,
-           let match = best(where: { $0.file.remoteSource == source }) {
+           let match = best(where: {
+               guard let stored = $0.file.remoteSource else { return false }
+               return Self.sameRemoteIdentity(stored, source)
+           }) {
             return .identical(existing: match.file.id)
         }
 
@@ -62,6 +65,22 @@ nonisolated struct DuplicateAudioIndex: Sendable {
         }
 
         return .distinct
+    }
+
+    /// A publisher's track identity survives CDN URL changes. UUID-shaped IDs
+    /// are also case-insensitive even when one JSON response changes casing.
+    private static func sameRemoteIdentity(
+        _ lhs: RemoteAudioSource,
+        _ rhs: RemoteAudioSource
+    ) -> Bool {
+        guard lhs.service.caseInsensitiveCompare(rhs.service) == .orderedSame else {
+            return false
+        }
+        if let lhsUUID = UUID(uuidString: lhs.trackID),
+           let rhsUUID = UUID(uuidString: rhs.trackID) {
+            return lhsUUID == rhsUUID
+        }
+        return lhs.trackID == rhs.trackID
     }
 
     /// The richest entry satisfying `predicate`.

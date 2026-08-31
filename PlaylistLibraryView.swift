@@ -81,7 +81,7 @@ struct PlaylistLibraryView: View {
                 // The request carries its own library snapshot; an isPresented
                 // sheet would build the importer from the pre-update body and
                 // hand it an empty library.
-                BambiCloudPlaylistImportView(
+                PlaylistImportView(
                     audioFiles: request.audioFiles,
                     onImport: savePlaylist
                 )

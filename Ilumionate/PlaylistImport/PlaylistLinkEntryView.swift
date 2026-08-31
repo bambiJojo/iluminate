@@ -1,20 +1,20 @@
 //
-//  BambiCloudPlaylistLinkEntryView.swift
+//  PlaylistLinkEntryView.swift
 //  Ilumionate
 //
 
 import SwiftUI
 
-struct BambiCloudPlaylistLinkEntryView: View {
-    @Bindable var model: BambiCloudPlaylistImportViewModel
+struct PlaylistLinkEntryView: View {
+    @Bindable var model: PlaylistImportViewModel
 
     var body: some View {
         Form {
             Section {
                 TextField(
-                    "Shared playlist link",
+                    "Playlist address",
                     text: $model.linkText,
-                    prompt: Text("https://bambicloud.com/playlist/…")
+                    prompt: Text("https://…")
                         .foregroundStyle(.textLight)
                 )
                 .labelsHidden()
@@ -40,7 +40,7 @@ struct BambiCloudPlaylistLinkEntryView: View {
                     .font(TranceTypography.caption)
                     .foregroundStyle(.textSecondary)
             } footer: {
-                Text("The link is used only to read the playlist name and track order. Audio is never downloaded.")
+                Text("The link first reads only the playlist name and track order. Audio is downloaded only when you explicitly choose a published track you have permission and source authorization to save.")
                     .font(TranceTypography.caption)
                     .foregroundStyle(.textLight)
             }
