@@ -10,7 +10,7 @@ import Testing
 @MainActor
 struct StagedAnalysisPipelineTests {
     @Test("Whisper prefetch waits for content analysis to release on-device ML resources", .timeLimit(.minutes(1)))
-    func keepsWhisperPrefetchOutOfContentAnalysis() async {
+    func keepsWhisperPrefetchOutOfContentAnalysis() async throws {
         let progressURL = URL.temporaryDirectory
             .appending(path: "AnalysisProgress-\(UUID().uuidString).json")
         let cacheURL = URL.temporaryDirectory
@@ -43,10 +43,9 @@ struct StagedAnalysisPipelineTests {
             await manager.queueForAnalysis([firstFile, secondFile], priority: testAnalysisPriority)
         }
 
-        // Waits on the signal rather than a deadline: this takes as long as
-        // the machine needs, and hangs visibly if the pipeline never gets there
-        // instead of failing an arbitrary timeout under load.
-        await probe.waitForActiveAnalysis()
+        try await waitUntil("content analysis to start") {
+            await probe.hasActiveAnalysis
+        }
 
         try? await Task.sleep(for: .milliseconds(100))
         let observedOverlap = await probe.didObserveAnalysisAndTranscriptionOverlap
@@ -63,7 +62,7 @@ struct StagedAnalysisPipelineTests {
     }
 
     @Test("A transient failure is immediately retried from its checkpoint", .timeLimit(.minutes(1)))
-    func automaticallyRetriesOnceWithoutRepeatingTranscription() async {
+    func automaticallyRetriesOnceWithoutRepeatingTranscription() async throws {
         let progressURL = URL.temporaryDirectory
             .appending(path: "AnalysisProgress-\(UUID().uuidString).json")
         let cacheURL = URL.temporaryDirectory
@@ -152,7 +151,6 @@ private actor StagedAnalysisProbe {
     private var observedOverlap = false
     private var firstAnalysisReleased = false
     private var releaseContinuations: [CheckedContinuation<Void, Never>] = []
-    private var startContinuations: [CheckedContinuation<Void, Never>] = []
 
     var didObserveAnalysisAndTranscriptionOverlap: Bool {
         observedOverlap
@@ -170,23 +168,6 @@ private actor StagedAnalysisProbe {
 
     func analysisStarted() {
         activeAnalysisCount += 1
-        let waiting = startContinuations
-        startContinuations.removeAll()
-        waiting.forEach { $0.resume() }
-    }
-
-    /// Suspends until content analysis actually begins.
-    ///
-    /// Replaces a poll against a 15-second deadline. `AnalysisStateManager` is
-    /// `@MainActor`, so under the full suite — where dozens of `@MainActor`
-    /// suites queue on one actor — the pipeline could not reach this state
-    /// inside the deadline and the test failed on a starved machine rather than
-    /// on anything about the pipeline.
-    func waitForActiveAnalysis() async {
-        guard activeAnalysisCount == 0 else { return }
-        await withCheckedContinuation { continuation in
-            startContinuations.append(continuation)
-        }
     }
 
     func analysisFinished() {

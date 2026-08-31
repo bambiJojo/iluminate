@@ -216,6 +216,20 @@ func waitUntil(
     guard condition() else { throw WaitTimedOut(label: label) }
 }
 
+@MainActor
+func waitUntil(
+    _ label: String,
+    polls: Int = 400,
+    interval: Duration = .milliseconds(10),
+    _ condition: () async -> Bool
+) async throws {
+    for _ in 0..<polls {
+        if await condition() { return }
+        try await Task.sleep(for: interval)
+    }
+    guard await condition() else { throw WaitTimedOut(label: label) }
+}
+
 /// Priority the pipeline tests drive the analysis queue at.
 ///
 /// Never `.background`: iOS throttles that QoS hard, so a queue drained at the

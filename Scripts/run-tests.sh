@@ -59,13 +59,36 @@ case " ${args[*]} " in
         ;;
 esac
 
+# Simulator clones contend heavily for the same MainActor- and ML-driven
+# pipeline tests. On this project parallel iOS runs abort after a rotating test
+# hits its one-minute limit, while the complete serial suite finishes in under
+# a minute. Respect an explicit caller choice; otherwise use the reliable
+# default only for iOS Simulator destinations. See ERRORS.md ERR-028.
+case " ${args[*]} " in
+    *"platform=iOS Simulator"*)
+        case " ${args[*]} " in
+            *" -parallel-testing-enabled "*) ;;
+            *) args+=(-parallel-testing-enabled NO) ;;
+        esac
+        ;;
+esac
+
 log="$(mktemp -t ilumionate-tests.XXXXXX)"
 trap 'rm -f "$log"' EXIT
 
 xcodebuild "${args[@]}" test 2>&1 | tee "$log"
 status="${PIPESTATUS[0]}"
 
+# Two mutually exclusive output formats. Parallel runs print XCTest-style
+# "Test case ..." lines; serial runs (-parallel-testing-enabled NO) print Swift
+# Testing's own summary instead and no "Test case" lines at all. Counting only
+# the first made every serial run look like it executed nothing, which tripped
+# the zero-test guard below on a fully passing suite. See ERRORS.md ERR-030.
 executed="$(grep -c '^Test case ' "$log" || true)"
+swift_testing="$(sed -n 's/.*Test run with \([0-9]\{1,\}\) tests\{0,1\} in .*/\1/p' "$log" | tail -1)"
+if [ -n "$swift_testing" ]; then
+    executed=$((executed + swift_testing))
+fi
 
 if [ "$status" -eq 0 ] && [ "$executed" -eq 0 ]; then
     cat >&2 <<'EOF'
