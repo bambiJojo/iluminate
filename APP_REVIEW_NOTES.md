@@ -5,14 +5,16 @@ LumeSync does not require an account or login. All shipping features are availab
 ## Suggested review path
 
 1. Complete onboarding. The flashing-light warning is required. Camera attention checking and anonymous analytics are both optional; choose **Not Now** to continue without either.
-2. Open **Library** and tap **+** to import an MP3 or M4A file. Core transcription, timing, and structure analysis run on the device. The first analysis may download a speech-recognition model; imported audio is not uploaded with that download.
+2. Open **Library** and tap **+** to import an MP3 or M4A file. Core transcription, timing, and structure analysis run on the device. The first analysis may download the approximately 140 MB WhisperKit `base` model from Hugging Face; download time depends on the network and progress appears in the Analysis Queue. Imported audio is not uploaded with that download.
 3. Open **Reader**. The bundled **Calm Boundaries** script lets you test paced reading immediately. Tap **+** to import a text document or add a user-chosen HTTP(S) website. The app has no curated website directory, search recommendations, or bundled explicit stories. Saving a visible web page requires a separate acknowledgement that the user has permission to import it.
 4. Open **Create** to configure Flash, Colour, Bilateral, or Visuals sessions. Flashing modes remain behind the safety acknowledgement. The Close control stops a running session; after the full controls hide, a persistent **Stop session** button remains on-screen.
-5. Open **Settings** to inspect privacy controls. Anonymous TelemetryDeck analytics are off until the user opts in and never include imported content, filenames, transcripts, or reading-source URLs.
+5. Open **Settings** to inspect privacy controls. Anonymous TelemetryDeck analytics are off until the user opts in and never include imported content, filenames, transcripts, or reading-source URLs. **Clear All Data** removes local content, settings, downloaded models, browser website data, and local analytics state, and revokes analytics consent.
 
 ## Platform behavior
 
 The complete reader, library, player, custom visual tools, and local audio analysis work on iOS 18 and later. On compatible iOS 26 devices, analysis may additionally use Apple's on-device Foundation Models. On iOS 18, local keyword, metadata, and audio heuristics provide the fallback.
+
+On iOS 26, when the on-device analysis identifies both a spoken track title and creator, the app may send only those two inferred strings to Apple's iTunes Search API to verify public catalog metadata. It does not send the audio file or full transcript.
 
 ## Content disclosure
 

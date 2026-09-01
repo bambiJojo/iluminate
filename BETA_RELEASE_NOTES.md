@@ -16,6 +16,9 @@ patterns. This release candidate supports iPhone and iPad on iOS 18 or later.
   you opt in.
 - Relaunch the app and confirm that imported content, progress, and settings are
   preserved.
+- As a final test, use Clear All Data in Settings and confirm that imported
+  content, custom websites, progress, browser data, and analytics consent are
+  removed.
 
 User-provided hypnosis and mature-content classification remain supported. The
 app does not include or recommend a directory of adult websites, stories, or
@@ -33,6 +36,8 @@ local keyword, metadata, and audio heuristics instead.
 Audio, transcripts, documents, reading history, and generated session data stay
 on the device. Optional TelemetryDeck analytics are off by default and do not
 include imported content, filenames, transcripts, or reading-source URLs.
+On iOS 26, an inferred track title and creator may be checked against Apple's
+public catalog; the audio file and full transcript are not sent.
 
 ## Visual-safety reminder
 
