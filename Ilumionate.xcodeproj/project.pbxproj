@@ -923,7 +923,7 @@
 				CODE_SIGN_ENTITLEMENTS = Ilumionate/Ilumionate.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Ilumionate/IlumionateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10028;
+				CURRENT_PROJECT_VERSION = 10029;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -971,7 +971,7 @@
 				CODE_SIGN_ENTITLEMENTS = Ilumionate/Ilumionate.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Ilumionate/IlumionateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10028;
+				CURRENT_PROJECT_VERSION = 10029;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1286,7 +1286,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = IlumionateShareExtension/IlumionateShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10028;
+				CURRENT_PROJECT_VERSION = 10029;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
@@ -1321,7 +1321,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = IlumionateShareExtension/IlumionateShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10028;
+				CURRENT_PROJECT_VERSION = 10029;
 				DEVELOPMENT_TEAM = GUHEBKT9SX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = IlumionateShareExtension/Info.plist;
