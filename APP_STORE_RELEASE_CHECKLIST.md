@@ -307,8 +307,8 @@ Current App Store Connect validation state:
 
 - [x] Entered a monitored review contact name, phone, and email.
 - [x] Review notes state that no account/login is required and `demoAccountRequired` is false.
-- [ ] Attach or provide a small, rights-cleared sample audio/text file so the reviewer can exercise import, analysis, reading, and playback without third-party content.
-- [ ] Give concise steps to reach every non-obvious feature: imports, share extension, camera attention monitoring, analysis/model download, reading mode, audio-reactive visuals, and flashing-light controls.
+- [x] Uploaded reviewer attachment `LumeSync-1.0-App-Review-Samples-v2.zip` (`d18ad3f4-e4c3-4221-bbd6-ded58500edcb`, `UPLOAD_COMPLETE`): original text, a 36.5-second macOS-synthesized AAC narration, and a rights/instructions note. ZIP SHA-256: `cf3e575f6d2a7e8d8a450fbce77836c27fd7183b34b29b16fceda8ccb09551de`.
+- [x] Review notes give concise steps for onboarding, attached audio/text imports, analysis/model download, Reader/web imports, Create/visual controls, flashing safety/stop controls, and privacy/deletion settings.
 - [x] Review notes explain the optional first-use WhisperKit model download (approximately 140 MB), host, local storage, and what the reviewer should expect.
 - [x] Review notes explain that optional TelemetryDeck analytics defaults off and where to inspect the privacy controls.
 - [x] Review notes explain on-device analysis, the optional model download, and that imported audio is not uploaded with it.
@@ -318,6 +318,7 @@ Current App Store Connect validation state:
 - [x] Review notes disclose the iOS 18 fallback and optional iOS 26 Foundation Models enhancement.
 - [x] Review notes state that the app is intended for unlisted distribution for a limited adult community using its own authorized material.
 - [x] Review notes provide a complete no-login path and do not rely on contacting the developer for basic access.
+- [x] App Store Connect review notes match `APP_REVIEW_NOTES.md` at SHA-256 `faceaa6db0ec352cbdd76dc4034994fc7248c0121e08c13e2e01a2783f83d4a9`.
 
 ## 13. Submission and unlisted-request sequence
 
