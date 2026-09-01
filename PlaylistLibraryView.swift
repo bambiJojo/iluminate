@@ -20,8 +20,6 @@ struct PlaylistLibraryView: View {
     @State private var editingPlaylist: Playlist?
     @State private var playingPlaylist: Playlist?
     @State private var importRequest: PlaylistImportRequest?
-    @State private var showingLinkBrowser = false
-    @State private var pendingLink: String?
 
     var body: some View {
         NavigationStack {
@@ -49,14 +47,6 @@ struct PlaylistLibraryView: View {
 
                         Button("Import from Link", systemImage: "link") {
                             showPlaylistImporter()
-                        }
-
-                        // Browsing for a playlist used to require making an
-                        // empty playlist first, because the browser was only
-                        // reachable from the editor's toolbar.
-                        Button("Browse for a Playlist", systemImage: "safari") {
-                            TranceHaptics.shared.light()
-                            showingLinkBrowser = true
                         }
                     }
                     .tint(.roseGold)
@@ -86,12 +76,6 @@ struct PlaylistLibraryView: View {
                     onImport: savePlaylist
                 )
             }
-            .platformFullScreenCover(
-                isPresented: $showingLinkBrowser,
-                onDismiss: startPendingImport
-            ) {
-                PlaylistLinkBrowserView { pendingLink = $0 }
-            }
             .platformFullScreenCover(item: $playingPlaylist) { playlist in
                 UnifiedPlayerView(mode: .playlist(playlist: playlist), engine: engine)
             }
@@ -102,17 +86,6 @@ struct PlaylistLibraryView: View {
 
     private func createNewPlaylist() {
         editingPlaylist = Playlist(name: "")
-    }
-
-    /// Opens the importer on the link the browser landed on, skipping link
-    /// entry. Deferred to dismissal: a sheet presented from inside a cover that
-    /// is still leaving never appears.
-    private func startPendingImport() {
-        guard let link = pendingLink else { return }
-        pendingLink = nil
-        let files = AudioLibraryStore.load()
-        availableAudioFiles = files
-        importRequest = PlaylistImportRequest(audioFiles: files, initialLink: link)
     }
 
     private func showPlaylistImporter() {

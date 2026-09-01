@@ -69,8 +69,6 @@ struct LibraryView: View {
     /// Audio manager first, so it hosts the three import sources.
     @State private var acquisition = AudioAcquisition()
     @State private var playlistImportRequest: PlaylistImportRequest?
-    @State private var showingPlaylistLinkBrowser = false
-    @State private var pendingPlaylistLink: String?
 
     var body: some View {
         // The banner sits outside the NavigationStack so it stays visible over
@@ -230,12 +228,6 @@ struct LibraryView: View {
                     onImport: { imported in upsertPlaylist(imported) }
                 )
             }
-            .platformFullScreenCover(
-                isPresented: $showingPlaylistLinkBrowser,
-                onDismiss: startPendingPlaylistImport
-            ) {
-                PlaylistLinkBrowserView { pendingPlaylistLink = $0 }
-            }
             .task {
                 // Refreshing here rather than inside the model keeps the
                 // acquisition flow ignorant of who is hosting it.
@@ -273,7 +265,6 @@ struct LibraryView: View {
             acquisition: acquisition,
             onNewPlaylist: { editingPlaylist = Playlist(name: "") },
             onImportPlaylistLink: { playlistImportRequest = PlaylistImportRequest(audioFiles: audioFiles) },
-            onBrowseForPlaylist: { showingPlaylistLinkBrowser = true },
             isCheckingIncomingFiles: isCheckingIncomingFiles,
             onCheckIncomingFiles: onCheckIncomingFiles,
             onManageAudio: { showingSessionsManager = true }
@@ -570,18 +561,6 @@ struct LibraryView: View {
 
     private func loadPlaylists() {
         playlists = PlaylistStore.load()
-    }
-
-    /// Opens the importer on the link the browser landed on. Deferred to the
-    /// browser's dismissal because presenting a sheet from inside a full screen
-    /// cover that is still on its way out drops the presentation.
-    private func startPendingPlaylistImport() {
-        guard let link = pendingPlaylistLink else { return }
-        pendingPlaylistLink = nil
-        playlistImportRequest = PlaylistImportRequest(
-            audioFiles: audioFiles,
-            initialLink: link
-        )
     }
 
     private func playPlaylist(_ playlist: Playlist) {

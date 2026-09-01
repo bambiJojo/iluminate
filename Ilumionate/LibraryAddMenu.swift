@@ -7,7 +7,7 @@
 //  Sessions and playlists are both added from this point, and the two used to
 //  be several taps apart behind different screens — audio behind the Audio
 //  manager and an action sheet, playlists behind the Playlists sheet. Naming
-//  all six destinations here makes the cost of each one tap.
+//  the destinations here makes the cost of each one tap.
 //
 
 import SwiftUI
@@ -17,7 +17,6 @@ struct LibraryAddMenu: View {
 
     let onNewPlaylist: () -> Void
     let onImportPlaylistLink: () -> Void
-    let onBrowseForPlaylist: () -> Void
     let isCheckingIncomingFiles: Bool
     let onCheckIncomingFiles: () -> Void
     /// Select, rename, find duplicates — management, not adding. It lives at the
@@ -42,10 +41,6 @@ struct LibraryAddMenu: View {
             Button("Import from Link", systemImage: "link.badge.plus") {
                 TranceHaptics.shared.light()
                 onImportPlaylistLink()
-            }
-            Button("Browse for a Playlist", systemImage: "safari") {
-                TranceHaptics.shared.light()
-                onBrowseForPlaylist()
             }
         }
 
