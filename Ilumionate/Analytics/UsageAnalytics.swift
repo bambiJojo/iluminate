@@ -14,6 +14,9 @@
 
 import Foundation
 import Observation
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
 #if canImport(TelemetryDeck)
 import TelemetryDeck
 #endif
@@ -151,6 +154,55 @@ final class UsageAnalytics {
             Self.telemetryDeckConfig?.analyticsDisabled = !enabled
             Self.telemetryDeckConfig?.sessionStatsEnabled = enabled
         }
+        #endif
+    }
+
+    /// Revokes consent and removes analytics state stored on this device.
+    ///
+    /// Replacing the SDK manager with a disabled instance also abandons any
+    /// unsent in-memory signals. `AppSettingsManager.clearAllData` separately
+    /// removes the app's cache directory, including TelemetryDeck's disk cache.
+    func resetForDataDeletion(appID rawAppID: String? = nil) {
+        let keys = [
+            Self.preferenceKey,
+            Self.consentAnsweredKey,
+            Self.legacyPreferenceKey,
+            Self.activationStartKey,
+            Self.activationCompletedKey,
+            Self.lastActiveDayKey,
+        ]
+        keys.forEach(defaults.removeObject(forKey:))
+
+        #if canImport(TelemetryDeck)
+        Self.telemetryDeckConfig?.analyticsDisabled = true
+        Self.telemetryDeckConfig?.sessionStatsEnabled = false
+
+        let appID = Self.normalizedAppID(rawAppID ?? Self.appID)
+        if let appID {
+            if let suiteName = Self.telemetryDeckDefaultsSuiteName(appID: appID) {
+                UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+            }
+
+            let disabledConfig = Self.makeTelemetryDeckConfig(
+                appID: appID,
+                analyticsEnabled: false
+            )
+            TelemetryDeck.initialize(config: disabledConfig)
+        }
+
+        Self.telemetryDeckConfig = nil
+        Self.isTelemetryDeckConfigured = false
+        #endif
+    }
+
+    private static func telemetryDeckDefaultsSuiteName(appID: String) -> String? {
+        #if canImport(CryptoKit)
+        let digest = SHA256.hash(data: Data(appID.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return "com.telemetrydeck.\(digest.suffix(12))"
+        #else
+        return nil
         #endif
     }
 

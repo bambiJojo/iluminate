@@ -7,6 +7,9 @@
 //
 
 import Foundation
+#if canImport(WebKit)
+import WebKit
+#endif
 
 @MainActor
 enum AppSettingsManager {
@@ -248,54 +251,79 @@ enum AppSettingsManager {
         fileManager: FileManager = .default,
         documentsDirectory: URL = URL.documentsDirectory,
         applicationSupportDirectory: URL = AppStoragePaths.supportRoot,
+        cachesDirectory: URL = URL.cachesDirectory,
         audioLibraryStorage: AudioLibraryStorage = .standard,
         resetAnalysisPreferences: Bool = true,
-        clearSharedHistory: Bool = true
+        clearSharedHistory: Bool = true,
+        clearSharedRuntimeState: Bool = true
     ) async throws {
+        if clearSharedRuntimeState {
+            // Revoke analytics before deleting its persisted state so nothing
+            // generated during cleanup can be queued for transmission.
+            UsageAnalytics.shared.resetForDataDeletion()
+            URLCache.shared.removeAllCachedResponses()
+            HTTPCookieStorage.shared.removeCookies(since: .distantPast)
+            #if canImport(WebKit)
+            await clearWebsiteData()
+            #endif
+        }
+
         if clearSharedHistory {
             SessionHistoryManager.shared.clearHistory()
         } else {
             defaults.removeObject(forKey: Key.sessionHistory)
         }
 
-        let keysToRemove = [
-            Key.profileName,
-            Key.profileGoal,
-            Key.audioFiles,
-            Key.sessionHistory,
-            Key.lastSessionId,
-            Key.lastSessionProgress,
-            Key.hasSeenFlashWarning,
-            Key.hasSeenLightSyncWarning,
-            Key.hasCompletedOnboarding,
-            Key.soundCloudClientId,
-            Key.soundCloudSecret,
-            Key.soundCloudAccessToken
-        ]
-        keysToRemove.forEach(defaults.removeObject(forKey:))
+        // This action promises to remove all app data, so erase every value in
+        // the supplied domain. This includes custom reading sources, presets,
+        // playback progress, and future preferences that are not yet enumerated
+        // by `Key`.
+        defaults.dictionaryRepresentation().keys.forEach(defaults.removeObject(forKey:))
 
         try await AudioLibraryStore.deleteLibrary(storage: audioLibraryStorage)
 
-        removeKeys(withPrefix: Key.streamingTrackPrefix, defaults: defaults)
         resetPreferences(
             defaults: defaults,
             resetAnalysisPreferences: resetAnalysisPreferences
         )
 
-        if fileManager.fileExists(atPath: documentsDirectory.path()) {
-            let items = try fileManager.contentsOfDirectory(
-                at: documentsDirectory,
-                includingPropertiesForKeys: nil
-            )
-            for item in items {
-                try fileManager.removeItem(at: item)
-            }
+        try removeContents(of: documentsDirectory, fileManager: fileManager)
+
+        if clearSharedRuntimeState {
+            try removeContents(of: cachesDirectory, fileManager: fileManager)
         }
 
         if fileManager.fileExists(atPath: applicationSupportDirectory.path()) {
             try fileManager.removeItem(at: applicationSupportDirectory)
         }
     }
+
+    private static func removeContents(
+        of directory: URL,
+        fileManager: FileManager
+    ) throws {
+        guard fileManager.fileExists(atPath: directory.path()) else { return }
+        let items = try fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )
+        for item in items {
+            try fileManager.removeItem(at: item)
+        }
+    }
+
+    #if canImport(WebKit)
+    private static func clearWebsiteData() async {
+        await withCheckedContinuation { continuation in
+            WKWebsiteDataStore.default().removeData(
+                ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+                modifiedSince: .distantPast
+            ) {
+                continuation.resume()
+            }
+        }
+    }
+    #endif
 
     private static func sessionHistory(defaults: UserDefaults) -> [SessionHistoryEntry] {
         guard

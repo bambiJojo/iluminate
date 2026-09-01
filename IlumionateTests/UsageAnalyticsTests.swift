@@ -134,6 +134,34 @@ struct UsageAnalyticsTests {
     }
 
     @Test
+    func dataDeletionRevokesConsentAndSuppressesFutureEvents() {
+        let appID = "1A7508D7-E62A-4429-9F51-D091C879D280"
+        let telemetrySuiteName = "com.telemetrydeck.cd587e616e37"
+        let defaults = makeEnabledDefaults()
+        defaults.set(true, forKey: UsageAnalytics.legacyPreferenceKey)
+        defaults.set(Date(), forKey: UsageAnalytics.activationStartKey)
+        defaults.set(true, forKey: UsageAnalytics.activationCompletedKey)
+        defaults.set(Date(), forKey: UsageAnalytics.lastActiveDayKey)
+        let telemetryDefaults = UserDefaults(suiteName: telemetrySuiteName)!
+        telemetryDefaults.set(Data("session".utf8), forKey: "recentSessions")
+        var captured: [AnalyticsEvent] = []
+        let analytics = UsageAnalytics(defaults: defaults, emit: { captured.append($0) })
+
+        analytics.screen(.home)
+        analytics.resetForDataDeletion(appID: appID)
+        analytics.screen(.library)
+
+        #expect(analytics.hasAnsweredConsent == false)
+        #expect(analytics.isEnabled == false)
+        #expect(defaults.object(forKey: UsageAnalytics.legacyPreferenceKey) == nil)
+        #expect(defaults.object(forKey: UsageAnalytics.activationStartKey) == nil)
+        #expect(defaults.object(forKey: UsageAnalytics.activationCompletedKey) == nil)
+        #expect(defaults.object(forKey: UsageAnalytics.lastActiveDayKey) == nil)
+        #expect(telemetryDefaults.object(forKey: "recentSessions") == nil)
+        #expect(captured == [AnalyticsEvent("screen.home")])
+    }
+
+    @Test
     func missingTelemetryDeckAppIDLeavesDefaultEmitterSafe() {
         UsageAnalytics.configure(appID: "")
         let analytics = UsageAnalytics(defaults: makeDefaults())

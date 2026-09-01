@@ -152,6 +152,10 @@ struct AppSettingsManagerTests {
         defaults.set(true, forKey: AppSettingsManager.Key.hasCompletedOnboarding)
         defaults.set("client", forKey: AppSettingsManager.Key.soundCloudClientId)
         defaults.set("cached", forKey: "\(AppSettingsManager.Key.streamingTrackPrefix)test")
+        defaults.set(Data("source".utf8), forKey: "readingSourceCustomLinks")
+        defaults.set(Data("preset".utf8), forKey: "textTranceReaderPresets.v1")
+        defaults.set(Data("progress".utf8), forKey: PlaybackProgressStore.storageKey)
+        defaults.set(Data("visual".utf8), forKey: VisualFieldStore.defaultsKey)
 
         try await AppSettingsManager.clearAllData(
             defaults: defaults,
@@ -159,7 +163,8 @@ struct AppSettingsManagerTests {
             applicationSupportDirectory: applicationSupportDirectory,
             audioLibraryStorage: storage,
             resetAnalysisPreferences: false,
-            clearSharedHistory: false
+            clearSharedHistory: false,
+            clearSharedRuntimeState: false
         )
 
         #expect(defaults.object(forKey: AppSettingsManager.Key.profileName) == nil)
@@ -167,6 +172,10 @@ struct AppSettingsManagerTests {
         #expect(defaults.object(forKey: AppSettingsManager.Key.sessionHistory) == nil)
         #expect(defaults.object(forKey: AppSettingsManager.Key.soundCloudClientId) == nil)
         #expect(defaults.object(forKey: "\(AppSettingsManager.Key.streamingTrackPrefix)test") == nil)
+        #expect(defaults.object(forKey: "readingSourceCustomLinks") == nil)
+        #expect(defaults.object(forKey: "textTranceReaderPresets.v1") == nil)
+        #expect(defaults.object(forKey: PlaybackProgressStore.storageKey) == nil)
+        #expect(defaults.object(forKey: VisualFieldStore.defaultsKey) == nil)
         #expect(defaults.bool(forKey: AppSettingsManager.Key.hapticFeedbackEnabled))
         #expect(defaults.string(forKey: AppSettingsManager.Key.appearanceMode) == "system")
 
