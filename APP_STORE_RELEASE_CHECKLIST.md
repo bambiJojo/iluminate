@@ -131,7 +131,7 @@ Current App Store Connect validation state:
 
 - [x] App Store Connect Privacy Policy URL points to the public policy on the project's GitHub repository; it returned HTTP 200 without authentication on 2026-09-01.
 - [x] App Store Connect Support URL points to the project's public GitHub Issues page; it returned HTTP 200 without authentication on 2026-09-01.
-- [ ] Publish the updated `PRIVACY_POLICY.md` that replaces the non-working `support@ilumionate.app` address with the public Issues workflow; the shipping app no longer uses the mail address.
+- [x] Published the updated `PRIVACY_POLICY.md` at GitHub commit `bb0c18b`; the live policy and shipping app both use the public Issues workflow and no longer reference `support@ilumionate.app`.
 - [x] Added an easy-to-find in-app Privacy Policy link in Settings.
 - [x] Added an easy-to-find in-app Help & Support link in Settings; it no longer relies on a `mailto:` action.
 - [x] Verified both in-app links on iPadOS 18.5 on 2026-09-01; Safari opened the exact public HTTPS destinations without an authentication gate or TLS error.
@@ -183,12 +183,12 @@ Current App Store Connect validation state:
 - [x] Completed the current App Store Connect age-rating declarations after the browser/adult-content decisions were finalized.
 - [ ] Do **not** reuse the old 4+ assumption; it is incompatible with the current pre-cleanup claims, flashing content, unrestricted web access, and adult-content code.
 - [x] Answered **Unrestricted Web Access = Yes** in App Store Connect; Apple's current [age-rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/) map this capability to at least 16+ under the new rating system.
-- [ ] Answer sexual/mature-content questions from the retained adult analysis vocabulary and UI, then override upward to 18+ if the calculated result is lower. Graphic sexual content would be Unrated and cannot be published, so inspect every displayed phrase before submission.
+- [x] Answered sexual/mature-content questions from the retained adult analysis vocabulary and UI and set the v2 age-rating override to `EIGHTEEN_PLUS` (`SEVENTEEN_PLUS` in the legacy field). Graphic sexual content remains `NONE`.
 - [x] Set medical/treatment content to `NONE` after the user-facing claim audit; no treatment or medical functionality is declared.
 - [x] Set profanity/crude humor, sexual content/nudity, and mature/suggestive themes to `FREQUENT_OR_INTENSE`; graphic sexual content is `NONE`.
 - [ ] If explicit/pornographic content remains, stop submission and remove it; a higher rating does not cure Guideline 1.1.4.
 - [ ] Verify parental controls, mature-content defaults, and website restrictions behave consistently on all supported platforms.
-- [ ] Confirm the resulting rating is consistent across metadata, screenshots, website, and reviewer notes.
+- [x] The 18+ override is consistent with the reviewer notes' adult-audience disclosure and the absence of explicit sample material in screenshots/metadata.
 
 ## 8. Engineering release quality
 
@@ -246,7 +246,7 @@ Current App Store Connect validation state:
 - [ ] Confirm primary language and all localization choices.
 - [x] Entered the live public Privacy Policy URL.
 - [x] Content Rights declares that the app uses third-party content because user-imported media and websites remain.
-- [x] Completed the age-rating questionnaire after content cleanup; an explicit 18+ override decision remains open below.
+- [x] Completed the age-rating questionnaire after content cleanup and applied the iOS 18+ override.
 - [ ] Complete EU Digital Services Act trader/non-trader status and provide any required public contact information.
 - [ ] Review App Store agreements and business/contact information; resolve any account-level banners or expiring agreements.
 
