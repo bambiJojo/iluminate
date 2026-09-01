@@ -37,9 +37,9 @@ Legend:
 - [x] An unsigned iOS 18.5 Simulator **Release** build compiled without diagnostics on 2026-08-31.
 - [x] An unsigned native macOS **Release** build compiled successfully on 2026-08-04.
 - [x] The iOS Release build emits no Swift warnings. LumeLabel still has one Swift 6 isolation warning, but macOS tooling is outside the iOS-first launch scope.
-- [x] A signed iOS App Store archive was produced and exported successfully on 2026-09-01; App Store Connect accepted build `1.0 (10026)` and reports it `VALID`.
+- [x] A signed iOS App Store archive was produced and exported successfully on 2026-09-01; App Store Connect accepted build `1.0 (10027)` and reports it `VALID`.
 - [ ] Produce and validate a signed macOS App Store archive if macOS is part of launch scope.
-- [x] Ran Greenlight against the exact build `10026` IPA: no critical findings. Its launch-storyboard warning is a false positive because the archived app has a modern `UILaunchScreen` dictionary. Repeat this check after the persistent-stop change is archived.
+- [x] Ran Greenlight against the exact build `10027` IPA: no critical findings. Its launch-storyboard warning is a false positive because the archived app has a modern `UILaunchScreen` dictionary.
 
 Current App Store Connect validation state:
 
@@ -52,8 +52,8 @@ Current App Store Connect validation state:
 - [x] **Launch decision:** ship iOS/iPadOS first; macOS is not part of this release gate.
 - [x] Leave the macOS version unsubmitted and create a separate Mac release plan later.
 - [x] Marketing version is `1.0`, matching the existing App Store version record.
-- [x] Build number is `10026` for both the app and share extension; this exact build is uploaded, valid, and attached to iOS version `1.0` in App Store Connect.
-- [x] The older TestFlight builds `0.7.4 (10018)` and `1.0 (10024)` are superseded by build `1.0 (10026)`.
+- [x] Build number is `10027` for both the app and share extension; this exact build is uploaded, valid, and attached to iOS version `1.0` in App Store Connect.
+- [x] The older TestFlight builds `0.7.4 (10018)`, `1.0 (10024)`, and `1.0 (10026)` are superseded by build `1.0 (10027)`.
 - [ ] Decide whether the app is free or paid. If paid, complete contracts, tax, banking, and pricing work before submission.
 - [ ] Decide the countries/regions where the app will be available.
 - [ ] Define the intended unlisted audience and write a short, specific justification for Apple (for example, members of a named organization or event).
@@ -68,7 +68,7 @@ Current App Store Connect validation state:
 - [x] Removed the retired `Show Adult Content (18+)` source switch. Only one migration key remains so old installs forget the setting.
 - [x] Deleted `Ilumionate/KnownAudioCatalog.json`; the 2026-08-31 Release product contains no catalog resource or its third-party titles/transcripts.
 - [ ] **POLICY RISK — adult analysis remains by product decision.** The binary and UI include labels such as `Erotic Hypnosis` / `Erotic Suggestions`, and `AnalyzerKnowledge_default.json` contains aggregate adult phrase vocabulary that can appear in Phrase Library. Preserve this functionality, but do not claim the archive contains no explicit strings.
-- [x] Inspected build `10026`: it contains no known-audio catalog, bundled third-party explicit transcripts/stories, named adult-site links, or curated explicit media. Adult/hypnosis classification resources intentionally remain. Repeat against the final archive.
+- [x] Inspected build `10027`: it contains no known-audio catalog resource, known third-party titles, bundled third-party explicit transcripts/stories, named adult-site links, or curated explicit media. Inert `KnownAudioCatalog` type names and retired SoundCloud credential-cleanup keys remain in the executable; adult/hypnosis classification resources intentionally remain.
 - [x] The uploaded iPhone/iPad screenshots, App Store metadata, and reviewer notes contain no explicit sample content or links to adult websites.
 - [ ] Do not treat unlisted distribution or a high age rating as an exception to Apple's content rules.
 - [ ] **BLOCKER — obtain specialist policy advice for the retained adult analysis and user-added web sources.** Apple's current [Guideline 1.1.4/1.2](https://developer.apple.com/app-store/review/guidelines/) exception for incidental mature web UGC says it must be hidden by default and enabled via the developer's website; this app intentionally has no account or website control plane.
@@ -107,7 +107,7 @@ Current App Store Connect validation state:
 - [ ] Keep App Store metadata, onboarding, in-app copy, website, screenshots, support material, privacy policy, generated text, and reviewer notes consistent with entertainment-only use.
 - [x] Retained the concise disclaimer: “LumeSync is a recreational entertainment experience, not medical care or therapy.”
 - [x] App Store Connect's medical/treatment age-rating declaration is `NONE`; health/wellness topics remain declared because the app's subject matter requires that truthful answer.
-- [x] Ran the retired-claim scan against the exact build `10026` archive on 2026-09-01. Exact removed claims were absent; remaining adult/hypnosis classification resources are intentional. Repeat against the final archive.
+- [x] Ran the retired-claim scan against the exact build `10027` archive on 2026-09-01. Exact removed claims were absent; internal `brainwaveentrainment` / `EntrainmentBackground` symbol names and the adult/hypnosis classification resources are intentional and are not user-facing claims.
 
 ## 5. Flashing-light and physical-safety gate
 
@@ -195,12 +195,13 @@ Current App Store Connect validation state:
 ### Build and archive
 
 - [ ] Remove all blocker content and create a clean release candidate from the frozen commit.
-- [x] Set `MARKETING_VERSION = 1.0` and `CURRENT_PROJECT_VERSION = 10026` for the app and share extension. The next final upload must increment this after the persistent-stop change.
-- [ ] Verify display name, bundle IDs, signing team, app groups, entitlements, capabilities, deployment targets, and provisioning profiles.
-- [x] Created and exported the signed iOS **Release** archive for build `1.0 (10026)` with Xcode 26.6 / iOS 26.5 SDK on 2026-09-01. macOS is not in this release scope.
+- [x] Set `MARKETING_VERSION = 1.0` and `CURRENT_PROJECT_VERSION = 10027` for the app and share extension.
+- [x] Verified build `10027` display name, app/extension bundle IDs, signing team, app group entitlement, deployment target, and distribution signing in the exported IPA.
+- [x] Created and exported the signed iOS **Release** archive for build `1.0 (10027)` with Xcode 26.6 / iOS 26.5 SDK on 2026-09-01. macOS is not in this release scope.
 - [ ] Run Xcode Organizer/App Store validation and resolve every error and actionable warning.
-- [x] Inspected build `10026`'s archived `.app` for retired claims, the removed known-audio catalog, explicit bundled samples, and signing integrity. Repeat after the final build increment.
-- [x] App and share-extension dSYMs are present in the build `10026` archive and were uploaded with the build.
+- [x] Inspected build `10027`'s exported `.app` for retired claims, the removed known-audio catalog resource/titles, explicit bundled samples, version alignment, and signing integrity.
+- [x] App and share-extension dSYMs are present in the build `10027` archive and match their binaries' UUIDs.
+- [x] Recorded the exact uploaded IPA: 30,082,095 bytes, SHA-256 `ed6b3472e4aa566bfe6cb73f3c076252429e04969c7d7d4d8ff438f14da447e8`.
 - [ ] Verify bitcode-related settings and legacy submission configuration are not present where unsupported.
 - [ ] Check archive and install size, including WhisperKit/model behavior; disclose any large post-install model download before it starts.
 
@@ -210,7 +211,7 @@ Current App Store Connect validation state:
 - [ ] Run the macOS unit-test suite if macOS is shipping.
 - [ ] Run UI tests for onboarding, consent, import, analysis, reading, playback, flashing safety, Settings, and deletion.
 - [ ] Run Swift concurrency/static analysis and fix data-race, main-actor, force-unwrap, and crash findings that affect release paths.
-- [x] Greenlight reported no critical findings for the exact build `10026` IPA; the source-tree Amplitude/ATT result was manually identified as a DSP-word false positive. Repeat on the next final IPA.
+- [x] Greenlight reported no critical findings for the exact build `10027` IPA; its launch-storyboard warning is a false positive because `UILaunchScreen` is present. The source-tree Amplitude/ATT result was manually identified as a DSP-word false positive.
 - [ ] Run dependency/vulnerability and license checks for Swift packages and model assets.
 - [ ] Run `git diff --check` and ensure the release commit contains no merge markers, generated junk, or accidentally committed secrets.
 
@@ -291,12 +292,13 @@ Current App Store Connect validation state:
 
 ## 11. Select the final build
 
-- [x] Uploaded build `1.0 (10026)`, whose marketing version exactly matches the App Store version.
-- [x] Build `10026` is higher than `10018` and `10024`.
-- [x] App Store Connect finished processing build `10026` with state `VALID`; it is distributed to the internal Alpha group.
+- [x] Uploaded build `1.0 (10027)`, whose marketing version exactly matches the App Store version.
+- [x] Build `10027` is higher than `10018`, `10024`, and `10026`.
+- [x] App Store Connect finished processing build `10027` with state `VALID`; the internal Alpha group has automatic access to every valid build.
 - [x] The processed build reports `usesNonExemptEncryption = false`; this matches the current app declaration.
 - [ ] Complete TestFlight smoke testing with the exact uploaded build.
-- [x] Attached build `10026` to the iOS 1.0 version. Replace it with the incremented build after the persistent-stop change is archived.
+- [x] Attached build `10027` to the iOS 1.0 version after the persistent-stop and in-app support/privacy-link changes.
+- [x] Published the complete English (U.S.) TestFlight “What to Test” notes on build `10027`.
 - [ ] Upload, test, and attach a matching macOS build only if Mac is in launch scope.
 - [x] Ran strict App Store Connect validation after build attachment, URLs, screenshots, and age declarations; only Pricing and Availability remains blocking.
 
