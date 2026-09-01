@@ -245,7 +245,7 @@ Current App Store Connect validation state:
 - [x] App name: `LumeSync`.
 - [x] Bundle ID: `com.byronquine.lumenSync`.
 - [x] Primary category: Entertainment; secondary: Music.
-- [ ] Confirm primary language and all localization choices.
+- [x] Primary language and the sole storefront localization are English (U.S.) (`en-US`), verified through App Store Connect on 2026-09-01.
 - [x] Entered the live public Privacy Policy URL.
 - [x] Content Rights declares that the app uses third-party content because user-imported media and websites remain.
 - [x] Completed the age-rating questionnaire after content cleanup and applied the iOS 18+ override.
@@ -255,9 +255,9 @@ Current App Store Connect validation state:
 ### iOS/iPadOS 1.0
 
 - [x] Existing description, keywords, subtitle, and categories are substantially aligned with an entertainment positioning and already state that the app is not medical treatment.
-- [ ] Re-review all copy after the claims/content changes; remove any feature no longer present in the App Store build.
+- [x] Re-reviewed the complete live English copy against build `10029` after the claims/content changes; no removed or hidden feature is advertised.
 - [x] Entered the public GitHub Issues Support URL.
-- [ ] Confirm subtitle, description, keywords, promotional text (optional), copyright, and version text.
+- [x] Confirmed subtitle, description, keywords, promotional text, `2026 Byron Quine` copyright, and version `1.0`. Both `asc metadata validate` and the repository ASO character-limit validator pass with zero issues (name 8/30, subtitle 29/30, promotional text 133/170, description 1181/4000, keywords 90/100).
 - [x] Uploaded four genuine iPhone 6.9-inch screenshots (1320×2868); App Store Connect reports every asset `COMPLETE`.
 - [x] Uploaded four genuine iPad Pro 13-inch screenshots (2064×2752); App Store Connect reports every asset `COMPLETE`.
 - [x] Uploaded screenshots use the shipping UI and contain no explicit material or unverifiable outcome claims.
@@ -275,10 +275,10 @@ Current App Store Connect validation state:
 
 ### Metadata quality check
 
-- [ ] Verify every screenshot/caption and every metadata claim matches the submitted binary.
-- [ ] Remove “beta,” placeholders, old product names, test text, pricing claims, unsupported platform claims, and references to hidden features.
-- [ ] Confirm URLs, email addresses, legal entity name, copyright year, and spelling.
-- [ ] Confirm the icon and screenshots remain legible and accurate in light/dark storefront contexts.
+- [x] Verified every screenshot and every metadata claim against submitted build `10029`; the screenshots are genuine shipping UI without added caption overlays.
+- [x] Confirmed the live copy contains no “beta,” placeholders, old product names, test text, pricing claims, unsupported platform claims, or references to removed features.
+- [x] Confirmed the public Privacy Policy and Support URLs return HTTP 200, and checked the product name, bundle ID, copyright name/year, and spelling.
+- [x] Confirmed the icon and dark-interface screenshots are legible and accurate; all eight App Store assets report `COMPLETE`.
 - [ ] Have a second person proofread the final storefront and safety/privacy copy.
 
 ## 10. Pricing, availability, and distribution
@@ -313,12 +313,12 @@ Current App Store Connect validation state:
 - [x] Review notes explain that optional TelemetryDeck analytics defaults off and where to inspect the privacy controls.
 - [x] Review notes explain on-device analysis, the optional model download, and that imported audio is not uploaded with it.
 - [x] Review notes explain the flashing-light warning, acknowledgement, and persistent stop control.
-- [ ] Explain background audio/processing modes and why they are required.
+- [x] Review notes explain that background audio preserves user-started playback and background processing continues or checkpoint-resumes user-started local audio analysis; neither mode records audio or performs background analytics tracking.
 - [ ] Declare all retained third-party services and attach permissions/authorizations where needed.
 - [x] Review notes disclose the iOS 18 fallback and optional iOS 26 Foundation Models enhancement.
 - [x] Review notes state that the app is intended for unlisted distribution for a limited adult community using its own authorized material.
 - [x] Review notes provide a complete no-login path and do not rely on contacting the developer for basic access.
-- [x] App Store Connect review notes match `APP_REVIEW_NOTES.md` at SHA-256 `faceaa6db0ec352cbdd76dc4034994fc7248c0121e08c13e2e01a2783f83d4a9`.
+- [x] App Store Connect review notes match `APP_REVIEW_NOTES.md` (with the file's trailing newline omitted) at SHA-256 `c14d250b972ab7032493009895ed3285dcbc562038d053d1b4c79d63b3bf1324`.
 
 ## 13. Submission and unlisted-request sequence
 

@@ -18,6 +18,8 @@ The complete reader, library, player, custom visual tools, and local audio analy
 
 On iOS 26, when the on-device analysis identifies both a spoken track title and creator, the app may send only those two inferred strings to Apple's iTunes Search API to verify public catalog metadata. It does not send the audio file or full transcript.
 
+The `audio` background mode keeps user-started playback active when the app is backgrounded or the screen locks. The `processing` mode lets user-started on-device analysis continue when iOS grants time and resume from durable checkpoints after suspension. Neither mode records audio or runs background analytics.
+
 ## Content disclosure
 
 LumeSync is intended for adults and supports classification of user-imported hypnosis and mature material. The app preserves labels such as hypnosis and mature-content categories, but it does not ship explicit audio, stories, thumbnails, third-party transcripts, or links to adult websites. It does not recommend where to obtain adult content. Users choose and remain responsible for their own local files and websites.
