@@ -513,9 +513,14 @@ extension ProfileSettingsView {
                     icon: "questionmark.circle"
                 ) {
                     TranceHaptics.shared.light()
-                    if let url = URL(string: "mailto:support@ilumionate.app") {
-                        openURL(url)
-                    }
+                    open(.support)
+                }
+                settingsButton(
+                    title: "Privacy Policy",
+                    icon: "hand.raised.circle"
+                ) {
+                    TranceHaptics.shared.light()
+                    open(.privacyPolicy)
                 }
                 settingsButton(title: "Rate on App Store", icon: "star.circle") {
                     TranceHaptics.shared.light()
@@ -534,6 +539,11 @@ extension ProfileSettingsView {
                     }
             }
         }
+    }
+
+    private func open(_ link: AppSupportLink) {
+        guard let url = link.url else { return }
+        openURL(url)
     }
 
     // MARK: - Developer Options

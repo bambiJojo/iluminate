@@ -131,10 +131,10 @@ Current App Store Connect validation state:
 
 - [x] App Store Connect Privacy Policy URL points to the public policy on the project's GitHub repository; it returned HTTP 200 without authentication on 2026-09-01.
 - [x] App Store Connect Support URL points to the project's public GitHub Issues page; it returned HTTP 200 without authentication on 2026-09-01.
-- [ ] **BLOCKER — make `support@ilumionate.app` deliverable**, or replace it everywhere with a working address.
-- [ ] Add an easy-to-find in-app Privacy Policy link (Settings/About and any consent screen).
-- [ ] Add an easy-to-find in-app Support link; do not rely only on a `mailto:` action.
-- [ ] Confirm Privacy Policy and Support URLs load on-device without authentication, redirects to broken pages, TLS errors, or region restrictions.
+- [ ] Publish the updated `PRIVACY_POLICY.md` that replaces the non-working `support@ilumionate.app` address with the public Issues workflow; the shipping app no longer uses the mail address.
+- [x] Added an easy-to-find in-app Privacy Policy link in Settings.
+- [x] Added an easy-to-find in-app Help & Support link in Settings; it no longer relies on a `mailto:` action.
+- [x] Verified both in-app links on iPadOS 18.5 on 2026-09-01; Safari opened the exact public HTTPS destinations without an authentication gate or TLS error.
 
 ### Privacy policy and App Privacy label
 
@@ -206,7 +206,7 @@ Current App Store Connect validation state:
 
 ### Automated tests and static checks
 
-- [x] Complete serial iOS 18.5 suite passed on 2026-09-01 after the persistent-stop change: **1696 tests / 259 suites / 0 failures** in 37.356 seconds.
+- [x] Complete serial iOS 18.5 suite passed on 2026-09-01 after the persistent-stop and support-link changes: **1698 tests / 260 suites / 0 failures** in 37.348 seconds.
 - [ ] Run the macOS unit-test suite if macOS is shipping.
 - [ ] Run UI tests for onboarding, consent, import, analysis, reading, playback, flashing safety, Settings, and deletion.
 - [ ] Run Swift concurrency/static analysis and fix data-race, main-actor, force-unwrap, and crash findings that affect release paths.
