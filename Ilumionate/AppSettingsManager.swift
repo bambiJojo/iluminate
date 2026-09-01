@@ -251,6 +251,7 @@ enum AppSettingsManager {
         fileManager: FileManager = .default,
         documentsDirectory: URL = URL.documentsDirectory,
         applicationSupportDirectory: URL = AppStoragePaths.supportRoot,
+        modelDirectory: URL = WhisperModelBootstrap.sharedDownloadBaseURL(),
         cachesDirectory: URL = URL.cachesDirectory,
         audioLibraryStorage: AudioLibraryStorage = .standard,
         resetAnalysisPreferences: Bool = true,
@@ -291,6 +292,10 @@ enum AppSettingsManager {
 
         if clearSharedRuntimeState {
             try removeContents(of: cachesDirectory, fileManager: fileManager)
+        }
+
+        if fileManager.fileExists(atPath: modelDirectory.path()) {
+            try fileManager.removeItem(at: modelDirectory)
         }
 
         if fileManager.fileExists(atPath: applicationSupportDirectory.path()) {

@@ -129,6 +129,7 @@ struct AppSettingsManagerTests {
         let defaults = try makeDefaults()
         let documentsDirectory = try makeDirectory()
         let applicationSupportDirectory = try makeDirectory()
+        let modelDirectory = try makeDirectory()
         let libraryDirectory = try makeDirectory()
         let libraryURL = libraryDirectory.appending(path: "library.json")
         let storage = AudioLibraryStorage(fileURL: libraryURL, legacyDefaults: defaults)
@@ -136,6 +137,10 @@ struct AppSettingsManagerTests {
         try Data("marker".utf8).write(to: markerURL, options: .atomic)
         try Data("private".utf8).write(
             to: applicationSupportDirectory.appending(path: "private-marker.txt"),
+            options: .atomic
+        )
+        try Data("model".utf8).write(
+            to: modelDirectory.appending(path: "model-marker.bin"),
             options: .atomic
         )
         #expect(
@@ -161,6 +166,7 @@ struct AppSettingsManagerTests {
             defaults: defaults,
             documentsDirectory: documentsDirectory,
             applicationSupportDirectory: applicationSupportDirectory,
+            modelDirectory: modelDirectory,
             audioLibraryStorage: storage,
             resetAnalysisPreferences: false,
             clearSharedHistory: false,
@@ -185,6 +191,7 @@ struct AppSettingsManagerTests {
         )
         #expect(remainingItems.isEmpty)
         #expect(FileManager.default.fileExists(atPath: applicationSupportDirectory.path()) == false)
+        #expect(FileManager.default.fileExists(atPath: modelDirectory.path()) == false)
         #expect(FileManager.default.fileExists(atPath: libraryURL.path()) == false)
     }
 
