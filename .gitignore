@@ -74,3 +74,12 @@ Tools/CorpusGenerator/build/
 # Downloaded third-party reference PDFs (transcriptions of published audio).
 # Reference material only — never committed, same policy as Corpus/real.
 /Download */
+
+# Xcode build output from the screenshot/preview pipeline. Same policy as
+# DerivedData/ above; the leading dot means that pattern does not catch it.
+/.derived-data/
+
+# Raw simulator screen recordings. These are multi-hundred-megabyte
+# intermediates that the final preview .mp4 is rendered from — regenerate
+# rather than commit. The delivered .mp4 and the PNG assets stay tracked.
+screenshots/**/*.mov
