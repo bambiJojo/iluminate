@@ -406,7 +406,7 @@ struct PlaylistImportTests {
         #expect(plan.downloadableRows.isEmpty)
     }
 
-    // BambiCloud numbers its tracks from zero, so a user's 1-based "01 …"
+    // Some publishers number tracks from zero, so a user's 1-based "01 …"
     // filename prefix is a different namespace from `trackNum`. Comparing the
     // two made every file conflict with the track it belonged to, rejecting a
     // whole numbered library at once.

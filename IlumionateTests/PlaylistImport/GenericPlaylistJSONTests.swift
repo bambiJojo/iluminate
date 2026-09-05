@@ -108,6 +108,21 @@ struct GenericPlaylistJSONTests {
         #expect(playlist.tracks.map(\.trackNumber) == [0, 1, 2])
     }
 
+    @Test("An `audioURL` key is read as the track's address")
+    func audioURLKeyIsRead() throws {
+        let json = Data("""
+        {"playlists":[{"uuid":"\(UUID().uuidString)","name":"P","files":[
+        {"uuid":"\(UUID().uuidString)","name":"T","duration":162000,
+         "audioURL": "https://cdn.example.com/a.mp3","trackNum":0}]}]}
+        """.utf8)
+
+        let playlist = try GenericPlaylistJSON.playlist(from: json)
+        let track = try #require(playlist.tracks.first)
+
+        #expect(track.audioURL?.absoluteString == "https://cdn.example.com/a.mp3")
+        #expect(track.audioURL?.scheme == "https")
+    }
+
     // MARK: - Failure surfaces
 
     @Test("Malformed JSON reports a decoding failure rather than crashing")

@@ -73,6 +73,45 @@ case " ${args[*]} " in
         ;;
 esac
 
+# Two agents building this project at once share one DerivedData, and the
+# loser does not fail cleanly. Observed twice: an outright
+# "database is locked ... two concurrent builds" error, and — worse — a run
+# that linked a stale test binary and reported failures that did not exist.
+# Both cost far more time to diagnose than the wait costs to take. See
+# ERRORS.md ERR-022.
+#
+# The check is best-effort: it only looks for another xcodebuild against this
+# same project, and it gives up waiting rather than blocking a run forever.
+wait_for_concurrent_build() {
+    local waited=0
+    local limit=600
+
+    # Matched on the executable name, not the command line. A -f pattern also
+    # matches any shell whose arguments merely mention xcodebuild — including
+    # the editor or agent that launched this script — and then waits forever on
+    # its own caller.
+    while pgrep -x xcodebuild >/dev/null 2>&1; do
+        if [ "$waited" -eq 0 ]; then
+            echo "Another xcodebuild is using this project's DerivedData; waiting…" >&2
+        fi
+        if [ "$waited" -ge "$limit" ]; then
+            echo "warning: still busy after ${limit}s — continuing anyway." >&2
+            echo "warning: a lock error or a stale binary here is ERRORS.md ERR-022." >&2
+            return
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+
+    # The build database stays locked briefly after the winner exits.
+    if [ "$waited" -gt 0 ]; then
+        sleep 3
+        echo "Concurrent build finished after ${waited}s; continuing." >&2
+    fi
+}
+
+wait_for_concurrent_build
+
 log="$(mktemp -t ilumionate-tests.XXXXXX)"
 trap 'rm -f "$log"' EXIT
 

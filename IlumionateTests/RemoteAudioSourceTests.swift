@@ -10,10 +10,10 @@ import Testing
 struct RemoteAudioSourceTests {
     @Test("Round-trips through the library encoding")
     func roundTripsThroughCoding() throws {
-        let url = try #require(URL(string: "https://cdn.bambicloud.com/a.mp3"))
+        let url = try #require(URL(string: "https://cdn.example.com/a.mp3"))
         var file = AudioFile(filename: "a.mp3", duration: 60, fileSize: 1_000)
         file.remoteSource = RemoteAudioSource(
-            service: "bambicloud",
+            service: "example.com",
             trackID: "c311778b-d79b-4f3a-8729-3474cda134b4",
             url: url
         )

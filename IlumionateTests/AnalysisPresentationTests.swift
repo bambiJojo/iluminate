@@ -3,6 +3,7 @@
 //  IlumionateTests
 //
 
+import Foundation
 import Testing
 
 @testable import Ilumionate
@@ -74,9 +75,38 @@ struct AnalysisPresentationTests {
         )
     }
 
+    /// The wording has to hold on both analysis engines. iOS 26 picks the
+    /// temperature with Foundation Models; iOS 18 reaches the same setting
+    /// through keyword heuristics. Naming either one makes the copy wrong on
+    /// the other platform, which is the rule in CLAUDE.md about never labelling
+    /// keyword work as AI.
+    ///
+    /// Asserting the exact sentence pinned an editorial choice rather than that
+    /// rule: it failed every copy change alike, so it could not tell a harmless
+    /// rewording from one that names an engine, and a reviewer had no signal
+    /// beyond "the string moved". This checks the property the test is named
+    /// for instead.
     @Test("Automatic color temperature describes both analysis engines")
     func automaticColorTemperatureDescriptionIsSourceNeutral() {
-        #expect(ColorTempMode.auto.description == "Analysis selects the best temperature")
+        let description = ColorTempMode.auto.description
+
+        #expect(description.localizedStandardContains("analysis"))
+
+        // Matched as whole words. A substring test reports "available" as an
+        // AI reference, which is the same false positive that made an unrelated
+        // release scan flag this app's amplitude maths as an analytics SDK.
+        let words = Set(
+            description
+                .lowercased()
+                .split(whereSeparator: { !$0.isLetter })
+                .map(String.init)
+        )
+        for engine in ["ai", "whisper", "keyword", "keywords"] {
+            #expect(!words.contains(engine), "\(engine) names one engine; the copy must hold on both")
+        }
+        for phrase in ["Foundation Models", "Apple Intelligence"] {
+            #expect(!description.localizedStandardContains(phrase))
+        }
     }
 
     private func makeResult(summary: String) -> AnalysisResult {

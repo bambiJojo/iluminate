@@ -2633,6 +2633,25 @@ The same stale worktrees corrupted ordinary work on the same day: a repo-wide gr
 been deleted from the app when it had not. Any `grep -r` from the repository root is
 affected, not just release tooling.
 
+**Verified 2026-08-31 — the archive approach works, and the app target is already clean.**
+
+`git archive HEAD` exported 1008 files with **zero** `.claude/worktrees` directories, taking
+`bambicloud` matches from **154 in the working directory down to 14**. None of those 14 are in
+a shipped target:
+
+| Where the 14 land | Ships? |
+|---|---|
+| `APP_STORE_RELEASE_CHECKLIST.md`, `ERRORS.md`, `plan.md`, `docs/**` | no |
+| `Tools/flow-studio/index.html` | no |
+| `IlumionateTests/**` | no |
+| `Ilumionate/**`, `IlumionateShareExtension/**` | **none — zero matches** |
+
+Three incidental test references were neutralised anyway, so a scanner has less to trip on:
+`RemoteAudioSourceTests.swift` (fixture host and service string) and a comment in
+`PlaylistImportTests.swift`. The one deliberate remaining reference is the literal inside
+`PlaylistSourceDocumentTests.noHardcodedPlaylistHost`, which is the invariant *asserting* the
+name never appears in shipped importer sources — it has to contain the string to check for it.
+
 **Proposed fix**
 Point the final scan at a **clean archive** — an `xcodebuild archive` output or
 `git archive HEAD` export — rather than the working directory. That fixes the scope defect at
@@ -2709,3 +2728,298 @@ Confirmed mutually exclusive before fixing, so summing cannot double-count:
 **Still outstanding**
 The truncated-run gap named in ERR-021 and ERR-028 is untouched. This fixes the *count*, not
 the case where a hung test aborts a run partway through.
+
+---
+
+## ERR-031 — `automaticColorTemperatureDescriptionIsSourceNeutral` asserts copy that no longer exists
+
+- **Date discovered:** 2026-08-31
+- **Status:** completed
+- **Severity:** low
+- **Area:** tests, analysis presentation
+
+**Symptom**
+The only failing test on either platform, on both:
+
+```
+Expectation failed: (ColorTempMode.auto.description → "Analysis chooses from the available
+temperatures") == "Analysis selects the best temperature"
+```
+
+macOS: 1689 tests / 258 suites, this one failure. iOS 18.5: 1691 / 258, the same.
+
+**Where**
+`IlumionateTests/AnalysisPresentationTests.swift:79` — expects
+`"Analysis selects the best temperature"`.
+`Ilumionate/AnalysisPreferences.swift` — `ColorTempMode.auto.description` now returns
+`"Analysis chooses from the available temperatures"`.
+
+**Root cause**
+A copy change that did not reach its test. `AnalysisPreferences.swift` was modified at
+17:33 on 2026-08-31; the test file was last touched 2026-08-30 01:08. Not a behaviour
+regression — the two strings are equivalent in meaning, and the test's name says its real
+subject is that the wording stays *source-neutral*, which both strings satisfy.
+
+**Proposed fix**
+Update the expectation to the new string. Better, assert the property the test is named for
+rather than an exact sentence — that the description mentions neither a specific analysis
+engine nor a platform — so future copy edits do not break it.
+
+**Risks / blockers**
+This sits inside another session's in-flight work and may already be fixed by the time it is
+read. Confirm against a fresh run before acting. Deliberately not fixed here: which of the
+two strings is intended is that session's call, not a mechanical choice.
+
+**Resolution** _(2026-08-31)_
+The test now asserts the property it is named for instead of one sentence: the description
+must mention "analysis" and must not name an engine. Engine names are matched as **whole
+words**, because a substring test reports "av*ai*lable" as an AI reference — the same false
+positive recorded in ERR-029, reached independently.
+
+Verified in both directions. It passes against the current copy, and temporarily setting
+`ColorTempMode.auto.description` to `"AI selects the best temperature"` fails it on both
+counts (no "analysis", and "ai" present as a word). The implementation string was restored
+immediately afterward.
+
+Note the earlier framing in this entry was too generous to the old test: it would also have
+failed that bad string. The real defect was that it failed *every* copy change alike, so it
+carried no signal about which changes actually mattered.
+
+`Foundation` had to be imported into `AnalysisPresentationTests.swift`; it was previously
+importing only `Testing`, so `localizedStandardContains` was unavailable.
+
+---
+
+## ERR-022 addendum — mitigation applied
+
+`Scripts/run-tests.sh` now waits for a concurrent `xcodebuild` before starting, rather than
+racing it. Matching is on the **executable name** (`pgrep -x xcodebuild`), not the command
+line: a `-f` pattern also matches any shell whose arguments merely mention xcodebuild —
+including the agent process that launched the script — so the first version waited on its own
+caller and hung. It waits up to 600 s, then continues with a warning naming this entry, and
+pauses 3 s after the winner exits because the build database stays locked briefly.
+
+Verified under real contention: with a `clean build` running, the wrapper reported
+`Another xcodebuild is using this project's DerivedData; waiting…`, then
+`Concurrent build finished after 30s; continuing.`, and completed with **zero**
+`database is locked` errors and 7 tests executed. It adds no wait when nothing else is
+building.
+
+This is a mitigation, not a cure — separate `-derivedDataPath` per session would remove the
+contention entirely, at the cost of full rebuilds. The stale-binary failure mode is the one
+that matters most: it produced four *fabricated* test failures during the playlist import
+work, all of which passed on a clean re-run.
+
+---
+
+## ERR-032 — The support site advertises a support mailbox on a domain that does not exist
+
+- **Date discovered:** 2026-09-01
+- **Status:** identified
+- **Severity:** medium (blocking only if the site is adopted as the App Store Support URL)
+- **Area:** `lumesync-support-site`, App Store submission
+
+**Symptom**
+Every contact route on the LumeSync support site points at `mailto:support@ilumionate.app`.
+The domain `ilumionate.app` does not resolve and has no MX record, so any mail sent to that
+address bounces. The site's stated support channel is dead.
+
+**Where**
+- `lumesync-support-site/app/site-chrome.tsx:11` — header "Contact" link
+- `lumesync-support-site/app/page.tsx:100` — home page contact strip
+- `lumesync-support-site/app/support/page.tsx:40` — "Contact support" section
+- `lumesync-support-site/app/privacy/page.tsx:157` — privacy-request address
+
+**Reproduction**
+```bash
+host ilumionate.app          # -> NXDOMAIN
+host -t MX ilumionate.app    # -> NXDOMAIN
+```
+Also NXDOMAIN: `lumesync.app`, `lumesync.io`, `getlumesync.com`.
+
+**Root cause**
+The site was written against a planned domain that was never registered. The site has never
+been deployed: its git repo (`lumesync-support-site/.git`) has a single commit `ad7b358` and
+**no remote**, and the directory is excluded from the app repo by `.gitignore:72`.
+
+**Impact today: none.** Nothing references the site. App Store Connect's Support URL and
+Privacy Policy URL, and the app's own Settings links, all point at GitHub
+(`Ilumionate/AppSupportLink.swift:11-12`); both URLs returned HTTP 200 on 2026-09-01.
+This becomes a live App Review 1.5 problem only if the site is adopted as the Support URL
+while the mailbox still bounces.
+
+**Proposed fix**
+Decide the support surface first. If GitHub Issues stays the channel, either delete the site
+or rewrite its contact routes to link the Issues page — do not leave a second, contradictory
+support story. If the site is adopted, register the domain and provision the mailbox before
+entering the URL in App Store Connect, and verify delivery end to end.
+
+**Risks / blockers**
+The site is gitignored and has no remote, so this file is the only durable record of it.
+Deleting the directory destroys the only copy.
+
+---
+
+## ERR-033 — The support site's privacy page is a stale fork of `PRIVACY_POLICY.md`, missing the camera disclosure
+
+- **Date discovered:** 2026-09-01
+- **Status:** identified
+- **Severity:** high if published as-is; currently latent
+- **Area:** `lumesync-support-site`, privacy compliance
+
+**Symptom**
+Two privacy policies exist and they disagree. `PRIVACY_POLICY.md` (Last Updated 2026-09-01)
+is the source of truth and is what App Store Connect links to. The site's page
+(`lumesync-support-site/app/privacy/page.tsx`) still shows "EFFECTIVE JULY 29, 2026" and
+omits disclosures added since.
+
+**Where**
+`lumesync-support-site/app/privacy/page.tsx` vs `PRIVACY_POLICY.md`.
+
+Present in the policy, absent from the site page:
+- **Front-camera face tracking for Reader attention checking** (`PRIVACY_POLICY.md:20,24`) —
+  a data-collection category. Publishing a privacy page that omits it while the app requests
+  camera access is a direct App Privacy mismatch.
+- macOS. The site says "the LumeSync iOS app"; the policy covers iOS and macOS.
+- WhisperKit model download from the Hugging Face `argmaxinc/whisperkit-coreml` repository
+  (`PRIVACY_POLICY.md:43`).
+- The iOS 26 iTunes Search API title/creator lookup (`PRIVACY_POLICY.md:45`).
+- What **Clear All Data** removes, and that already-transmitted analytics cannot be recalled
+  (`PRIVACY_POLICY.md:53-55`).
+- The Visual Safety section (`PRIVACY_POLICY.md:69-71`). The site carries this copy on its
+  home and support pages but not in the policy body.
+
+Actively contradictory: the site's "Support communications" section describes email support
+and email retention; the policy describes public GitHub Issues and warns that posts are
+public (`PRIVACY_POLICY.md:47-49`). See also ERR-032.
+
+**Reproduction**
+```bash
+diff <(sed -n '1,80p' PRIVACY_POLICY.md) lumesync-support-site/app/privacy/page.tsx
+grep -n "camera\|macOS\|whisperkit\|iTunes" PRIVACY_POLICY.md
+grep -in "camera\|macOS\|whisperkit\|iTunes" lumesync-support-site/app/privacy/page.tsx  # no hits
+```
+
+**Root cause**
+The page is a hand-copied snapshot from 2026-07-29 with no sync mechanism. The markdown has
+been revised at least twice since; the JSX never was.
+
+**Proposed fix**
+Do not maintain two copies. Either render the site's privacy page from `PRIVACY_POLICY.md`
+at build time so drift is impossible, or drop the page and keep the markdown as the single
+published policy. If the page is kept hand-written, it must be re-derived from the markdown
+and re-checked against the App Privacy answers before any submission that links to it.
+
+**Risks / blockers**
+Latent only while nothing links to the site. It becomes a submission blocker the moment the
+site is used as the Privacy Policy URL — the camera omission is the item most likely to draw
+a rejection.
+
+---
+
+## ERR-034 — The support site's test suite asserts the starter template, not the real pages
+
+- **Date discovered:** 2026-09-01
+- **Status:** identified
+- **Severity:** low
+- **Area:** `lumesync-support-site`, tests
+
+**Symptom**
+`npm test` in `lumesync-support-site` builds the site and then asserts the unmodified
+`vinext-starter` placeholder markup — `<title>Your site is taking shape</title>`,
+"Building your site", and a `codex-preview` development meta tag. None of that is LumeSync
+content, so the suite passes without exercising `/`, `/privacy`, or `/support` at all.
+
+**Where**
+`lumesync-support-site/tests/rendered-html.test.mjs` — renders `dist/server/index.js` for
+`/` only and matches template strings.
+
+**Reproduction**
+```bash
+cd lumesync-support-site && npm run build   # succeeds
+grep -n "taking shape" tests/rendered-html.test.mjs
+```
+The build itself is healthy — it completed and emitted routes `/`, `/privacy`, `/support` on
+2026-09-01.
+
+**Root cause**
+Scaffolding left in place. `README.md` in that directory is likewise still the untouched
+`vinext-starter` README and describes a D1/ChatGPT-sign-in starter the site does not use.
+
+**Proposed fix**
+Replace the assertions with checks that actually matter for a support site: each of the three
+routes returns 200, the privacy page shows the current effective date, and the contact link
+resolves to the real support channel. Rewrite the README to describe this site and how it is
+deployed.
+
+**Risks / blockers**
+None. Contingent on the site being kept at all — see ERR-032.
+
+---
+
+## ERR-032 addendum — a live site with the right pattern already exists
+
+_(2026-09-01)_ The developer's existing Wix site, `https://quineent.wixsite.com/quineent`,
+is live and already publishes one privacy page per app: `privacy-ITStime`,
+`privacy-nocattoe` (`/about-7-1`), and `privacy-iORMPro` (`/copy-of-privacy-nocattoe`). Its
+contact address, `quineent@gmail.com`, is a real mailbox, which removes the dead-domain
+problem in ERR-032 without registering anything.
+
+Adding `privacy-LumeSync` and `support-LumeSync` there is the cheaper path than deploying
+`lumesync-support-site`. Paste-ready copy is in `WEBSITE_LUMESYNC_PAGES.md`, which also
+records the three decisions that must be settled first: the house "collects no personal
+information" template does not fit LumeSync, the support channel must be either GitHub
+Issues or email but not both, and the developer name must be either "Byron Quine" or
+"QuineEnt" consistently.
+
+Note for whoever picks this up: `privacy-ITStime` on that site renders with no policy body
+at all — only site chrome. If ITS-Time ships with that as its privacy URL, it has the same
+class of problem. Not this repo's issue; recorded because it was seen.
+
+## ERR-035 — The neutral-import invariant fails on the personal BambiCloud branch
+
+- **Date discovered:** 2026-09-05
+- **Status:** identified
+- **Severity:** medium
+
+**Symptom.** `PlaylistSourceDocumentTests.noHardcodedPlaylistHost()` fails on branch
+`personal/bambi-playlist-downloader`. Every other test passes (1859 executed, 1 failure).
+
+**Reproduce.**
+
+```bash
+Scripts/run-tests.sh -destination 'platform=macOS,arch=arm64' \
+  -only-testing:IlumionateTests/PlaylistSourceDocumentTests
+```
+
+**Root cause.** Not a defect in either the test or the feature — the two encode
+opposite, deliberate intentions.
+
+The invariant scans `Ilumionate/PlaylistImport/*.swift` and asserts no source file
+names a specific playlist host. It exists so the shipped importer stays generic and
+decodes by document shape rather than by site, which is what ERR-029 verified for the
+App Store archive.
+
+Commit `5de1a9f` ("Restore BambiCloud playlist downloader on personal branch")
+reintroduces `Ilumionate/PlaylistImport/BambiCloudPlaylistLink.swift`, which is a
+host-specific adapter by design. The invariant therefore reports exactly what it was
+written to detect.
+
+**Consequence for release.** ERR-029 recorded zero `bambicloud` hits in shipped
+targets. That finding was made against the neutral line and **no longer holds on this
+branch**: the name is now in a source file compiled into the app target. The claim
+needs re-verifying against whatever branch is actually archived, not assumed.
+
+**Proposed fix.** Decide which of these the project wants; do not resolve it by
+deleting the test or the feature:
+
+1. Keep the personal branch as a downstream fork that is never archived, and accept
+   this test as a known red there.
+2. Exempt an explicitly-named adapter file from the invariant, so it still guards the
+   generic machinery while permitting one opt-in host module. Weakens the ERR-029
+   guarantee unless the adapter is also excluded from the release target.
+3. Move the adapter behind a compilation condition absent from the App Store
+   configuration, which keeps both the feature and the invariant true.
+
+**Risks.** Option 2 makes it possible to reintroduce host coupling without the suite
+noticing, which is the failure mode the invariant was written to prevent.

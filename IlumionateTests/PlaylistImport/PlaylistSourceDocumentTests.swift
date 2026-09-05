@@ -178,3 +178,26 @@ struct PlaylistSourceDocumentTests {
         }
     }
 }
+
+@Suite("Download source scoping")
+struct DownloadDomainScopeTests {
+    @Test("Registrable domain collapses subdomains")
+    func registrableDomainCollapsesSubdomains() throws {
+        let list = try #require(URL(string: "https://example.com/list.json"))
+        let cdn = try #require(URL(string: "https://cdn.example.com/a.mp3"))
+
+        #expect(PlaylistTrackDownloader.registrableDomain(of: list) == "example.com")
+        #expect(PlaylistTrackDownloader.registrableDomain(of: cdn) == "example.com")
+    }
+
+    @Test("A lookalike host is a different domain")
+    func lookalikeIsDifferent() throws {
+        let real = try #require(URL(string: "https://example.com/list.json"))
+        let fake = try #require(URL(string: "https://example.com.attacker.example/a.mp3"))
+
+        #expect(
+            PlaylistTrackDownloader.registrableDomain(of: real)
+                != PlaylistTrackDownloader.registrableDomain(of: fake)
+        )
+    }
+}
