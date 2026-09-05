@@ -99,3 +99,4 @@ Ilumionate.xcodeproj/xcshareddata/xcschemes/LumeLabel.xcscheme
 
 # Host-specific playlist import design docs. Kept local, not published.
 docs/superpowers/specs/*bambicloud*
+lumelabel_adversarial_review.json
