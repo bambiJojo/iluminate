@@ -79,7 +79,9 @@ Tools/CorpusGenerator/build/
 # DerivedData/ above; the leading dot means that pattern does not catch it.
 /.derived-data/
 
-# Raw simulator screen recordings. These are multi-hundred-megabyte
-# intermediates that the final preview .mp4 is rendered from — regenerate
-# rather than commit. The delivered .mp4 and the PNG assets stay tracked.
-screenshots/**/*.mov
+# App Store screenshot and preview assets (~200 MB of PNGs, simulator screen
+# recordings, and the rendered preview .mp4). Deliberately untracked: they are
+# regenerable from the capture pipeline, and this repository is public, so the
+# weight would be permanent and awkward to remove from history later. They live
+# on disk and are uploaded to App Store Connect directly.
+/screenshots/
