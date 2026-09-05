@@ -32,7 +32,10 @@ nonisolated struct PlaylistSourceClient: Sendable {
     }
 
     func playlist(at rawLink: String) async throws -> Result {
-        try await playlist(at: PlaylistSourceURL.normalized(rawLink))
+        if let bambiLink = BambiCloudPlaylistLink(rawLink) {
+            return try await playlist(at: bambiLink.apiURL)
+        }
+        return try await playlist(at: PlaylistSourceURL.normalized(rawLink))
     }
 
     func playlist(at url: URL) async throws -> Result {

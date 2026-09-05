@@ -31,6 +31,8 @@ struct PlaylistEditorView: View {
     @State private var showingSessionPicker = false
     @State private var showingArtworkPicker = false
     @State private var importRequest: PlaylistImportRequest?
+    @State private var showingLinkBrowser = false
+    @State private var pendingImportLink: String?
     @State private var availableAudioFiles: [AudioFile] = []
     @State private var storedAudioFiles: [AudioFile] = []
     // IDs of files that already have a generated light session, so the picker
@@ -142,6 +144,12 @@ struct PlaylistEditorView: View {
                         for file in files { addItem(from: file) }
                     }
                 )
+            }
+            .platformFullScreenCover(
+                isPresented: $showingLinkBrowser,
+                onDismiss: startPendingImport
+            ) {
+                PlaylistLinkBrowserView { pendingImportLink = $0 }
             }
             .sheet(item: $importRequest) { request in
                 // The request carries its own library snapshot; an isPresented
@@ -511,10 +519,22 @@ struct PlaylistEditorView: View {
 
     private func showImporter() {
         TranceHaptics.shared.light()
+        showingLinkBrowser = true
+    }
+
+    /// Runs once the browser has fully dismissed. Presenting the importer while
+    /// the cover is still going away drops the sheet.
+    private func startPendingImport() {
+        guard let link = pendingImportLink else { return }
+        pendingImportLink = nil
+
         let files = AudioLibraryStore.load()
         storedAudioFiles = files
         availableAudioFiles = files
-        importRequest = PlaylistImportRequest(audioFiles: files)
+        importRequest = PlaylistImportRequest(
+            audioFiles: files,
+            initialLink: link
+        )
     }
 
     /// Folds a link import into the draft rather than replacing it, so tracks
