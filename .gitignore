@@ -100,3 +100,11 @@ Ilumionate.xcodeproj/xcshareddata/xcschemes/LumeLabel.xcscheme
 # Host-specific playlist import design docs. Kept local, not published.
 docs/superpowers/specs/*bambicloud*
 lumelabel_adversarial_review.json
+
+# AI agent skill packs (.agents/, .agent/, .claude/). Third-party tooling
+# documentation installed by `asc install-skills`, not part of the app. All
+# three held the same App Store Connect skill pack, so the repository carried
+# it three times. Regenerate locally rather than tracking it.
+/.agents/
+/.agent/
+/.claude/
