@@ -93,3 +93,6 @@ Tools/CorpusGenerator/build/
 /LumeLabel/
 /LumeLabelTests/
 /LumeLabelUITests/
+
+# Shared scheme for the untracked LumeLabel target.
+Ilumionate.xcodeproj/xcshareddata/xcschemes/LumeLabel.xcscheme
