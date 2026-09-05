@@ -75,3 +75,18 @@ xcodebuild -project Ilumionate.xcodeproj \
 See [`CLAUDE.md`](CLAUDE.md) for the test strategy, the subset-filter caveat, and
 the `Scripts/run-tests.sh` wrapper, and [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md)
 for platform privacy details.
+
+## Licence
+
+Copyright © 2026 Byron Quine. All rights reserved.
+
+This repository is public so the code can be read, but **no licence is granted
+by its publication**. Viewing and forking on GitHub is permitted under GitHub's
+Terms of Service; copying, modifying, redistributing, or shipping derivative
+works is not.
+
+If you want to build on this — including porting it to another platform — ask
+first. Permission is granted individually and in writing.
+
+See [PORTING.md](PORTING.md) if you have that permission and need to know which
+parts of the codebase actually cross a platform boundary.
