@@ -91,3 +91,5 @@ Tools/CorpusGenerator/build/
 # depends on it — the Ilumionate scheme has no reference to it and there are no
 # target dependencies on it — so removing it does not affect building the app.
 /LumeLabel/
+/LumeLabelTests/
+/LumeLabelUITests/
