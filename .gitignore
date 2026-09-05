@@ -85,3 +85,9 @@ Tools/CorpusGenerator/build/
 # weight would be permanent and awkward to remove from history later. They live
 # on disk and are uploaded to App Store Connect directly.
 /screenshots/
+
+# LumeLabel companion labelling app. Kept out of the public repository by
+# request; the sources stay on disk locally. Nothing in the shipped app target
+# depends on it — the Ilumionate scheme has no reference to it and there are no
+# target dependencies on it — so removing it does not affect building the app.
+/LumeLabel/
