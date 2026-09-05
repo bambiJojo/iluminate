@@ -57,6 +57,7 @@ struct ProfileSettingsView: View {
     @State var showClearDataDone = false
     @State var showDeveloperOptions = false
     @State var showAbout = false
+    @State var showAcknowledgements = false
     #if DEBUG
     @State var showAnalyzerTraining = false
     #endif
@@ -107,6 +108,9 @@ struct ProfileSettingsView: View {
             }
             .sheet(isPresented: $isEditingProfile) { profileEditor }
             .sheet(isPresented: $showAbout) { aboutSheet }
+            .sheet(isPresented: $showAcknowledgements) {
+                ThirdPartyAcknowledgementsView()
+            }
             .sheet(isPresented: $showingFlashTintSheet) {
                 FlashTintSheet(selection: $flashTint)
             }

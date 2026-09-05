@@ -530,6 +530,13 @@ extension ProfileSettingsView {
                     TranceHaptics.shared.light()
                     showAbout = true
                 }
+                settingsButton(
+                    title: "Third-Party Acknowledgements",
+                    icon: "doc.text"
+                ) {
+                    TranceHaptics.shared.light()
+                    showAcknowledgements = true
+                }
                 // Hidden dev toggle — tap 5× on the last row
                 Color.clear
                     .frame(height: 1)
