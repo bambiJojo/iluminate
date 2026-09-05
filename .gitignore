@@ -126,3 +126,7 @@ code_review_issues.json
 # Styled HTML renders of Markdown docs. The .md is the source of truth; the
 # .html twin doubles the file count and goes stale silently.
 docs/**/*.html
+
+# Historical whole-codebase review (2026-05-30, 154 files). The app is now
+# ~229 files; a stale review reads as current to a new reader. Kept locally.
+CODE_REVIEW_THERMONUCLEAR.*
