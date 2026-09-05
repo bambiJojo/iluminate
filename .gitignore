@@ -108,3 +108,21 @@ lumelabel_adversarial_review.json
 /.agents/
 /.agent/
 /.claude/
+
+# Editor configuration — personal preference, not project structure.
+/.vscode/
+
+# Build logs. Regenerate; never commit.
+build_output.log
+*.build.log
+
+# One-off review artefacts.
+code_review_issues.json
+
+# Working-tree patch scaffolding. The analyzer work these captured is long
+# since committed, and the patches no longer apply.
+/patches/
+
+# Styled HTML renders of Markdown docs. The .md is the source of truth; the
+# .html twin doubles the file count and goes stale silently.
+docs/**/*.html
