@@ -96,3 +96,6 @@ Tools/CorpusGenerator/build/
 
 # Shared scheme for the untracked LumeLabel target.
 Ilumionate.xcodeproj/xcshareddata/xcschemes/LumeLabel.xcscheme
+
+# Host-specific playlist import design docs. Kept local, not published.
+docs/superpowers/specs/*bambicloud*
