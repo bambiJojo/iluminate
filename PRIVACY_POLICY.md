@@ -1,7 +1,7 @@
 # LumeSync Privacy Policy
 
 **Effective Date:** July 29, 2026
-**Last Updated:** September 1, 2026
+**Last Updated:** September 10, 2026
 
 ## Overview
 
@@ -18,11 +18,14 @@ Core app data is stored locally and is not uploaded to LumeSync servers. This ma
 - Playlists, visual-session settings, and playback history
 - Documents, imported text, and reading preferences
 - App settings and analytics-consent choices
-- Transient front-camera face-tracking observations when you enable Reader attention checking
 
 Audio transcription and analysis run on your device. Some features may download a speech-recognition model before local processing begins. Your audio is not sent with that model download.
 
-Reader attention checking is optional and begins only after you choose to enable it. Camera frames and face-tracking observations are processed on the device while the Reader is open; LumeSync does not record, save, or transmit those images or observations, and monitoring stops when the Reader closes or the app leaves the foreground.
+## Camera and Face Data
+
+**LumeSync does not use the camera and does not collect, process, store, or transmit face data of any kind.** The app requests no camera permission, contains no camera or face-tracking code, and declares no camera usage description or entitlement.
+
+An earlier pre-release build included an optional Reader "attention check" that used on-device face tracking to pause reading when you looked away. That feature and all of its code were removed before release. No face data was ever stored, shared, or transmitted by any version of the app.
 
 ## Optional Anonymous Analytics
 
@@ -36,6 +39,8 @@ Those analytics may include:
 
 Analytics do not include your name, email, advertising identifier, audio, transcripts, imported documents, generated text, file names, or reading-source URLs. They are not used for advertising or cross-app tracking.
 
+LumeSync does not track you as Apple defines tracking. It does not access the advertising identifier, does not link analytics with third-party data for advertising, and does not share data with data brokers. It therefore does not use the App Tracking Transparency framework, because there is no tracking to request permission for.
+
 You can disable analytics at any time in LumeSync Settings. For information about the service, see [TelemetryDeck’s privacy information](https://telemetrydeck.com/privacy/).
 
 ## Third-Party Services and Links
@@ -46,7 +51,9 @@ On compatible iOS 26 devices, LumeSync may verify a spoken track title and creat
 
 ## Support Communications
 
-Support is provided through the project's [public GitHub Issues page](https://github.com/bambiJojo/iluminate/issues). If you open or comment on an issue, GitHub receives your account information and the content you choose to post under its own privacy policy, and the post is normally visible to the public. We use that information to respond, troubleshoot, and improve the app. Do not post private audio, transcripts, documents, reading-source URLs, or other sensitive information.
+For private support or privacy requests, email lumesyncapp@gmail.com. We use your email address and the information you provide to respond and troubleshoot. You may request deletion of support correspondence by contacting that address. Please send only information needed to handle your request.
+
+You may also use the project's [public GitHub Issues page](https://github.com/bambiJojo/iluminate/issues). If you open or comment on an issue, GitHub receives your account information and the content you choose to post under its own privacy policy, and the post is normally visible to the public. We use that information to respond, troubleshoot, and improve the app. Do not post private audio, transcripts, documents, reading-source URLs, or other sensitive information.
 
 ## Storage, Security, and Deletion
 
@@ -62,9 +69,9 @@ LumeSync is not designed for children and is intended for adult users. We do not
 
 ## Your Choices and Rights
 
-You can decline or disable analytics, delete locally stored content, revoke permissions in iOS or macOS System Settings, or delete the app. Depending on where you live, you may also have legal rights concerning personal information you send to support.
+You can disable analytics, delete locally stored content, or delete the app. Depending on where you live, you may also have legal rights concerning personal information you send to support.
 
-To ask a privacy question or make a request, open an issue on the [public support page](https://github.com/bambiJojo/iluminate/issues) without including sensitive information. If a request needs private identifying details, first ask for a private contact method in that issue rather than posting those details publicly.
+To ask a privacy question or make a request privately, email lumesyncapp@gmail.com. Do not post personal or sensitive information in public GitHub issues.
 
 ## Visual Safety
 
