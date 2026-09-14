@@ -14,19 +14,19 @@ struct AppSupportLinkTests {
             let url = try #require(link.url)
 
             #expect(url.scheme == "https")
-            #expect(url.host == "github.com")
+            #expect(url.host == "quineent.wixsite.com")
         }
     }
 
-    @Test("Support and privacy open their published project pages")
-    func linksUsePublishedProjectPages() {
+    @Test("Support and privacy open their published website pages")
+    func linksUsePublishedWebsitePages() {
         #expect(
             AppSupportLink.support.url?.absoluteString
-                == "https://github.com/bambiJojo/iluminate/issues"
+                == "https://quineent.wixsite.com/lumesync/support"
         )
         #expect(
             AppSupportLink.privacyPolicy.url?.absoluteString
-                == "https://github.com/bambiJojo/iluminate/blob/main/PRIVACY_POLICY.md"
+                == "https://quineent.wixsite.com/lumesync/privacy-policy"
         )
     }
 }

@@ -33,6 +33,7 @@ final class UnifiedPlayerViewModel {
     // MARK: - Injected Dependencies
     // Default to the shared singletons in production; injectable for testing.
     private let nowPlaying: NowPlayingState
+    private let systemNowPlaying = SystemNowPlayingCenter.shared
     private let analysisManager: AnalysisStateManager
     private let sessionHistory: SessionHistoryManager
     private let haptics: TranceHaptics
@@ -387,6 +388,7 @@ final class UnifiedPlayerViewModel {
         PerformanceTrace.event("Playback Seek")
         playbackRuntime?.seek(to: time)
         currentTime = playbackRuntime?.snapshot(elapsed: 0).currentTime ?? time
+        publishSystemNowPlaying()
     }
 
     func seekByProgress(_ progress: Double) {
@@ -1008,6 +1010,11 @@ final class UnifiedPlayerViewModel {
         }
 
         playbackRuntime?.begin()
+        systemNowPlaying.begin(
+            title: mode.title,
+            duration: duration,
+            handlers: systemNowPlayingHandlers
+        )
     }
 
     private func pause() {
@@ -1017,6 +1024,7 @@ final class UnifiedPlayerViewModel {
 
         playbackRuntime?.pause()
         persistPlaybackProgress()
+        publishSystemNowPlaying()
     }
 
     private func resume() {
@@ -1026,6 +1034,7 @@ final class UnifiedPlayerViewModel {
         interruptionNotice = nil
 
         playbackRuntime?.resume()
+        publishSystemNowPlaying()
     }
 
     func stopAll(reason: PlaybackEndReason = .userStopped) {
@@ -1043,6 +1052,7 @@ final class UnifiedPlayerViewModel {
 
         playbackState = .idle
         nowPlaying.deactivate()
+        systemNowPlaying.end()
     }
 
     private func handlePlaybackInterruption() {
@@ -1090,6 +1100,7 @@ final class UnifiedPlayerViewModel {
         showingControls = true
         nowPlaying.updateProgress(1)
         nowPlaying.updatePlaybackState(.complete)
+        systemNowPlaying.end()
     }
 
     private func reportSessionEndedIfNeeded(reason: PlaybackEndReason) {
@@ -1244,6 +1255,7 @@ final class UnifiedPlayerViewModel {
         // Keep mini-player in sync
         nowPlaying.updateProgress(progress)
         nowPlaying.updatePlaybackState(playbackState)
+        publishSystemNowPlaying()
     }
 
     private func resetLightExposureForNewAttempt() {
@@ -1340,6 +1352,41 @@ final class UnifiedPlayerViewModel {
         } else {
             currentPhase = "Integration Phase"
         }
+    }
+
+    // MARK: - Private: System Now Playing
+
+    /// Transport the lock screen and Control Center drive. Routed through the
+    /// same entry points as the in-app controls so remote and on-screen taps
+    /// cannot diverge.
+    var systemNowPlayingHandlers: SystemNowPlayingHandlers {
+        SystemNowPlayingHandlers(
+            play: { [weak self] in
+                guard let self, playbackState == .paused else { return }
+                resume()
+            },
+            pause: { [weak self] in
+                guard let self, playbackState == .playing else { return }
+                pause()
+            },
+            togglePlayPause: { [weak self] in
+                guard let self, playbackState == .playing || playbackState == .paused else { return }
+                togglePlayPause()
+            },
+            seek: { [weak self] time in self?.seek(to: time) },
+            skipForward: { [weak self] in self?.skipForward15() },
+            skipBackward: { [weak self] in self?.skipBack15() }
+        )
+    }
+
+    private func publishSystemNowPlaying() {
+        guard playbackState == .playing || playbackState == .paused else { return }
+        systemNowPlaying.update(
+            title: mode.title,
+            isPlaying: playbackState == .playing,
+            currentTime: currentTime,
+            duration: duration
+        )
     }
 
     // MARK: - Private: Progress Persistence

@@ -1,0 +1,83 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LumeSync — App Review Reply (98358163)</title><style>
+:root{--bg:oklch(98% .005 265);--surface:oklch(100% 0 0);--text:oklch(24% .02 265);--muted:oklch(52% .02 265);--accent:oklch(52% .17 265);--line:oklch(91% .01 265);--ok:oklch(58% .14 155);--code-bg:oklch(96% .008 265)}
+@media(prefers-color-scheme:dark){:root{--bg:oklch(19% .015 265);--surface:oklch(23% .018 265);--text:oklch(93% .01 265);--muted:oklch(70% .02 265);--accent:oklch(76% .14 265);--line:oklch(32% .02 265);--ok:oklch(74% .15 155);--code-bg:oklch(27% .02 265)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 ui-sans-serif,-apple-system,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:60rem;margin:0 auto;padding:clamp(1.5rem,1rem+3vw,4rem) clamp(1rem,.5rem+3vw,3rem)}
+h1{font-size:clamp(1.9rem,1.4rem+2vw,2.9rem);line-height:1.15;letter-spacing:-.02em;margin:0 0 .4em}
+h2{font-size:clamp(1.25rem,1.05rem+.8vw,1.6rem);letter-spacing:-.01em;margin:2.6em 0 .7em;padding-bottom:.35em;border-bottom:2px solid var(--line)}
+h3{font-size:1.1rem;margin:2em 0 .5em;color:var(--accent)}
+p{margin:0 0 1.05em}
+a{color:var(--accent);text-underline-offset:3px}
+code{background:var(--code-bg);padding:.13em .38em;border-radius:5px;font:.87em ui-monospace,"SF Mono",Menlo,monospace}
+ul{margin:0 0 1.15em;padding-left:1.3em}
+li{margin:.42em 0}
+li::marker{color:var(--accent)}
+hr{border:0;border-top:1px solid var(--line);margin:2.6em 0}
+table{width:100%;border-collapse:collapse;margin:1.4em 0;font-size:.93rem;background:var(--surface);border-radius:10px;overflow:hidden;box-shadow:0 1px 2px oklch(0% 0 0/.06),0 8px 24px oklch(0% 0 0/.05)}
+th{background:var(--code-bg);text-align:left;font-weight:650;letter-spacing:.01em}
+th,td{padding:.7em .9em;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+strong{font-weight:650}
+p>strong:first-child{color:var(--ok)}
+.meta{color:var(--muted);font-size:.9rem}
+</style></head>
+<body><main><pre style="white-space:pre-wrap;font:inherit"># App Review reply — submission 98358163-4be9-43b2-968e-9f1437675929
+
+**Reference draft. A condensed 3,960-character version covering all sections was sent September 11, 2026, to fit Apple’s 4,000-character limit. Build 10030 resubmitted; status WAITING_FOR_REVIEW.**
+
+---
+
+Thank you for reviewing LumeSync 1.0 (10029). Our replacement build is 1.0 (10030). Below are the changes and the requested information.
+
+## Guideline 5.1.1(iv) — Camera permission
+
+We removed the optional Reader attention-check feature, including the custom camera explanation with “Enable Attention Check” and “Not Now.” The replacement app requests no camera permission. Its camera usage descriptions and macOS camera entitlement have been removed. Reading now uses manual pause and resume.
+
+## Guideline 2.1 — Face data
+
+**What face data does the app collect?** The replacement build does not use the camera or collect, process, store, or transmit face data.
+
+For the reviewed build 10029, the optional attention check used ARKit on-device face tracking while Reader was open and camera access was granted. The app used face-tracking status, head position/orientation and left/right eye-blink coefficients to derive attention and eyes-closed scores and decide whether to pause or resume reading. Camera frames and ARKit face observations were processed locally; they were not used for identification, advertising, profiling, or analytics.
+
+**Use, sharing, storage, retention and deletion:** In build 10029, these observations and derived attention state were temporary runtime data used only for that reading feature. The app did not record camera images or persist face observations to disk, and did not upload or share them. Monitoring stopped when Reader closed or the app left the foreground. There was no stored face-data record requiring later deletion. The feature and its code have been removed from the replacement build, so it has no face-data use, storage, retention, sharing, or deletion workflow.
+
+**Third parties and storage location:** No face data was sent to third parties or external servers. Processing in 10029 occurred only on the device during the optional feature. The replacement build performs no face processing.
+
+**Privacy-policy location:** The “Camera and Face Data” section, immediately after “Information Processed on Your Device,” explains removal of the feature and the earlier build&#x27;s practices. The section states:
+
+&gt; LumeSync does not use the camera and does not collect, process, store, or transmit face data of any kind. The app requests no camera permission, contains no camera or face-tracking code, and declares no camera usage description or entitlement.
+&gt;
+&gt; An earlier pre-release build included an optional Reader &quot;attention check&quot; that used on-device face tracking to pause reading when you looked away. That feature and all of its code were removed before release. No face data was ever stored, shared, or transmitted by any version of the app.
+
+Privacy policy: https://quineent.wixsite.com/lumesync/privacy-policy
+
+## Guideline 5.1.2(i) — Tracking and analytics
+
+LumeSync does not track users as Apple defines tracking. It does not access the advertising identifier, link app data with third-party data for advertising, or share data with data brokers. There is no advertising SDK.
+
+Optional TelemetryDeck analytics measure product usage and stability: screens and features used, completion buckets, activation/retention events and non-content error categories. They exclude audio, transcripts, imported documents, generated text, filenames and reading-source URLs. App Store Connect declares non-linked Device ID and Product Interaction used for Analytics, without tracking.
+
+We removed the standalone analytics alert. Onboarding now has an off-by-default “Share anonymous analytics” toggle and one Continue button. The user can proceed with analytics off and can change the choice in Settings. The SDK is not initialized for analytics before opt-in. This setting controls optional product analytics; it does not request permission for tracking. Because the app does not perform tracking, it does not use AppTrackingTransparency.
+
+## Guideline 2.5.1 — TrueDepth
+
+The removed Reader attention check was the only feature using ARKit face tracking. The replacement build removes that feature and its ARKit/TrueDepth API use, including ARFaceTrackingConfiguration and ARFaceAnchor. There is no camera-dependent feature for reviewers to locate.
+
+## Guideline 2.5.4 — Background audio
+
+LumeSync plays user-imported audio. The audio background mode is used for user-started audible playback when the app is backgrounded or the screen locks. The replacement build adds Now Playing metadata and play, pause, toggle, seek and 15-second skip handlers. The toggle uses the player&#x27;s own state on iOS.
+
+To reproduce from a fresh installation:
+
+1. Save and unzip the attached LumeSync-1.0-10030-Review-Evidence.zip in Files.
+2. Complete onboarding. In Library, tap + &gt; Import from Files and select LumeSync-Review-Sample.m4a.
+3. Open the imported item and press Play. Once narration is audible, go to the Home Screen.
+4. Verify continued audio and use Control Center/Lock Screen playback controls. Use this audio-backed session for the demonstration; visual-only sessions do not demonstrate background audio.
+
+The attached LumeSync-1.0-10030-Review-Evidence.zip includes the unedited physical-iPhone recording ScreenRecording_09-10-2026 16-37-42_1.MP4, the audio/text samples, and a README. The recording shows playback in LumeSync, continued narration on the Home Screen (approximately 6–16 seconds), and Control Center pause/resume (approximately 19–30 seconds).
+
+The app behaves the same across its available countries and regions. Thank you for reviewing the replacement build.
+</pre></main></body></html>

@@ -17,7 +17,6 @@ struct TextTranceSessionSettings: Sendable {
     let postHandoffDuration: TimeInterval
     let subliminalEnabled: Bool
     let subliminalSpeed: TextPacingSettings.SubliminalSpeed
-    let attentionGateEnabled: Bool
     let speedTraining: ReaderSpeedTrainingSettings
     let displayPreferences: ReaderDisplayPreferences
 
@@ -29,7 +28,6 @@ struct TextTranceSessionSettings: Sendable {
          postHandoffDuration: TimeInterval,
          subliminalEnabled: Bool = true,
          subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium,
-         attentionGateEnabled: Bool = false,
          speedTraining: ReaderSpeedTrainingSettings = .standard,
          displayPreferences: ReaderDisplayPreferences = .standard) {
         self.arc = arc
@@ -40,7 +38,6 @@ struct TextTranceSessionSettings: Sendable {
         self.postHandoffDuration = postHandoffDuration
         self.subliminalEnabled = subliminalEnabled
         self.subliminalSpeed = subliminalSpeed
-        self.attentionGateEnabled = attentionGateEnabled
         self.speedTraining = speedTraining
         self.displayPreferences = displayPreferences
     }
@@ -54,14 +51,12 @@ struct TextTranceSessionSettings: Sendable {
          postHandoffDuration: TimeInterval,
          subliminalEnabled: Bool = true,
          subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium,
-         attentionGateEnabled: Bool = false,
          speedTraining: ReaderSpeedTrainingSettings = .standard,
          displayPreferences: ReaderDisplayPreferences = .standard) {
         self.init(arc: arc, speedMultiplier: speed.multiplier,
                   lightEnabled: lightEnabled, binauralEnabled: binauralEnabled,
                   beatFrequency: beatFrequency, postHandoffDuration: postHandoffDuration,
                   subliminalEnabled: subliminalEnabled, subliminalSpeed: subliminalSpeed,
-                  attentionGateEnabled: attentionGateEnabled,
                   speedTraining: speedTraining,
                   displayPreferences: displayPreferences)
     }
@@ -86,9 +81,6 @@ final class TextTranceSession: Identifiable {
     private(set) var currentWordIndex = 0
     private(set) var isPaused = false
     var speedMultiplier: Double
-    private(set) var attentionGateEnabled: Bool
-    private(set) var attentionSatisfied = true
-    private(set) var isAttentionPaused = false
 
     /// Reading progress by word position, 0…1. Drives the reader's progress line.
     var progressFraction: Double {
@@ -159,7 +151,6 @@ final class TextTranceSession: Identifiable {
         self.speedMultiplier = settings.speedMultiplier
         self.subliminalEnabled = settings.subliminalEnabled
         self.subliminalSpeed = settings.subliminalSpeed
-        self.attentionGateEnabled = settings.attentionGateEnabled
         self.binauralActive = settings.binauralEnabled
         self.lightEnabledLive = settings.lightEnabled
         self.speedTraining = settings.speedTraining
@@ -267,7 +258,6 @@ final class TextTranceSession: Identifiable {
                 binauralEnabled: binauralActive,
                 lightEnabled: lightEnabledLive,
                 beatFrequency: settings.beatFrequency,
-                attentionGateEnabled: attentionGateEnabled,
                 speedTraining: speedTraining,
                 displayPreferences: displayPreferences),
             phase: .reading,
@@ -357,8 +347,7 @@ final class TextTranceSession: Identifiable {
 
     /// Resume word advance and the binaural layer.
     func resume() {
-        guard isPaused, !isComplete, !isAttentionPaused else { return }
-        guard !attentionGateEnabled || attentionSatisfied else { return }
+        guard isPaused, !isComplete else { return }
         isPaused = false
         if binauralActive, isReading { startBinaural() }
         releaseResumeWaiter()
@@ -386,37 +375,6 @@ final class TextTranceSession: Identifiable {
     /// Toggle the post-handoff light tail (applied when the tail begins).
     func setLightEnabled(_ enabled: Bool) {
         lightEnabledLive = enabled
-    }
-
-    /// Enables the gaze/attention gate. The view owns camera monitoring and
-    /// feeds its current observation through `setReaderAttention`.
-    func setAttentionGate(enabled: Bool) {
-        guard attentionGateEnabled != enabled else { return }
-        attentionGateEnabled = enabled
-        if !enabled {
-            attentionSatisfied = true
-            if isAttentionPaused {
-                isAttentionPaused = false
-                resume()
-            }
-        }
-    }
-
-    /// Auto-pause while attention is absent and auto-resume only if the
-    /// session was paused by this gate, preserving manual pause semantics.
-    func setReaderAttention(isLookingAtScreen: Bool) {
-        attentionSatisfied = isLookingAtScreen
-        guard attentionGateEnabled, isReading, !isComplete, !cancelled else { return }
-
-        if isLookingAtScreen {
-            guard isAttentionPaused else { return }
-            isAttentionPaused = false
-            resume()
-        } else {
-            guard !isPaused else { return }
-            isAttentionPaused = true
-            pause()
-        }
     }
 
     /// Clamp + apply a live speed multiplier and re-render the current word.
@@ -495,7 +453,6 @@ final class TextTranceSession: Identifiable {
         guard !isComplete, !cancelled else { return }
         if isReading, !isComplete { progressStore?.save(currentSnapshot()) }
         cancelled = true
-        isAttentionPaused = false
         holdTask?.cancel()
         if isPaused {
             isPaused = false

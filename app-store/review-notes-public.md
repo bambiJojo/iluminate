@@ -1,35 +1,32 @@
-# LumeSync 1.0 App Review Notes
+LumeSync 1.0 (10031) — App Review Notes (draft)
 
-LumeSync does not require an account or login. All shipping features are available after onboarding.
+No account, login, purchase, or subscription is required. This version is intended for public App Store distribution in the United States, United Kingdom, Canada, Australia, and New Zealand. App behavior does not vary by country.
 
-The review attachment **LumeSync-1.0-App-Review-Samples-v2.zip** contains an original text sample, a macOS-synthesized M4A narration of that text, and a rights/instructions note. It contains no third-party or explicit material.
+Changes following review of build 10029:
+- Removed Reader attention checking, its camera pre-permission screen, and all camera/ARKit/TrueDepth use. No camera permission is requested.
+- Removed the onboarding analytics screen shown in Screenshot-0914-141626.png. Fresh installs have optional product analytics disabled. Users can enable or disable it in Settings; onboarding does not request analytics consent.
+- Added system Now Playing metadata and remote playback controls for user-started audio.
 
-## Suggested review path
+REVIEW PATH
+1. Complete onboarding and acknowledge the flashing-light warning. The next screen offers a welcome session or Explore App; no analytics screen appears.
+2. Save and unzip the attached LumeSync-1.0-10030-Review-Evidence.zip in Files. In Library, tap + > Import from Files and select LumeSync-Review-Sample.m4a. Open the imported audio and press Play. The sample is original, non-explicit narration; the ZIP includes rights/instructions and a text sample.
+3. While the narration is audible, go to the Home Screen. Audio should continue. Check Control Center or the Lock Screen for LumeSync, play/pause, scrubbing and 15-second skips. Background audio applies to sessions with audible audio; a visual-only session is not the audio demonstration.
+4. Open Reader and use the bundled Calm Boundaries script, or import the attached LumeSync-Review-Sample.txt. Reading uses manual pause/resume; there is no camera attention check.
+5. Open Create to configure visual sessions. Close/Stop session ends playback. Flashing effects remain behind the safety acknowledgement.
+6. In Settings, inspect analytics controls, Privacy Policy and Clear All Data. Clear All Data removes local content, settings, models, browser data and analytics state, and revokes analytics consent.
 
-1. Complete onboarding. The flashing-light warning is required. Camera attention checking and anonymous analytics are both optional; choose **Not Now** to continue without either.
-2. Open **Library** and tap **+** to import the attached `LumeSync-Review-Sample.m4a` (or another MP3/M4A). Core transcription, timing, and structure analysis run on the device. The first analysis may download the approximately 140 MB WhisperKit `base` model from Hugging Face; download time depends on the network and progress appears in the Analysis Queue. Imported audio is not uploaded with that download.
-3. Open **Reader**. The bundled **Calm Boundaries** script lets you test paced reading immediately. Tap **+** to import the attached `LumeSync-Review-Sample.txt`, another text document, or a user-chosen HTTP(S) website. The app has no curated website directory, search recommendations, or bundled explicit stories. Saving a visible web page requires a separate acknowledgement that the user has permission to import it.
-4. Open **Create** to configure Flash, Colour, Bilateral, or Visuals sessions. Flashing modes remain behind the safety acknowledgement. The Close control stops a running session; after the full controls hide, a persistent **Stop session** button remains on-screen.
-5. Open **Settings** to inspect privacy controls. Anonymous TelemetryDeck analytics are off until the user opts in and never include imported content, filenames, transcripts, or reading-source URLs. **Clear All Data** removes local content, settings, downloaded models, browser website data, and local analytics state, and revokes analytics consent.
+PRIVACY AND PROCESSING
+Core transcription and analysis run on-device. Initial analysis may download the approximately 140 MB WhisperKit base model from Hugging Face; audio is not uploaded with the download. Compatible iOS 26 devices may also use on-device Foundation Models. A public-metadata lookup may send only an inferred track title and creator to Apple's iTunes Search API, not audio or the full transcript. Core features work on iOS 18 and later.
 
-## Platform behavior
+Optional TelemetryDeck analytics measure usage and stability. They exclude audio, transcripts, imported documents, generated text, filenames and reading-source URLs. There is no advertising identifier use, third-party advertising linkage or data-broker sharing, so the app does not use ATT. App Privacy declares non-linked Device ID and Product Interaction for analytics.
 
-The complete reader, library, player, custom visual tools, and local audio analysis work on iOS 18 and later. On compatible iOS 26 devices, analysis may additionally use Apple's on-device Foundation Models. On iOS 18, local keyword, metadata, and audio heuristics provide the fallback.
+The audio background mode supports user-started audible playback. The processing mode supports user-started local analysis when iOS grants execution time, with durable checkpoints. Neither mode records audio or keeps an analytics service running.
 
-On iOS 26, when the on-device analysis identifies both a spoken track title and creator, the app may send only those two inferred strings to Apple's iTunes Search API to verify public catalog metadata. It does not send the audio file or full transcript.
+CONTENT AND SAFETY
+Users import their own authorized files and websites. The app contains no explicit media, adult-site links or content-provider recommendations. LumeSync is an entertainment experience, not medical care. Photosensitive users should not use flashing modes.
 
-The `audio` background mode keeps user-started playback active when the app is backgrounded or the screen locks. The `processing` mode lets user-started on-device analysis continue when iOS grants time and resume from durable checkpoints after suspension. Neither mode records audio or runs background analytics.
-
-## Content disclosure
-
-LumeSync supports classification of user-imported hypnosis and mature material. The app preserves labels such as hypnosis and mature-content categories, but it does not ship explicit audio, stories, thumbnails, third-party transcripts, or links to adult websites. It does not recommend where to obtain adult content. Users choose and remain responsible for their own local files and websites.
-
-LumeSync is a recreational entertainment experience, not medical care or therapy. It does not diagnose, treat, prevent, or monitor a condition.
-
-## Distribution
-
-This version is intended for public App Store distribution in the United States, United Kingdom, Canada, Australia, and New Zealand.
-
-Privacy policy: https://quineent.wixsite.com/lumesync/privacy-policy
-
+Privacy: https://quineent.wixsite.com/lumesync/privacy-policy
 Support: https://quineent.wixsite.com/lumesync/support
+
+RECORDING EVIDENCE
+The attached LumeSync-1.0-10030-Review-Evidence.zip includes ScreenRecording_09-10-2026 16-37-42_1.MP4, an unedited physical-iPhone recording. It shows continued sample narration on the Home Screen at approximately 6–16 seconds and Control Center pause/resume at approximately 19–30 seconds. The ZIP also contains the regenerated original narration sample, text, and README.

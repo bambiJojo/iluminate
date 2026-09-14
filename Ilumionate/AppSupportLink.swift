@@ -8,8 +8,8 @@
 import Foundation
 
 enum AppSupportLink: String, CaseIterable {
-    case support = "https://github.com/bambiJojo/iluminate/issues"
-    case privacyPolicy = "https://github.com/bambiJojo/iluminate/blob/main/PRIVACY_POLICY.md"
+    case support = "https://quineent.wixsite.com/lumesync/support"
+    case privacyPolicy = "https://quineent.wixsite.com/lumesync/privacy-policy"
 
     var url: URL? { URL(string: rawValue) }
 }

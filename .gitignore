@@ -86,6 +86,17 @@ Tools/CorpusGenerator/build/
 # on disk and are uploaded to App Store Connect directly.
 /screenshots/
 
+# App Review evidence media: the background-audio screen recording and the
+# packaged evidence ZIP (~118 MB combined). Same policy as /screenshots/ —
+# they are uploaded to App Store Connect directly and this repository is
+# public, so the weight would be permanent. The small provenance and README
+# files alongside them stay tracked, because they are the record of what was
+# sent and to which submission.
+/AppReviewSamples/*.zip
+/AppReviewSamples/*.MP4
+/AppReviewSamples/*.mp4
+/AppReviewSamples/*.m4a
+
 # LumeLabel companion labelling app. Kept out of the public repository by
 # request; the sources stay on disk locally. Nothing in the shipped app target
 # depends on it — the Ilumionate scheme has no reference to it and there are no

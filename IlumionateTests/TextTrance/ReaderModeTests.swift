@@ -71,7 +71,7 @@ struct ReaderModeTests {
 
     @Test("Shared groups keep the same tier in both modes")
     func sharedGroupsAreStable() {
-        for group in [ReaderSettingsGroup.readingComfort, .visual, .attention] {
+        for group in [ReaderSettingsGroup.readingComfort, .visual] {
             #expect(group.tier(in: .reading) == .main)
             #expect(group.tier(in: .trance) == .main)
         }

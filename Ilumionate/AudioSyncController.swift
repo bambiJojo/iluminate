@@ -49,7 +49,9 @@ class AudioSyncController {
         #if !os(macOS)
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            // A non-mixable playback session makes this player eligible
+            // for the system Now Playing controls.
+            try audioSession.setCategory(.playback, mode: .default)
             try audioSession.setActive(true)
             Log.audio.info("✅ Audio session configured for playback")
         } catch {

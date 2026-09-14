@@ -11,7 +11,6 @@ import SwiftUI
 
 struct ReaderSettingsDrawer: View {
     @Bindable var session: TextTranceSession
-    let attentionStatus: ReaderAttentionMonitorStatus
     /// Passed in live rather than re-read from the store: the Trance tile in the
     /// control tray can change it while the reader is open, and the drawer must
     /// offer the groups for the mode the user is actually in.
@@ -34,10 +33,6 @@ struct ReaderSettingsDrawer: View {
     private var lightBinding: Binding<Bool> {
         Binding(get: { session.lightEnabledLive },
                 set: { session.setLightEnabled($0) })
-    }
-    private var attentionBinding: Binding<Bool> {
-        Binding(get: { session.attentionGateEnabled },
-                set: { session.setAttentionGate(enabled: $0) })
     }
     private var speedTrainingBinding: Binding<ReaderSpeedTrainingSettings> {
         Binding(get: { session.speedTraining },
@@ -97,13 +92,6 @@ struct ReaderSettingsDrawer: View {
             SpeedTargetRow(settings: speedTrainingBinding)
         case .visual:
             ReaderVisualControls(preferences: displayPreferencesBinding, style: .formSection)
-        case .attention:
-            Toggle("Require attention", isOn: attentionBinding)
-            if session.attentionGateEnabled {
-                Label(attentionStatusText, systemImage: attentionStatusImage)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-            }
         case .binaural:
             Toggle("Binaural beats", isOn: binauralBinding)
         case .speedDetail:
@@ -126,16 +114,6 @@ struct ReaderSettingsDrawer: View {
         case .arc, .pacingPreset:
             EmptyView()   // filtered out by drawerGroups
         }
-    }
-
-    private var attentionStatusText: String {
-        if session.isAttentionPaused { return "Waiting for attention" }
-        if let text = attentionStatus.displayText { return text }
-        return session.attentionSatisfied ? "Attention detected" : "Waiting for attention"
-    }
-
-    private var attentionStatusImage: String {
-        session.attentionSatisfied ? "eye.fill" : "eye.slash.fill"
     }
 }
 

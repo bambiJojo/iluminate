@@ -28,7 +28,6 @@ struct ContentView: View {
     @State private var audioLibraryCache = AudioLibraryCache.shared
     @State private var selectedSession: LightSession?
     @State private var showingOnboarding = false
-    @State private var showingAnalyticsConsentPrompt = false
     @State private var showingResumedPlayer = false
     @State private var isLoading = true
     @State private var showingAnalysisQueue = false
@@ -74,7 +73,6 @@ struct ContentView: View {
             await scanCableInbox()
             startWatchingCableInbox()
             checkForFirstLaunch()
-            checkForAnalyticsConsentPrompt()
             engine.userFrequencyMultiplier = userFrequencyMultiplierPref
             UsageAnalytics.shared.appBecameActive()
             UsageAnalytics.shared.screen(screen(for: selectedTab))
@@ -141,16 +139,6 @@ struct ContentView: View {
             NavigationStack {
                 AnalysisCenterView(engine: engine)
             }
-        }
-        .alert("Help Improve LumeSync", isPresented: $showingAnalyticsConsentPrompt) {
-            Button("Not Now", role: .cancel) {
-                UsageAnalytics.shared.setEnabled(false)
-            }
-            Button("Share Anonymous Analytics") {
-                UsageAnalytics.shared.setEnabled(true)
-            }
-        } message: {
-            Text("Share anonymous usage analytics so we can understand what works, find problems, and improve the app. This never includes audio, transcripts, generated session text, imported documents, or reading-source URLs.")
         }
         .alert(
             cableImportAlertTitle,
@@ -406,18 +394,6 @@ struct ContentView: View {
                 await MainActor.run {
                     showingOnboarding = true
                 }
-            }
-        }
-    }
-
-    private func checkForAnalyticsConsentPrompt() {
-        let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-        guard hasCompletedOnboarding, !UsageAnalytics.shared.hasAnsweredConsent else { return }
-
-        Task {
-            try? await Task.sleep(for: .milliseconds(900))
-            await MainActor.run {
-                showingAnalyticsConsentPrompt = true
             }
         }
     }

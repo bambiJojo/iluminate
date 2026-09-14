@@ -21,7 +21,6 @@ enum ReaderSettingsGroup: String, CaseIterable, Identifiable, Sendable {
     // Shared
     case readingComfort     // reader mode, font, size
     case visual             // TranceVisual picker (never removed by mode)
-    case attention          // attention gate
     case displayDetail      // line spacing, highlight, brightness, hide controls, dyslexia
     case speedDetail        // speed mode, warm-up/ramp WPM, chunk size, punctuation pauses
 
@@ -41,7 +40,6 @@ enum ReaderSettingsGroup: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .readingComfort: "Reading comfort"
         case .visual:         "Visual"
-        case .attention:      "Attention"
         case .displayDetail:  "Reader display"
         case .speedDetail:    "Speed training"
         case .speedTarget:    "Speed"
@@ -61,7 +59,7 @@ enum ReaderSettingsGroup: String, CaseIterable, Identifiable, Sendable {
     /// named presets because the number is a tuning detail there.
     func tier(in mode: ReaderMode) -> ReaderSettingsTier? {
         switch self {
-        case .readingComfort, .visual, .attention:
+        case .readingComfort, .visual:
             return .main
         case .displayDetail, .speedDetail:
             return .advanced
@@ -118,7 +116,6 @@ extension TextTranceSessionSettings {
             postHandoffDuration: postHandoffDuration,
             subliminalEnabled: offers(.subliminal) && subliminalEnabled,
             subliminalSpeed: subliminalSpeed,
-            attentionGateEnabled: attentionGateEnabled,
             speedTraining: speedTraining,
             displayPreferences: displayPreferences
         )

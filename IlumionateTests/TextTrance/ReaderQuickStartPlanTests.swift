@@ -52,7 +52,6 @@ struct ReaderQuickStartPlanTests {
         #expect(plan?.settings.speedMultiplier == preset.speedTraining.targetSpeedMultiplier)
         #expect(plan?.settings.lightEnabled == false)
         #expect(plan?.settings.binauralEnabled == false)
-        #expect(plan?.settings.attentionGateEnabled == false)
     }
 
     private func makeScript(id: String) -> TranceScript {

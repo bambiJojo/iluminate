@@ -21,7 +21,6 @@ struct TextTranceSetupView: View {
     // want it can still switch it on; saved sessions keep their own choice.
     @State private var subliminalEnabled = false
     @State private var subliminalSpeed: TextPacingSettings.SubliminalSpeed = .medium
-    @State private var attentionGateEnabled = false
     @State private var resumeIndex = 0
     @State private var activePlayerSession: TextTranceSession?
     @State private var loadedPreset = false
@@ -64,8 +63,6 @@ struct TextTranceSetupView: View {
                     ReaderVisualControls(preferences: $displayPreferences, style: .setupCard)
                 }
             }
-        case .attention:
-            AttentionGateCard(enabled: $attentionGateEnabled)
         case .binaural:
             BinauralLayerCard(enabled: $binauralEnabled)
         case .speedDetail:
@@ -202,7 +199,6 @@ struct TextTranceSetupView: View {
             postHandoffDuration: 600,
             subliminalEnabled: subliminalEnabled,
             subliminalSpeed: subliminalSpeed,
-            attentionGateEnabled: attentionGateEnabled,
             speedTraining: activeSpeedTraining,
             displayPreferences: displayPreferences
         ).normalized(for: mode, supportedArcs: script.supportedArcs)
@@ -253,7 +249,6 @@ struct TextTranceSetupView: View {
         binauralEnabled = s.settings.binauralEnabled
         subliminalEnabled = s.settings.subliminalEnabled
         subliminalSpeed = s.settings.subliminalSpeed
-        attentionGateEnabled = s.settings.attentionGateEnabled
         displayPreferences = s.settings.displayPreferences
     }
 
@@ -621,23 +616,6 @@ private struct ReaderDisplayCard: View {
                     .tint(.roseGold)
                 Toggle("Dyslexia-friendly rendering", isOn: $preferences.dyslexiaFriendly)
                     .tint(.roseGold)
-            }
-        }
-    }
-}
-
-private struct AttentionGateCard: View {
-    @Binding var enabled: Bool
-
-    var body: some View {
-        LiminalCard(label: "Attention") {
-            VStack(spacing: TranceSpacing.list) {
-                Toggle("Require attention", isOn: $enabled)
-                    .tint(.roseGold)
-                Text("Uses the front camera when the reader is open")
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

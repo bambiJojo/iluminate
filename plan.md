@@ -1,6 +1,6 @@
 # LumeSync (Ilumionate) — Unified Development Plan
 
-> Consolidated from all planning documents. Last updated: 2026-08-26.
+> Consolidated from all planning documents. Last updated: 2026-09-09.
 
 ## Where documentation lives
 
@@ -378,8 +378,38 @@ exist, so the "fake streaming analysis" phase resolved itself by deletion)*
 - ✅ Privacy policy, medical disclaimer, export compliance
 - ✅ Beta release notes + tester guide written
 - 🔄 Final pre-upload testing checklist — some items pending full audio sync feature
-- ❌ Upload archive + submit for external review
+- ✅ Upload archive + submit for external review — submitted as 1.0 (10029)
 - ❌ Screenshots for all required device sizes
+
+### App Review rejection — 1.0 (10029), 2026-09-09
+
+Submission `98358163-4be9-43b2-968e-9f1437675929` was rejected on five guidelines.
+Replacement build 10030 is prepared on `fix/app-review-rejection-1.0`; resubmission
+has verified physical-device background-audio evidence attached. Draft reply:
+[`app-store/APPEAL_RESPONSE_98358163.md`](app-store/APPEAL_RESPONSE_98358163.md).
+
+| Guideline | Change and verification |
+|---|---|
+| 5.1.1(iv) | Removed Reader attention checking and camera pre-prompt; release archive has no camera usage description. |
+| 2.1 | Draft answers explain both reviewed build 10029 and replacement build 10030; corrected face-data policy is published on Wix. |
+| 5.1.2(i) | Standalone analytics prompt removed; off-by-default onboarding toggle. ASC privacy labels checked: analytics not linked, no tracking. |
+| 2.5.1 | Release archive has no ARKit dependency, ARFaceTrackingConfiguration or ARFaceAnchor strings. |
+| 2.5.4 | Now Playing and remote controls added; iOS toggle uses the player's own state. Simulator regression passes. Physical-iPhone Home Screen playback and Control Center pause/resume recording verified and attached. |
+
+The personal BambiCloud integration was removed from this release working tree.
+Targeted iOS checks passed: 105 tests, one remote-transport test, and two updated
+Wix support/privacy link tests. Clean release archive and signing verification passed. Build 10030 is uploaded, VALID,
+selected for version 1.0, and available for internal TestFlight testing.
+
+The sole published privacy policy is https://quineent.wixsite.com/lumesync/privacy-policy.
+App code, App Store Connect and review drafts point there; GitHub contains a link only.
+Obsolete attention-check screenshots were removed from both iPhone galleries; remaining
+screenshots and the app preview were inspected.
+
+**Still open before resubmission:**
+
+- Verify physical-device background playback, interruptions, audio route changes and controls.
+- Live review notes and draft reply reference the verified recording; validation has zero errors/warnings. Reply sent and build 10030 resubmitted September 11; WAITING_FOR_REVIEW.
 
 ---
 

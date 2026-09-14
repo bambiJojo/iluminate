@@ -110,7 +110,6 @@ struct ReaderControlCluster: View {
                     symbolSize: Self.playSymbolSize
                 ) {
                     onInteraction()
-                    guard !session.isAttentionPaused else { return }
                     if session.isPaused { session.resume() } else { session.pause() }
                 }
 
@@ -297,12 +296,10 @@ struct ReaderControlCluster: View {
     }
 
     private var transportLabel: String {
-        if session.isAttentionPaused { return "Waiting" }
-        return session.isPaused ? "Resume" : "Pause"
+        session.isPaused ? "Resume" : "Pause"
     }
 
     private var transportSystemImage: String {
-        if session.isAttentionPaused { return "eye.slash.fill" }
-        return session.isPaused ? "play.fill" : "pause.fill"
+        session.isPaused ? "play.fill" : "pause.fill"
     }
 }

@@ -44,7 +44,6 @@ struct ReaderQuickStartPlan: Identifiable {
                 postHandoffDuration: 600,
                 subliminalEnabled: false,   // see TextTranceSetupView for rationale
                 subliminalSpeed: .medium,
-                attentionGateEnabled: false,
                 speedTraining: savedPreset.speedTraining,
                 displayPreferences: savedPreset.displayPreferences
             )
@@ -114,7 +113,6 @@ struct ReaderQuickStartPlan: Identifiable {
                 postHandoffDuration: 600,
                 subliminalEnabled: state.settings.subliminalEnabled,
                 subliminalSpeed: state.settings.subliminalSpeed,
-                attentionGateEnabled: state.settings.attentionGateEnabled,
                 speedTraining: speedTraining,
                 displayPreferences: state.settings.displayPreferences
             )

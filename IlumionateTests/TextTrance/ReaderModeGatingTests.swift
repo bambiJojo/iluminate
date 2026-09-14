@@ -22,8 +22,7 @@ struct ReaderModeGatingTests {
             beatFrequency: 10,
             postHandoffDuration: 600,
             subliminalEnabled: true,
-            subliminalSpeed: .medium,
-            attentionGateEnabled: true
+            subliminalSpeed: .medium
         )
     }
 
@@ -81,7 +80,6 @@ struct ReaderModeGatingTests {
     func ungatedSettingsSurvive() {
         for mode in ReaderMode.allCases {
             let s = allLayersOn.normalized(for: mode, supportedArcs: [.fullText, .handoff])
-            #expect(s.attentionGateEnabled == true)
             #expect(s.speedMultiplier == 1)
             #expect(s.beatFrequency == 10)
             #expect(s.subliminalSpeed == .medium)

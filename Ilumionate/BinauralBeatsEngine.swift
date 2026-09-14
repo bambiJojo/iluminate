@@ -140,7 +140,7 @@ final class BinauralBeatsEngine {
         // output-node format reflects the correct hardware configuration.
         #if os(iOS)
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
+            try AVAudioSession.sharedInstance().setCategory(.playback)
         } catch {
             Log.audio.info("[BinauralBeats] AVAudioSession setup error: \(error)")
         }
