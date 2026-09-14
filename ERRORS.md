@@ -2979,8 +2979,21 @@ class of problem. Not this repo's issue; recorded because it was seen.
 ## ERR-035 — The neutral-import invariant fails on the personal BambiCloud branch
 
 - **Date discovered:** 2026-09-05
-- **Status:** identified
+- **Status:** completed (2026-09-15) — resolved for the release line; still red on the personal branch by design
 - **Severity:** medium
+
+**Resolution (2026-09-15).** Option 1 from the proposed fixes was taken: the personal
+branch is a downstream fork that is never archived, and the release line is `main`.
+The App Store 1.0 (10031) work was rebuilt on `main`, which has never carried
+`BambiCloudPlaylistLink.swift` or `PlaylistLinkBrowserView.swift`, so
+`noHardcodedPlaylistHost()` passes there — verified in full serial runs of both
+suites (macOS 1,705 and iOS 26 1,706 test cases, zero failures). The ERR-029
+guarantee therefore holds for anything archived from `main`.
+
+`personal/bambi-playlist-downloader` still fails this test, and that is now the
+intended state rather than an open defect: the branch exists to carry the host
+adapter for local use. **Do not archive a release from it** — see
+`app-store/RESUBMISSION_STATUS_10031.md`.
 
 **Symptom.** `PlaylistSourceDocumentTests.noHardcodedPlaylistHost()` fails on branch
 `personal/bambi-playlist-downloader`. Every other test passes (1859 executed, 1 failure).
