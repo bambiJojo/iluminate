@@ -54,10 +54,52 @@ The test now allows 400 polling attempts, retains all state-transition assertion
 - Review media (~118 MB of ZIP and MP4) moved to `.gitignore`; the provenance and
   README files stay tracked as the record of what was sent.
 
+## Archive and IPA — September 15, 2026
+
+Distribution-signed IPA produced and verified at `/tmp/LumeSync-10031-export/Ilumionate.ipa`
+(29 MB). Archive at `/tmp/LumeSync-10031.xcarchive`. Not uploaded.
+
+**Both steps need `-allowProvisioningUpdates`.** A first attempt without it archived
+against the development "iOS Team Provisioning Profile" (`get-task-allow = true`) and
+the App Store re-sign then failed on the share extension:
+
+```
+error: exportArchive codesign command failed (… /PlugIns/IlumionateShareExtension.appex:
+replacing existing signature
+** EXPORT FAILED **
+```
+
+`Scripts/release-testflight.sh:330` passes the flag on both the archive and the export;
+hand-rolled `xcodebuild` invocations must do the same.
+
+**Do not trust the shell exit code when piping xcodebuild through `grep`** — the pipeline
+reports the exit status of `grep`, so a failed export reads as success. Capture
+xcodebuild's own status (`cmd > log 2>&1; echo "EXIT=$?"`) and grep the log for
+`** EXPORT SUCCEEDED **`.
+
+IPA verified (contents, not just source):
+
+| Check | Result |
+|---|---|
+| Signing authority | `iPhone Distribution: Byron Quine (GUHEBKT9SX)` |
+| Embedded profile | `iOS Team Store Provisioning Profile`, `get-task-allow = false` |
+| App / extension `get-task-allow` | false / false |
+| `CFBundleVersion` app / extension | 10031 / 10031 |
+| Camera or tracking Info.plist keys | 0 |
+| `UIBackgroundModes` | `["audio","processing"]` |
+| ARKit linked | no |
+| MediaPlayer linked | yes |
+| `ARFace*` / attention strings | 0 |
+| Analytics-consent copy | 0 |
+| ATT symbols | 0 |
+| `NSPrivacyTracking` | false |
+
 ## Before submission — still outstanding
 
-1. **Upload build 10031.** App Store Connect's newest build is still 10030, the
-   rejected one. Nothing can be resubmitted until 10031 is uploaded and selected.
+1. **Upload build 10031.** The signed IPA is built and verified but **not uploaded** —
+   App Store Connect's newest build is still 10030, the rejected one. Upload with
+   `asc builds upload --app 6760121072 --ipa /tmp/LumeSync-10031-export/Ilumionate.ipa`,
+   then select the build on the version.
 2. **Confirm App Privacy is published** in the App Store Connect UI. The public
    API cannot verify this and it can silently block submission.
 3. **On a physical device**, walk the new onboarding flow end to end and confirm
