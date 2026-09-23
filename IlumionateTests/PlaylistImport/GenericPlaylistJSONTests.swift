@@ -141,6 +141,18 @@ struct GenericPlaylistJSONTests {
         }
     }
 
+    /// A lookup by ID that matches nothing answers with an empty collection.
+    /// That is a missing playlist, not an unreadable format, and the user
+    /// needs to hear the difference.
+    @Test("An empty playlist collection is reported as not found")
+    func emptyCollectionIsNotFound() {
+        let json = Data(#"{ "playlists": [], "totalItems": 0, "pageSize": 12 }"#.utf8)
+
+        #expect(throws: PlaylistSourceError.playlistNotFound) {
+            try GenericPlaylistJSON.playlist(from: json)
+        }
+    }
+
     @Test("A track with no usable title is skipped rather than importing blank rows")
     func untitledTracksAreSkipped() throws {
         let json = Data("""

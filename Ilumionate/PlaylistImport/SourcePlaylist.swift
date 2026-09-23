@@ -72,6 +72,9 @@ nonisolated enum PlaylistSourceError: LocalizedError, Equatable, Sendable {
     case noTracks
     /// The response was a web page rather than playlist data.
     case looksLikeAWebPage
+    /// The response was an empty collection of playlists — the address was a
+    /// lookup that matched nothing, such as a deleted or private playlist.
+    case playlistNotFound
 
     var errorDescription: String? { failureReason }
 
@@ -85,6 +88,8 @@ nonisolated enum PlaylistSourceError: LocalizedError, Equatable, Sendable {
             "That playlist did not list any tracks."
         case .looksLikeAWebPage:
             "That link is a web page, not playlist data. Paste the playlist's file or feed address instead."
+        case .playlistNotFound:
+            "No playlist was found at that link. It may be private or deleted, or the link may be mistyped."
         }
     }
 }

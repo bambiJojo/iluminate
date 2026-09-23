@@ -53,6 +53,11 @@ struct PlaylistLinkBrowserView: View {
                         .tint(.roseGold)
                 }
             }
+            .overlay {
+                if let pageErrorMessage, isLoading == false {
+                    PlaylistBrowserErrorView(message: pageErrorMessage, reload: reload)
+                }
+            }
 
             bottomBar
         }
@@ -61,21 +66,18 @@ struct PlaylistLinkBrowserView: View {
 
     private var topBar: some View {
         HStack(spacing: TranceSpacing.inner) {
-            Button {
+            Button("Close browser", systemImage: "xmark") {
                 dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.textPrimary)
-                    .frame(width: 42, height: 42)
-                    .background(Color.glassBorder.opacity(0.16), in: Circle())
             }
-            .accessibilityLabel("Close browser")
+            .labelStyle(.iconOnly)
+            .font(.headline)
+            .foregroundStyle(.textPrimary)
+            .frame(width: 44, height: 44)
+            .background(Color.glassBorder.opacity(0.16), in: .circle)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
                 Text(displayTitle)
-                    .font(TranceTypography.body)
-                    .fontWeight(.semibold)
+                    .font(TranceTypography.body.bold())
                     .foregroundStyle(.textPrimary)
                     .lineLimit(1)
 
@@ -87,31 +89,12 @@ struct PlaylistLinkBrowserView: View {
 
             Spacer(minLength: TranceSpacing.inner)
 
-            Button(action: importCurrentPage) {
-                HStack(spacing: TranceSpacing.icon) {
-                    Image(systemName: "square.and.arrow.down")
-                    Text("Import")
-                }
-                .font(TranceTypography.body)
-                .fontWeight(.semibold)
-                .foregroundStyle(isPlaylistPage ? .white : Color.textLight)
-                .padding(.horizontal, TranceSpacing.inner)
-                .frame(height: 42)
-                .background {
-                    if isPlaylistPage {
-                        LinearGradient(
-                            colors: [.roseGold, .roseDeep],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .clipShape(.capsule)
-                    } else {
-                        Capsule().fill(Color.glassBorder.opacity(0.16))
-                    }
-                }
-            }
-            .disabled(!isPlaylistPage)
-            .accessibilityLabel("Import this playlist")
+            Button("Import", systemImage: "square.and.arrow.down", action: importCurrentPage)
+                .font(TranceTypography.caption.bold())
+                .buttonStyle(.borderedProminent)
+                .tint(.roseGold)
+                .disabled(isPlaylistPage == false)
+                .accessibilityLabel("Import this playlist")
         }
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.inner)
@@ -137,7 +120,7 @@ struct PlaylistLinkBrowserView: View {
                 if isLoading {
                     webView?.stopLoading()
                 } else {
-                    webView?.reload()
+                    reload()
                 }
             }
         }
@@ -147,13 +130,23 @@ struct PlaylistLinkBrowserView: View {
         .background(.ultraThinMaterial)
     }
 
-    /// Any web page can be handed to the importer. Whether it *is* a playlist
-    /// is decided by what the address returns, not by its shape — the importer
-    /// has no list of known services to check against — so this only rules out
-    /// addresses that could never be fetched.
     private var isPlaylistPage: Bool {
-        guard let currentURL else { return false }
-        return (try? PlaylistSourceURL.normalized(currentURL.absoluteString)) != nil
+        Self.isImportable(currentURL)
+    }
+
+    /// Only a BambiCloud playlist page converts to playlist data. Every other
+    /// page on the site is HTML the importer would reject, so offering Import
+    /// there only leads to an error.
+    nonisolated static func isImportable(_ url: URL?) -> Bool {
+        guard let url else { return false }
+        return BambiCloudPlaylistLink(url.absoluteString) != nil
+    }
+
+    /// Following a link while a page is still loading cancels that load. It is
+    /// routine, not a failure, and must not cover the page with an error.
+    nonisolated static func isReportableLoadFailure(_ error: any Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain != NSURLErrorDomain || nsError.code != NSURLErrorCancelled
     }
 
     private var displayTitle: String {
@@ -164,9 +157,20 @@ struct PlaylistLinkBrowserView: View {
     private var subtitle: String {
         guard let currentURL else { return "Loading…" }
         if isPlaylistPage {
-            return "Tap Import to read this address as a playlist"
+            return "Tap Import to load this playlist"
         }
         return currentURL.host(percentEncoded: false) ?? currentURL.absoluteString
+    }
+
+    /// A first load that fails — offline, typically — leaves the web view with
+    /// no page to reload, so `reload()` alone would silently do nothing.
+    private func reload() {
+        guard let webView else { return }
+        if webView.url == nil {
+            webView.load(URLRequest(url: initialURL))
+        } else {
+            webView.reload()
+        }
     }
 
     private func importCurrentPage() {
@@ -184,15 +188,44 @@ private struct PlaylistBrowserControl: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isEnabled ? .textPrimary : .textLight)
-                .frame(width: 42, height: 42)
-                .background(Color.glassBorder.opacity(0.16), in: Circle())
+        Button(label, systemImage: systemName, action: action)
+            .labelStyle(.iconOnly)
+            .font(.headline)
+            .foregroundStyle(isEnabled ? Color.textPrimary : Color.textLight)
+            .frame(width: 44, height: 44)
+            .background(Color.glassBorder.opacity(0.16), in: .circle)
+            .disabled(isEnabled == false)
+    }
+}
+
+/// Without this, a page that fails to load leaves a blank web view and a
+/// stopped progress bar — indistinguishable from a page that is still coming.
+private struct PlaylistBrowserErrorView: View {
+    let message: String
+    let reload: () -> Void
+
+    var body: some View {
+        VStack(spacing: TranceSpacing.list) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title)
+                .foregroundStyle(.warmAccent)
+
+            Text("Page unavailable")
+                .font(TranceTypography.sectionTitle)
+                .foregroundStyle(.textPrimary)
+
+            Text(message)
+                .font(TranceTypography.body)
+                .foregroundStyle(.textSecondary)
+                .multilineTextAlignment(.center)
+
+            Button("Reload", systemImage: "arrow.clockwise", action: reload)
+                .buttonStyle(.borderedProminent)
+                .tint(.roseGold)
         }
-        .disabled(isEnabled == false)
-        .accessibilityLabel(label)
+        .padding(TranceSpacing.screen)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.bgPrimary.opacity(0.96))
     }
 }
 
@@ -365,9 +398,7 @@ private struct PlaylistBrowserWebView: PlaylistBrowserRepresentable {
             didFail navigation: WKNavigation!,
             withError error: Error
         ) {
-            updateState(from: webView)
-            isLoading = false
-            errorMessage = error.localizedDescription
+            handleFailure(error, in: webView)
         }
 
         func webView(
@@ -375,8 +406,13 @@ private struct PlaylistBrowserWebView: PlaylistBrowserRepresentable {
             didFailProvisionalNavigation navigation: WKNavigation!,
             withError error: Error
         ) {
+            handleFailure(error, in: webView)
+        }
+
+        private func handleFailure(_ error: any Error, in webView: WKWebView) {
             updateState(from: webView)
             isLoading = false
+            guard PlaylistLinkBrowserView.isReportableLoadFailure(error) else { return }
             errorMessage = error.localizedDescription
         }
 

@@ -43,7 +43,9 @@ nonisolated enum GenericPlaylistJSON {
         }
 
         guard let object = playlistObject(in: root) else {
-            throw PlaylistSourceError.invalidResponse
+            throw isEmptyCollection(root)
+                ? PlaylistSourceError.playlistNotFound
+                : PlaylistSourceError.invalidResponse
         }
 
         let tracks = self.tracks(in: object)
@@ -84,6 +86,15 @@ nonisolated enum GenericPlaylistJSON {
         }
 
         return nil
+    }
+
+    /// A lookup that matched nothing still has the collection's shape — only
+    /// every collection it names is empty. Anything else unreadable is a format
+    /// problem, not a missing playlist.
+    private static func isEmptyCollection(_ root: Any) -> Bool {
+        guard let object = root as? [String: Any] else { return false }
+        let collections = collectionKeys.compactMap { object[$0] as? [Any] }
+        return !collections.isEmpty && collections.allSatisfy(\.isEmpty)
     }
 
     private static func firstPlaylist(in array: [Any]) -> [String: Any]? {

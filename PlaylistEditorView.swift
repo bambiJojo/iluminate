@@ -495,8 +495,19 @@ struct PlaylistEditorView: View {
                 .foregroundColor(.roseGold)
         }
         ToolbarItem(placement: .primaryAction) {
-            Button("Import", systemImage: "globe", action: showImporter)
-                .foregroundColor(.roseGold)
+            // Both routes, because the browser has no address bar: without the
+            // link entry, only BambiCloud could be imported from here.
+            Menu("Import", systemImage: "globe") {
+                Button("Import from Link", systemImage: "link") {
+                    TranceHaptics.shared.light()
+                    presentImporter(initialLink: nil)
+                }
+                Button("Browse BambiCloud", systemImage: "safari") {
+                    TranceHaptics.shared.light()
+                    showingLinkBrowser = true
+                }
+            }
+            .tint(.roseGold)
         }
         ToolbarItem(placement: .confirmationAction) {
             Button("Done") {
@@ -517,23 +528,22 @@ struct PlaylistEditorView: View {
         playlist.items.append(item)
     }
 
-    private func showImporter() {
-        TranceHaptics.shared.light()
-        showingLinkBrowser = true
-    }
-
     /// Runs once the browser has fully dismissed. Presenting the importer while
     /// the cover is still going away drops the sheet.
     private func startPendingImport() {
         guard let link = pendingImportLink else { return }
         pendingImportLink = nil
+        presentImporter(initialLink: link)
+    }
 
+    /// A browser-picked link skips link entry; `nil` opens the paste form.
+    private func presentImporter(initialLink: String?) {
         let files = AudioLibraryStore.load()
         storedAudioFiles = files
         availableAudioFiles = files
         importRequest = PlaylistImportRequest(
             audioFiles: files,
-            initialLink: link
+            initialLink: initialLink
         )
     }
 

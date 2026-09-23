@@ -83,6 +83,7 @@ struct PlaylistLibraryView: View {
                 // hand it an empty library.
                 PlaylistImportView(
                     audioFiles: request.audioFiles,
+                    initialLink: request.initialLink,
                     onImport: savePlaylist
                 )
             }

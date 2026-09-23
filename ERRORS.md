@@ -3036,3 +3036,165 @@ deleting the test or the feature:
 
 **Risks.** Option 2 makes it possible to reintroduce host coupling without the suite
 noticing, which is the failure mode the invariant was written to prevent.
+
+## ERR-036 — "Browse BambiCloud" from the Playlists screen opens an empty importer
+
+- **Date discovered:** 2026-09-23
+- **Status:** completed (2026-09-23)
+- **Severity:** high (the feature's main path from that screen does nothing useful)
+- **Branch:** `personal/bambi-playlist-downloader` only (commit `5de1a9f`)
+
+**Symptom.** Library → Playlists → "+" → **Browse BambiCloud**, open a playlist page, tap
+**Import**. The browser closes and the importer sheet appears on the blank link-entry form
+instead of loading the playlist the user picked. The same flow from the Library "+" menu
+(`LibraryView`) and from the playlist editor works.
+
+**Location.** `PlaylistLibraryView.swift:80-88` — the `.sheet(item: $importRequest)` builds
+`PlaylistImportView(audioFiles:onImport:)` and never passes `initialLink: request.initialLink`.
+`startPendingImport()` (`PlaylistLibraryView.swift:110-116`) sets `initialLink` correctly; the
+sheet discards it. Compare `Ilumionate/LibraryView.swift:227-231` and
+`PlaylistEditorView.swift:~160`, which both forward it.
+
+**Reproduce.** Run the app, follow the steps above. No unit test covers the view wiring.
+
+**Root cause.** The restore commit added the browser + pending-link plumbing to
+`PlaylistLibraryView` but did not update its existing import sheet.
+
+**Proposed fix.** Add `initialLink: request.initialLink,` to that `PlaylistImportView` call.
+`PlaylistImportView`'s `.task` then auto-loads it, as it already does for the other two hosts.
+
+**Risks.** None beyond the one-line change; `initialLink` defaults to `nil` for the
+"Import from Link" path.
+
+## ERR-037 — BambiCloud browser: Import is enabled on every page, load errors are never shown, editor lost link paste
+
+- **Date discovered:** 2026-09-23
+- **Status:** completed (2026-09-23)
+- **Severity:** medium
+- **Branch:** `personal/bambi-playlist-downloader` only (commit `5de1a9f`)
+
+Three related gaps in `Ilumionate/PlaylistImport/PlaylistLinkBrowserView.swift` and its callers.
+
+1. **Import is lit on every page.** `isPlaylistPage` (`PlaylistLinkBrowserView.swift:~150`)
+   returns true for any http(s) URL via `PlaylistSourceURL.normalized`, so on the BambiCloud
+   home, search, or profile pages the button shows the rose-gold "ready" style and the
+   subtitle says "Tap Import to read this address as a playlist". Tapping it fetches the HTML
+   page and the importer fails with the "looks like a web page" error. Its doc comment ("the
+   importer has no list of known services") is stale on this branch now that
+   `BambiCloudPlaylistLink` exists.
+   *Fix:* `BambiCloudPlaylistLink(currentURL.absoluteString) != nil`.
+2. **Page-load errors are swallowed.** The coordinator writes `errorMessage` on
+   `didFail`/`didFailProvisionalNavigation`, but `pageErrorMessage` is never rendered in
+   `body`. Offline, or with BambiCloud down, the user sees a blank page and a stopped
+   progress bar. It also records `NSURLErrorCancelled` (-999) from normal
+   navigations as an error. *Fix:* overlay the message with a Retry
+   button (for example `ContentUnavailableView`) and ignore `-999`.
+3. **The editor lost link paste.** `PlaylistEditorView.showImporter()` (the toolbar's globe
+   **Import**) now always opens the browser. The browser has no address bar and starts at
+   `bambicloud.com`, so from the editor you can no longer import a link from any other
+   source. On `main` this button opened link entry. *Fix:* make the button a `Menu` with
+   "Import from Link" and "Browse BambiCloud", matching `PlaylistLibraryView`.
+
+**Reproduce.** (1) Open Browse BambiCloud and look at the Import button on the landing page.
+(2) Turn off networking, then open Browse BambiCloud. (3) Open any playlist in the editor and
+tap the globe **Import** button.
+
+**Root cause.** The browser was built as a generic "any page" picker and reused as a
+BambiCloud-specific surface without narrowing its readiness check or adding error UI.
+
+**Risks.** Fix 1 stops users importing non-BambiCloud feed pages from the browser. That is
+acceptable because the browser cannot reach them (no address bar), and link entry still
+accepts any URL.
+
+## ERR-036 / ERR-037 resolution — 2026-09-23
+
+**ERR-036.** `PlaylistLibraryView.swift` now forwards `initialLink: request.initialLink`
+to `PlaylistImportView`. Not unit-testable (view wiring); verified by compiling on macOS
+and iOS 18.5. Still needs one manual run through Playlists → + → Browse BambiCloud.
+
+**ERR-037.**
+1. `PlaylistLinkBrowserView.isImportable(_:)` now enables Import only when
+   `BambiCloudPlaylistLink` accepts the page URL. Covered by
+   `BambiCloudPlaylistLinkTests.browserOffersImportOnPlaylistPages` (3 cases) and
+   `browserWithholdsImportElsewhere` (5 cases) plus `browserWithholdsImportBeforeAnyPageLoads`.
+2. Load failures now show `PlaylistBrowserErrorView` with Reload, and
+   `isReportableLoadFailure(_:)` ignores `NSURLErrorCancelled`. Both Reload buttons go through
+   `reload()`, which reloads `initialURL` when the first load failed and the web view has no
+   URL. Plain `WKWebView.reload()` is a no-op in that state, which is the offline case.
+   Tests: `cancelledNavigationIsNotAPageFailure`, `offlineIsAPageFailure`. The overlay
+   itself is not visually verified.
+3. The editor's globe toolbar item is now a `Menu` with "Import from Link" and
+   "Browse BambiCloud", sharing `presentImporter(initialLink:)`.
+
+Also in the same change:
+- New `PlaylistSourceError.playlistNotFound`. `GenericPlaylistJSON` throws it when every
+  collection key in the document is an empty array. The BambiCloud API returns
+  `{"playlists":[],"totalItems":0,...}` for an unknown or private UUID (checked live
+  2026-09-23), which used to surface as "did not return a playlist LumeSync can read".
+  Tests: `GenericPlaylistJSONTests.emptyCollectionIsNotFound`,
+  `BambiCloudPlaylistLinkTests.unknownPlaylistIsReportedAsNotFound`.
+- The Bambi client fixture now mirrors the live API: `files`, numeric `id` plus `uuid`, and
+  declared `trackNum` out of array order.
+- Browser buttons use `Button(_:systemImage:)` + `.font(.headline)` instead of fixed point
+  sizes, matching `ReadingSourceBrowserView`.
+
+**Verification.** `Scripts/run-tests.sh` with the Bambi, GenericPlaylistJSON,
+PlaylistImport, PlaylistSourceDocument, and PlaylistSourceClient suites: iOS 18.5
+simulator 50 tests, macOS 56 cases. The only failure on both is
+`noHardcodedPlaylistHost()` (ERR-035). The iOS 18.5 app build succeeds.
+
+## ERR-035 addendum — 2026-09-23 (personal branch)
+
+On `personal/bambi-playlist-downloader` the invariant now records **three** issues, not
+one. `bambicloud` appears in `BambiCloudPlaylistLink.swift`, in `PlaylistSourceClient.swift`
+(the adapter call), and in `PlaylistLinkBrowserView.swift` (default start URL and
+`isImportable`). Option 2 in ERR-035 (exempt one named adapter file) would therefore
+not turn the test green on its own. The call sites would also have to move or be
+exempted. On `main` this entry is closed and still correct: the release line has none of
+this code.
+
+## ERR-038 — Documented iOS 26.0 simulator destination no longer exists
+
+- **Date discovered:** 2026-09-23
+- **Status:** identified
+- **Severity:** low (tooling / docs)
+
+**Symptom.** `CLAUDE.md` gives
+`-destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0'` for build and test.
+`Scripts/run-tests.sh` with that destination exits 70 ("no device matched -destination")
+and runs 0 tests.
+
+**Reproduce.** `xcrun simctl list devices available | grep "iPhone 16 Pro ("` combined with
+the runtime headers lists only iOS 18.0, 18.1, 18.3, 18.4 and 18.5 for iPhone 16 Pro.
+
+**Root cause.** The iOS 26 simulator runtime or device was removed from this machine after
+`CLAUDE.md` was written.
+
+**Proposed fix.** Either reinstall an iOS 26 simulator (Xcode → Settings → Components), or
+update `CLAUDE.md` to name a destination that exists, e.g. `OS=18.5`. That runtime is also
+the deployment floor. Keep `OS=` pinned.
+
+**Risks.** With no iOS 26 runtime, the FoundationModels (`@available(iOS 26)`) code paths
+cannot be exercised on the simulator at all.
+
+## ERR-039 — `xcodebuild test` on the iOS 18.5 simulator sometimes hangs after the run ends
+
+- **Date discovered:** 2026-09-23
+- **Status:** identified
+- **Severity:** low (tooling)
+
+**Symptom.** Swift Testing prints "Test run with 50 tests in 5 suites failed after 0.076
+seconds", then `xcodebuild` never exits. It sat for more than 10 minutes and was killed.
+An earlier run with the same destination and filter, the same session, exited normally.
+
+**Reproduce (intermittent).**
+`Scripts/run-tests.sh -destination 'platform=iOS Simulator,id=46D97A1F-473A-411C-8F63-8D3ED81B4296' -only-testing:IlumionateTests/BambiCloudPlaylistLinkTests -only-testing:IlumionateTests/GenericPlaylistJSONTests -only-testing:IlumionateTests/PlaylistImportTests -only-testing:IlumionateTests/PlaylistSourceDocumentTests -only-testing:IlumionateTests/PlaylistSourceClientTests`
+
+**Root cause.** Unknown. Probably simulator or test-host teardown. It happened on the run
+that had a failing test, which may be relevant.
+
+**Proposed fix.** Give `Scripts/run-tests.sh` a wall-clock cap. GNU `timeout` is not on
+this Mac (exit 127), so use a background watchdog or `perl -e 'alarm shift; exec @ARGV'`.
+The script should also report the results already printed when the cap fires.
+
+**Risks.** A cap that is too short would kill legitimately slow full-suite runs.
