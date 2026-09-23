@@ -3198,3 +3198,42 @@ this Mac (exit 127), so use a background watchdog or `perl -e 'alarm shift; exec
 The script should also report the results already printed when the cap fires.
 
 **Risks.** A cap that is too short would kill legitimately slow full-suite runs.
+
+## ERR-040 — Release branch `release/1.0.1-playlist-browser` carries the BambiCloud adapter; not safe for external TestFlight or App Store review
+
+- **Date discovered:** 2026-09-23
+- **Status:** identified
+- **Severity:** high if submitted for review; none for internal TestFlight
+
+**Context.** On 2026-09-23 the user asked for a TestFlight build with the playlist browser.
+The branch is `main` (the accepted 10031 source) plus `5de1a9f` (the BambiCloud restore) and
+the ERR-036/037 fixes, with every user-facing "Bambi"/"BambiCloud" label renamed:
+"Browse for Playlists", and "Core Pack" / "Core corpus" in the Phrase Library. It is
+intended for the internal group "Alpha internal" only, which gets no Beta App Review.
+
+**What is still in the binary.**
+1. `PlaylistLinkBrowserView` opens `https://bambicloud.com` as its start page, and
+   `BambiCloudPlaylistLink` hardcodes `bambicloud.com` / `api.bambicloud.com`. The browser's
+   top bar shows the site's own page title, which includes its branding.
+2. The bundled analyzer vocabulary (`Ilumionate/AnalyzerConfig/AnalyzerKnowledge_default.json`,
+   `phraseSourcePacks`) contains phrases such as "bambi sleep" and "good girl bambi". The
+   Phrase Library (`PhraseLibraryView`, reached from `TranscriptView`) lists them as phrase
+   text. These drive phase detection, so they were not removed.
+3. `PlaylistSourceDocumentTests.noHardcodedPlaylistHost()` fails on this branch (3 issues).
+   ERR-035's closing note ("release line moved to main, invariant passes there") does not
+   hold for this branch.
+
+**Why it matters.** `app-store/REVIEW_NOTES_UNLISTED_10031.md` tells Apple the app contains
+"no explicit media, adult-site links or content-provider recommendations". A built-in
+browser that opens an adult-hypnosis site contradicts that statement. Guideline 5.1.2(i) and
+1.1/1.4 history is in [[lumesync-att-rejection-root-cause]] and `app-store/`.
+
+**Reproduce.** `git grep -n -i bambicloud release/1.0.1-playlist-browser -- Ilumionate`
+
+**Proposed fix before any external or App Store submission.** Either drop `5de1a9f` from the
+submitted build, or remove the hardcoded start page and host adapter. For example, start the
+browser on a blank page with an address bar, and put the adapter behind a compilation
+condition that is absent from the App Store configuration (ERR-035 option 3).
+
+**Risks.** The same App Store Connect app record is used for internal and external builds.
+Adding this build to an external group or to a version submission sends it to Apple review.

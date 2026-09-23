@@ -2669,7 +2669,7 @@
       "phase" : "brainwashing",
       "phrase" : "a good",
       "sectionCount" : 16,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -2682,7 +2682,7 @@
       "phase" : "brainwashing",
       "phrase" : "a good girl",
       "sectionCount" : 12,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -2731,7 +2731,7 @@
       "phase" : "brainwashing",
       "phrase" : "and more",
       "sectionCount" : 4,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -2768,7 +2768,7 @@
       "phase" : "brainwashing",
       "phrase" : "at all",
       "sectionCount" : 3,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -2829,7 +2829,7 @@
       "phase" : "brainwashing",
       "phrase" : "every time",
       "sectionCount" : 4,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -2854,7 +2854,7 @@
       "phase" : "brainwashing",
       "phrase" : "for cock",
       "sectionCount" : 2,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -3071,7 +3071,7 @@
       "phase" : "deepening",
       "phrase" : "deeper and deeper",
       "sectionCount" : 45,
-      "sourceLabel" : "Sleep (2014) hypnotic deepening study + Bambi corpus",
+      "sourceLabel" : "Sleep (2014) hypnotic deepening study + Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -3529,7 +3529,7 @@
       "phase" : "induction",
       "phrase" : "and deeper",
       "sectionCount" : 7,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -3616,7 +3616,7 @@
       "phase" : "induction",
       "phrase" : "deeper and",
       "sectionCount" : 8,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -4025,7 +4025,7 @@
       "phase" : "suggestions",
       "phrase" : "a good",
       "sectionCount" : 11,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -4038,7 +4038,7 @@
       "phase" : "suggestions",
       "phrase" : "a good girl",
       "sectionCount" : 11,
-      "sourceLabel" : "Bambi corpus",
+      "sourceLabel" : "Core corpus",
       "sourcePackIDs" : [
         "bambi"
       ],
@@ -5395,7 +5395,7 @@
   },
   "schemaVersion" : 1,
   "sourcePackLabels" : {
-    "bambi" : "Bambi corpus"
+    "bambi" : "Core corpus"
   },
   "transitionPriors" : {
     "brainwashing" : {

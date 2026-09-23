@@ -43,7 +43,7 @@ struct LibraryAddMenu: View {
                 TranceHaptics.shared.light()
                 onImportPlaylistLink()
             }
-            Button("Browse BambiCloud", systemImage: "safari") {
+            Button("Browse for Playlists", systemImage: "safari") {
                 TranceHaptics.shared.light()
                 onBrowseForPlaylist()
             }

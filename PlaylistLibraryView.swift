@@ -54,7 +54,7 @@ struct PlaylistLibraryView: View {
                         // Browsing for a playlist used to require making an
                         // empty playlist first, because the browser was only
                         // reachable from the editor's toolbar.
-                        Button("Browse BambiCloud", systemImage: "safari") {
+                        Button("Browse for Playlists", systemImage: "safari") {
                             TranceHaptics.shared.light()
                             showingLinkBrowser = true
                         }

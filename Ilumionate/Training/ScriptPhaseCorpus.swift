@@ -413,7 +413,7 @@ nonisolated struct ScriptPhaseCorpus: Sendable {
         guard let sourcePackID = sourcePackID(for: url, relativeTo: directory) else { return nil }
         switch sourcePackID {
         case "bambi":
-            return "Bambi corpus"
+            return "Core corpus"
         default:
             let words = sourcePackID
                 .split(separator: "-")

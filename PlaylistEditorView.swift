@@ -502,7 +502,7 @@ struct PlaylistEditorView: View {
                     TranceHaptics.shared.light()
                     presentImporter(initialLink: nil)
                 }
-                Button("Browse BambiCloud", systemImage: "safari") {
+                Button("Browse for Playlists", systemImage: "safari") {
                     TranceHaptics.shared.light()
                     showingLinkBrowser = true
                 }

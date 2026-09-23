@@ -91,7 +91,7 @@ struct PhraseLibraryView: View {
         var title: String {
             switch self {
             case .all: return "All Sources"
-            case .bambi: return "Bambi"
+            case .bambi: return "Core Pack"
             case .other: return "Other"
             }
         }
@@ -196,7 +196,7 @@ struct PhraseLibraryView: View {
                         tint: .roseGold
                     )
                     summaryBadge(
-                        title: "Bambi",
+                        title: "Core Pack",
                         value: allAssociations.filter { $0.sourcePackIDs.contains("bambi") }.count.formatted(),
                         tint: .orange
                     )

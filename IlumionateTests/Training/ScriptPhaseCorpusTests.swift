@@ -158,7 +158,7 @@ struct ScriptPhaseCorpusTests {
         #expect(example.phase == .brainwashing)
         #expect(example.sourcePath == "bambi/brainwashing/mind-lock.txt")
         #expect(example.sourcePackID == "bambi")
-        #expect(example.sourcePackLabel == "Bambi corpus")
+        #expect(example.sourcePackLabel == "Core corpus")
     }
 
     @Test
@@ -205,7 +205,7 @@ struct ScriptPhaseCorpusTests {
             sourceFilename: "mind-lock.txt",
             sourcePath: "bambi/brainwashing/mind-lock.txt",
             sourcePackID: "bambi",
-            sourcePackLabel: "Bambi corpus",
+            sourcePackLabel: "Core corpus",
             text: text,
             wordCount: ScriptPhaseTextAnalyzer.tokens(in: text).count
         )
@@ -222,7 +222,7 @@ struct ScriptPhaseCorpusTests {
 
         let association = knowledge.phraseAssociations[.brainwashing]?
             .first { $0.sourcePackIDs.contains("bambi") }
-        #expect(association?.sourceLabel == "Bambi corpus")
+        #expect(association?.sourceLabel == "Core corpus")
         #expect(association?.sourcePackIDs == ["bambi"])
         #expect(knowledge.phraseSourcePacks[.brainwashing]?["mind lock"] == ["bambi"])
     }
