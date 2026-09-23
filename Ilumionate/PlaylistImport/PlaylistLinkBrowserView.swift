@@ -28,9 +28,10 @@ struct PlaylistLinkBrowserView: View {
         self.onPicked = onPicked
     }
 
-    /// Read once, when the web view is created: changing the setting while the
-    /// browser is open should not yank the user off the page they are on.
-    private var initialURL: URL {
+    /// The web view reads this once, when it is created, so changing the setting
+    /// while the browser is open never yanks the user off the page they are on.
+    /// Go to Start Page reads it live, so it follows a newly set start page.
+    private var startURL: URL {
         PlaylistBrowserHomePage.startURL(for: homePageSetting)
     }
 
@@ -39,7 +40,7 @@ struct PlaylistLinkBrowserView: View {
             topBar
 
             PlaylistBrowserWebView(
-                initialURL: initialURL,
+                initialURL: startURL,
                 webView: $webView,
                 currentURL: $currentURL,
                 pageTitle: $pageTitle,
@@ -66,42 +67,81 @@ struct PlaylistLinkBrowserView: View {
         .background(Color.bgPrimary.ignoresSafeArea())
     }
 
+    /// One row when everything fits (iPad, Mac); otherwise the actions drop to
+    /// a second row. On a phone, one row squeezes the page title to a word and
+    /// wraps Import letter by letter.
     private var topBar: some View {
-        HStack(spacing: TranceSpacing.inner) {
-            Button("Close browser", systemImage: "xmark") {
-                dismiss()
-            }
-            .labelStyle(.iconOnly)
-            .font(.headline)
-            .foregroundStyle(.textPrimary)
-            .frame(width: 44, height: 44)
-            .background(Color.glassBorder.opacity(0.16), in: .circle)
-
-            VStack(alignment: .leading, spacing: TranceSpacing.micro) {
-                Text(displayTitle)
-                    .font(TranceTypography.body.bold())
-                    .foregroundStyle(.textPrimary)
-                    .lineLimit(1)
-
-                Text(subtitle)
-                    .font(TranceTypography.caption)
-                    .foregroundStyle(isPlaylistPage ? Color.roseGold : Color.textSecondary)
-                    .lineLimit(1)
+        ViewThatFits(in: .horizontal) {
+            // The heading's ideal width is fixed rather than its text's, so
+            // the row choice depends on the screen, not the page title — the
+            // header would otherwise jump between layouts while browsing.
+            HStack(spacing: TranceSpacing.inner) {
+                closeButton
+                pageHeading
+                    .frame(minWidth: 0, idealWidth: 220, maxWidth: .infinity, alignment: .leading)
+                pageActions
             }
 
-            Spacer(minLength: TranceSpacing.inner)
-
-            Button("Import", systemImage: "square.and.arrow.down", action: importCurrentPage)
-                .font(TranceTypography.caption.bold())
-                .buttonStyle(.borderedProminent)
-                .tint(.roseGold)
-                .disabled(isPlaylistPage == false)
-                .accessibilityLabel("Import this playlist")
+            VStack(alignment: .leading, spacing: TranceSpacing.list) {
+                HStack(spacing: TranceSpacing.inner) {
+                    closeButton
+                    pageHeading
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: TranceSpacing.inner) {
+                    Spacer(minLength: 0)
+                    pageActions
+                }
+            }
         }
         .padding(.horizontal, TranceSpacing.screen)
         .padding(.top, TranceSpacing.inner)
         .padding(.bottom, TranceSpacing.list)
         .background(.ultraThinMaterial)
+    }
+
+    private var closeButton: some View {
+        Button("Close browser", systemImage: "xmark") {
+            dismiss()
+        }
+        .labelStyle(.iconOnly)
+        .font(.headline)
+        .foregroundStyle(.textPrimary)
+        .frame(width: 44, height: 44)
+        .background(Color.glassBorder.opacity(0.16), in: .circle)
+    }
+
+    private var pageHeading: some View {
+        VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+            Text(displayTitle)
+                .font(TranceTypography.body.bold())
+                .foregroundStyle(.textPrimary)
+                .lineLimit(1)
+
+            Text(subtitle)
+                .font(TranceTypography.caption)
+                .foregroundStyle(isPlaylistPage ? Color.roseGold : Color.textSecondary)
+                .lineLimit(1)
+        }
+    }
+
+    private var pageActions: some View {
+        HStack(spacing: TranceSpacing.inner) {
+            SetStartPageButton(
+                isStartPage: isStartPage,
+                canSet: canSetStartPage,
+                action: setCurrentPageAsStartPage
+            )
+
+            Button("Import", systemImage: "square.and.arrow.down", action: importCurrentPage)
+                .font(TranceTypography.caption.bold())
+                .lineLimit(1)
+                .fixedSize()
+                .buttonStyle(.borderedProminent)
+                .tint(.roseGold)
+                .disabled(isPlaylistPage == false)
+                .accessibilityLabel("Import this playlist")
+        }
     }
 
     private var bottomBar: some View {
@@ -127,11 +167,10 @@ struct PlaylistLinkBrowserView: View {
             }
 
             PlaylistBrowserControl(
-                systemName: isStartPage ? "house.fill" : "house",
-                label: isStartPage ? "Current Start Page" : "Set as Start Page",
-                isEnabled: canSetStartPage,
-                isActive: isStartPage,
-                action: setCurrentPageAsStartPage
+                systemName: "house",
+                label: "Go to Start Page",
+                isEnabled: webView != nil && !isStartPage,
+                action: goToStartPage
             )
         }
         .frame(maxWidth: .infinity)
@@ -177,7 +216,7 @@ struct PlaylistLinkBrowserView: View {
     private func reload() {
         guard let webView else { return }
         if webView.url == nil {
-            webView.load(URLRequest(url: initialURL))
+            webView.load(URLRequest(url: startURL))
         } else {
             webView.reload()
         }
@@ -204,6 +243,11 @@ struct PlaylistLinkBrowserView: View {
         homePageSetting = value
     }
 
+    private func goToStartPage() {
+        TranceHaptics.shared.light()
+        webView?.load(URLRequest(url: startURL))
+    }
+
     private func importCurrentPage() {
         guard let currentURL, isPlaylistPage else { return }
         TranceHaptics.shared.light()
@@ -216,24 +260,42 @@ private struct PlaylistBrowserControl: View {
     let systemName: String
     let label: String
     let isEnabled: Bool
-    /// Marks a control whose state is "on" — drawn in the accent even though
-    /// it is disabled, so it reads as set rather than unavailable.
-    var isActive = false
     let action: () -> Void
 
     var body: some View {
         Button(label, systemImage: systemName, action: action)
             .labelStyle(.iconOnly)
             .font(.headline)
-            .foregroundStyle(foreground)
+            .foregroundStyle(isEnabled ? Color.textPrimary : Color.textLight)
             .frame(width: 44, height: 44)
             .background(Color.glassBorder.opacity(0.16), in: .circle)
             .disabled(isEnabled == false)
     }
+}
 
-    private var foreground: Color {
-        if isActive { return .roseGold }
-        return isEnabled ? .textPrimary : .textLight
+/// Words, not an icon: a house glyph reads as "go home", which is the bottom
+/// bar's job. On the current start page it becomes a confirmation instead.
+private struct SetStartPageButton: View {
+    let isStartPage: Bool
+    let canSet: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Group {
+            if isStartPage {
+                Button("Start Page", systemImage: "checkmark", action: {})
+                    .disabled(true)
+                    .accessibilityLabel("This is your start page")
+            } else {
+                Button("Set as Start Page", action: action)
+                    .disabled(canSet == false)
+            }
+        }
+        .font(TranceTypography.caption.bold())
+        .lineLimit(1)
+        .fixedSize()
+        .buttonStyle(.bordered)
+        .tint(.roseGold)
     }
 }
 
