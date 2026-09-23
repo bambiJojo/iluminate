@@ -3,7 +3,7 @@
 //  Ilumionate
 //
 //  Fetches a user-supplied playlist link and hands the bytes to format
-//  detection. Knows nothing about any particular service.
+//  detection, resolving supported share pages to their playlist data.
 //
 
 import Foundation
@@ -32,14 +32,18 @@ nonisolated struct PlaylistSourceClient: Sendable {
     }
 
     func playlist(at rawLink: String) async throws -> Result {
-        if let bambiLink = BambiCloudPlaylistLink(rawLink) {
-            return try await playlist(at: bambiLink.apiURL)
-        }
-        return try await playlist(at: PlaylistSourceURL.normalized(rawLink))
+        try await playlist(at: PlaylistSourceURL.normalized(rawLink))
     }
 
     func playlist(at url: URL) async throws -> Result {
+        // Both entry points resolve share pages after the pasted URL is normalized.
+        let url = BambiCloudPlaylistLink(url.absoluteString)?.apiURL ?? url
         let (data, contentType) = try await load(url)
+
+        if BambiCloudPlaylistLink.isAPIURL(url) {
+            let playlist = try GenericPlaylistJSON.playlist(from: data, durationsInMilliseconds: true)
+            return Result(playlist: playlist, sourceURL: url)
+        }
 
         do {
             let playlist = try PlaylistSourceDocument.playlist(from: data, contentType: contentType)

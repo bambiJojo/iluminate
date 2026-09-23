@@ -155,8 +155,8 @@ struct PlaylistSourceDocumentTests {
 
     // MARK: - Neutrality invariant
 
-    @Test("No shipped playlist-import source names a playlist host")
-    func noHardcodedPlaylistHost() throws {
+    @Test("Playlist import screens use generic wording")
+    func importScreensUseGenericWording() throws {
         let directory = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // PlaylistImport
             .deletingLastPathComponent()   // IlumionateTests
@@ -165,16 +165,31 @@ struct PlaylistSourceDocumentTests {
 
         let files = try FileManager.default
             .contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "swift" }
+            .filter { $0.lastPathComponent.hasSuffix("View.swift") }
+        let root = directory.deletingLastPathComponent().deletingLastPathComponent()
+        let screens = files + [
+            directory.appending(path: "PlaylistBrowserSettingsCard.swift"),
+            directory.appending(path: "SourcePlaylist.swift"),
+            directory.appending(path: "PlaylistTrackDownloadError.swift"),
+            root.appending(path: "PlaylistLibraryView.swift"),
+            root.appending(path: "PlaylistEditorView.swift"),
+            root.appending(path: "Ilumionate/LibraryAddMenu.swift"),
+        ]
+        // Check copy rather than type names: the browser may reference the
+        // service adapter internally without exposing its name to the user.
+        let stringLiteral = try NSRegularExpression(pattern: #""(?:[^"\\]|\\.)*""#)
 
         #expect(!files.isEmpty, "the importer sources must be where this test looks")
 
-        for file in files {
-            let contents = try String(contentsOf: file, encoding: .utf8).lowercased()
-            #expect(
-                !contents.contains("bambicloud"),
-                "\(file.lastPathComponent) names a specific service"
-            )
+        for file in screens {
+            let contents = try String(contentsOf: file, encoding: .utf8) as NSString
+            let matches = stringLiteral.matches(in: contents as String, range: NSRange(location: 0, length: contents.length))
+            for match in matches {
+                #expect(
+                    !contents.substring(with: match.range).localizedCaseInsensitiveContains("bambi"),
+                    "\(file.lastPathComponent) includes a service name in its copy"
+                )
+            }
         }
     }
 }

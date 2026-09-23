@@ -61,6 +61,56 @@ struct BambiCloudPlaylistLinkTests {
         }
     }
 
+    @Test(arguments: [
+        "bambicloud.com/playlist/69b12112-e603-428a-aeb5-9f204481da13",
+        "  www.bambicloud.com/playlist/69b12112-e603-428a-aeb5-9f204481da13/ \n",
+        shareLink,
+        apiAddress,
+    ])
+    func normalizedLinksResolveToPlaylistData(_ address: String) async throws {
+        let body = Data(#"{"playlists":[{"name":"Shared Playlist","files":[{"name":"Track","duration":9000}]}]}"#.utf8)
+        let client = PlaylistSourceClient { url in
+            #expect(url.absoluteString == Self.apiAddress)
+            return try Self.jsonResponse(body, for: url)
+        }
+        let result = try await client.playlist(at: address)
+        #expect(result.sourceURL.absoluteString == Self.apiAddress)
+        #expect(result.playlist.tracks.first?.duration == 9)
+    }
+
+    @Test func urlEntryPointResolvesSharePages() async throws {
+        let body = Data(#"{"playlists":[{"name":"Shared Playlist","files":[{"name":"Track","duration":9000}]}]}"#.utf8)
+        let client = PlaylistSourceClient { url in
+            #expect(url.absoluteString == Self.apiAddress)
+            return try Self.jsonResponse(body, for: url)
+        }
+        let url = try #require(URL(string: Self.shareLink))
+        let result = try await client.playlist(at: url)
+        #expect(result.sourceURL.absoluteString == Self.apiAddress)
+        #expect(result.playlist.tracks.first?.duration == 9)
+    }
+
+    @Test(arguments: [0, 500, 9000, 14399, 14400, 154000])
+    func knownSourceAlwaysUsesMilliseconds(_ milliseconds: Int) async throws {
+        let body = Data("""
+        {"playlists":[{"name":"Shared Playlist","files":[{"name":"Track","duration":\(milliseconds)}]}]}
+        """.utf8)
+        let client = PlaylistSourceClient { url in
+            try Self.jsonResponse(body, for: url)
+        }
+        let result = try await client.playlist(at: Self.shareLink)
+        #expect(result.playlist.tracks.first?.duration == Double(milliseconds) / 1000)
+    }
+
+    @Test func unrelatedJSONSourceKeepsItsSeconds() async throws {
+        let body = Data(#"{"name":"Long Playlist","tracks":[{"name":"Track","duration":9000}]}"#.utf8)
+        let client = PlaylistSourceClient { url in
+            try Self.jsonResponse(body, for: url)
+        }
+        let result = try await client.playlist(at: "https://example.com/playlist.json")
+        #expect(result.playlist.tracks.first?.duration == 9000)
+    }
+
     // MARK: - Browser
 
     @Test(arguments: [

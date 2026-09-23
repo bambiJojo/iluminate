@@ -52,7 +52,9 @@ nonisolated enum PlaylistBrowserHomePage {
         while path.hasSuffix("/") { path.removeLast() }
         let port = components.port.map { ":\($0)" } ?? ""
         let query = components.query.map { "?\($0)" } ?? ""
-        return "\(scheme)://\(host)\(port)\(path)\(query)"
+        // Fragments can identify separate routes in a client-side web app.
+        let fragment = components.percentEncodedFragment.map { "#\($0)" } ?? ""
+        return "\(scheme)://\(host)\(port)\(path)\(query)\(fragment)"
     }
 
     /// Whether Settings should accept the typed address. Empty is fine — it

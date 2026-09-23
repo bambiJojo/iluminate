@@ -76,6 +76,23 @@ struct PlaylistBrowserHomePageTests {
         #expect(PlaylistBrowserHomePage.isStartPage(nil, setting: "") == false)
     }
 
+    @Test("Fragment routes identify different start pages")
+    func fragmentRoutesRemainDistinct() throws {
+        let setting = "https://example.com/#/playlist/first"
+        let second = try #require(URL(string: "https://example.com/#/playlist/second"))
+        let saved = try #require(URL(string: setting))
+        let noFragment = try #require(URL(string: "https://example.com/"))
+
+        #expect(!PlaylistBrowserHomePage.isStartPage(second, setting: setting))
+        #expect(!PlaylistBrowserHomePage.isStartPage(noFragment, setting: setting))
+        #expect(PlaylistBrowserHomePage.isStartPage(saved, setting: setting))
+        let newSetting = try #require(PlaylistBrowserHomePage.settingValue(for: second))
+        #expect(newSetting == second.absoluteString)
+        #expect(PlaylistBrowserHomePage.startURL(for: newSetting) == second)
+        #expect(PlaylistBrowserHomePage.isStartPage(second, setting: newSetting))
+        #expect(!PlaylistBrowserHomePage.isStartPage(saved, setting: newSetting))
+    }
+
     @Test("Settings flags only a non-empty address it cannot open")
     func validity() {
         #expect(PlaylistBrowserHomePage.isUsable(""))

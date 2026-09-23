@@ -14,6 +14,13 @@ nonisolated struct BambiCloudPlaylistLink: Equatable, Sendable {
     let playlistID: UUID
     let apiURL: URL
 
+    /// The API reports every duration in milliseconds, including short tracks.
+    static func isAPIURL(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "https"
+            && url.host()?.lowercased() == "api.bambicloud.com"
+            && url.path == "/playlists"
+    }
+
     init?(_ rawValue: String) {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let components = URLComponents(string: trimmed),

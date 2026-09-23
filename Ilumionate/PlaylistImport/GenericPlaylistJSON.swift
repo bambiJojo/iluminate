@@ -34,7 +34,10 @@ nonisolated enum GenericPlaylistJSON {
 
     // MARK: - Entry point
 
-    static func playlist(from data: Data) throws -> SourcePlaylist {
+    static func playlist(
+        from data: Data,
+        durationsInMilliseconds: Bool = false
+    ) throws -> SourcePlaylist {
         let root: Any
         do {
             root = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
@@ -48,7 +51,7 @@ nonisolated enum GenericPlaylistJSON {
                 : PlaylistSourceError.invalidResponse
         }
 
-        let tracks = self.tracks(in: object)
+        let tracks = self.tracks(in: object, durationsInMilliseconds: durationsInMilliseconds)
         guard !tracks.isEmpty else { throw PlaylistSourceError.noTracks }
 
         return SourcePlaylist(
@@ -114,7 +117,10 @@ nonisolated enum GenericPlaylistJSON {
 
     // MARK: - Tracks
 
-    private static func tracks(in playlist: [String: Any]) -> [SourcePlaylistTrack] {
+    private static func tracks(
+        in playlist: [String: Any],
+        durationsInMilliseconds: Bool
+    ) -> [SourcePlaylistTrack] {
         guard let raw = trackArray(in: playlist) else { return [] }
 
         // A row with no title cannot be matched against the library or shown in
@@ -132,7 +138,7 @@ nonisolated enum GenericPlaylistJSON {
             return SourcePlaylistTrack(
                 id: string(in: element, forAnyOf: identifierKeys),
                 title: title,
-                duration: duration(in: element),
+                duration: duration(in: element, milliseconds: durationsInMilliseconds),
                 trackNumber: hasDeclaredOrder ? (declared[index] ?? index) : index,
                 audioURL: url(in: element, forAnyOf: audioURLKeys)
             )
@@ -145,14 +151,13 @@ nonisolated enum GenericPlaylistJSON {
 
     // MARK: - Field readers
 
-    /// Durations arrive in seconds or milliseconds with nothing to say which.
-    /// The magnitude is the only available signal, and it is unambiguous in
-    /// practice — see `millisecondThreshold`.
-    private static func duration(in element: [String: Any]) -> TimeInterval {
+    /// Use a known source's units when available; retain the existing heuristic
+    /// for generic documents that do not declare a unit.
+    private static func duration(in element: [String: Any], milliseconds: Bool) -> TimeInterval {
         guard let raw = number(asDouble: element, forAnyOf: durationKeys), raw > 0 else {
             return 0
         }
-        return raw >= millisecondThreshold ? raw / 1_000 : raw
+        return milliseconds || raw >= millisecondThreshold ? raw / 1_000 : raw
     }
 
     private static func string(in object: [String: Any], forAnyOf keys: [String]) -> String? {
