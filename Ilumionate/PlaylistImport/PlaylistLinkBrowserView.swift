@@ -11,10 +11,10 @@ import SwiftUI
 import WebKit
 
 struct PlaylistLinkBrowserView: View {
-    let initialURL: URL
     let onPicked: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(PlaylistBrowserHomePage.storageKey) private var homePageSetting = ""
 
     @State private var webView: WKWebView?
     @State private var currentURL: URL?
@@ -24,12 +24,14 @@ struct PlaylistLinkBrowserView: View {
     @State private var isLoading = false
     @State private var pageErrorMessage: String?
 
-    init(
-        initialURL: URL = URL(string: "https://bambicloud.com")!,
-        onPicked: @escaping (String) -> Void
-    ) {
-        self.initialURL = initialURL
+    init(onPicked: @escaping (String) -> Void) {
         self.onPicked = onPicked
+    }
+
+    /// Read once, when the web view is created: changing the setting while the
+    /// browser is open should not yank the user off the page they are on.
+    private var initialURL: URL {
+        PlaylistBrowserHomePage.startURL(for: homePageSetting)
     }
 
     var body: some View {
@@ -134,9 +136,9 @@ struct PlaylistLinkBrowserView: View {
         Self.isImportable(currentURL)
     }
 
-    /// Only a BambiCloud playlist page converts to playlist data. Every other
-    /// page on the site is HTML the importer would reject, so offering Import
-    /// there only leads to an error.
+    /// The browser can wander anywhere, but only a playlist page the importer
+    /// recognises converts to playlist data. Any other page is HTML the importer
+    /// would reject, so offering Import there only leads to an error.
     nonisolated static func isImportable(_ url: URL?) -> Bool {
         guard let url else { return false }
         return BambiCloudPlaylistLink(url.absoluteString) != nil

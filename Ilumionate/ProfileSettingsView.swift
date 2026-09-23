@@ -79,6 +79,7 @@ struct ProfileSettingsView: View {
                         coreSettingsSection
                         sessionDefaultsSection
                         lightSyncPreferencesSection
+                        PlaylistBrowserSettingsCard()
                         privacyDataSection
                         recentSessionsCard
                         supportAboutSection

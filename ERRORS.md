@@ -3237,3 +3237,24 @@ condition that is absent from the App Store configuration (ERR-035 option 3).
 
 **Risks.** The same App Store Connect app record is used for internal and external builds.
 Adding this build to an external group or to a version submission sends it to Apple review.
+
+## ERR-040 update — 2026-09-23: hardcoded start page removed
+
+- **Status:** working (partially mitigated)
+
+"Browse for Playlists" no longer opens `bambicloud.com`. It opens the address the user sets
+in Settings → Playlist Browser → Start Page (`PlaylistBrowserHomePage.storageKey`), and
+falls back to `https://www.google.com` when the setting is empty or cannot be opened. No
+site name appears in the Settings copy. Covered by
+`IlumionateTests/PlaylistImport/PlaylistBrowserHomePageTests.swift`.
+
+**Still outstanding for external or App Store use:** `BambiCloudPlaylistLink` still hardcodes
+`bambicloud.com` / `api.bambicloud.com` (share-link → API conversion and the browser's
+Import enablement). `noHardcodedPlaylistHost()` still fails with 3 issues, and the analyzer
+phrase vocabulary still lists "bambi …" phrases in the Phrase Library. The app no longer
+*links to* the site on its own, but it still recognises it by name in code.
+
+**Also note:** on sites other than that one, the browser's Import button stays disabled.
+`isImportable` only accepts pages the host adapter recognises, so a user-set start site
+other than BambiCloud is for browsing only. To import from other sites, paste a feed or
+playlist address with "Import from Link".
