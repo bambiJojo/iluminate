@@ -33,6 +33,49 @@ struct PlaylistBrowserHomePageTests {
         #expect(PlaylistBrowserHomePage.startURL(for: setting).absoluteString == "https://www.google.com")
     }
 
+    // MARK: - Set as Start Page
+
+    @Test("The page being viewed is saved as its full address")
+    func webPageBecomesSetting() throws {
+        let url = try #require(URL(string: "https://example.com/playlists?sort=new"))
+
+        #expect(PlaylistBrowserHomePage.settingValue(for: url) == "https://example.com/playlists?sort=new")
+    }
+
+    @Test(
+        "Pages that could not be reopened are not offered as a start page",
+        arguments: ["about:blank", "file:///etc/hosts", "data:text/html,hi"]
+    )
+    func nonWebPageIsNotSaved(_ address: String) throws {
+        let url = try #require(URL(string: address))
+
+        #expect(PlaylistBrowserHomePage.settingValue(for: url) == nil)
+    }
+
+    /// Google redirects the bare fallback to `https://www.google.com/`; that is
+    /// still the start page, so the button must show it as already set.
+    @Test("The default start page is recognised after its trailing-slash redirect")
+    func defaultStartPageIsRecognised() throws {
+        let landed = try #require(URL(string: "https://www.google.com/"))
+
+        #expect(PlaylistBrowserHomePage.isStartPage(landed, setting: ""))
+    }
+
+    @Test("A saved start page is recognised regardless of host case or trailing slash")
+    func savedStartPageIsRecognised() throws {
+        let landed = try #require(URL(string: "https://Example.com/playlists/"))
+
+        #expect(PlaylistBrowserHomePage.isStartPage(landed, setting: "example.com/playlists"))
+    }
+
+    @Test("Another page on the same site is not the start page")
+    func otherPageIsNotStartPage() throws {
+        let elsewhere = try #require(URL(string: "https://example.com/playlist/42"))
+
+        #expect(PlaylistBrowserHomePage.isStartPage(elsewhere, setting: "example.com/playlists") == false)
+        #expect(PlaylistBrowserHomePage.isStartPage(nil, setting: "") == false)
+    }
+
     @Test("Settings flags only a non-empty address it cannot open")
     func validity() {
         #expect(PlaylistBrowserHomePage.isUsable(""))

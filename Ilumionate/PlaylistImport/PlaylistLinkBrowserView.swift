@@ -125,6 +125,14 @@ struct PlaylistLinkBrowserView: View {
                     reload()
                 }
             }
+
+            PlaylistBrowserControl(
+                systemName: isStartPage ? "house.fill" : "house",
+                label: isStartPage ? "Current Start Page" : "Set as Start Page",
+                isEnabled: canSetStartPage,
+                isActive: isStartPage,
+                action: setCurrentPageAsStartPage
+            )
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, TranceSpacing.screen)
@@ -175,6 +183,27 @@ struct PlaylistLinkBrowserView: View {
         }
     }
 
+    private var isStartPage: Bool {
+        PlaylistBrowserHomePage.isStartPage(currentURL, setting: homePageSetting)
+    }
+
+    /// False when this is already the start page, or is a page that could not
+    /// be reopened from Settings later.
+    private var canSetStartPage: Bool {
+        guard let currentURL, !isStartPage else { return false }
+        return PlaylistBrowserHomePage.settingValue(for: currentURL) != nil
+    }
+
+    /// Writes the same `@AppStorage` key Settings edits, so the Start Page
+    /// field shows this address and Browse for Playlists opens here next time.
+    private func setCurrentPageAsStartPage() {
+        guard let currentURL,
+              let value = PlaylistBrowserHomePage.settingValue(for: currentURL)
+        else { return }
+        TranceHaptics.shared.medium()
+        homePageSetting = value
+    }
+
     private func importCurrentPage() {
         guard let currentURL, isPlaylistPage else { return }
         TranceHaptics.shared.light()
@@ -187,16 +216,24 @@ private struct PlaylistBrowserControl: View {
     let systemName: String
     let label: String
     let isEnabled: Bool
+    /// Marks a control whose state is "on" — drawn in the accent even though
+    /// it is disabled, so it reads as set rather than unavailable.
+    var isActive = false
     let action: () -> Void
 
     var body: some View {
         Button(label, systemImage: systemName, action: action)
             .labelStyle(.iconOnly)
             .font(.headline)
-            .foregroundStyle(isEnabled ? Color.textPrimary : Color.textLight)
+            .foregroundStyle(foreground)
             .frame(width: 44, height: 44)
             .background(Color.glassBorder.opacity(0.16), in: .circle)
             .disabled(isEnabled == false)
+    }
+
+    private var foreground: Color {
+        if isActive { return .roseGold }
+        return isEnabled ? .textPrimary : .textLight
     }
 }
 
