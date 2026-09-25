@@ -1,6 +1,6 @@
 # LumeSync (Ilumionate) — Unified Development Plan
 
-> Consolidated from all planning documents. Last updated: 2026-09-09.
+> Consolidated from all planning documents. Last updated: 2026-09-24.
 
 ## Where documentation lives
 
@@ -348,6 +348,23 @@ Both reports came from real testers; screenshots and analysis in session notes.
     answered this request
   - Decision: no colour-specific seizure rules; the frequency cap in
     `LightSafety` and the photosensitivity warning remain the only guards
+
+## FROM APP STORE USER FEEDBACK (2026-09-24)
+
+First feedback after the 1.0 launch.
+
+- 🔄 Player time display (report 1) — only elapsed time was shown, and sessions and playlists
+  showed no time at all in the full controls. Tapping the time now cycles elapsed / total →
+  remaining → percentage, and the choice persists. `PlayerTimeDisplayStyle`, `PlayerTimeLabel`.
+  Hour-long files now show `1:02:05`, not `62:05`. Needs on-device check and user confirmation.
+  - Video support (same report): not scoped
+- 🔄 Persistent Stop button "never goes away" (report 3) — kept for App Review and safety, but it
+  now fades to a faint glyph after 8 s idle and brightens on touch
+  (`PlayerControlsVisibility.isStopControlDimmed`). The "Swipe up to show controls" hint retires
+  after 3 successful reveals (`SwipeRevealHint`). Needs on-device check on a bright flash field.
+- ❌ SharePlay listen-together (report 2, "joint collab") — design draft:
+  `docs/superpowers/specs/2026-09-24-shareplay-listen-together-design.md`. Blocked on the user
+  clarifying live listening vs. collaborative playlists.
 
 ---
 

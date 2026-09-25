@@ -3258,3 +3258,36 @@ phrase vocabulary still lists "bambi …" phrases in the Phrase Library. The app
 `isImportable` only accepts pages the host adapter recognises, so a user-set start site
 other than BambiCloud is for browsing only. To import from other sites, paste a feed or
 playlist address with "Import from Link".
+
+## ERR-041 — `CLAUDE.md`'s iOS 26 destination (`iPhone 16 Pro,OS=26.0`) no longer exists on this machine
+
+**Date discovered:** 2026-09-24
+**Status:** identified
+
+**Symptom.** The documented iOS 26 build and test commands fail immediately with
+`Unable to find a device matching the provided destination specifier`, so zero tests run
+(`Scripts/run-tests.sh` correctly exits 70 rather than hanging — see ERR-026).
+
+**Reproduction.**
+
+```bash
+Scripts/run-tests.sh -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -only-testing:IlumionateTests
+xcrun simctl list devices available | grep -E "^-- iOS|iPhone 1[67] Pro \("
+```
+
+**Where.** `CLAUDE.md` → "Build and test": the iOS Simulator build command, the shared unit
+test command, and the note claiming "This machine has no iPhone 17 Pro; available iPhone 16
+Pro runtimes are 18.0, 18.1, 18.3, 18.4, 18.5, and 26.0".
+
+**Root cause.** The simulator set changed after ERR-026 was written. As of 2026-09-24 the
+iOS 26.0 runtime has iPhone 17 / 17 Pro / 17 Pro Max and no iPhone 16 Pro; iPhone 16 Pro
+remains on 18.0–18.5 only. The documentation hard-codes a machine-specific inventory.
+
+**Workaround used.** `-destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'`.
+
+**Proposed fix.** Update `CLAUDE.md` to name `iPhone 17 Pro,OS=26.0` for iOS 26 while keeping
+`iPhone 16 Pro,OS=18.5` for iOS 18, and reword the inventory sentence to "check
+`xcrun simctl list` first" rather than listing devices, so it cannot go stale again.
+
+**Risks.** None to the app. A simulator reinstall could change the set again, which is the
+argument for not hard-coding it.
