@@ -135,6 +135,72 @@ struct PlayerControlsVisibilityTests {
         await v.awaitPendingAutoHide()
         #expect(v.isVisible == false)
     }
+
+    // MARK: - Stop control dimming
+
+    /// The reported bug: the Stop button sat at full strength for the whole
+    /// session and could not be dismissed. It must stay available, so it fades
+    /// to a resting glyph instead of disappearing.
+    @Test("The stop control dims once the controls have been hidden a while")
+    func stopControlDimsAfterIdle() async {
+        let v = Self.immediateHide()
+        v.registerInteraction()
+        await v.awaitPendingAutoHide()
+        #expect(v.showsPersistentStopControl)
+
+        // Not-yet-dimmed is covered by stopControlWaitsBeforeDimming: with an
+        // instant wait the dim may already have run by this point.
+        await v.awaitPendingStopDim()
+        #expect(v.isStopControlDimmed)
+        #expect(v.showsPersistentStopControl)
+    }
+
+    @Test("The stop control waits for its own idle delay before dimming")
+    func stopControlWaitsBeforeDimming() async {
+        let gate = IdleGate()
+        let v = PlayerControlsVisibility(idleWait: { _ in await gate.wait() })
+        v.hideNow()
+        #expect(v.isStopControlDimmed == false)
+
+        gate.release()
+        await v.awaitPendingStopDim()
+        #expect(v.isStopControlDimmed)
+    }
+
+    @Test("Touching the screen brightens a dimmed stop control")
+    func touchBrightensStopControl() async {
+        let v = Self.immediateHide()
+        v.hideNow()
+        await v.awaitPendingStopDim()
+        #expect(v.isStopControlDimmed)
+
+        v.registerOverlayTouch()
+        #expect(v.isStopControlDimmed == false)
+        #expect(v.isVisible == false)   // a touch alone does not reveal the controls
+    }
+
+    @Test("Revealing the controls clears the dim state")
+    func revealClearsDim() async {
+        let v = Self.immediateHide()
+        v.hideNow()
+        await v.awaitPendingStopDim()
+
+        v.registerInteraction()
+        #expect(v.isStopControlDimmed == false)
+    }
+
+    @Test("A dim countdown that fires after the controls return does nothing")
+    func staleDimIgnoredWhenVisible() async {
+        let gate = IdleGate()
+        let v = PlayerControlsVisibility(idleWait: { _ in await gate.wait() })
+        v.hideNow()
+        v.isPaused = true        // controls come back and stay up
+        v.registerInteraction()
+
+        gate.release()
+        await v.awaitPendingStopDim()
+        #expect(v.isStopControlDimmed == false)
+    }
 }
 
 /// A countdown the test decides the length of.

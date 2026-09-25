@@ -1572,7 +1572,7 @@ final class UnifiedPlayerViewModel {
     // MARK: - Helpers
 
     func formatTime(_ seconds: TimeInterval) -> String {
-        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
+        PlayerTimeDisplayStyle.clock(seconds)
     }
 
     private func stageLabel(_ stage: AnalysisStage) -> String {

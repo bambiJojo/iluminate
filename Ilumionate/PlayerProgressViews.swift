@@ -9,28 +9,49 @@
 
 import SwiftUI
 
+/// Read-only time in the minimal overlay. Mirrors the style chosen on
+/// `PlayerTimeLabel`; it is not tappable because the overlay is one
+/// full-screen pull surface.
 struct PlayerElapsedTime: View {
     let viewModel: UnifiedPlayerViewModel
-
-    var body: some View {
-        Text(viewModel.formatTime(viewModel.currentTime))
-            .font(.system(.caption, design: .monospaced))
-            .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
-    }
-}
-
-struct PlayerElapsedDuration: View {
-    let viewModel: UnifiedPlayerViewModel
+    @AppStorage(AppSettingsManager.Key.playerTimeDisplayStyle) private var storedStyle: String?
 
     var body: some View {
         Text(
-            viewModel.formatTime(viewModel.currentTime)
-                + " / "
-                + viewModel.formatTime(viewModel.duration)
+            PlayerTimeDisplayStyle(storedValue: storedStyle)
+                .text(currentTime: viewModel.currentTime, duration: viewModel.duration)
         )
-        .font(TranceTypography.caption)
-        .foregroundStyle(viewModel.secondaryLabelColor)
-        .monospacedDigit()
+        .font(.system(.caption, design: .monospaced))
+        .foregroundStyle(viewModel.secondaryLabelColor.opacity(0.6))
+    }
+}
+
+/// Time in the full controls. Tapping cycles elapsed / remaining / percentage.
+struct PlayerTimeLabel: View {
+    let viewModel: UnifiedPlayerViewModel
+    @AppStorage(AppSettingsManager.Key.playerTimeDisplayStyle) private var storedStyle: String?
+
+    private var style: PlayerTimeDisplayStyle {
+        PlayerTimeDisplayStyle(storedValue: storedStyle)
+    }
+
+    var body: some View {
+        Button {
+            storedStyle = style.next.rawValue
+            TranceHaptics.shared.selection()
+        } label: {
+            Text(style.text(currentTime: viewModel.currentTime, duration: viewModel.duration))
+                .font(TranceTypography.caption)
+                .foregroundStyle(viewModel.secondaryLabelColor)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .frame(minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(style.displayName)
+        .accessibilityValue(style.text(currentTime: viewModel.currentTime, duration: viewModel.duration))
+        .accessibilityHint("Changes to \(style.next.displayName.lowercased())")
     }
 }
 
