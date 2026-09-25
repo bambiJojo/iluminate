@@ -20,7 +20,17 @@ struct PlayerTitleBlock: View {
                 .lineLimit(1)
 
             subtitle
+
+            // Phase and track subtitles used to replace the time entirely,
+            // leaving sessions and playlists with no way to see progress.
+            if showsTimeBelowSubtitle {
+                PlayerTimeLabel(viewModel: viewModel)
+            }
         }
+    }
+
+    private var showsTimeBelowSubtitle: Bool {
+        viewModel.mode.hasPhaseIndicator || viewModel.mode.hasTrackNavigation
     }
 
     @ViewBuilder
@@ -49,7 +59,7 @@ struct PlayerTitleBlock: View {
                 .foregroundStyle(viewModel.secondaryLabelColor)
                 .lineLimit(1)
         } else {
-            PlayerElapsedDuration(viewModel: viewModel)
+            PlayerTimeLabel(viewModel: viewModel)
         }
     }
 }

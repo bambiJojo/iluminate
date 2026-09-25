@@ -28,6 +28,10 @@ enum AppSettingsManager {
         static let focusSpots = "focusSpots"
         static let mindMachineEnabled = "mindMachineEnabled"
         static let listeningHistoryEnabled = "listeningHistoryEnabled"
+        /// Player time label: elapsed, remaining, or percentage.
+        static let playerTimeDisplayStyle = "playerTimeDisplayStyle"
+        /// Successful swipe-up reveals, counted until the player's hint retires.
+        static let swipeRevealCount = "swipeRevealCount"
         /// Retired content-directory preference. Kept only so reset can remove
         /// values written by pre-release builds; the App Store build never reads it.
         static let retiredMatureSourcesEnabled = "nsfwSourcesEnabled"
@@ -223,6 +227,8 @@ enum AppSettingsManager {
         defaults.set(true, forKey: Key.mindMachineEnabled)
         defaults.set(false, forKey: Key.listeningHistoryEnabled)
         defaults.removeObject(forKey: Key.retiredMatureSourcesEnabled)
+        defaults.removeObject(forKey: Key.playerTimeDisplayStyle)
+        defaults.removeObject(forKey: Key.swipeRevealCount)
 
         let retiredKeys = [
             Key.sessionNotifications,

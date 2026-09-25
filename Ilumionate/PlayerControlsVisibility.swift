@@ -13,6 +13,12 @@ import SwiftUI
 final class PlayerControlsVisibility {
     var isVisible: Bool = true
 
+    /// Whether the persistent Stop button has faded to its resting glyph.
+    /// It never goes away — it is the one-tap exit — but at full strength it
+    /// read as an undismissable banner over the whole session. Any touch
+    /// brightens it again.
+    private(set) var isStopControlDimmed: Bool = false
+
     /// Set while a sheet ("···", track list) or a bloom slider is open, which
     /// suppresses auto-hide. Closing it re-arms the idle timer: the original
     /// timer will have fired and been swallowed by the suppression guard, so
@@ -46,16 +52,20 @@ final class PlayerControlsVisibility {
 
     private let voiceOverActive: @MainActor () -> Bool
     private let autoHideDelay: Double
+    private let stopDimDelay: Double
     private let idleWait: IdleWait
     private var hideTask: Task<Void, Never>?
+    private var dimTask: Task<Void, Never>?
 
     init(
         voiceOverActive: @escaping @MainActor () -> Bool = { PlatformAccessibility.isVoiceOverRunning },
         autoHideDelay: Double = LiminalMotion.controlsAutoHideDelay,
+        stopDimDelay: Double = LiminalMotion.stopControlDimDelay,
         idleWait: @escaping IdleWait = { try? await Task.sleep(for: $0) }
     ) {
         self.voiceOverActive = voiceOverActive
         self.autoHideDelay = autoHideDelay
+        self.stopDimDelay = stopDimDelay
         self.idleWait = idleWait
     }
 
@@ -69,14 +79,26 @@ final class PlayerControlsVisibility {
 
     /// User touched the screen: show controls and restart the idle timer.
     func registerInteraction() {
-        withAnimation(LiminalMotion.fade) { isVisible = true }
+        dimTask?.cancel()
+        withAnimation(LiminalMotion.fade) {
+            isVisible = true
+            isStopControlDimmed = false
+        }
         scheduleAutoHide()
+    }
+
+    /// User touched the minimal overlay without revealing the controls:
+    /// brighten the Stop button and restart its dim countdown.
+    func registerOverlayTouch() {
+        withAnimation(LiminalMotion.fade) { isStopControlDimmed = false }
+        scheduleStopDim()
     }
 
     /// Force-hide now (respects suppression rules).
     func hideNow() {
         guard canAutoHide else { return }
         withAnimation(LiminalMotion.fade) { isVisible = false }
+        scheduleStopDim()
     }
 
     /// Begin/refresh the idle countdown.
@@ -91,11 +113,30 @@ final class PlayerControlsVisibility {
         }
     }
 
-    func cancel() { hideTask?.cancel() }
+    private func scheduleStopDim() {
+        dimTask?.cancel()
+        let wait = idleWait
+        let delay = Duration.seconds(stopDimDelay)
+        dimTask = Task { [weak self] in
+            await wait(delay)
+            guard let self, !Task.isCancelled, !self.isVisible else { return }
+            withAnimation(LiminalMotion.fade) { self.isStopControlDimmed = true }
+        }
+    }
+
+    func cancel() {
+        hideTask?.cancel()
+        dimTask?.cancel()
+    }
 
     /// Awaits the pending countdown, so a test can observe the result without
     /// guessing how long the machine will take to get round to it.
     func awaitPendingAutoHide() async {
         await hideTask?.value
+    }
+
+    /// Awaits the pending Stop-button dim countdown; see `awaitPendingAutoHide`.
+    func awaitPendingStopDim() async {
+        await dimTask?.value
     }
 }
