@@ -181,6 +181,28 @@ extension ProfileSettingsView {
                         .font(TranceTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
+                VStack(alignment: .leading, spacing: TranceSpacing.micro) {
+                    HStack(spacing: TranceSpacing.list) {
+                        Image(systemName: "clock")
+                            .font(.body)
+                            .foregroundStyle(Color.bwAlpha)
+                            .frame(width: 24)
+                        Text("Time Display")
+                            .font(TranceTypography.body)
+                            .foregroundStyle(Color.textPrimary)
+                        Spacer()
+                        Picker("Time Display", selection: $playerTimeDisplayStyleRaw) {
+                            ForEach(PlayerTimeDisplayStyle.allCases, id: \.self) { style in
+                                Text(style.displayName).tag(style.rawValue)
+                            }
+                        }
+                        .tint(.textSecondary)
+                    }
+
+                    Text("You can also tap the time in the player to switch.")
+                        .font(TranceTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
                 Button {
                     TranceHaptics.shared.light()
                     showingFlashTintSheet = true

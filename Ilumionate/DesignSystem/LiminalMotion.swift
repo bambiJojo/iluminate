@@ -24,8 +24,8 @@ enum LiminalMotion {
     /// Idle seconds before Pure Void controls auto-hide.
     static let controlsAutoHideDelay: Double = 4.0
     /// Idle seconds, after the controls hide, before the persistent Stop
-    /// button fades to its resting glyph.
-    static let stopControlDimDelay: Double = 8.0
+    /// button shrinks to its icon and the swipe hint times out.
+    static let stopControlCompactDelay: Double = 8.0
 
     static var breath: Animation { .easeInOut(duration: breathDuration).repeatForever(autoreverses: true) }
     static var orbSpin: Animation { .linear(duration: orbSpinDuration).repeatForever(autoreverses: false) }

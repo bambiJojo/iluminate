@@ -3,15 +3,15 @@
 //  Ilumionate
 //
 //  Decides whether the player still shows "Swipe up to show controls".
-//  The hint teaches a gesture; once someone has used it a few times it is
-//  just clutter over the session, so it retires for good.
+//  The hint teaches a gesture; once someone has used it, it is just clutter
+//  over the session, so it retires for good after the first reveal.
 //
 
 import Foundation
 
 struct SwipeRevealHint {
     /// Successful reveals after which the hint stops appearing.
-    static let retireAfterReveals = 3
+    static let retireAfterReveals = 1
 
     private let defaults: UserDefaults
 

@@ -36,6 +36,9 @@ struct ProfileSettingsView: View {
     @AppStorage("maximumLightTimeMinutes") var maximumLightTimeMinutes =
         LightExposureLimit.recommended.rawValue
     @AppStorage("steadyLightEnabled") var steadyLightEnabled = false
+    /// Shared with the player's tap-to-cycle time label.
+    @AppStorage(AppSettingsManager.Key.playerTimeDisplayStyle)
+    var playerTimeDisplayStyleRaw = PlayerTimeDisplayStyle.elapsed.rawValue
     @State var flashTint: FlashTint = .default
     @State var showingFlashTintSheet = false
     @AppStorage("focusSpotsEnabled") var focusSpotsEnabled = false

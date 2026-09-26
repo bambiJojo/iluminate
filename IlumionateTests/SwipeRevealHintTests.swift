@@ -24,6 +24,16 @@ struct SwipeRevealHintTests {
 
     /// The reported bug: the hint never went away, so it read as a tutorial
     /// that could not be dismissed.
+    @Test("One successful reveal retires the hint")
+    func oneRevealRetires() throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let hint = SwipeRevealHint(defaults: defaults)
+
+        hint.recordReveal()
+        #expect(hint.isVisible == false)
+    }
+
     @Test("The hint retires once the user has revealed the controls enough times")
     func hintRetiresAfterReveals() throws {
         let (defaults, suite) = try makeDefaults()

@@ -13,11 +13,15 @@ import SwiftUI
 final class PlayerControlsVisibility {
     var isVisible: Bool = true
 
-    /// Whether the persistent Stop button has faded to its resting glyph.
-    /// It never goes away — it is the one-tap exit — but at full strength it
-    /// read as an undismissable banner over the whole session. Any touch
-    /// brightens it again.
-    private(set) var isStopControlDimmed: Bool = false
+    /// Whether the persistent Stop button has shrunk to its icon-only
+    /// resting form. It never goes away — it is the one-tap exit — but at full
+    /// size it read as an undismissable banner over the whole session. Any
+    /// touch expands it again.
+    private(set) var isStopControlCompact: Bool = false
+
+    /// Set once the user has revealed the controls by swiping, persisted
+    /// through `SwipeRevealHint` so the hint never returns.
+    private(set) var isSwipeHintLearned: Bool
 
     /// Set while a sheet ("···", track list) or a bloom slider is open, which
     /// suppresses auto-hide. Closing it re-arms the idle timer: the original
@@ -52,20 +56,24 @@ final class PlayerControlsVisibility {
 
     private let voiceOverActive: @MainActor () -> Bool
     private let autoHideDelay: Double
-    private let stopDimDelay: Double
+    private let stopCompactDelay: Double
+    private let swipeHint: SwipeRevealHint
     private let idleWait: IdleWait
     private var hideTask: Task<Void, Never>?
-    private var dimTask: Task<Void, Never>?
+    private var compactTask: Task<Void, Never>?
 
     init(
         voiceOverActive: @escaping @MainActor () -> Bool = { PlatformAccessibility.isVoiceOverRunning },
         autoHideDelay: Double = LiminalMotion.controlsAutoHideDelay,
-        stopDimDelay: Double = LiminalMotion.stopControlDimDelay,
+        stopCompactDelay: Double = LiminalMotion.stopControlCompactDelay,
+        swipeHint: SwipeRevealHint = SwipeRevealHint(),
         idleWait: @escaping IdleWait = { try? await Task.sleep(for: $0) }
     ) {
         self.voiceOverActive = voiceOverActive
         self.autoHideDelay = autoHideDelay
-        self.stopDimDelay = stopDimDelay
+        self.stopCompactDelay = stopCompactDelay
+        self.swipeHint = swipeHint
+        self.isSwipeHintLearned = !swipeHint.isVisible
         self.idleWait = idleWait
     }
 
@@ -77,28 +85,46 @@ final class PlayerControlsVisibility {
     /// for modes that change the whole screen's brightness.
     var showsPersistentStopControl: Bool { !isVisible }
 
+    /// "Swipe up to show controls" teaches a gesture, so it shows only until
+    /// the gesture is learned, and only while the Stop button is expanded —
+    /// it times out with the same idle countdown rather than sitting on
+    /// screen for the whole session.
+    var showsSwipeHint: Bool {
+        showsPersistentStopControl && !isSwipeHintLearned && !isStopControlCompact
+    }
+
     /// User touched the screen: show controls and restart the idle timer.
     func registerInteraction() {
-        dimTask?.cancel()
+        compactTask?.cancel()
         withAnimation(LiminalMotion.fade) {
             isVisible = true
-            isStopControlDimmed = false
+            isStopControlCompact = false
         }
         scheduleAutoHide()
     }
 
+    /// A swipe or pull revealed the controls. Only a reveal from the hidden
+    /// state proves the gesture was learned.
+    func registerSwipeReveal() {
+        if !isVisible, !isSwipeHintLearned {
+            swipeHint.recordReveal()
+            isSwipeHintLearned = true
+        }
+        registerInteraction()
+    }
+
     /// User touched the minimal overlay without revealing the controls:
-    /// brighten the Stop button and restart its dim countdown.
+    /// expand the Stop button and restart its idle countdown.
     func registerOverlayTouch() {
-        withAnimation(LiminalMotion.fade) { isStopControlDimmed = false }
-        scheduleStopDim()
+        withAnimation(LiminalMotion.fade) { isStopControlCompact = false }
+        scheduleStopCompact()
     }
 
     /// Force-hide now (respects suppression rules).
     func hideNow() {
         guard canAutoHide else { return }
         withAnimation(LiminalMotion.fade) { isVisible = false }
-        scheduleStopDim()
+        scheduleStopCompact()
     }
 
     /// Begin/refresh the idle countdown.
@@ -113,20 +139,20 @@ final class PlayerControlsVisibility {
         }
     }
 
-    private func scheduleStopDim() {
-        dimTask?.cancel()
+    private func scheduleStopCompact() {
+        compactTask?.cancel()
         let wait = idleWait
-        let delay = Duration.seconds(stopDimDelay)
-        dimTask = Task { [weak self] in
+        let delay = Duration.seconds(stopCompactDelay)
+        compactTask = Task { [weak self] in
             await wait(delay)
             guard let self, !Task.isCancelled, !self.isVisible else { return }
-            withAnimation(LiminalMotion.fade) { self.isStopControlDimmed = true }
+            withAnimation(LiminalMotion.fade) { self.isStopControlCompact = true }
         }
     }
 
     func cancel() {
         hideTask?.cancel()
-        dimTask?.cancel()
+        compactTask?.cancel()
     }
 
     /// Awaits the pending countdown, so a test can observe the result without
@@ -135,8 +161,8 @@ final class PlayerControlsVisibility {
         await hideTask?.value
     }
 
-    /// Awaits the pending Stop-button dim countdown; see `awaitPendingAutoHide`.
-    func awaitPendingStopDim() async {
-        await dimTask?.value
+    /// Awaits the pending Stop-button idle countdown; see `awaitPendingAutoHide`.
+    func awaitPendingStopCompact() async {
+        await compactTask?.value
     }
 }

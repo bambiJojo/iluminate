@@ -25,8 +25,6 @@ struct UnifiedPlayerView: View {
     @State private var pullOrigin: CGPoint?
     @State private var pullProgress: Double = 0
     @State private var hasRevealedThisPull = false
-    /// Read once per session: the hint should not vanish mid-session.
-    @State private var showsSwipeHint = SwipeRevealHint().isVisible
     /// Overlay size, so the pull target can be aimed at the centre line.
     @State private var overlaySize: CGSize = .zero
 
@@ -80,8 +78,8 @@ struct UnifiedPlayerView: View {
                 if controlsVisibility.showsPersistentStopControl {
                     PlayerPersistentStopControl(
                         revealProgress: pullProgress,
-                        showsSwipeHint: showsSwipeHint,
-                        isDimmed: controlsVisibility.isStopControlDimmed && pullOrigin == nil,
+                        showsSwipeHint: controlsVisibility.showsSwipeHint,
+                        isCompact: controlsVisibility.isStopControlCompact && pullOrigin == nil,
                         onStop: stopSession
                     )
                     .frame(maxHeight: .infinity, alignment: .bottom)
@@ -197,8 +195,7 @@ struct UnifiedPlayerView: View {
             DragGesture(minimumDistance: 20)
                 .onEnded { value in
                     if value.translation.height < -40 {        // swipe up → reveal
-                        if !viewModel.showingControls { SwipeRevealHint().recordReveal() }
-                        controlsVisibility.registerInteraction()
+                        controlsVisibility.registerSwipeReveal()
                     } else if value.translation.height > 40 {   // swipe down → hide
                         controlsVisibility.hideNow()
                     }
@@ -357,8 +354,7 @@ struct UnifiedPlayerView: View {
                     if pullProgress >= 1, !hasRevealedThisPull {
                         hasRevealedThisPull = true
                         TranceHaptics.shared.medium()
-                        SwipeRevealHint().recordReveal()
-                        controlsVisibility.registerInteraction()
+                        controlsVisibility.registerSwipeReveal()
                         // Drop the puck immediately rather than leaving it
                         // rendered at full progress during the fade-out.
                         pullOrigin = nil

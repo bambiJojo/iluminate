@@ -136,61 +136,61 @@ struct PlayerControlsVisibilityTests {
         #expect(v.isVisible == false)
     }
 
-    // MARK: - Stop control dimming
+    // MARK: - Stop control idle state
 
-    /// The reported bug: the Stop button sat at full strength for the whole
-    /// session and could not be dismissed. It must stay available, so it fades
-    /// to a resting glyph instead of disappearing.
-    @Test("The stop control dims once the controls have been hidden a while")
-    func stopControlDimsAfterIdle() async {
+    /// The reported bug: the Stop button sat at full size for the whole
+    /// session and could not be dismissed. It must stay available, so it
+    /// shrinks to an icon instead of disappearing.
+    @Test("The stop control goes compact once the controls have been hidden a while")
+    func stopControlCompactsAfterIdle() async {
         let v = Self.immediateHide()
         v.registerInteraction()
         await v.awaitPendingAutoHide()
         #expect(v.showsPersistentStopControl)
 
-        // Not-yet-dimmed is covered by stopControlWaitsBeforeDimming: with an
-        // instant wait the dim may already have run by this point.
-        await v.awaitPendingStopDim()
-        #expect(v.isStopControlDimmed)
+        // Not-yet-compact is covered by stopControlWaitsBeforeCompacting: with
+        // an instant wait the countdown may already have run by this point.
+        await v.awaitPendingStopCompact()
+        #expect(v.isStopControlCompact)
         #expect(v.showsPersistentStopControl)
     }
 
-    @Test("The stop control waits for its own idle delay before dimming")
-    func stopControlWaitsBeforeDimming() async {
+    @Test("The stop control waits for its own idle delay before going compact")
+    func stopControlWaitsBeforeCompacting() async {
         let gate = IdleGate()
         let v = PlayerControlsVisibility(idleWait: { _ in await gate.wait() })
         v.hideNow()
-        #expect(v.isStopControlDimmed == false)
+        #expect(v.isStopControlCompact == false)
 
         gate.release()
-        await v.awaitPendingStopDim()
-        #expect(v.isStopControlDimmed)
+        await v.awaitPendingStopCompact()
+        #expect(v.isStopControlCompact)
     }
 
-    @Test("Touching the screen brightens a dimmed stop control")
-    func touchBrightensStopControl() async {
+    @Test("Touching the screen expands a compact stop control")
+    func touchExpandsStopControl() async {
         let v = Self.immediateHide()
         v.hideNow()
-        await v.awaitPendingStopDim()
-        #expect(v.isStopControlDimmed)
+        await v.awaitPendingStopCompact()
+        #expect(v.isStopControlCompact)
 
         v.registerOverlayTouch()
-        #expect(v.isStopControlDimmed == false)
+        #expect(v.isStopControlCompact == false)
         #expect(v.isVisible == false)   // a touch alone does not reveal the controls
     }
 
-    @Test("Revealing the controls clears the dim state")
-    func revealClearsDim() async {
+    @Test("Revealing the controls clears the compact state")
+    func revealClearsCompact() async {
         let v = Self.immediateHide()
         v.hideNow()
-        await v.awaitPendingStopDim()
+        await v.awaitPendingStopCompact()
 
         v.registerInteraction()
-        #expect(v.isStopControlDimmed == false)
+        #expect(v.isStopControlCompact == false)
     }
 
-    @Test("A dim countdown that fires after the controls return does nothing")
-    func staleDimIgnoredWhenVisible() async {
+    @Test("A compact countdown that fires after the controls return does nothing")
+    func staleCompactIgnoredWhenVisible() async {
         let gate = IdleGate()
         let v = PlayerControlsVisibility(idleWait: { _ in await gate.wait() })
         v.hideNow()
@@ -198,8 +198,78 @@ struct PlayerControlsVisibilityTests {
         v.registerInteraction()
 
         gate.release()
-        await v.awaitPendingStopDim()
-        #expect(v.isStopControlDimmed == false)
+        await v.awaitPendingStopCompact()
+        #expect(v.isStopControlCompact == false)
+    }
+
+    // MARK: - Swipe hint
+
+    private static func withHintDefaults(
+        _ body: (UserDefaults) async throws -> Void
+    ) async throws {
+        let suite = "PlayerControlsVisibilityTests.hint.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try await body(defaults)
+    }
+
+    @Test("A new user sees the swipe hint while the controls are hidden")
+    func hintShowsForNewUser() async throws {
+        try await Self.withHintDefaults { defaults in
+            let v = PlayerControlsVisibility(
+                swipeHint: SwipeRevealHint(defaults: defaults),
+                idleWait: { _ in await IdleGate().wait() }
+            )
+            #expect(v.showsSwipeHint == false)   // controls up: nothing to hint at
+            v.hideNow()
+            #expect(v.showsSwipeHint)
+        }
+    }
+
+    @Test("The hint goes away the moment the swipe is learned, and stays gone")
+    func hintRetiresOnFirstReveal() async throws {
+        try await Self.withHintDefaults { defaults in
+            let v = PlayerControlsVisibility(
+                swipeHint: SwipeRevealHint(defaults: defaults),
+                idleWait: { _ in await IdleGate().wait() }
+            )
+            v.hideNow()
+            v.registerSwipeReveal()
+            v.hideNow()
+            #expect(v.showsSwipeHint == false)
+
+            // A later session reads the persisted state.
+            let next = PlayerControlsVisibility(swipeHint: SwipeRevealHint(defaults: defaults))
+            next.hideNow()
+            #expect(next.showsSwipeHint == false)
+        }
+    }
+
+    @Test("The hint times out with the stop control's idle countdown")
+    func hintTimesOut() async throws {
+        try await Self.withHintDefaults { defaults in
+            let v = PlayerControlsVisibility(
+                swipeHint: SwipeRevealHint(defaults: defaults),
+                idleWait: { _ in }
+            )
+            v.hideNow()
+            await v.awaitPendingStopCompact()
+            #expect(v.showsSwipeHint == false)
+            #expect(v.showsPersistentStopControl)   // the exit itself stays
+        }
+    }
+
+    @Test("A swipe while the controls are already up does not count as learning")
+    func revealWhileVisibleDoesNotRetireHint() async throws {
+        try await Self.withHintDefaults { defaults in
+            let v = PlayerControlsVisibility(
+                swipeHint: SwipeRevealHint(defaults: defaults),
+                idleWait: { _ in await IdleGate().wait() }
+            )
+            v.registerSwipeReveal()   // controls start visible
+            v.hideNow()
+            #expect(v.showsSwipeHint)
+        }
     }
 }
 
